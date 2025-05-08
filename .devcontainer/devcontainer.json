@@ -1,0 +1,16 @@
+{
+  "build": { "dockerfile": "Dockerfile" },
+  "customizations": {
+    "vscode": {
+      "settings": { "terminal.integrated.defaultProfile.linux": "bash" },
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "angular.ng-template"
+      ]
+    }
+  },
+  "forwardPorts": [4200],
+  "portsAttributes": {
+    "4200": { "label": "Frontend Development Server" }
+  }
+}
