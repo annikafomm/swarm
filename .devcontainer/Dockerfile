@@ -14,7 +14,7 @@ RUN apt-get update \
 
 USER $username
 
-WORKDIR /home/$username/app
+WORKDIR /workspaces/mopitas-mapra
 
 COPY --chown=$username ../frontend/package*.json ./frontend/
 
