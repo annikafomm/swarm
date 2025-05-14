@@ -15,3 +15,7 @@ RUN apt-get update \
 USER $username
 
 WORKDIR /home/$username/app
+
+COPY --chown=$username ../frontend/package*.json ./frontend/
+
+RUN cd frontend && npm install
