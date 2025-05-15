@@ -15,5 +15,6 @@
   "forwardPorts": [4200],
   "portsAttributes": {
     "4200": { "label": "Frontend Development Server" }
-  }
+  },
+  "postCreateCommand": "cd frontend && npm install"
 }

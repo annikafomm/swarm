@@ -16,6 +16,3 @@ USER $username
 
 WORKDIR /workspaces/mopitas-mapra
 
-COPY --chown=$username ../frontend/package*.json ./frontend/
-
-RUN cd frontend && npm install
