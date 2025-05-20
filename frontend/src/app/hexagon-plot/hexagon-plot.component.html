@@ -1,0 +1,23 @@
+<div class="hexagon-plot">
+<h1> Hexagon Plot </h1>
+<svg id="my_dataviz" width="1000" height="1000">
+  <g *ngFor="let hex of hexagonData">
+    <polygon
+      [attr.points]="hex.geometry.coordinates"
+      [attr.fill]="hex.properties.color"
+      (click)="openSidenav(hex)"
+      stroke="#333"
+      stroke-width="1"
+      fill-opacity="0.6"
+    ></polygon>
+  </g>
+</svg>
+
+<div class="sidenav" *ngIf="selectedHexagon">
+    <button class="close-btn" (click)="closeSidenav()">×</button>
+    <h2>{{ selectedHexagon.properties.label }}</h2>
+    <p>ID: {{ selectedHexagon.properties.id }}</p>
+    <p>Color: {{ selectedHexagon.properties.color }}</p>
+    <!-- Add more details as needed -->
+  </div>
+</div>
