@@ -4,7 +4,7 @@ import * as d3 from 'd3';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule],
+  imports: [CommonModule,d3],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss'
