@@ -1,42 +1,25 @@
 <div class="hexagon-plot">
+
+
 <h1> Hexagon Plot </h1>
 
-<!-- Load d3.js -->
-<script src="https://d3js.org/d3.v4.js"></script>
-<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
-<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
 
-<!-- Create an element where the map will take place -->
-<svg id="hexbin_map" width="440" height="300"></svg>
+<div style="display: flex; align-items: flex-start;">
+    <div id="hexbin"></div>
+    <div id="legend" style="margin-left: 2rem;"></div>
+  </div>
 
-<script>
+<div
+    class="sidenav"
+    *ngIf="selectedCell"
+    style="position:fixed; top:0; right:0; width:300px; height:100%; background:#fff; box-shadow:-2px 0 8px rgba(0,0,0,0.2); padding:1.5rem; z-index:1000;">
+    <button (click)="closeSidenav()" style="position:absolute; top:10px; right:20px; font-size:2rem; background:none; border:none; cursor:pointer;">×</button>
+    <h2>Cell Details</h2>
+    <div *ngIf="selectedCell">
+      <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
+      <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
+      <p><strong>Centroid:</strong> {{ selectedCell.properties.centroid | json }}</p>
+    </div>
+  </div>
 
-// The svg
-var svg = d3.select("svg"),
-    width = +svg.attr("width"),
-    height = +svg.attr("height");
-
-// Map and projection
-var projection = d3.geoMercator()
-    .scale(350) // This is the zoom
-    .translate([850, 440]); // You have to play with these values to center your map
-
-// Load external data and boot
-d3.json("/nfs/home/students/a.fomm/GitRepositories/mopitas-mapra/backend/hexagons_GSM6592049_M2.geojson", function(data){
-
-  // Draw the map
-  svg.append("g")
-      .selectAll("path")
-      .data(data.features)
-      .enter()
-      .append("path")
-          .attr("fill", "#69a2a2")
-          .attr("d", d3.geoPath()
-              .projection(projection)
-          )
-          .attr("stroke", "black")
-
-})
-
-</script>
 </div>
