@@ -14,6 +14,7 @@ export class HexagonPlotComponent implements OnInit {
   public selectedCell: CellFeature | null = null;
   private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
   private g!: d3.Selection<SVGGElement, unknown, HTMLElement,any>;
+  public datasetTitle = 'GSM6592049_M2';
   // ...existing imports...
 
   private colorScale = d3
@@ -24,7 +25,7 @@ export class HexagonPlotComponent implements OnInit {
         "#088da5",
         "#F0E442",
         "#0072B2",
-        "#D55E00",
+        "#ffc3a0",
         "#CC79A7",
         "#E15759"
     ])
@@ -82,6 +83,7 @@ export class HexagonPlotComponent implements OnInit {
 
         // Draw the map inside the zoomable group
         this.g
+          .style('cursor', 'pointer')
           .append('g')
           .selectAll('path')
           .data(data.features)
@@ -150,7 +152,7 @@ export class HexagonPlotComponent implements OnInit {
     const legend = d3.select('#legend');
     legend.selectAll('*').remove(); // Clear previous legend
 
-    const legendItem = legend
+    const legendItem = this.svg
       .append('svg')
       .attr('width', 400)
       .attr('height', cellTypes.length * 28)
