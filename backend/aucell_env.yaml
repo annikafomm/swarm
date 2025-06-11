@@ -6,12 +6,13 @@ channels:
 
 dependencies:
   - python=3.10
-  - pip
   - scanpy
   - numpy
   - pandas
   - ipykernel
   - matplotlib
-pip:
-  - pyscenic
+  - pip
+  - pip:
+      - pyscenic
+
  
