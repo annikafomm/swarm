@@ -1,8 +1,8 @@
 # Ignore dataset files
-./backend/scores/datasets/*
+backend/scores/datasets
 
 # Ignore network files
-./backend/scores/networks/*
+backend/scores/networks
 
 # Ignore output files
-./backend/scores/output/*
+backend/scores/outputs
