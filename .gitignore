@@ -6,3 +6,12 @@ backend/scores/networks
 
 # Ignore output files
 backend/scores/outputs
+
+# Ignore renv folder
+backend/scores/gene_set_ES/renv
+# Ignore R environment files
+backend/scores/gene_set_ES/.Rproj.user
+backend/scores/gene_set_ES/.Rhistory
+backend/scores/gene_set_ES/.Rprofile
+backend/scores/gene_set_ES/.RData*
+

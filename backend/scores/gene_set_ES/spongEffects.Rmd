@@ -1,0 +1,138 @@
+---
+title: "spongEffects"
+author: "R. Ellenrieder"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(SPONGE)
+library(doParallel)
+library(foreach)
+library(dplyr)
+
+# Register your backend here
+num.of.cores <- 1
+cl <- makeCluster(num.of.cores) 
+registerDoParallel(cl)
+```
+
+# Load the data
+
+spatial expression object
+```{r}
+library(anndata)
+adata <- read_h5ad("../datasets/GSM6592055_M8.h5ad")
+```
+
+extract expression matrix
+```{r}
+# Expression matrix (may be sparse)
+expr <- adata$X
+
+# Convert to dense matrix if needed
+if (inherits(expr, "dgRMatrix")) {
+  expr <- as.matrix(expr)
+}
+
+# Preview
+expr[1:5, 1:8]
+```
+
+
+```{r}
+library(data.table)
+
+ceRNA_interactions <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv")
+
+head(ceRNA_interactions)
+```
+
+```{r}
+ceRNA_centralities <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv")
+
+head(ceRNA_centralities)
+```
+
+```{r}
+dim(ceRNA_centralities)
+length(unique(c(ceRNA_interactions$geneA, ceRNA_interactions$geneB)))
+```
+
+filter ceRNA network and add weighted centrality measures information
+```{r}
+summary(ceRNA_interactions$mscor)
+summary(ceRNA_interactions$p.adj)
+```
+
+```{r}
+filtered_network_centralities <- filter_ceRNA_network(sponge_effects = ceRNA_interactions, Node_Centrality = ceRNA_centralities, add_weighted_centrality=T, mscor.threshold = 0.01, padj.threshold = 0.1)
+```
+
+```{r}
+dim(ceRNA_interactions)
+dim(ceRNA_centralities)
+
+dim(filtered_network_centralities$Sponge.filtered)
+dim(filtered_network_centralities$Node_Centrality)
+```
+
+```{r}
+top_genes <- filtered_network_centralities$Node_Centrality[order(-eigenvector)][,gene][1:100]
+```
+
+
+Discover modules
+```{r}
+central_gene_modules<-get_central_modules(central_nodes = top_genes, node_centrality = filtered_network_centralities$Node_Centrality)
+
+central_gene_modules
+setdiff(union(central_gene_modules$gene, top_genes), intersect(central_gene_modules$gene, top_genes))
+```
+
+Define SPONGE modules
+
+```{r}
+Sponge.modules <- define_modules(network = filtered_network_centralities$Sponge.filtered, central.modules = central_gene_modules, remove.central = F, set.parallel = F)
+# Module size distribution
+Size.modules <- sapply(Sponge.modules, length)
+```
+
+```{r}
+Size.modules
+hist(Size.modules)
+```
+
+Calculate Enrichment Scores
+
+Overall Enrichment (OE)
+single-sample Gene Set Enrichment Analysis (ssGSEA)
+Gene Set Variation Analysis (GSVA)
+
+```{r}
+class(expr)
+str(expr)
+```
+
+```{r}
+train.modules <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "OE", cores=1)
+```
+
+```{r}
+t_expr <- t(expr)
+```
+
+Machine Learning spongEffects scores
+
+
+
+
+
+
+
+
+
+
+
+
+
