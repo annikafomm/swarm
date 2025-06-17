@@ -1,11 +1,9 @@
-# Ignore dataset files
-backend/scores/datasets
+# Ignore all h5ad files
+*.h5ad
+
 
 # Ignore network files
 backend/scores/networks
-
-# Ignore output files
-backend/scores/outputs
 
 # Ignore renv folder
 backend/scores/gene_set_ES/renv

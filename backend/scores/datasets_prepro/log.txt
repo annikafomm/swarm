@@ -1,0 +1,48 @@
+python preprocessing.py -input ../datasets/GSM6592055_M8.h5ad >> log.txt
+
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 3261
+Total number of genes: 36406
+Number of genes after filtering: 19918
+
+
+python preprocessing.py -input ../datasets/GSM6592049_M2.h5ad >> log.txt
+
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 2255
+Total number of genes: 36406
+Number of genes after filtering: 20390
+
+
+python preprocessing.py -input ../datasets/GSM6592052_M5.h5ad >> log.txt
+
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 4246
+Total number of genes: 36406
+Number of genes after filtering: 20910
+
+
+python preprocessing.py -input ../datasets/GSM6592053_M6.h5ad >> log.txt
+
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 2795
+Total number of genes: 36406
+Number of genes after filtering: 20764
+
+
+python preprocessing.py -input ../datasets/GSM6592059_M13.h5ad >> log.txt
+
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 4476
+Total number of genes: 36406
+Number of genes after filtering: 20854
