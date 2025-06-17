@@ -31,7 +31,8 @@ def main():
 
     # additional options
     parser.add_argument('-cluster', type=str, default='leiden', help='Cluster key in adata.obs (default: leiden)')
-    parser.add_argument('-n_perms', type=int, default=None, help='Number of permutations for scores')
+    parser.add_argument('-n_perms_autocorr', type=int, default=None, help='Number of permutations for spatial autocorrelation scores')
+    parser.add_argument('-n_perms_nhood', type=int, default=1000, help='Number of permutations for neighborhood enrichment')
     parser.add_argument('-n_jobs', type=int, default=None, help='Number of jobs for parallel processing')
 
     #parser.add_argument('-corr_method', type=str, default='fdr_bh', help='Correlation method for Moran\'s I and Geary\'s C (default: benjamini-hochberg)')
@@ -60,9 +61,11 @@ def main():
 
     if args.filter:
         print("Filtering ...")
+        print("Number of cells and genes before filtering: ", (adata.n_obs, adata.n_vars))
         sc.pp.filter_cells(adata, min_counts=10) # GitHub CoPilot: For spatial transcriptomics (like Xenium) typical values are 10–100.
         # GitHub CoPilot: For single cell data typical values are 200–500.
         sc.pp.filter_genes(adata, min_cells=3) # GitHub CoPilot: For spatial data (like Xenium), 3–10 is typical.
+        print("Number of cells and genes after filtering: ", (adata.n_obs, adata.n_vars))
 
     if args.normalize:
         print("Normalization ...")
@@ -105,18 +108,18 @@ def main():
     # Compute neighborhood enrichment
     if args.nhood_enrichment:
         print("Computing neighborhood enrichment ...")
-        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, seed=0, n_perms=3 if args.n_perms is None or args.n_perms < 3 else args.n_perms, n_jobs=args.n_jobs, show_progress_bar=True)
+        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, seed=0, n_perms=args.n_perms_nhood, n_jobs=args.n_jobs, show_progress_bar=True)
     
 
     # Compute Moran's I 
     if args.moranI:
         print("Computing Moran's I ...")
-        sq.gr.spatial_autocorr(adata, mode="moran", seed=0, n_perms=args.n_perms, n_jobs=args.n_jobs, transformation=args.n_perms is None, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="moran", seed=0, n_perms=args.n_perms_autocorr, n_jobs=args.n_jobs, transformation=args.n_perms_autocorr is None, show_progress_bar=True)
 
     # Compute Geary's C
     if args.gearyC:
         print("Computing Geary's C ...")
-        sq.gr.spatial_autocorr(adata, mode="geary", seed=0, n_perms=args.n_perms, n_jobs=args.n_jobs, transformation=args.n_perms is None, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="geary", seed=0, n_perms=args.n_perms_autocorr, n_jobs=args.n_jobs, transformation=args.n_perms_autocorr is None, show_progress_bar=True)
 
 
     # save AnnData object in file
@@ -127,4 +130,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    print("Done")
+    
