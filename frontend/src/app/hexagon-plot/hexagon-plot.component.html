@@ -1,0 +1,25 @@
+<div class="hexagon-plot">
+
+
+<h1> HexBinMap: {{datasetTitle}} </h1>
+
+
+<div style="display: flex; align-items: flex-start;">
+    <div id="hexbin"></div>
+    <div id="legend" style="margin-left: 2rem;"></div>
+  </div>
+
+<div
+    class="sidenav"
+    *ngIf="selectedCell"
+    style="position:fixed; top:0; right:0; width:300px; height:100%; background:#fff; box-shadow:-2px 0 8px rgba(0,0,0,0.2); padding:1.5rem; z-index:1000;">
+    <button (click)="closeSidenav()" style="position:absolute; top:10px; right:20px; font-size:2rem; background:none; border:none; cursor:pointer;">×</button>
+    <h2>Cell Details</h2>
+    <div *ngIf="selectedCell">
+      <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
+      <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
+      <p><strong>Centroid:</strong> {{ selectedCell.properties.centroid | json }}</p>
+    </div>
+  </div>
+
+</div>
