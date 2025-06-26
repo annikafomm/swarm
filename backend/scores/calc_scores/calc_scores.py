@@ -1,5 +1,6 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="xarray_schema")
 
 import argparse
 import os
@@ -30,15 +31,20 @@ def main():
     parser.add_argument('-nhood_enrichment', action='store_true', help='Compute neighborhood enrichment')
 
     # additional options
+    ## centrality scores, co-occurrence, and nhood enrichment
     parser.add_argument('-cluster', type=str, default='leiden', help='Cluster key in adata.obs (default: leiden)')
-    parser.add_argument('-n_perms_autocorr', type=int, default=None, help='Number of permutations for spatial autocorrelation scores')
+    ## co-occurrence
+    parser.add_argument('-interval', type=int, default=50, help='Distance interval for co-occurrence computation (default: 50)')
+    parser.add_argument('-n_splits', type=int, default=None, help='Number of splits for co-occurrence computation (default: None)')
+    ## nhood enrichment
+    parser.add_argument('-library_key', type=str, default=None, help='Key for library information in adata.obs (default: None)')
     parser.add_argument('-n_perms_nhood', type=int, default=1000, help='Number of permutations for neighborhood enrichment')
-    parser.add_argument('-n_jobs', type=int, default=None, help='Number of jobs for parallel processing')
-
-    #parser.add_argument('-corr_method', type=str, default='fdr_bh', help='Correlation method for Moran\'s I and Geary\'s C (default: benjamini-hochberg)')
-    #parser.add_argument('-numba_parallel', action='store_true', help='Use numba for parallel processing')
-    #parser.add_argument('-interval', type=int, default=50, help='Distances interval at which co-occurrence is computed (default: 50)')
-    #parser.add_argument('-n_splits', type=int, default=None, help='Number of splits in which to divide the spatial coordinates')
+    ## Moran's I / Geary's C
+    parser.add_argument('-n_perms_autocorr', type=int, default=None, help='Number of permutations for spatial autocorrelation scores')
+    parser.add_argument('-genes', type=str, nargs='*', default=None, help='List of genes to compute spatial autocorrelation scores for (default: all genes)')
+    parser.add_argument('-attr', type=str, default='X', help='Attribute to compute spatial autocorrelation scores for (default: None)')
+    parser.add_argument('-two_tailed', action='store_true', help='Use two-tailed test for spatial autocorrelation scores (default: False)')
+    parser.add_argument('-corr_method', type=str, default='fdr_bh', help='Correction method for spatial autocorrelation scores (default: benjamini-hochberg)')
 
     args = parser.parse_args()
 
@@ -64,13 +70,13 @@ def main():
         print("Number of cells and genes before filtering: ", (adata.n_obs, adata.n_vars))
         sc.pp.filter_cells(adata, min_counts=10) # GitHub CoPilot: For spatial transcriptomics (like Xenium) typical values are 10–100.
         # GitHub CoPilot: For single cell data typical values are 200–500.
-        sc.pp.filter_genes(adata, min_cells=3) # GitHub CoPilot: For spatial data (like Xenium), 3–10 is typical.
+        sc.pp.filter_genes(adata, min_cells=2) # siehe best practices
         print("Number of cells and genes after filtering: ", (adata.n_obs, adata.n_vars))
 
     if args.normalize:
         print("Normalization ...")
-        adata.layers["counts"] = adata.X.copy()
-
+        # TODO: add check if counts are already normalized
+        # is_integer = np.all(np.mod(dense_layer, 1) == 0)
         sc.pp.normalize_total(adata, inplace=True) # Normalize counts per cell
         sc.pp.log1p(adata) # Logarithmize
         sc.pp.pca(adata) # do principal component analysis
@@ -78,10 +84,16 @@ def main():
 
     # Calculate spatial scores
 
-    if 'spatial_connectivities' not in adata.obsp.keys() or 'spatial_distances' not in adata.obsp.keys():
-        print("Computing the spatial neighbors ...")
-        sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
+    print("Computing the spatial neighbors ...")
+    sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
 
+    if args.library_key not in adata.obs.keys() and args.library_key != None:
+            raise ValueError(f"Library key '{args.library_key}' not found in adata.obs. Please provide a valid library key.")
+    
+    if args.corr_method not in ['bonferroni', 'sidak', 'holm-sidak', 'holm', 'simes-hochberg', 'hommel', 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky']:
+        raise ValueError(f"Correlation method '{args.corr_method}' not available.")
+    
+    # TODO: Grenze für n_perms
 
     # check if the cluster key exists in adata.obs if needed
     if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
@@ -98,28 +110,28 @@ def main():
     # Compute centrality scores
     if args.centrality_scores:
         print("Computing centrality scores ...")
-        sq.gr.centrality_scores(adata, cluster_key=args.cluster, score=None, n_jobs=args.n_jobs, show_progress_bar=True)
+        sq.gr.centrality_scores(adata, cluster_key=args.cluster, show_progress_bar=True)
 
     # Compute co-occurrence probability
     if args.co_occurrence:
         print("Computing co-occurrence probability ...")
-        sq.gr.co_occurrence(adata, cluster_key=args.cluster, n_jobs=args.n_jobs, show_progress_bar=True)
+        sq.gr.co_occurrence(adata, cluster_key=args.cluster, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
 
     # Compute neighborhood enrichment
     if args.nhood_enrichment:
         print("Computing neighborhood enrichment ...")
-        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, seed=0, n_perms=args.n_perms_nhood, n_jobs=args.n_jobs, show_progress_bar=True)
+        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
     
 
     # Compute Moran's I 
     if args.moranI:
         print("Computing Moran's I ...")
-        sq.gr.spatial_autocorr(adata, mode="moran", seed=0, n_perms=args.n_perms_autocorr, n_jobs=args.n_jobs, transformation=args.n_perms_autocorr is None, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, genes = args.genes, two_tailed = args.two_tailed, corr_method = args.corr_method, attr = args.attr, show_progress_bar=True)
 
     # Compute Geary's C
     if args.gearyC:
         print("Computing Geary's C ...")
-        sq.gr.spatial_autocorr(adata, mode="geary", seed=0, n_perms=args.n_perms_autocorr, n_jobs=args.n_jobs, transformation=args.n_perms_autocorr is None, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, genes = args.genes, two_tailed = args.two_tailed, corr_method = args.corr_method, attr = args.attr, show_progress_bar=True)
 
 
     # save AnnData object in file

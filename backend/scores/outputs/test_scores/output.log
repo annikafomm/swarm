@@ -1,0 +1,52 @@
+Processing datasets_prepro/GSM6592049_M2_prepro.h5ad
+KeyboardInterrupt
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\scores\calc_scores\calc_scores.py", line 7, in <module>
+    import scanpy as sc
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\__init__.py", line 48, in <module>
+    from . import datasets, experimental, external, get, logging, metrics, queries
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\datasets\__init__.py", line 5, in <module>
+    from ._datasets import (
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\datasets\_datasets.py", line 15, in <module>
+    from ..readwrite import read, read_visium
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\readwrite.py", line 38, in <module>
+    from matplotlib.image import imread
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\__init__.py", line 161, in <module>
+    from . import _api, _version, cbook, _docstring, rcsetup
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\rcsetup.py", line 28, in <module>
+    from matplotlib.colors import Colormap, is_color_like
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\colors.py", line 57, in <module>
+    from matplotlib import _api, _cm, cbook, scale, _image
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\scale.py", line 39, in <module>
+    from matplotlib.ticker import (
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\ticker.py", line 144, in <module>
+    from matplotlib import transforms as mtransforms
+  File "C:\Users\rebec\miniforge3\lib\site-packages\matplotlib\transforms.py", line 49, in <module>
+    from matplotlib._path import (
+ImportError: initialization failed
+Finished outputs/test_scores/GSM6592049_M2_prepro_defaults.h5ad
+Processing datasets_prepro/GSM6592052_M5_prepro.h5ad
+Traceback (most recent call last):
+  File "C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\scores\calc_scores\calc_scores.py", line 6, in <module>
+    import spatialdata as sd
+  File "C:\Users\rebec\miniforge3\lib\site-packages\spatialdata\__init__.py", line 58, in <module>
+    from spatialdata import dataloader, datasets, models, transformations
+  File "C:\Users\rebec\miniforge3\lib\site-packages\spatialdata\dataloader\__init__.py", line 2, in <module>
+    from spatialdata.dataloader.datasets import ImageTilesDataset
+  File "C:\Users\rebec\miniforge3\lib\site-packages\spatialdata\dataloader\datasets.py", line 14, in <module>
+    from geopandas import GeoDataFrame
+  File "C:\Users\rebec\miniforge3\lib\site-packages\geopandas\__init__.py", line 3, in <module>
+    from geopandas.geoseries import GeoSeries
+  File "C:\Users\rebec\miniforge3\lib\site-packages\geopandas\geoseries.py", line 17, in <module>
+    from geopandas.base import GeoPandasBase, _delegate_property
+  File "C:\Users\rebec\miniforge3\lib\site-packages\geopandas\base.py", line 11, in <module>
+    from . import _compat as compat
+  File "C:\Users\rebec\miniforge3\lib\site-packages\geopandas\_compat.py", line 67, in <module>
+    import pyproj  # noqa: F401
+  File "C:\Users\rebec\miniforge3\lib\site-packages\pyproj\__init__.py", line 50, in <module>
+    from pyproj._show_versions import (  # noqa: F401 pylint: disable=unused-import
+  File "<frozen importlib._bootstrap>", line 1022, in _find_and_load
+KeyboardInterrupt
