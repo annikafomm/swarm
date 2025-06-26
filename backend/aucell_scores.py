@@ -22,9 +22,11 @@ def compute_aucell_scores(adata: anndata.AnnData, gene_signatures: list, output_
 
     # Compute AUCell scores
     aucell_scores = aucell(adata.X, gene_signatures, num_workers=8)
+
     
     # Save AUCell scores to AnnData object
-    adata.obs['aucell_scores'] = aucell_scores
+    adata.obsm['aucell'] = aucell_scores
+    anndata.uns["genesets"] = {gs.name: list(gs.gene2weight.keys()) for gs in gene_signatures}
     # Save the updated AnnData object
     adata.write(os.path.join(output_dir, 'anndata_with_aucell_scores.h5ad'))
 
