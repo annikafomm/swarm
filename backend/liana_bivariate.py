@@ -1,3 +1,5 @@
+from itertools import product
+
 import decoupler as dc
 import liana as li
 import mygene
@@ -5,6 +7,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from matplotlib import pyplot as plt
+from mudata import MuData
 
 
 def convert_ensembl_to_symbol(ensembl_series, species="human"):
@@ -27,9 +30,13 @@ if __name__ == "__main__":
     # NOTE: Make sure that liana >= 1.0.0 is installed
 
     # Data loading
-    dataset_path = "/nfs/data3/mopitas/mapra/datasets/GSM6592049_M2/GSM6592049_M2.h5ad"
+    # dataset_path = "/nfs/data3/mopitas/mapra/datasets/GSM6592049_M2/GSM6592049_M2.h5ad"
+    dataset_path = "/home/noah/Downloads/cell2location_adata.h5ad"
     adata = sc.read(dataset_path)
     adata = adata[adata.obs["in_tissue"] == 1]
+    # Make sure that all cells have counts, else decoupler's ULM throws them
+    # out with just a warning, causing annoying shape mismatches
+    sc.pp.filter_cells(adata, min_counts=1)
 
     # Normalization
     adata.layers["counts"] = adata.X.copy()
@@ -56,7 +63,9 @@ if __name__ == "__main__":
     li.ut.spatial_neighbors(
         adata, bandwidth=bw, cutoff=0.1, kernel="gaussian", set_diag=True
     )
-    connectivity_plot = li.pl.connectivity(adata, idx=0, size=1.3, figure_size=(6, 5))
+    connectivity_plot = li.pl.connectivity(
+        adata, idx=0, size=1.3, figure_size=(6, 5)
+    )
     # connectivity_plot.show()
 
     ensembl_ids = adata.var.index
@@ -133,9 +142,9 @@ if __name__ == "__main__":
         verbose=True,
     )
 
-    lr_loadings = li.ut.get_variable_loadings(lrdata, varm_key="NMF_H").set_index(
-        "index"
-    )
+    lr_loadings = li.ut.get_variable_loadings(
+        lrdata, varm_key="NMF_H"
+    ).set_index("index")
     factor_scores = li.ut.get_factor_scores(lrdata, obsm_key="NMF_W")
 
     nmf = sc.AnnData(
@@ -147,7 +156,11 @@ if __name__ == "__main__":
     )
 
     sc.pl.spatial(
-        nmf, color=[*nmf.var.index, None], size=1.4, ncols=2, library_id="GSM6592049_M2"
+        nmf,
+        color=[*nmf.var.index, None],
+        size=1.4,
+        ncols=2,
+        library_id="GSM6592049_M2",
     )
 
     # Beyond Ligand-Receptors
@@ -156,6 +169,91 @@ if __name__ == "__main__":
     # would require running cell2location, so ignore for now
 
     # Extract Cell type Composition
-    comps = li.ut.obsm_to_adata(adata, "compositions")
+    comps = li.ut.obsm_to_adata(adata, "means_cell_abundance_w_sf")
+
     # check key cell types
-    sc.pl.spatial(comps, color=["vSMCs", "CM", "Endo", "Fib"], size=1.3, ncols=2)
+    # sc.pl.spatial(
+    #     comps,
+    #     color=["Cancer Epithelial", "Normal Epithelial", "T-cells", "B-cells"],
+    #     size=1.3,
+    #     ncols=2,
+    #     library_id="GSM6592052_M5",
+    # )
+
+    net = dc.op.collectri()
+
+    dc.mt.ulm(adata, net=net, raw=False, verbose=True)
+
+    est = li.ut.obsm_to_adata(adata, "score_ulm")
+    est.var["cv"] = est.X.std(axis=0) / est.X.mean(axis=0)
+    top_tfs = (
+        est.var.sort_values("cv", ascending=False, key=abs).head(50).index
+    )
+
+    mdata = MuData({"tf": est, "comps": comps})
+    mdata.obsp = adata.obsp
+    mdata.uns = adata.uns
+    mdata.obsm = adata.obsm
+
+    interactions = list(product(comps.var.index, top_tfs))
+
+    bdata = li.mt.bivariate(
+        mdata,
+        x_mod="comps",
+        y_mod="tf",
+        x_transform=sc.pp.scale,
+        y_transform=sc.pp.scale,
+        local_name="cosine",
+        interactions=interactions,
+        mask_negatives=True,
+        add_categories=True,
+        x_use_raw=False,
+        y_use_raw=False,
+        xy_sep="<->",
+        x_name="celltype",
+        y_name="tf",
+    )
+
+    # Plot results
+    interaction_color = [
+        "meanscell_abundance_w_sf_Cancer LumB SC<->RELA",
+        "meanscell_abundance_w_sf_Cancer LumB SC<->SP1",
+    ]
+
+    sc.pl.spatial(
+        bdata,
+        color=interaction_color,
+        size=1.4,
+        cmap="coolwarm",
+        vmax=1,
+        vmin=-1,
+        library_id="GSM6592052_M5",
+    )
+
+    sc.pl.spatial(
+        bdata,
+        layer="cats",
+        color=interaction_color,
+        cmap="coolwarm",
+        library_id="GSM6592052_M5",
+    )
+
+    sc.pl.spatial(
+        mdata.mod["tf"],
+        color=["AR", "JUN"],
+        cmap="coolwarm",
+        size=1.4,
+        vcenter=0,
+        library_id="GSM6592052_M5",
+    )
+
+    sc.pl.spatial(
+        mdata.mod["comps"],
+        color=[
+            "meanscell_abundance_w_sf_B cells Memory",
+            "meanscell_abundance_w_sf_Cancer Cycling",
+        ],
+        cmap="viridis",
+        size=1.4,
+        library_id="GSM6592052_M5",
+    )
