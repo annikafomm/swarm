@@ -41,8 +41,6 @@ def main():
     parser.add_argument('-n_perms_nhood', type=int, default=1000, help='Number of permutations for neighborhood enrichment')
     ## Moran's I / Geary's C
     parser.add_argument('-n_perms_autocorr', type=int, default=None, help='Number of permutations for spatial autocorrelation scores')
-    parser.add_argument('-genes', type=str, nargs='*', default=None, help='List of genes to compute spatial autocorrelation scores for (default: all genes)')
-    parser.add_argument('-attr', type=str, default='X', help='Attribute to compute spatial autocorrelation scores for (default: None)')
     parser.add_argument('-two_tailed', action='store_true', help='Use two-tailed test for spatial autocorrelation scores (default: False)')
     parser.add_argument('-corr_method', type=str, default='fdr_bh', help='Correction method for spatial autocorrelation scores (default: benjamini-hochberg)')
 
@@ -87,7 +85,7 @@ def main():
     print("Computing the spatial neighbors ...")
     sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
 
-    if args.library_key not in adata.obs.keys() and args.library_key != None:
+    if args.library_key != None and args.library_key not in adata.obs.keys():
             raise ValueError(f"Library key '{args.library_key}' not found in adata.obs. Please provide a valid library key.")
     
     if args.corr_method not in ['bonferroni', 'sidak', 'holm-sidak', 'holm', 'simes-hochberg', 'hommel', 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky']:
@@ -125,13 +123,14 @@ def main():
 
     # Compute Moran's I 
     if args.moranI:
+        print(args.attr, args.genes)
         print("Computing Moran's I ...")
-        sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, genes = args.genes, two_tailed = args.two_tailed, corr_method = args.corr_method, attr = args.attr, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
 
     # Compute Geary's C
     if args.gearyC:
         print("Computing Geary's C ...")
-        sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, genes = args.genes, two_tailed = args.two_tailed, corr_method = args.corr_method, attr = args.attr, show_progress_bar=True)
+        sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
 
 
     # save AnnData object in file
