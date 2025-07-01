@@ -24,9 +24,9 @@ class Hexagons:
         # Convert to dict with id as key and properties as values
         properties_dict = properties.to_dict(orient='index')
         return properties_dict
-  
-       
-    
+
+
+
     def parse_aucell_gene_sets(self):
         uns = self.anndata.uns
         gene_sets = uns.get("genesets", None)
@@ -35,7 +35,7 @@ class Hexagons:
         else:
             print("No Aucell gene sets found in the AnnData object.")
             return {}
-            
+
 
     def hexagon_points(self,x, y, radius):
         # Scale centers
@@ -105,19 +105,26 @@ class Hexagons:
                     "leiden_nhood_enrichment": leiden_nhood_zscores.tolist()
                     }
                 }
-            
+
             # Add additional properties from obs
             for key, value in self.obs[barcode].items():
+
+                if value is None or value == "":
+                    continue
+            # Check for NaN if value is a float
+                if isinstance(value, float) and np.isnan(value):
+                    continue
+                
                 feature_dict["properties"][key] = value
 
-            # Add leiden properties from uns
-            
+            # Add leiden properties from uns--
 
-            
+
+
             hexagons["features"].append(feature_dict)
 
         return hexagons
-    
+
 
 
 if __name__ == "__main__":
@@ -126,8 +133,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert Visium data to GeoJSON format.")
 
     parser.add_argument("--adata", type=str, required=True, help="Path to the input .h5ad file.")
-    parser.add_argument("--radius", type=int, default=5, help="Radius of the hexagons.")
-    parser.add_argument("--scale", type=float, default=0.1, help="Scale factor for the hexagons.")
+    parser.add_argument("--radius", type=int, default=50, help="Radius of the hexagons.")
+    parser.add_argument("--scale", type=float, default=0.5, help="Scale factor for the hexagons.")
     parser.add_argument("--data_type", type=str, default="visium", choices=["visium", "xenium"], help="Type of spatial data (visium or xenium).")
     args = parser.parse_args()
 

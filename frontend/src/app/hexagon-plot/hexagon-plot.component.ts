@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
+import * as Plotly from 'plotly.js-dist-min';
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -15,7 +16,10 @@ export class HexagonPlotComponent implements OnInit {
   private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
   private g!: d3.Selection<SVGGElement, unknown, HTMLElement,any>;
   public datasetTitle = 'GSM6592049_M2';
-  // ...existing imports...
+
+
+  public colorableProperties = ['cell_type', 'leiden'];
+  public colorByProperty = 'cell_type';
 
   private colorScale = d3
     .scaleOrdinal<string>()
@@ -30,7 +34,7 @@ export class HexagonPlotComponent implements OnInit {
         "#E15759"
     ])
 
-
+  private features: CellFeature[] = [];
 
   constructor() {
 
@@ -78,6 +82,11 @@ export class HexagonPlotComponent implements OnInit {
           features: data.features,
         });
 
+        this.features = data.features;
+
+        this.colorScale.domain([...new Set(this.features.map(f => String(f.properties[this.colorByProperty])))]);
+
+
         // Create a geoPath generator with the projection
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
@@ -110,6 +119,18 @@ export class HexagonPlotComponent implements OnInit {
 
   }
 
+   public updateHexColors(): void {
+    // Update color scale domain for the new property
+    this.colorScale.domain([...new Set(this.features.map(f => String(f.properties[this.colorByProperty])))]);
+    // Update hexagon colors
+    this.g.selectAll<SVGPathElement, CellFeature>('path')
+      .transition()
+      .duration(300)
+      .attr('fill', (d: CellFeature) => this.colorScale(String(d.properties[this.colorByProperty])));
+
+    this.renderLegend();
+  }
+
   private mouseOver(event: MouseEvent, d: CellFeature): void {
     d3.selectAll('.Country')
       .transition()
@@ -137,20 +158,63 @@ export class HexagonPlotComponent implements OnInit {
       .style('stroke', 'transparent');
   }
 
-  public openSidenav(event: MouseEvent,cell: CellFeature): void {
+  public openSidenav(event: MouseEvent, cell: CellFeature): void {
     this.selectedCell = cell;
+    setTimeout(() => this.renderNhoodHeatmap(), 0); // Wait for DOM update
   }
+
+  private renderNhoodHeatmap(): void {
+ if (!this.selectedCell?.properties.leiden_nhood_enrichment) return;
+
+  const enrichment = this.selectedCell.properties.leiden_nhood_enrichment;
+  const leiden = this.selectedCell.properties.leiden;
+  const n = enrichment.length;
+  const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
+
+  // 1D heatmap: just a single row
+  const data: Partial<Plotly.PlotData>[] = [{
+    z: [enrichment],
+    x: clusterLabels,
+    y: [leiden.toString()],
+    type: 'heatmap',
+    colorscale: 'Viridis'
+  }];
+
+  const layout = {
+  margin: { t: 30, l: 60, r: 10, b: 40 },
+  width: 300,
+  height: 170,
+  xaxis: {
+    title: { text: 'Cluster' },
+    automargin: true,
+    tickfont: { size: 10 }
+  },
+  yaxis: {
+    title: { text: '' },
+    automargin: true,
+    showticklabels: false,
+    tickfont: { size: 10 }
+  }
+};
+
+  const container = document.getElementById('nhood-heatmap');
+  if (!container) return;
+  Plotly.purge(container);
+  Plotly.newPlot(container, data, layout, { displayModeBar: false });
+}
+
+
 
   public closeSidenav(): void {
     this.selectedCell = null;
   }
 
   private renderLegend(): void {
+    // Clear existing legend
+    this.svg.selectAll('svg').remove();
     // Get unique cell types from your color scale's domain
-    const cellTypes = this.colorScale.domain();
+    const cellTypes = this.colorScale.domain().sort();
 
-    const legend = d3.select('#legend');
-    legend.selectAll('*').remove(); // Clear previous legend
 
     const legendItem = this.svg
       .append('svg')
@@ -189,6 +253,10 @@ interface CellProperties {
   barcode : string;
   centroid: [];
   cell_type: string;
+  leiden_nhood_enrichment: number[];
+  leiden: number;
+  color: string;
+  [key: string]: string | number | number[] | [] | undefined;
 }
 
 interface CellFeature {

@@ -3,6 +3,11 @@
 
 <h1> HexBinMap: {{datasetTitle}} </h1>
 
+<label for="colorBy">Color hexagons by:</label>
+  <select id="colorBy" [(ngModel)]="colorByProperty" (change)="updateHexColors()">
+    <option *ngFor="let prop of colorableProperties" [value]="prop">{{ prop }}</option>
+  </select>
+
 
 <div style="display: flex; align-items: flex-start;">
     <div id="hexbin"></div>
@@ -18,7 +23,10 @@
     <div *ngIf="selectedCell">
       <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
       <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
-      <p><strong>Centroid:</strong> {{ selectedCell.properties.centroid | json }}</p>
+      <p><strong>Leiden-Cluster:</strong> {{ (+selectedCell.properties.leiden)}}</p>
+
+      <p><strong>Neighborhood Enrichment:</strong></p>
+      <div id="nhood-heatmap" style="width:300px;height:220px;"></div>
     </div>
   </div>
 
