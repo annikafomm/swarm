@@ -10,7 +10,7 @@ if __name__ == "__main__":
     ref_run_name = f"{results_folder}/reference_signatures"
     run_name = f"{results_folder}/cell2location_map"
 
-    adata_vis = sc.read_h5ad("/home/noah/Downloads/GSM6592052_M5.h5ad")
+    adata_vis = sc.read_h5ad("/nfs/data3/mopitas/mapra/datasets/GSM6592052_M5/GSM6592052_M5.h5ad")
     adata_vis = adata_vis[adata_vis.obs["in_tissue"] == 1]
     adata_vis.obs["sample"] = list(adata_vis.uns["spatial"].keys())[0]
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     ].X.toarray()
     adata_vis = adata_vis[:, ~adata_vis.var["MT_gene"].values]
 
-    adata_ref = sc.read("/home/noah/Downloads/Wu_annotated.h5ad")
+    adata_ref = sc.read("/nfs/data3/mopitas/mapra/datasets/scRNA/Wu_annotated.h5ad")
 
     adata_vis.var["ensembl_id"] = adata_vis.var.index
     # rename 'GeneID-2' as necessary for your data
@@ -130,4 +130,4 @@ if __name__ == "__main__":
         },
     )
 
-    adata_vis.write("/home/noah/Downloads/cell2location_adata.h5ad")
+    adata_vis.write("/nfs/data3/mopitas/mapra/user/noah/cell2location_adata.h5ad")
