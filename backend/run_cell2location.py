@@ -1,6 +1,7 @@
 import cell2location
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scanpy as sc
 
 if __name__ == "__main__":
@@ -47,7 +48,7 @@ if __name__ == "__main__":
         # 10X reaction / sample / batch
         batch_key="sample",
         # cell type, covariate used for constructing signatures
-        labels_key="celltype_subset",
+        labels_key="cell_subclass",
         # multiplicative technical effects (platform, 3' vs 5', donor effect)
         # categorical_covariate_keys=[""],
     )
@@ -55,7 +56,7 @@ if __name__ == "__main__":
     # create the regression model
     mod = cell2location.models.RegressionModel(adata_ref)
 
-    mod.train(max_epochs=1)
+    mod.train(max_epochs=250)
 
     mod.plot_history(20)
     # plt.show()
@@ -108,7 +109,7 @@ if __name__ == "__main__":
     )
 
     mod.train(
-        max_epochs=1,
+        max_epochs=30000,
         # train using full data (batch_size=None)
         batch_size=None,
         # use all data points in training because
