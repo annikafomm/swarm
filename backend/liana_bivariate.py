@@ -2,7 +2,6 @@ from itertools import product
 
 import decoupler as dc
 import liana as li
-import mygene
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -10,73 +9,7 @@ from matplotlib import pyplot as plt
 from mudata import MuData
 
 
-def convert_ensembl_to_symbol(ensembl_series, species="human"):
-    mg = mygene.MyGeneInfo()
-    unique_ids = ensembl_series.unique().tolist()
-    results = mg.querymany(
-        unique_ids, scopes="ensembl.gene", fields="symbol", species=species
-    )
-    id_to_symbol = {}
-    for item in results:
-        if "symbol" in item:
-            id_to_symbol[item["query"]] = item["symbol"]
-        else:
-            id_to_symbol[item["query"]] = None
-    return ensembl_series.map(id_to_symbol)
-
-
-if __name__ == "__main__":
-    # Source: https://liana-py.readthedocs.io/en/latest/notebooks/bivariate.html
-    # NOTE: Make sure that liana >= 1.0.0 is installed
-
-    # Data loading
-    # dataset_path = "/nfs/data3/mopitas/mapra/datasets/GSM6592049_M2/GSM6592049_M2.h5ad"
-    dataset_path = "/home/noah/Downloads/cell2location_adata.h5ad"
-    adata = sc.read(dataset_path)
-    adata = adata[adata.obs["in_tissue"] == 1]
-    # Make sure that all cells have counts, else decoupler's ULM throws them
-    # out with just a warning, causing annoying shape mismatches
-    sc.pp.filter_cells(adata, min_counts=1)
-
-    # Normalization
-    adata.layers["counts"] = adata.X.copy()
-    sc.pp.normalize_total(adata, target_sum=1e4)
-    sc.pp.log1p(adata)
-
-    # Plot spatial data and cell type annotations
-    sc.pl.spatial(
-        adata,
-        color=[None, "cell_type"],
-        size=1.3,
-        palette="Set1",
-        library_id="GSM6592049_M2",
-    )
-
-    plot, bw_df = li.utils.query_bandwidth(
-        coordinates=adata.obsm["spatial"], start=0, end=500, interval_n=20
-    )
-    # plot.show()
-    bw = int(np.round(bw_df[bw_df["neighbours"] >= 6].iloc[0, 0]))
-
-    # Construct spatial connectivities
-    # Bandwidth may be set based on query_bandwidth function
-    li.ut.spatial_neighbors(
-        adata, bandwidth=bw, cutoff=0.1, kernel="gaussian", set_diag=True
-    )
-    connectivity_plot = li.pl.connectivity(
-        adata, idx=0, size=1.3, figure_size=(6, 5)
-    )
-    # connectivity_plot.show()
-
-    ensembl_ids = adata.var.index
-    gene_symbols = convert_ensembl_to_symbol(ensembl_ids)
-
-    adata.var["gene_ids"] = adata.var.index
-    adata.var.index = gene_symbols
-    # NOTE: required to fix common bug (MergeError)
-    # https://github.com/saezlab/liana-py/issues/143
-    adata.var.index.name = None
-
+def ligand_receptor_relationships(adata: sc.AnnData):
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
     lrdata = li.mt.bivariate(
@@ -91,46 +24,15 @@ if __name__ == "__main__":
         use_raw=False,
         verbose=True,
     )
-
-    sc.pl.spatial(
-        lrdata,
-        color=["TIMP2^ITGB1", "COL1A1^SDC1"],
-        size=1.4,
-        vmax=1,
-        cmap="magma",
-        library_id="GSM6592049_M2",
-    )
-
-    sc.pl.spatial(
-        adata,
-        color=["TIMP2", "ITGB1", "COL1A1", "SDC1"],
-        size=1.4,
-        ncols=2,
-        library_id="GSM6592049_M2",
-    )
-
-    # Permutation-based p-values
-    sc.pl.spatial(
-        lrdata,
-        layer="pvals",
-        color=["TIMP2^ITGB1", "COL1A1^SDC1"],
-        size=1.4,
-        cmap="magma_r",
-        library_id="GSM6592049_M2",
-    )
-
-    # Local Categories for ligand/receptor expression
-    # +1 = high-high
-    # 0 = high-low / low-high
-    # -1 = low-low
-    sc.pl.spatial(
-        lrdata,
-        layer="cats",
-        color=["TIMP2^ITGB1", "COL1A1^SDC1"],
-        size=1.4,
-        cmap="coolwarm",
-        library_id="GSM6592049_M2",
-    )
+    # Add ligand-receptor scores to adata.obs
+    lr_relationships = lrdata.var.index
+    lr_cos_sim_mat = lrdata.X.T.toarray()
+    lr_pval_mat = lrdata.layers["pvals"].T.toarray()
+    lr_cat_mat = lrdata.layers["cats"].T.toarray()
+    for i, lr_relationship in enumerate(lr_relationships):
+        adata.obs[f"{lr_relationship}_cosine-similarity"] = lr_cos_sim_mat[i]
+        adata.obs[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
+        adata.obs[f"{lr_relationship}_category"] = lr_cat_mat[i]
 
     # Identify intercellular patterns
     li.multi.nmf(
@@ -142,45 +44,31 @@ if __name__ == "__main__":
         verbose=True,
     )
 
+    # Loadings have shape ligand receptor pairs x number of factors
+    # Don't think we can use them
     lr_loadings = li.ut.get_variable_loadings(
         lrdata, varm_key="NMF_H"
     ).set_index("index")
-    factor_scores = li.ut.get_factor_scores(lrdata, obsm_key="NMF_W")
 
-    nmf = sc.AnnData(
-        X=lrdata.obsm["NMF_W"],
-        obs=lrdata.obs,
-        var=pd.DataFrame(index=lr_loadings.columns),
-        uns=lrdata.uns,
-        obsm=lrdata.obsm,
+    factor_scores = li.ut.get_factor_scores(
+        lrdata, obsm_key="NMF_W"
+    ).set_index("index")
+
+    factor_scores = factor_scores.rename(
+        columns={
+            f"Factor{i}": f"NMF_Factor_{i}"
+            for i, _ in enumerate(factor_scores.columns, 1)
+        }
     )
 
-    sc.pl.spatial(
-        nmf,
-        color=[*nmf.var.index, None],
-        size=1.4,
-        ncols=2,
-        library_id="GSM6592049_M2",
-    )
 
-    # Beyond Ligand-Receptors
-
-    # NOTE: we don't have compositions in obsm
-    # would require running cell2location, so ignore for now
-
+def cell_comp_tf_activity_similarity(
+    adata: sc.AnnData,
+    net: pd.DataFrame,
+    cell_comp_obsm_key: str = "tangram_ct_pred",
+):
     # Extract Cell type Composition
-    comps = li.ut.obsm_to_adata(adata, "means_cell_abundance_w_sf")
-
-    # check key cell types
-    # sc.pl.spatial(
-    #     comps,
-    #     color=["Cancer Epithelial", "Normal Epithelial", "T-cells", "B-cells"],
-    #     size=1.3,
-    #     ncols=2,
-    #     library_id="GSM6592052_M5",
-    # )
-
-    net = dc.op.collectri()
+    comps = li.ut.obsm_to_adata(adata, cell_comp_obsm_key)
 
     dc.mt.ulm(adata, net=net, raw=False, verbose=True)
 
@@ -214,46 +102,71 @@ if __name__ == "__main__":
         y_name="tf",
     )
 
-    # Plot results
-    interaction_color = [
-        "meanscell_abundance_w_sf_Cancer LumB SC<->RELA",
-        "meanscell_abundance_w_sf_Cancer LumB SC<->SP1",
-    ]
+    # Cosine similarities
+    comp_tf_interactions = bdata.var.index
+    comp_tf_cos_sim_mat = bdata.X.T.toarray()
+    for interaction, cos_sim_vec in zip(
+        comp_tf_interactions, comp_tf_cos_sim_mat
+    ):
+        adata.obs[interaction] = cos_sim_vec
 
-    sc.pl.spatial(
-        bdata,
-        color=interaction_color,
-        size=1.4,
-        cmap="coolwarm",
-        vmax=1,
-        vmin=-1,
-        library_id="GSM6592052_M5",
+    # ULM scores for TFs
+    tfs = mdata.mod["tf"].var.index
+    ulm_score_mat = mdata.mod["tf"].X.T
+    for tf, ulm_score_vec in zip(tfs, ulm_score_mat):
+        adata.obs[tf] = ulm_score_vec
+
+
+if __name__ == "__main__":
+    # Source: https://liana-py.readthedocs.io/en/latest/notebooks/bivariate.html
+    # NOTE: Make sure that liana >= 1.0.0 is installed
+
+    # Data loading
+    # dataset_path = "/nfs/data3/mopitas/mapra/datasets/GSM6592049_M2/GSM6592049_M2.h5ad"
+    dataset_path = "/home/noah/Downloads/tangram_adata.h5ad"
+    adata = sc.read(dataset_path)
+
+    # Only look at spots in tissue
+    adata = adata[adata.obs["in_tissue"] == 1]
+    # Make sure that all cells have counts, else decoupler's ULM throws them
+    # out with just a warning, causing annoying shape mismatches
+    sc.pp.filter_cells(adata, min_counts=1)
+
+    # Normalization from tutorial
+    adata.layers["counts"] = adata.X.copy()
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+
+    # Spatial connectivity graph
+    plot, bw_df = li.utils.query_bandwidth(
+        coordinates=adata.obsm["spatial"], start=0, end=500, interval_n=20
+    )
+    bw = int(np.round(bw_df[bw_df["neighbours"] >= 6].iloc[0, 0]))
+
+    # Bandwidth may be set based on query_bandwidth function
+    li.ut.spatial_neighbors(
+        adata, bandwidth=bw, cutoff=0.1, kernel="gaussian", set_diag=True
     )
 
-    sc.pl.spatial(
-        bdata,
-        layer="cats",
-        color=interaction_color,
-        cmap="coolwarm",
-        library_id="GSM6592052_M5",
+    # NOTE: Setting index.name to None is required to fix
+    # common bug (MergeError)
+    # https://github.com/saezlab/liana-py/issues/143
+    adata.var.index.name = None
+    adata.var.index = adata.var.index.str.upper()
+
+    ligand_receptor_relationships(adata)
+
+    # net = dc.op.collectri()
+    net = pd.read_csv(
+        "/home/noah/Downloads/genie3_BRCA_mrn.top_100k.csv",
+    )
+    net = net.rename(
+        columns={
+            old: new
+            for old, new in zip(net.columns, ["source", "target", "weight"])
+        }
     )
 
-    sc.pl.spatial(
-        mdata.mod["tf"],
-        color=["AR", "JUN"],
-        cmap="coolwarm",
-        size=1.4,
-        vcenter=0,
-        library_id="GSM6592052_M5",
-    )
+    cell_comp_tf_activity_similarity(adata, net)
 
-    sc.pl.spatial(
-        mdata.mod["comps"],
-        color=[
-            "meanscell_abundance_w_sf_B cells Memory",
-            "meanscell_abundance_w_sf_Cancer Cycling",
-        ],
-        cmap="viridis",
-        size=1.4,
-        library_id="GSM6592052_M5",
-    )
+    adata.write("/home/noah/Downloads/liana_tangram_adata.h5ad")
