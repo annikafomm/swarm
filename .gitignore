@@ -1,6 +1,7 @@
 # Ignore all h5ad files
 *.h5ad
-
+*.parquet
+*.h5
 
 # Ignore network files
 backend/networks
