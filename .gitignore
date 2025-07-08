@@ -3,13 +3,14 @@
 
 
 # Ignore network files
-backend/scores/networks
+backend/networks
 
 # Ignore renv folder
-backend/scores/gene_set_ES/renv
+backend/gene_set_ES/renv
 # Ignore R environment files
-backend/scores/gene_set_ES/.Rproj.user
-backend/scores/gene_set_ES/.Rhistory
-backend/scores/gene_set_ES/.Rprofile
-backend/scores/gene_set_ES/.RData*
+backend/gene_set_ES/.Rproj.user
+backend/gene_set_ES/.Rhistory
+backend/gene_set_ES/.Rprofile
+backend/gene_set_ES/.RData*
 
+.Rproj.user
