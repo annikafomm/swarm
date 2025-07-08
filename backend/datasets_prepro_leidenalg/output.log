@@ -1,0 +1,77 @@
+Processing datasets/GSM6592049_M2.h5ad
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_GSM6592049_M2.png
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 2255
+Total number of genes: 36386
+Number of genes after filtering: 20387
+Finished datasets_prepro_leidenalg/GSM6592049_M2-prepro.h5ad
+Processing datasets/GSM6592052_M5.h5ad
+C:\Users\rebec\miniforge3\envs\mapra\lib\site-packages\legacy_api_wrap\__init__.py:82: UserWarning: Some cells have zero counts
+  return fn(*args_all, **kw)
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_GSM6592052_M5.png
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 4246
+Total number of genes: 36386
+Number of genes after filtering: 20905
+Finished datasets_prepro_leidenalg/GSM6592052_M5-prepro.h5ad
+Processing datasets/GSM6592053_M6.h5ad
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_GSM6592053_M6.png
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 2795
+Total number of genes: 36386
+Number of genes after filtering: 20760
+Finished datasets_prepro_leidenalg/GSM6592053_M6-prepro.h5ad
+Processing datasets/GSM6592055_M8.h5ad
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_GSM6592055_M8.png
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 3261
+Total number of genes: 36386
+Number of genes after filtering: 19915
+Finished datasets_prepro_leidenalg/GSM6592055_M8-prepro.h5ad
+Processing datasets/GSM6592059_M13.h5ad
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_GSM6592059_M13.png
+Number of mitochondrial genes: 13
+Total number of cells: 4992
+Number of cells after filtering of low quality cells: 4476
+Total number of genes: 36386
+Number of genes after filtering: 20849
+Finished datasets_prepro_leidenalg/GSM6592059_M13-prepro.h5ad
+Processing datasets/output-XETG00125_compact.h5ad
+C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\preprocessing\preprocessing.py:91: FutureWarning: In the future, the default backend for leiden will be igraph instead of leidenalg.
+
+ To achieve the future defaults please pass: flavor="igraph" and n_iterations=2.  directed must also be False to work with igraph's implementation.
+  sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+WARNING: saving figure to file figures\scatter_output-XETG00125_compact.png
+No mitochondrial genes found by prefix. Checking if var_names are Ensembl IDs...
+Number of mitochondrial genes: 0
+No mitochondrial genes found. Please check the input file and the mt_ensembl_ids file.
+Total number of cells: 189598
+Number of cells after filtering of low quality cells: 178682
+Total number of genes: 280
+Number of genes after filtering: 280
+Finished datasets_prepro_leidenalg/output-XETG00125_compact-prepro.h5ad
+All files processed. Check datasets_prepro_leidenalg/output.log for details.

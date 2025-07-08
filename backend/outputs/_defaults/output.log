@@ -1,0 +1,21 @@
+Processing datasets/xenium.h5ad
+Reading input file ...
+Filtering ...
+Number of cells and genes before filtering:  (189598, 280)
+Number of cells and genes after filtering:  (186606, 280)
+Normalization ...
+Computing the spatial neighbors ...
+Computing the neighborhood graph (leiden cluster) ...
+Computing Leiden clusters ...
+Traceback (most recent call last):
+  File "C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\scores\calc_scores\calc_scores.py", line 142, in <module>
+    main()
+  File "C:\RebEll\Computer\BioinformatikMaster\Semester8\MaPra\mopitas-mapra\backend\scores\calc_scores\calc_scores.py", line 105, in main
+    sc.tl.leiden(adata, flavor="igraph", n_iterations=2, directed=False) # not user configurable, because makeshift solution for when no cluster key is provided
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\tools\_leiden.py", line 126, in leiden
+    _utils.ensure_igraph()
+  File "C:\Users\rebec\miniforge3\lib\site-packages\scanpy\_utils\__init__.py", line 91, in ensure_igraph
+    raise ImportError(msg)
+ImportError: Please install the igraph package: `conda install -c conda-forge python-igraph` or `pip3 install igraph`.
+Finished outputs/_defaults/xenium_defaults.h5ad
+All files processed. Check outputs/_defaults/output.log for details.

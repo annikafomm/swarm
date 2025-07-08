@@ -21,7 +21,7 @@ def main():
     parser.add_argument('-mt_ensembl_ids', type=str, default="mt_ensembl_ids.txt", help='Path to file containing mitochondrial gene Ensembl IDs')  
     parser.add_argument('-output', type=str, default=None, help='Output AnnData file path')
 
-    parser.add_argument('-mt_col', type=str, default=None, help='Column name with gene names as symbols of Ensembl IDs in adata.var. If not provided, the script will look at var_names.')
+    parser.add_argument('-mt_col', type=str, default=None, help='Column name with gene names as symbols or Ensembl IDs in adata.var. If not provided, the script will look at var_names.')
 
     args = parser.parse_args()
 
@@ -54,7 +54,7 @@ def main():
         raise ValueError(f"Column {args.mt_col} not found in adata.var. Please provide a valid column name.")
 
     if adata.var["mt"].sum() == 0:
-        raise ValueError("No mitochondrial genes found. Please check the input file and the mt_ensembl_ids file.")
+        print("No mitochondrial genes found. Please check the input file and the mt_ensembl_ids file.")
 
     # calculate the QC covariates
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], inplace=True, percent_top=[20],log1p=True)
@@ -88,7 +88,7 @@ def main():
     # Calculate some basic statistics and clustering
     sc.pp.pca(adata)
     sc.pp.neighbors(adata)
-    sc.tl.leiden(adata, flavor="leidenalg", n_iterations=2, directed=False)
+    sc.tl.leiden(adata, flavor="igraph", n_iterations=2, directed=False)
 
     basename = os.path.splitext(os.path.basename(args.input))[0]
 
@@ -98,7 +98,7 @@ def main():
     adata.write(args.output)
 
 
-    p1 = sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", color="pct_counts_mt", save=f"{basename}_scatter.png")
+    sc.pl.scatter(adata, "total_counts", "n_genes_by_counts", color="pct_counts_mt", save=f"_{basename}.png", show=False)
 
 if __name__ == "__main__":
     main()

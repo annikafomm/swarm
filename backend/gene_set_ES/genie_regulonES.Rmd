@@ -12,7 +12,6 @@ library(dplyr)
 library(tibble)
 library(viper)
 library(pheatmap)
-library(AUCell)
 ```
 
 # prepping the data
@@ -87,30 +86,3 @@ head(vpres[, 1:5])
 write.csv(vpres, "regulons_vpres_matrix.csv")
 pheatmap(vpres[, 1:100])
 ```
-
-AUCell
-
-```{r}
-# transform the regulon list
-regulon_aucell <- lapply(regulon_list, function(targets) names(targets))
-
-# Build rankings
-cells_rankings <- AUCell_buildRankings(expr, nCores=1, plotStats=TRUE)
-
-# Calculate AUC
-cells_AUC <- AUCell_calcAUC(regulon_aucell, cells_rankings)
-
-# vpres is a matrix: TFs × cells/spots
-head(cells_AUC[, 1:5])
-```
-
-
-```{r}
-library(Seurat)
-
-# seurat_obj is a Seurat object with expression data
-# gene_list is a list of gene sets (each as a character vector)
-
-seurat_obj <- AddModuleScore(seurat_obj, features = gene_list, name = "ModuleScore")
-```
-

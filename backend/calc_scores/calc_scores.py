@@ -4,7 +4,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="xarray_schema")
 
 import argparse
 import os
-import spatialdata as sd
 import scanpy as sc
 import squidpy as sq
 
@@ -54,12 +53,8 @@ def main():
 
     if args.input.endswith('.h5ad'):
         adata = sc.read_h5ad(args.input)
-    elif args.input.endswith('.zarr'):
-        sdata = sd.read_zarr(args.input)
-        adata = sdata.tables["table"]
     else:
         raise ValueError("Unsupported file format. Please provide a .h5ad or .zarr file.")
-
 
     # Preprocessing
 
