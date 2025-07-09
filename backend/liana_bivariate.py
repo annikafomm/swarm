@@ -61,6 +61,8 @@ def ligand_receptor_relationships(adata: sc.AnnData):
         }
     )
 
+    adata.obs = adata.obs.join(factor_scores)
+
 
 def cell_comp_tf_activity_similarity(
     adata: sc.AnnData,
@@ -124,7 +126,10 @@ if __name__ == "__main__":
     # Data loading
     # dataset_path = "/nfs/data3/mopitas/mapra/datasets/GSM6592049_M2/GSM6592049_M2.h5ad"
     dataset_path = "/home/noah/Downloads/tangram_adata.h5ad"
+    c2l_path = "/home/noah/Downloads/cell2location_adata.h5ad"
     adata = sc.read(dataset_path)
+    c2l_adata = sc.read(c2l_path)
+    adata.obsm["c2l_compositions"] = c2l_adata.obsm["q05_cell_abundance_w_sf"]
 
     # Only look at spots in tissue
     adata = adata[adata.obs["in_tissue"] == 1]
@@ -167,6 +172,6 @@ if __name__ == "__main__":
         }
     )
 
-    cell_comp_tf_activity_similarity(adata, net)
+    cell_comp_tf_activity_similarity(adata, net, "c2l_compositions")
 
-    adata.write("/home/noah/Downloads/liana_tangram_adata.h5ad")
+    adata.write("/home/noah/Downloads/liana_cell2location_adata.h5ad")

@@ -61,9 +61,17 @@ if __name__ == "__main__":
     pathway_activities(adata, pathway_net)
 
     # sc.pl.spatial(
-    #     acts_progeny,
-    #     color=["PI3K"],
+    #     adata,
+    #     color=["p53_pathway_activity_score"],
     #     cmap="RdBu_r",
+    #     size=1.3,
+    #     library_id="GSM6592052_M5",
+    # )
+    #
+    # sc.pl.spatial(
+    #     adata,
+    #     color=["p53_pathway_activity_padj"],
+    #     cmap="magma_r",
     #     size=1.3,
     #     library_id="GSM6592052_M5",
     # )
