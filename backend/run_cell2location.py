@@ -10,24 +10,20 @@ if __name__ == "__main__":
     ref_run_name = f"{results_folder}/reference_signatures"
     run_name = f"{results_folder}/cell2location_map"
 
-    adata_vis = sc.read_h5ad("/nfs/data3/mopitas/mapra/datasets/GSM6592052_M5/GSM6592052_M5.h5ad")
+    adata_vis = sc.read_h5ad("/nfs/data3/mopitas/mapra/datasets/updated_anndata/GSM6592052_M5.h5ad")
     adata_vis = adata_vis[adata_vis.obs["in_tissue"] == 1]
     adata_vis.obs["sample"] = list(adata_vis.uns["spatial"].keys())[0]
 
     adata_vis.var["MT_gene"] = [
-        gene.startswith("MT-") for gene in adata_vis.var["feature_name"]
+        gene.startswith("MT-") for gene in adata_vis.var.index
     ]
-
     adata_vis.obsm["MT"] = adata_vis[
         :, adata_vis.var["MT_gene"].values
     ].X.toarray()
     adata_vis = adata_vis[:, ~adata_vis.var["MT_gene"].values]
 
     adata_ref = sc.read("/nfs/data3/mopitas/mapra/datasets/scRNA/Wu_annotated.h5ad")
-
-    adata_vis.var["ensembl_id"] = adata_vis.var.index
-    # rename 'GeneID-2' as necessary for your data
-    adata_vis.var.set_index("feature_name", drop=True, inplace=True)
+    adata_ref.var.index = adata_ref.var.index.str.upper()
 
     # delete unnecessary raw slot (to be removed in a future version of the tutorial)
     del adata_ref.raw
