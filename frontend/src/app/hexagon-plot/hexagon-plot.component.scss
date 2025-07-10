@@ -1,5 +1,5 @@
 :host {
-  background-color: #f6f7fb;
+  background-color: #fff;
   font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
   color: #222;
   min-height: 100vh;
@@ -24,16 +24,19 @@ select {
 
 #hexbin {
   background: #fff;
+  border: 1px solid #ddd;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-  padding: 1rem;
-  width: 500px
-
+  padding: 2rem;
+  width: 500px;
+  top:200px;
 }
 
 #main-visualization {
    margin-right: 0;
   transition: margin-right 0.3s cubic-bezier(0.4,0,0.2,1);
+  margin-top: 1rem;
+  background-color: #fff;
 }
 
 #legend {

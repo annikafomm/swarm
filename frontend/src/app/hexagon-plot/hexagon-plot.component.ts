@@ -331,6 +331,8 @@ export class HexagonPlotComponent implements OnInit {
     this.updateHexColors();
   }
 
+
+
   private renderLegend(): void {
     // Remove previous legend group
     this.svg.selectAll('.svg-legend').remove();

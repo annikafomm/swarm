@@ -1,0 +1,87 @@
+<h2>Upload your own data</h2>
+<form [formGroup]="form" (ngSubmit)="onSubmit()">
+
+  <label>Select Dataset:</label>
+  <select formControlName="dataset">
+    <option value="Visium">Visium</option>
+    <option value="Xenium">Xenium</option>
+  </select>
+
+  <br />
+
+  <label>Select Method:</label>
+  <select formControlName="method">
+    <option value="Genie3">Genie3</option>
+    <option value="Sponge">Sponge</option>
+  </select>
+
+  <br /><br />
+
+  <label>Upload spatial dataset (.h5ad):</label>
+  <input type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad" />
+
+  <br />
+
+  <label>Upload single cell dataset (.h5ad):</label>
+  <input type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad" />
+
+  <div *ngIf="singleCellFile" style="margin-top: 4px;">
+    <label>
+      <input type="checkbox" formControlName="tangram" />
+      Use Tangram for mapping
+    </label>
+    <br />
+    <label>
+      <input type="checkbox" formControlName="filteringSingleCell" />
+      Enable filtering (Single Cell)
+    </label>
+  </div>
+
+  <br />
+
+  <label>Upload Genie3 or Sponge (.csv/.tsv):</label>
+  <input type="file" (change)="onFileSelected($event, 'file2')" accept=".csv,.tsv" />
+
+  <br />
+
+  <h3>Options</h3>
+
+  <label>
+    <input type="checkbox" formControlName="normalization" />
+    Enable normalization
+  </label>
+
+  <br />
+
+  <label>
+    <input type="checkbox" formControlName="filteringSpatial" />
+    Enable filtering (Spatial)
+  </label>
+
+  <br />
+
+  <h3>Select Scores</h3>
+
+  <div formGroupName="scores">
+    <label *ngFor="let score of availableScores">
+      <input type="checkbox" [formControlName]="score" />
+      {{ score }}
+    </label>
+  </div>
+
+  <br />
+
+  <div *ngIf="requiresSponge()">
+    <label>Upload Sponge network (.csv/.tsv):</label>
+    <input type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv" />
+  </div>
+
+  <div *ngIf="requiresGenie()">
+    <label>Upload Genie3 results (.csv/.tsv):</label>
+    <input type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv" />
+  </div>
+
+  <br />
+
+  <button type="submit">Submit</button>
+</form>
