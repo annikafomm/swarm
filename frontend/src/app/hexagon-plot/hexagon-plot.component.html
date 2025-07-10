@@ -1,25 +1,53 @@
-<div class="hexagon-plot">
+<div class="hexagon-plot" >
 
 
-<h1> HexBinMap: {{datasetTitle}} </h1>
+  <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
 
-<div style="display: flex; align-items: flex-start;">
-    <div id="hexbin"></div>
-    <div id="legend" style="margin-left: 2rem;"></div>
+
+    <div style="display: flex; align-items: flex-start;">
+        <div id="hexbin"></div>
+        <div id="legend" style="margin-left: 2rem;"></div>
+      </div>
+
+     <label for="colorBy">Color hexagons by:</label>
+      <select id="colorBy" [(ngModel)]="colorByProperty" (change)="updateHexColors()">
+        <option *ngFor="let prop of colorableProperties" [value]="prop">{{ prop }}</option>
+      </select>
+
+
   </div>
 
-<div
-    class="sidenav"
-    *ngIf="selectedCell"
-    style="position:fixed; top:0; right:0; width:300px; height:100%; background:#fff; box-shadow:-2px 0 8px rgba(0,0,0,0.2); padding:1.5rem; z-index:1000;">
-    <button (click)="closeSidenav()" style="position:absolute; top:10px; right:20px; font-size:2rem; background:none; border:none; cursor:pointer;">×</button>
-    <h2>Cell Details</h2>
-    <div *ngIf="selectedCell">
-      <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
-      <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
-      <p><strong>Centroid:</strong> {{ selectedCell.properties.centroid | json }}</p>
+  <div class="sidenav" *ngIf="selectedCell">
+
+      <button (click)="closeSidenav(selectedCell)" style="position:absolute; top:10px; right:20px; font-size:2rem; background:none; border:none; cursor:pointer;">×</button>
+      <h2>Cell Details</h2>
+      <div *ngIf="selectedCell">
+          <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
+          <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
+          <p><strong>Leiden-Cluster:</strong> {{ (+selectedCell.properties.leiden)}}</p>
+          <p> <strong>Leiden-Centrality Scores:</strong></p>
+          <ul class="centrality-list">
+            <li><strong>Degree-Centrality:</strong>{{selectedCell.properties.leiden_centrality['degree_centrality']| number:'1.2-2'}}</li>
+            <li><strong>Average-Clustering:</strong>{{selectedCell.properties.leiden_centrality['average_clustering']| number:'1.2-2'}}</li>
+            <li><strong>Closeness-Centrality:</strong>{{selectedCell.properties.leiden_centrality['closeness_centrality']| number:'1.2-2'}}</li>
+            </ul>
+
+
+          <p><strong>Neighborhood Enrichment:</strong></p>
+          <div id="nhood-heatmap" style="width:300px;height:220px;"></div>
+      </div>
+
+      <div *ngIf="selectedCell">
+        <label for="geneset-select">Select Geneset:</label>
+        <select [(ngModel)]="selectedGeneSet" (change)="updateAucellGraph()">
+            <option *ngFor="let gs of (selectedCell?.properties?.aucell ? (selectedCell.properties.aucell | keyvalue) : [])" [value]="gs.key">
+          {{ gs.key }}
+        </option>
+        </select>
+        <p *ngIf="selectedGeneSet"><strong>AUcell score:</strong> {{selectedCell.properties.aucell[selectedGeneSet]}}</p>
+      <div id="aucell_graph" style="width:100%;height:250px;"> </div>
+      </div>
     </div>
-  </div>
 
 </div>
