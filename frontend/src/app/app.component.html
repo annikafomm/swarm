@@ -177,19 +177,12 @@
   }
 </style>
 
+<nav class="top-bar">
+  <span class="app-title">HexBinMap</span>
+  <a routerLink="/hexagon-plot" routerLinkActive="active">Hexagon Plot</a>
+  <!-- Add more links as needed -->
+</nav>
+
 <main class="main">
-  <div>
-  <app-hexagon-plot></app-hexagon-plot>
-  </div>
+  <router-outlet></router-outlet>
 </main>
-
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * The content above * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * is only a placeholder * * * * * * * * * * * -->
-<!-- * * * * * * * * * * and can be replaced.  * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * End of Placeholder  * * * * * * * * * * * * -->
-<!-- * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * -->
-
-
-<router-outlet />

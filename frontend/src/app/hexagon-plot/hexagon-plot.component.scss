@@ -1,3 +1,106 @@
 :host {
-  background-color: #dce0e8; // Replace with your desired color
+  background-color: #f6f7fb;
+  font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+  color: #222;
+  min-height: 100vh;
+}
+
+
+label {
+  font-weight: 600;
+  margin-right: 0.5rem;
+}
+
+select {
+  font-size: 1rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 5px;
+  border: 1px solid #bdbdbd;
+  background: #fff;
+  margin-bottom: 0.5rem;
+  margin-right: 1rem;
+  margin-top: 0.5rem;
+}
+
+#hexbin {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 1rem;
+  width: 500px
+
+}
+
+#main-visualization {
+   margin-right: 0;
+  transition: margin-right 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+
+#legend {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 1rem 1.5rem;
+  min-width: 180px;
+}
+#legend:empty {
+  display: none;
+}
+
+.sidenav {
+  background: #fff;
+  box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
+  padding: 1.5rem 1.5rem 1.5rem 1.5rem;
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+  overflow-y: auto;
+  position: fixed;
+  top: 70px; // <-- Set this to your nav bar height
+  right: 0;
+  width: 300px;
+  height: calc(100% - 64px); // <-- Adjust height accordingly
+  z-index: 1000;
+}
+
+.sidenav h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+}
+
+
+
+button {
+  color: #ff5e57;
+  font-weight: bold;
+  transition: color 0.2s;
+}
+
+button:hover {
+  color: #d7263d;
+}
+
+.centrality-list {
+  margin: 0 0 1rem 1.2rem;
+  padding: 0;
+  list-style-type: disc;
+  font-size: 1rem;
+
+  li {
+    margin-bottom: 0.3rem;
+    line-height: 1.4;
+  }
+}
+
+@media (max-width: 900px) {
+  .hexagon-plot {
+    padding: 1rem;
+    margin-right: 0;
+  }
+  .sidenav {
+    width: 100vw !important;
+    left: 0;
+    right: 0;
+    border-radius: 0;
+  }
 }

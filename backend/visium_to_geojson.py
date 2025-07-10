@@ -85,6 +85,7 @@ class Hexagons:
             leiden_co_occurrence = self.anndata.uns.get("leiden_co_occurrence")["occ"][leiden_cluster]
             leiden_nhood_zscores = self.anndata.uns.get("leiden_nhood_enrichment",{}).get("zscore")[leiden_cluster]
 
+
             # Print all types
             print(type(leiden_centrality))
             print(type(leiden_co_occurrence))
@@ -97,8 +98,7 @@ class Hexagons:
                 },
                 "properties": {
                     "barcode": barcode,
-                    "aucell": self.anndata.obsm.get("aucell", {}).get(barcode, {}),
-                    "aucell_genesets": self.anndata.obsm.get("aucell_genesets", {}),
+                    "aucell": self.anndata.obsm.get("aucell", {}).loc[barcode].to_dict() if "aucell" in self.anndata.obsm else {},
                     "leiden": leiden_cluster,
                     "leiden_centrality": leiden_centrality,
                     "leiden_co_occurrence": leiden_co_occurrence.tolist(),
