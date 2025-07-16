@@ -13,6 +13,7 @@ from liana.method.sp import LinearModel, RandomForestModel, RobustLinearModel
 def pathway_activities(
     adata: sc.AnnData,
     pathway_net: pd.DataFrame,
+    return_scores: bool = False,
 ):
     # Use multivariate linear model to estimate activity
     dc.mt.mlm(
@@ -24,7 +25,12 @@ def pathway_activities(
 
     mlm_scores = adata.obsm["score_mlm"].add_suffix("_pathway_activity_score")
     mlm_padj = adata.obsm["padj_mlm"].add_suffix("_pathway_activity_padj")
-    adata.obs = adata.obs.join(mlm_scores).join(mlm_padj)
+    scores = mlm_scores.join(mlm_padj)
+
+    if return_scores:
+        return scores
+    else:
+        adata.obs = adata.obs.join(scores)
 
 
 if __name__ == "__main__":

@@ -9,7 +9,9 @@ from matplotlib import pyplot as plt
 from mudata import MuData
 
 
-def ligand_receptor_relationships(adata: sc.AnnData):
+def ligand_receptor_relationships(
+    adata: sc.AnnData, return_scores: bool = False
+):
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
     lrdata = li.mt.bivariate(
@@ -29,10 +31,15 @@ def ligand_receptor_relationships(adata: sc.AnnData):
     lr_cos_sim_mat = lrdata.X.T.toarray()
     lr_pval_mat = lrdata.layers["pvals"].T.toarray()
     lr_cat_mat = lrdata.layers["cats"].T.toarray()
+    local_scores = pd.DataFrame()
     for i, lr_relationship in enumerate(lr_relationships):
-        adata.obs[f"{lr_relationship}_cosine-similarity"] = lr_cos_sim_mat[i]
-        adata.obs[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
-        adata.obs[f"{lr_relationship}_category"] = lr_cat_mat[i]
+        local_scores[f"{lr_relationship}_cosine-similarity"] = lr_cos_sim_mat[
+            i
+        ]
+        local_scores[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
+        local_scores[f"{lr_relationship}_category"] = lr_cat_mat[i]
+
+    global_scores = lrdata.var[["mean", "std", "morans"]]
 
     # Identify intercellular patterns
     li.multi.nmf(
@@ -61,13 +68,22 @@ def ligand_receptor_relationships(adata: sc.AnnData):
         }
     )
 
-    adata.obs = adata.obs.join(factor_scores)
+    # adata.obs = adata.obs.join(factor_scores)
+    if return_scores:
+        return (local_scores, global_scores, factor_scores)
+    else:
+        adata.obs = (
+            adata.obs.join(local_scores)
+            .join(global_scores)
+            .join(factor_scores)
+        )
 
 
 def cell_comp_tf_activity_similarity(
     adata: sc.AnnData,
     net: pd.DataFrame,
     cell_comp_obsm_key: str = "tangram_ct_pred",
+    return_scores: bool = False,
 ):
     # Extract Cell type Composition
     comps = li.ut.obsm_to_adata(adata, cell_comp_obsm_key)
@@ -104,19 +120,25 @@ def cell_comp_tf_activity_similarity(
         y_name="tf",
     )
 
+    scores = pd.DataFrame()
     # Cosine similarities
     comp_tf_interactions = bdata.var.index
     comp_tf_cos_sim_mat = bdata.X.T.toarray()
     for interaction, cos_sim_vec in zip(
         comp_tf_interactions, comp_tf_cos_sim_mat
     ):
-        adata.obs[interaction] = cos_sim_vec
+        scores[interaction] = cos_sim_vec
 
     # ULM scores for TFs
     tfs = mdata.mod["tf"].var.index
     ulm_score_mat = mdata.mod["tf"].X.T
     for tf, ulm_score_vec in zip(tfs, ulm_score_mat):
-        adata.obs[tf] = ulm_score_vec
+        scores[tf] = ulm_score_vec
+
+    if return_scores:
+        return scores
+    else:
+        adata.obs = adata.obs.join(scores)
 
 
 if __name__ == "__main__":
