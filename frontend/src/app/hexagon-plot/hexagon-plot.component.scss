@@ -50,37 +50,46 @@ select {
   display: none;
 }
 
-.sidenav {
-  background: #fff;
-  box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
-  padding: 1.5rem 1.5rem 1.5rem 1.5rem;
-  border-top-left-radius: 18px;
-  border-bottom-left-radius: 18px;
-  overflow-y: auto;
-  position: fixed;
-  top: 70px; // <-- Set this to your nav bar height
-  right: 0;
-  width: 300px;
-  height: calc(100% - 64px); // <-- Adjust height accordingly
-  z-index: 1000;
+.sidenav-content, .cluster-sidenav-content {
+  padding: 1.5rem;
 }
 
-.sidenav h2 {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin-bottom: 1.2rem;
-}
+.sidenav-header, .cluster-sidenav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
 
+  h2, h3 {
+    margin: 0;
+    color: #333;
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
 
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #ff5e57; // Match your button color
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    transition: color 0.2s;
 
-button {
-  color: #ff5e57;
-  font-weight: bold;
-  transition: color 0.2s;
-}
-
-button:hover {
-  color: #d7263d;
+    &:hover {
+      color: #d7263d; // Match your button hover color
+      background: #e9ecef;
+      border-radius: 50%;
+    }
+  }
 }
 
 .centrality-list {
@@ -100,10 +109,143 @@ button:hover {
     padding: 1rem;
     margin-right: 0;
   }
-  .sidenav {
-    width: 100vw !important;
-    left: 0;
+}
+
+.sidenav {
+  position: fixed;
+  top: 70px;
+  right: 0;
+  width: 400px;
+  height: calc(100vh - 70px);
+  background: white;
+  box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
+  z-index: 1000;
+  overflow-y: auto;
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+}
+
+.cluster-sidenav {
+  position: fixed;
+  top: 70px;
+  right: -400px;
+  width: 400px;
+  height: calc(100vh - 70px);
+  background: white;
+  box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
+  transition: right 0.3s ease;
+  z-index: 1000;
+  overflow-y: auto;
+  border-top-left-radius: 18px;
+  border-bottom-left-radius: 18px;
+
+  &.open {
     right: 0;
-    border-radius: 0;
   }
 }
+
+.cluster-sidenav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #eee;
+  background: #f8f9fa;
+
+  h3 {
+    margin: 0;
+    color: #333;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #666;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      color: #333;
+      background: #e9ecef;
+      border-radius: 50%;
+    }
+  }
+}
+
+.cluster-sidenav-content {
+  padding: 20px;
+}
+
+.cluster-stats, .cell-types, .cluster-centrality, .cluster-cells-list {
+  margin-bottom: 25px;
+
+  h4 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+  }
+}
+
+.cell-type-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 14px;
+
+  .cell-type-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    margin-right: 10px;
+    border: 1px solid #ccc;
+  }
+}
+
+.cells-container {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  border-radius: 4px;
+}
+
+.cell-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background: #f8f9fa;
+  }
+
+  &.selected {
+    background: #e3f2fd;
+    border-left: 3px solid #2196f3;
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .cell-barcode {
+    font-family: monospace;
+    color: #333;
+  }
+
+  .cell-type {
+    color: #666;
+    font-size: 12px;
+  }
+}
+

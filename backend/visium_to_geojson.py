@@ -102,7 +102,8 @@ class Hexagons:
                     "leiden": leiden_cluster,
                     "leiden_centrality": leiden_centrality,
                     "leiden_co_occurrence": leiden_co_occurrence.tolist(),
-                    "leiden_nhood_enrichment": leiden_nhood_zscores.tolist()
+                    "leiden_nhood_enrichment": leiden_nhood_zscores.tolist(),
+                    "centroid": self.centers[barcode] if barcode in self.centers else None
                     }
                 }
 
@@ -114,7 +115,7 @@ class Hexagons:
             # Check for NaN if value is a float
                 if isinstance(value, float) and np.isnan(value):
                     continue
-                
+
                 feature_dict["properties"][key] = value
 
             # Add leiden properties from uns--
