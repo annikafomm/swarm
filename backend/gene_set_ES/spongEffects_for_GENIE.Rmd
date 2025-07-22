@@ -1,0 +1,121 @@
+---
+title: "spongEffects_for_GENIE"
+output: html_document
+---
+
+spatial expression object
+```{r}
+library(anndata)
+adata <- read_h5ad("../datasets_prepro_leidenalg/GSM6592055_M8-prepro.h5ad")
+```
+
+## gene expression datasets 
+
+- gene x sample expression matrix, with gene names as rownames. The type of gene identifier is up to the user but must be consistent between gene expression and ceRNA network.
+
+```{r}
+# Expression matrix (may be sparse)
+expr <- adata$X
+
+# Convert to dense matrix if needed
+if (inherits(expr, "dgRMatrix")) {
+  expr <- as.matrix(expr)
+}
+
+expr <- t(expr)
+
+# Preview
+expr[1:5, 1:8]
+```
+
+```{r}
+library(data.table)
+library(tibble)
+
+# Load the regulon table
+regulon_df <- fread("../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv")
+
+# list of regulons (= named list of weights, names are regulators)
+regulon_list <- regulon_df %>%
+  group_by(regulatoryGene) %>%
+  summarize(regulon = list(setNames(weight, targetGene))) %>%
+  deframe()
+```
+
+```{r}
+summary(regulon_df$weight)
+```
+
+
+
+```{r}
+Size.regulons <- sapply(regulon_list, length)
+Size.regulons[names(Size.regulons)[1:10]]
+```
+
+```{r}
+hist(Size.regulons)
+```
+
+
+```{r}
+source("./score_utils.R")
+
+
+regulons_filtered <- filter_genie_network(regulon_df, 0.014)
+
+regulons_top <- get_top_regulons(regulons_filtered, 25, 20)
+
+```
+
+
+```{r}
+Size.regulons_filt <- sapply(regulons_top, length)
+Size.regulons_filt
+```
+
+
+```{r}
+library(GSVA)
+
+# Prepare your gene set (modules) and expression matrix (expr)
+gsvaPar_reg <- gsvaParam(exprData = expr, geneSets = regulons_top, minSize = 2, maxSize = 2000)
+regulons.gsva <- as.data.frame(gsva(gsvaPar_reg, verbose=FALSE))
+```
+
+```{r}
+regulons.gsva
+```
+
+```{r}
+ssgseaPar_reg <- ssgseaParam(exprData = expr, geneSets = regulons_top, minSize = 2, maxSize = 2000)
+regulons.ssgsea <- as.data.frame(gsva(ssgseaPar_reg, verbose=FALSE))
+```
+
+```{r}
+regulons.ssgsea
+```
+
+```{r}
+regulons_oe <- enrichment_modules(Expr.matrix = expr, modules = regulons_top, bin.size = 10, min.size = 2, max.size = 2000, min.expr = 1, method = "OE", cores=1)
+```
+```{r}
+regulons_oe
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

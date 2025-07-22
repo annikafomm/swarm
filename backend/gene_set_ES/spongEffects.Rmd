@@ -23,7 +23,7 @@ registerDoParallel(cl)
 spatial expression object
 ```{r}
 library(anndata)
-adata <- read_h5ad("../datasets/GSM6592055_M8.h5ad")
+adata <- read_h5ad("../datasets_prepro_leidenalg/GSM6592055_M8-prepro.h5ad")
 ```
 
 ## gene expression datasets 
@@ -76,6 +76,23 @@ filtered_network_centralities <- filter_ceRNA_network(sponge_effects = ceRNA_int
 ```
 
 
+```{r}
+# 728666          6069
+# make network smaller
+
+ceRNA_interactions %>% 
+  filter(p.adj <= 0.0001 & mscor >= 0.14) %>%
+  select(mscor, p.adj) %>%
+  dim
+
+filtered_network_centralities <- filter_ceRNA_network(sponge_effects = ceRNA_interactions, Node_Centrality = ceRNA_centralities, add_weighted_centrality=T, mscor.threshold = 0.14, padj.threshold = 0.0001)
+
+dim(filtered_network_centralities$Sponge.filtered)
+dim(filtered_network_centralities$Node_Centrality)
+```
+
+
+
 
 # D) Discover modules 
 
@@ -87,18 +104,20 @@ Different number of central nodes can be selected via the cutoff parameter.
 
 
 ```{r}
-# defined own central nodes
-top_genes <- filtered_network_centralities$Node_Centrality[order(-eigenvector)][,gene][1:100]
+unique(adata$var$feature_type)
 ```
 
 
 Discover modules
 ```{r}
 RNAs <- c("lncRNA","protein_coding")
+RNAs.ofInterest <- adata$var %>% 
+  filter(feature_type %in% RNAs) %>%
+  pull(ensemble_id)
 
-central_gene_modules<-get_central_modules(central_nodes = top_genes, node_centrality = filtered_network_centralities$Node_Centrality, ceRNA_class = RNAs, centrality_measure = "Weighted_Degree", cutoff = 10)
+central_gene_modules<-get_central_modules(central_nodes = RNAs.ofInterest, node_centrality = filtered_network_centralities$Node_Centrality, ceRNA_class = RNAs, centrality_measure = "Weighted_Degree", cutoff = 20)
 
-central_gene_modules
+head(central_gene_modules)
 ```
 
 # E) Define SPONGE modules 
@@ -122,7 +141,56 @@ we implemented three different single sample gene set enrichment approaches to s
 For this example, we run the OE algorithm
 
 ```{r}
+identical(rownames(adata$var), rownames(expr))
+
+rownames(expr) <- adata$var$ensemble_id
+
+Sponge.modules <- Sponge.modules[Size.modules > 1]
+```
+
+```{r}
 train.modules <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "OE", cores=1)
 ```
+
+```{r}
+train.modules
+```
+
+
+
+```{r}
+library(GSVA)
+
+# Prepare your gene set (modules) and expression matrix (expr)
+gsvaPar <- gsvaParam(exprData = expr, geneSets = Sponge.modules, minSize = 1, maxSize = 2000)
+train.modules.gsva <- as.data.frame(gsva(gsvaPar, verbose=FALSE))
+
+
+# train.modules.gsva <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "gsva", cores=1)
+```
+
+```{r}
+train.modules.gsva
+```
+
+
+```{r}
+# Prepare your gene set (modules) and expression matrix (expr)
+ssgseaPar <- ssgseaParam(exprData = expr, geneSets = Sponge.modules, minSize = 1, maxSize = 2000)
+train.modules.ssgsea <- as.data.frame(gsva(ssgseaPar, verbose=FALSE))
+
+#train.modules.ssgsea <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "ssgsea", cores=1)
+```
+
+```{r}
+train.modules.ssgsea
+```
+
+
+
+
+
+
+
 
 

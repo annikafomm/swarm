@@ -1,0 +1,66 @@
+---
+title: "VIPER"
+output: html_document
+---
+
+```{r}
+library(viper)
+library(data.table)
+library(dplyr)
+```
+
+
+```{r}
+# Expression matrix (may be sparse)
+expr <- adata$X
+
+# Convert to dense matrix if needed
+if (inherits(expr, "dgRMatrix")) {
+  expr <- as.matrix(expr)
+}
+
+expr <- t(expr)
+
+# Preview
+expr[1:5, 1:8]
+```
+
+```{r}
+regulon_df <- fread("../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv")
+
+setnames(regulon_df, c("regulatoryGene", "targetGene", "weight"), c("tf", "target", "mi"))
+
+# Save without header for aracne2regulon()
+fwrite(regulon_df, "genie3_aracne_format.txt", sep = "\t", col.names = FALSE)
+```
+
+
+
+```{r}
+# 2. Create regulon object
+regulon <- aracne2regulon(afile = "./genie3_aracne_format.txt", eset = expr, format = "3col", verbose = FALSE)
+
+regulon
+```
+
+
+```{r}
+vpres <- viper(expr, regulon, verbose = FALSE)
+```
+
+```{r}
+as.data.frame(vpres)
+```
+
+```{r}
+regulon_filt <- regulon[top_regulons]
+```
+
+```{r}
+vpres_filt <- as.data.frame(viper(expr, regulon_filt, verbose = FALSE))
+```
+
+```{r}
+vpres_filt
+```
+
