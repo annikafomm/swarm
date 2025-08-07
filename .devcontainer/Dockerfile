@@ -20,10 +20,10 @@ RUN pip3 install --no-cache-dir \
     matplotlib \
     seaborn \
     scanpy \
-    anndata 
+    anndata
 
 RUN R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'readr', 'devtools', 'BiocManager'), repos='https://cran.rstudio.com/')" \
-    && R -e "BiocManager::install(c('AUcell', 'viper', 'SPONGE'))"
+    && R -e "BiocManager::install(c('AUCell', 'viper', 'SPONGE'))"
 
 USER $username
 
