@@ -7,6 +7,7 @@ import os
 import scanpy as sc
 import squidpy as sq
 
+from preprocessing.preprocessing_functions import *
 
 def main():
     # Parser
@@ -61,19 +62,17 @@ def main():
     if args.filter:
         print("Filtering ...")
         print("Number of cells and genes before filtering: ", (adata.n_obs, adata.n_vars))
-        sc.pp.filter_cells(adata, min_counts=10) # GitHub CoPilot: For spatial transcriptomics (like Xenium) typical values are 10–100.
-        # GitHub CoPilot: For single cell data typical values are 200–500.
-        sc.pp.filter_genes(adata, min_cells=2) # siehe best practices
+        small_filtering(adata)
         print("Number of cells and genes after filtering: ", (adata.n_obs, adata.n_vars))
 
     if args.normalize:
         print("Normalization ...")
         # TODO: add check if counts are already normalized
         # is_integer = np.all(np.mod(dense_layer, 1) == 0)
-        sc.pp.normalize_total(adata, inplace=True) # Normalize counts per cell
-        sc.pp.log1p(adata) # Logarithmize
-        sc.pp.pca(adata) # do principal component analysis
+        normalize(adata)
 
+    # TODO: check, if adata was changed or has to be returned
+    print(adata)
 
     # Calculate spatial scores
 
@@ -128,6 +127,8 @@ def main():
         sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
 
 
+    #  TODO: tidy up andata --> delete entries, that are not used further
+    
     # save AnnData object in file
     print("Saving AnnData object ...")
     if not args.output.endswith('.h5ad'):

@@ -4,6 +4,8 @@ import numpy as np
 import scanpy as sc
 from scipy.stats import median_abs_deviation
 
+from preprocessing_functions import *
+
 
 def is_outlier(adata, metric: str, nmads: int):
     M = adata.obs[metric]
@@ -82,11 +84,9 @@ def main():
     print(f'Number of genes after filtering: {adata.n_vars}')
 
     # Normalize the data
-    sc.pp.normalize_total(adata, target_sum=None, inplace=True)
-    sc.pp.log1p(adata)
+    normalize(adata)
 
-    # Calculate some basic statistics and clustering
-    sc.pp.pca(adata)
+    # Calculate clustering
     sc.pp.neighbors(adata)
     sc.tl.leiden(adata, flavor="igraph", n_iterations=2, directed=False)
 
