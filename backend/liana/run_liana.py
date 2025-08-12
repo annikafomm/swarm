@@ -8,6 +8,7 @@ import argparse
 import decoupler as dc
 import pandas as pd
 import scanpy as sc
+import squidpy as sq
 from liana_bivariate import (
     cell_comp_tf_activity_similarity,
     ligand_receptor_relationships,
@@ -25,21 +26,23 @@ if __name__ == "__main__":
 
     adata = sc.read_h5ad(args.adata)
 
+    if args.grn is not None:
+        grn = pd.read_csv(args.grn)
+    else:
+        grn = dc.op.collectri()
+
+    if args.pathway_net is not None:
+        pathway_net = pd.read_csv(args.pathway_net)
+    else:
+        pathway_net = dc.op.progeny()
+
     ligand_receptor_relationships(adata)
 
-    grn = (
-        pd.read_csv(args.grn) if args.grn is not None else dc.op.collectri(),
-    )
     cell_comp_tf_activity_similarity(
         adata,
         grn,
     )
 
-    pathway_net = (
-        pd.read_csv(args.pathway_net)
-        if args.pathway_net is not None
-        else dc.op.progeny()
-    )
     pathway_activities(adata, pathway_net)
 
     adata.write_h5ad(args.output)
