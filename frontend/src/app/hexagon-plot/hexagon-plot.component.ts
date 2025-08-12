@@ -12,6 +12,7 @@ import * as Plotly from 'plotly.js-dist-min';
   styleUrl: './hexagon-plot.component.scss'
 })
 export class HexagonPlotComponent implements OnInit {
+  public Math = Math;
   public selectedCell: CellFeature | null = null;
   private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
   private g!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
@@ -28,7 +29,23 @@ export class HexagonPlotComponent implements OnInit {
   public colorByProperty = 'cell_type';
   public selectedGeneSet: string | null = null;
 
-  private colorScale = d3
+  public selectedCluster: number | null = null;
+  public clusterCells: CellFeature[] = [];
+  public clusterCellTypes: { type: string, count: number, percentage: string }[] = [];
+  public clusterCentralityAvg: { degree_centrality: number, average_clustering: number, closeness_centrality: number } = {
+    degree_centrality: 0,
+    average_clustering: 0,
+    closeness_centrality: 0
+  };
+
+  public selectedInterval: number = 0;
+  public coOccurrenceData: number[] = [];
+  public coOccurrenceColumns: string[] = [];
+  public coOccurrenceThreshold: number = 0.5;
+  public maxInterval: number = 49;
+  public clusterCount: number = 10;
+
+  public colorScale = d3
     .scaleOrdinal<string>()
     .range([
       "#FF7373",
@@ -92,7 +109,7 @@ export class HexagonPlotComponent implements OnInit {
         const height = 1000;
 
 
-        const projection = d3.geoIdentity().fitSize([width,height], {
+        const projection = d3.geoIdentity().fitSize([width, height], {
           type: 'FeatureCollection',
           features: data.features,
         });
@@ -112,7 +129,7 @@ export class HexagonPlotComponent implements OnInit {
           .selectAll('path')
           .data(data.features)
           .join('path')
-          .attr('d', (d) => pathGenerator(d)) // Fixed: Now properly typed
+          .attr('d', (d) => pathGenerator(d))
           .attr('fill', (d) => {
             const total = d.properties.cell_type || 0;
             return this.colorScale(total.toString());
@@ -149,13 +166,31 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public updateHexColors(): void {
+    this.resetClusterExtension();
+
+    if (this.selectedCell && this.selectedCluster) {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.clusterCentralityAvg = {
+        degree_centrality: 0,
+        average_clustering: 0,
+        closeness_centrality: 0
+      };
+
+    }
+
+    if (this.selectedCell) {
+      this.selectedCell = null;
+    }
+
+
     if (this.leidenCentralityProps.includes(this.colorByProperty)) {
       // Get all values for the selected centrality property
       const values = this.features.map(f => f.properties.leiden_centrality[this.colorByProperty]);
       const min = Math.min(...values);
       const max = Math.max(...values);
 
-      // Set domain for continuous scale
       this.continuousColorScale.domain([min, max]);
 
       // Update hexagon colors using the continuous scale
@@ -273,15 +308,170 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
-
-     d3.select(event.target as SVGElement)
-      .transition()
-      .style('stroke', 'black');
-
     this.selectedCell = cell;
-    setTimeout(() => this.renderNhoodHeatmap(), 0); // Wait for DOM update
+
+    if (this.colorByProperty === 'leiden') {
+      this.openClusterSidenav(cell.properties.leiden);
+      this.extendCluster(cell.properties.leiden);
+    }
+    else {
+      d3.select(event.target as SVGElement)
+        .transition()
+        .style('stroke', 'black');
+    }
+
+
+    setTimeout(() => this.renderNhoodHeatmap(), 0);
 
     setTimeout(() => this.updateAucellGraph(), 0);
+  }
+
+  public openClusterSidenav(clusterId: number): void {
+    this.selectedCluster = clusterId;
+    this.clusterCells = this.features.filter(cell => cell.properties.leiden === clusterId);
+    this.calculateClusterStats();
+
+    // Initialize co-occurrence table for this cluster
+    this.updateCoOccurrenceTable();
+
+    if (this.clusterCells.length > 0) {
+      this.selectedCell = this.clusterCells[0];
+      setTimeout(() => this.renderNhoodHeatmap(), 100);
+      setTimeout(() => this.updateAucellGraph(), 100);
+    }
+
+  }
+
+  public selectCellFromCluster(cell: CellFeature): void {
+    this.selectedCell = cell;
+    setTimeout(() => this.renderNhoodHeatmap(), 0);
+    setTimeout(() => this.updateAucellGraph(), 0);
+  }
+
+  public closeClusterSidenav(): void {
+    this.selectedCluster = null;
+    this.clusterCells = [];
+    this.clusterCellTypes = [];
+    this.coOccurrenceData = []; // Clear co-occurrence data
+    this.resetClusterExtension();
+    this.updateHexColors();
+  }
+
+  private calculateClusterStats(): void {
+    if (this.clusterCells.length === 0) return;
+
+    // Calculate cell type distribution using existing cell_type property
+    const cellTypeMap = new Map<string, number>();
+    this.clusterCells.forEach(cell => {
+      const cellType = cell.properties.cell_type;
+      cellTypeMap.set(cellType, (cellTypeMap.get(cellType) || 0) + 1);
+    });
+
+    this.clusterCellTypes = Array.from(cellTypeMap.entries())
+      .map(([type, count]) => ({
+        type,
+        count,
+        percentage: ((count / this.clusterCells.length) * 100).toFixed(1)
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    if (this.clusterCells.length > 0) {
+      const firstCell = this.clusterCells[0];
+      this.clusterCentralityAvg = {
+        degree_centrality: firstCell.properties.leiden_centrality['degree_centrality'] || 0,
+        average_clustering: firstCell.properties.leiden_centrality['average_clustering'] || 0,
+        closeness_centrality: firstCell.properties.leiden_centrality['closeness_centrality'] || 0
+      };
+    }
+  }
+
+  private extendCluster(selectedCluster: number): void {
+    this.g.selectAll<SVGPathElement, CellFeature>('path')
+      .transition()
+      .duration(300)
+      .attr('d', (d: CellFeature) => {
+        if (d.properties.leiden === selectedCluster) {
+          // Scale the hexagon coordinates outward
+          return this.getScaledPath(d, 1.1); // 10% larger
+        }
+        // Return original path for non-selected hexagons
+        const projection = d3.geoIdentity().fitSize([1200, 1000], {
+          type: 'FeatureCollection',
+          features: this.features,
+        });
+        const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+        return pathGenerator(d) || '';
+      })
+      .style('stroke-width', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? '3px' : '1px';
+      })
+      .style('stroke', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
+      })
+      // Remove mouseleave event to prevent resetting outline
+      .on('mouseleave', null)
+      .style('opacity', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? 1.0 : 0.6;
+      });
+  }
+
+  private getScaledPath(feature: CellFeature, scaleFactor: number): string {
+    const coords = feature.geometry.coordinates[0];
+
+    // Calculate centroid of the hexagon
+    let centerX = 0, centerY = 0;
+    coords.forEach((coord: number[]) => {
+      centerX += coord[0];
+      centerY += coord[1];
+    });
+    centerX /= coords.length;
+    centerY /= coords.length;
+
+    // Scale each coordinate outward from the center
+    const scaledCoords = coords.map((coord: number[]) => {
+      const dx = coord[0] - centerX;
+      const dy = coord[1] - centerY;
+      return [
+        centerX + dx * scaleFactor,
+        centerY + dy * scaleFactor
+      ];
+    });
+
+    // Create scaled geometry
+    const scaledGeometry: CellGeometry = {
+      type: 'Polygon',
+      coordinates: [scaledCoords]
+    };
+
+    // Use path generator to convert to SVG path
+    const projection = d3.geoIdentity().fitSize([1200, 1000], {
+      type: 'FeatureCollection',
+      features: this.features,
+    });
+    const pathGenerator = d3.geoPath().projection(projection);
+
+    return pathGenerator(scaledGeometry) || '';
+  }
+
+
+  private resetClusterExtension(): void {
+    const projection = d3.geoIdentity().fitSize([1200, 1000], {
+      type: 'FeatureCollection',
+      features: this.features,
+    });
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+
+    this.g.selectAll<SVGPathElement, CellFeature>('path')
+      .transition()
+      .duration(300)
+      .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+      .style('stroke-width', '1px')
+      .style('stroke', 'transparent')
+      .style('opacity', 0.8);
+
+    // Reinitialize the mouseleave event
+    this.g.selectAll<SVGPathElement, CellFeature>('path')
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
 
   private renderNhoodHeatmap(): void {
@@ -292,7 +482,6 @@ export class HexagonPlotComponent implements OnInit {
     const n = enrichment.length;
     const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
 
-    // 1D heatmap: just a single row
     const data: Partial<Plotly.PlotData>[] = [{
       z: [enrichment],
       x: clusterLabels,
@@ -318,123 +507,240 @@ export class HexagonPlotComponent implements OnInit {
       }
     };
 
-    const container = document.getElementById('nhood-heatmap');
+    const container = document.getElementById('cluster-nhood-heatmap');
+    if (!container) {
+      console.error('Container cluster-nhood-heatmap not found');
+      return;
+    }
+
     if (!container) return;
     Plotly.purge(container);
     Plotly.newPlot(container, data, layout, { displayModeBar: false });
   }
 
-
-
-  public closeSidenav(cell:CellFeature): void {
+  public closeSidenav(): void {
     this.selectedCell = null;
     this.updateHexColors();
+  }
+
+  public updateCoOccurrenceTable(): void {
+    if (this.features.length === 0 || this.selectedCluster === null) {
+      this.coOccurrenceData = [];
+      return;
+    }
+
+    // Get co-occurrence data from the first cell
+    const firstCell = this.features[0];
+    if (!firstCell?.properties?.leiden_co_occurrence) {
+      console.warn('No leiden_co_occurrence data found');
+      this.coOccurrenceData = [];
+      return;
+    }
+
+    const coOccurrenceMatrix = firstCell.properties.leiden_co_occurrence;
+
+    if (!Array.isArray(coOccurrenceMatrix)) {
+      console.error('Co-occurrence matrix is not an array:', coOccurrenceMatrix);
+      this.coOccurrenceData = [];
+      return;
+    }
+
+    this.coOccurrenceData = [];
+    console.log(coOccurrenceMatrix[1][this.selectedInterval])
+    try {
+
+      for (let j = 0; j < this.clusterCount; j++) {
+        if (Array.isArray(coOccurrenceMatrix[j]) &&
+          Array.isArray(coOccurrenceMatrix[j]) &&
+          typeof coOccurrenceMatrix[j][this.selectedInterval] === 'number') {
+          this.coOccurrenceData.push(coOccurrenceMatrix[j][this.selectedInterval]);
+        } else {
+          this.coOccurrenceData.push(0);
+        }
+      }
+    } catch (error) {
+      console.error('Error extracting co-occurrence data:', error);
+      this.coOccurrenceData = Array(this.clusterCount).fill(0);
+    }
+
+    // Calculate threshold for highlighting
+    this.calculateCoOccurrenceThreshold();
+
+    console.log('Co-occurrence data for cluster', this.selectedCluster, 'at interval', this.selectedInterval, ':', this.coOccurrenceData);
+  }
+
+  private calculateCoOccurrenceThreshold(): void {
+    const allValues = this.coOccurrenceData.flat().filter(val => val > 0);
+    if (allValues.length > 0) {
+      allValues.sort((a, b) => a - b);
+      const percentile75 = Math.floor(allValues.length * 0.75);
+      this.coOccurrenceThreshold = allValues[percentile75] || 0.5;
+    }
+  }
+
+  public getCoOccurrenceColor(value: number): string {
+    if (value === 0) return '#f8f9fa';
+
+    // Create a color scale from light to dark based on value
+    const maxValue = Math.max(...this.coOccurrenceData.flat());
+    const intensity = Math.min(value / maxValue, 1);
+
+    // Use a blue color scale
+    const blue = Math.floor(255 - (intensity * 200));
+    const green = Math.floor(255 - (intensity * 150));
+    return `rgb(${blue}, ${green}, 255)`;
+  }
+
+  public getIntervalStats(): { min: number, max: number, avg: number } {
+    const allValues = this.coOccurrenceData.flat().filter(val => val > 0);
+    if (allValues.length === 0) return { min: 0, max: 0, avg: 0 };
+
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const avg = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
+
+    return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
 
 
   private renderLegend(): void {
-    // Remove previous legend group
+    // Remove any existing legend
     this.svg.selectAll('.svg-legend').remove();
 
-    const svgWidth = +this.svg.attr('width');
-    const svgHeight = +this.svg.attr('height');
-
     if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-      // Continuous legend
-      const width = 160, height = 14;
-      const legendX = svgWidth - width;
-      const legendY = svgHeight - height - 38;
+      // Continuous legend for centrality properties
+      const legendX = 20; 
+      const legendY = 20; 
+      const width = 250;
+      const height = 30;
+
+  
+      const values = this.features.map(f => f.properties.leiden_centrality[this.colorByProperty]);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      // Create gradient for continuous legend
+      const defs = this.svg.select('defs').empty() ? this.svg.append('defs') : this.svg.select('defs');
+
+      // Remove existing gradient
+      defs.select('#svg-legend-gradient').remove();
+
+      const gradient = defs.append('linearGradient')
+        .attr('id', 'svg-legend-gradient')
+        .attr('x1', '0%')
+        .attr('x2', '100%')
+        .attr('y1', '0%')
+        .attr('y2', '0%');
+
+      // Create gradient stops based on the color scale
+      const numStops = 10;
+      for (let i = 0; i <= numStops; i++) {
+        const t = i / numStops;
+        const value = min + t * (max - min);
+        gradient.append('stop')
+          .attr('offset', `${t * 100}%`)
+          .attr('stop-color', this.continuousColorScale(value));
+      }
 
       const legendG = this.svg.append('g')
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      // Gradient definition
-      const defs = this.svg.select('defs').empty()
-        ? this.svg.append('defs')
-        : this.svg.select('defs');
-      defs.select('linearGradient#svg-legend-gradient').remove();
-      const gradient = defs.append('linearGradient')
-        .attr('id', 'svg-legend-gradient')
-        .attr('x1', '0%').attr('y1', '0%')
-        .attr('x2', '100%').attr('y2', '0%');
+      // Add background for better visibility
+      legendG.append('rect')
+        .attr('x', -10)
+        .attr('y', -25)
+        .attr('width', width + 30)
+        .attr('height', height + 60)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .style('stroke', '#ccc')
+        .style('stroke-width', 1)
+        .attr('rx', 5);
 
-      const [min, max] = this.continuousColorScale.domain();
-      for (let i = 0; i <= 100; i++) {
-        gradient.append('stop')
-          .attr('offset', `${i}%`)
-          .attr('stop-color', this.continuousColorScale(min + (i / 100) * (max - min)));
-      }
-
+      // Add the gradient rectangle
       legendG.append('rect')
         .attr('width', width)
         .attr('height', height)
         .style('fill', 'url(#svg-legend-gradient)')
         .style('stroke', '#ccc')
         .style('stroke-width', 1)
-        .attr('rx', 5);
+        .attr('rx', 3);
 
+      
       legendG.append('text')
         .attr('x', 0)
-        .attr('y', height + 14)
+        .attr('y', height + 16)
         .attr('text-anchor', 'start')
-        .style('font-size', '11px')
+        .style('font-size', '20px')
+        .style('fill', '#333')
         .text(min !== undefined ? min.toFixed(2) : '');
 
+  
       legendG.append('text')
         .attr('x', width)
-        .attr('y', height + 14)
+        .attr('y', height + 16)
         .attr('text-anchor', 'end')
-        .style('font-size', '11px')
+        .style('font-size', '20px')
+        .style('fill', '#333')
         .text(max !== undefined ? max.toFixed(2) : '');
 
+    
       legendG.append('text')
         .attr('x', width / 2)
-        .attr('y', -4)
+        .attr('y', -10)
         .attr('text-anchor', 'middle')
-        .style('font-size', '12px')
+        .style('font-size', '20px')
         .style('font-weight', 'bold')
+        .style('fill', '#333')
         .text(this.colorByProperty.replace(/_/g, ' '));
+
     } else {
-      // Categorical legend
       const cellTypes = this.colorScale.domain().sort();
-      const legendX = 0;
-      const legendY = 60;
-      const width = 100;
-      const itemHeight = 25;
+      const legendX = 20; 
+      const legendY = 6; 
+      const itemHeight = 30;
+      const itemWidth = 200;
 
       const legendG = this.svg.append('g')
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      cellTypes.forEach((d, i) => {
-        legendG.append('rect')
-          .attr('x', 0)
-          .attr('y', i * itemHeight + 4)
-          .attr('width', 24)
+      // Add background for categorical legend
+      const backgroundHeight = cellTypes.length * itemHeight + 20;
+      legendG.append('rect')
+        .attr('x', -10)
+        .attr('y', -10)
+        .attr('width', itemWidth + 20)
+        .attr('height', backgroundHeight)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .style('stroke', '#ccc')
+        .style('stroke-width', 1)
+        .attr('rx', 5);
+
+      cellTypes.forEach((cellType, i) => {
+        const legendItem = legendG.append('g')
+          .attr('transform', `translate(0, ${i * itemHeight})`);
+
+        // Color rectangle
+        legendItem.append('rect')
+          .attr('width', 30)
           .attr('height', 20)
-          .attr('fill', this.colorScale(d));
+          .style('fill', this.colorScale(cellType))
+          .style('stroke', '#333')
+          .style('stroke-width', 0.5)
+          .attr('rx', 2);
 
-        legendG.append('text')
-          .attr('x', 32)
-          .attr('y', i * itemHeight + 18)
-          .text(d)
+        // Label
+        legendItem.append('text')
+          .attr('x', 40)
+          .attr('y', 12)
           .style('font-size', '16px')
-          .attr('alignment-baseline', 'middle');
+          .style('fill', '#333')
+          .text(cellType);
       });
-
-      legendG.append('text')
-        .attr('x', width / 2)
-        .attr('y', -6)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '12px')
-        .style('font-weight', 'bold')
-        .text(this.colorByProperty.replace(/_/g, ' '));
     }
   }
-
-
 }
 
 interface CellGeometry {
@@ -444,13 +750,14 @@ interface CellGeometry {
 
 interface CellProperties {
   barcode: string;
-  centroid: [];
+  centroid: [number, number] | [];
   cell_type: string;
   leiden_nhood_enrichment: number[];
   leiden: number;
   color: string;
   aucell: { [key: string]: number };
   leiden_centrality: { [key: string]: number };
+  leiden_co_occurrence: number[][];
   [key: string]: string | number | number[] | [] | undefined | { [key: string]: any };
 }
 
