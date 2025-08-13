@@ -19,6 +19,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--adata", type=str, required=True)
     parser.add_argument("--grn", type=str, default=None)
+    parser.add_argument("--cell-comp-key", type=str, default="tangram_ct_pred")
     parser.add_argument("--pathway-net", type=str, default=None)
     parser.add_argument("--output", type=str, required=True)
 
@@ -36,11 +37,19 @@ if __name__ == "__main__":
     else:
         pathway_net = dc.op.progeny()
 
+    # HACK: Setting index.name to None is required to fix
+    # common bug (MergeError). If everything goes down the
+    # drain because of that we might need to come back.
+    # https://github.com/saezlab/liana-py/issues/143
+    adata.var.index.name = None
+    adata.var.index = adata.var.index.str.upper()
+
     ligand_receptor_relationships(adata)
 
     cell_comp_tf_activity_similarity(
         adata,
         grn,
+        cell_comp_obsm_key=args.cell_comp_key,
     )
 
     pathway_activities(adata, pathway_net)

@@ -10,13 +10,6 @@ from mudata import MuData
 def ligand_receptor_relationships(
     adata: sc.AnnData, return_scores: bool = False
 ):
-    # HACK: Setting index.name to None is required to fix
-    # common bug (MergeError). If everything goes down the
-    # drain because of that we might need to come back.
-    # https://github.com/saezlab/liana-py/issues/143
-    adata.var.index.name = None
-    adata.var.index = adata.var.index.str.upper()
-
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
     lrdata = li.mt.bivariate(
@@ -135,7 +128,7 @@ def cell_comp_tf_activity_similarity(
         y_name="tf",
     )
 
-    scores = pd.DataFrame()
+    scores = pd.DataFrame(index=adata.obs.index)
     # Cosine similarities
     comp_tf_interactions = bdata.var.index
     comp_tf_cos_sim_mat = bdata.X.T.toarray()
