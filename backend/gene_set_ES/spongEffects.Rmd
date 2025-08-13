@@ -44,6 +44,10 @@ expr <- t(expr)
 # Preview
 expr[1:5, 1:8]
 ```
+```{r}
+#test <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkInteractions_full.csv", nrows=6)
+#test
+```
 
 ## ceRNA network, ceRNA network centrality measures (the ceRNA network and the centrality measures were created using the SPONGE vignette).
 
