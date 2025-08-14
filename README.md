@@ -16,3 +16,22 @@ Start the frontend development server:
 cd frontend
 npm start
 ```
+
+# Format Requirements
+The web-tool is working with the anndata-format. This is a tutorial on how counts and scores should be saved.
+
+**Counts** - anndata.X
+**Clusterings/Observations (per Spot)** - anndata.obs (all observation columns will be shown so make sure to clean your anndata before upload). Save the Leiden-clustering for leiden-based scores under “leiden”
+**Scores (Geary C, Moran I, leiden-centrality, leiden-cooccurence)** - anndata.uns as DataFrames / Dicts
+**DF:** “gearyC” cols: C, pval_norm
+**DF:** “moranI” cols: I, pval_norm
+**DF:** “leiden_centrality_scores” cols: degree_centrality, average_clustering, closeness_centrality
+**DICT:** “leiden_co_occurrence”: dict with intervals: n_intervals - 1 ,occ: 3D array (n_clusters,n_clusters, n_intervals) (Make sure to select the right num_intervals in Upload form)
+**DICT**: “leiden_nhood_enrichment” dict: counts: (n_clust, n_clust), zscore(n_clust, nclust)
+**AUcell Scores**
+**DF:** cols “Regulon”: Genesets , rows “Cell”: cell_names as barcodes
+**DICT:** genesets/ regulons should be saved as a dict with regulon_name: tuple(gene1,...,gene_n)
+
+## Tangram (if mapping precomputed)
+## LIANA+ Scores (if precomputed)
+
