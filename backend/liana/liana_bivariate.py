@@ -26,16 +26,25 @@ def ligand_receptor_relationships(
     )
     # Extract ligand-receptor scores
     lr_relationships = lrdata.var.index
-    lr_cos_sim_mat = lrdata.X.T.toarray()
-    lr_pval_mat = lrdata.layers["pvals"].T.toarray()
-    lr_cat_mat = lrdata.layers["cats"].T.toarray()
-    local_scores = pd.DataFrame()
-    for i, lr_relationship in enumerate(lr_relationships):
-        local_scores[f"{lr_relationship}_cosine-similarity"] = lr_cos_sim_mat[
-            i
-        ]
-        local_scores[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
-        local_scores[f"{lr_relationship}_category"] = lr_cat_mat[i]
+    lr_cos_sim_mat = lrdata.X.toarray()
+    lr_pval_mat = lrdata.layers["pvals"].toarray()
+    lr_cat_mat = lrdata.layers["cats"].toarray()
+    cos_sim_df = pd.DataFrame(
+        lr_cos_sim_mat,
+        columns=[f"{rel}_cosine-similarity" for rel in lr_relationships],
+        index=adata.obs.index,
+    )
+    pval_df = pd.DataFrame(
+        lr_pval_mat,
+        columns=[f"{rel}_p-value" for rel in lr_relationships],
+        index=adata.obs.index,
+    )
+    cat_df = pd.DataFrame(
+        lr_cat_mat,
+        columns=[f"{rel}_category" for rel in lr_relationships],
+        index=adata.obs.index,
+    )
+    local_scores = pd.concat([cos_sim_df, pval_df, cat_df], axis=1)
 
     global_score_columns = ["mean", "std", "morans"]
     global_scores = lrdata.var[global_score_columns]
@@ -140,16 +149,25 @@ def cell_comp_tf_activity_similarity(
     # Cosine similarities
     comp_tf_interactions = bdata.var.index
     comp_tf_cos_sim_mat = bdata.X.T.toarray()
-    for interaction, cos_sim_vec in zip(
-        comp_tf_interactions, comp_tf_cos_sim_mat
-    ):
-        scores[f"{interaction}_cosine_similarity"] = cos_sim_vec
+    cos_sim_df = pd.DataFrame(
+        comp_tf_cos_sim_mat.T,
+        columns=[
+            f"{interaction}_cosine-similarity"
+            for interaction in comp_tf_interactions
+        ],
+        index=scores.index,
+    )
+    scores = scores.join(cos_sim_df)
 
     # ULM scores for TFs
     tfs = mdata.mod["tf"].var.index
     ulm_score_mat = mdata.mod["tf"].X.T
-    for tf, ulm_score_vec in zip(tfs, ulm_score_mat):
-        scores[f"{tf}_score_ulm"] = ulm_score_vec
+    ulm_scores_df = pd.DataFrame(
+        ulm_score_mat.T,
+        columns=[f"{tf}_score_ulm" for tf in tfs],
+        index=scores.index,
+    )
+    scores = scores.join(ulm_scores_df)
 
     if return_scores:
         return scores
