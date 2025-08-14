@@ -1,0 +1,5 @@
+cutoffs for automatic thresholding and filtering based on MAD.
+QC covariates: 3
+Mt counts: 3
+
+cutoff percentage of mitochondrial counts: 12
