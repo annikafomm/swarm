@@ -16,6 +16,7 @@ Start the frontend development server:
 cd frontend
 npm start
 ```
+<img width="1072" height="921" alt="Screenshot from 2025-08-14 14-33-33" src="https://github.com/user-attachments/assets/145f8ff9-9150-4cda-9d2e-c2eb8f3f7c35" />
 
 # Format Requirements
 The web-tool is working with the anndata-format. This is a tutorial on how counts and scores should be saved.
