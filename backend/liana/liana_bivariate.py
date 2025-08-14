@@ -24,7 +24,7 @@ def ligand_receptor_relationships(
         use_raw=False,
         verbose=True,
     )
-    # Add ligand-receptor scores to adata.obs
+    # Extract ligand-receptor scores
     lr_relationships = lrdata.var.index
     lr_cos_sim_mat = lrdata.X.T.toarray()
     lr_pval_mat = lrdata.layers["pvals"].T.toarray()
@@ -37,7 +37,18 @@ def ligand_receptor_relationships(
         local_scores[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
         local_scores[f"{lr_relationship}_category"] = lr_cat_mat[i]
 
-    global_scores = lrdata.var[["mean", "std", "morans"]]
+    global_score_columns = ["mean", "std", "morans"]
+    global_scores = lrdata.var[global_score_columns]
+    global_scores = global_scores.rename(
+        columns={
+            col: (
+                f"ligand_receptor_cosine_similarity_{col}"
+                if col in ["mean", "std"]
+                else f"ligand_receptor_{col}"
+            )
+            for col in global_score_columns
+        }
+    )
 
     # Identify intercellular patterns
     li.multi.nmf(
@@ -49,8 +60,9 @@ def ligand_receptor_relationships(
         verbose=True,
     )
 
-    # Loadings have shape ligand receptor pairs x number of factors
-    # Don't think we can use them
+    # Loadings have shape ligand receptor pairs x number of factors.
+    # Don't think we can use them in a straightforward way, but
+    # could come up with something later.
     lr_loadings = li.ut.get_variable_loadings(
         lrdata, varm_key="NMF_H"
     ).set_index("index")
@@ -66,15 +78,11 @@ def ligand_receptor_relationships(
         }
     )
 
-    # adata.obs = adata.obs.join(factor_scores)
     if return_scores:
         return (local_scores, global_scores, factor_scores)
     else:
-        adata.obs = (
-            adata.obs.join(local_scores)
-            .join(global_scores)
-            .join(factor_scores)
-        )
+        adata.obs = adata.obs.join(local_scores).join(factor_scores)
+        adata.var = adata.var.join(global_scores)
 
 
 def cell_comp_tf_activity_similarity(
