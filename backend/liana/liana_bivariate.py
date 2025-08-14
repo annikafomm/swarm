@@ -73,7 +73,7 @@ def ligand_receptor_relationships(
 
     factor_scores = factor_scores.rename(
         columns={
-            f"Factor{i}": f"NMF_Factor_{i}"
+            f"Factor{i}": f"ligand_receptor_NMF_factor_{i}"
             for i, _ in enumerate(factor_scores.columns, 1)
         }
     )
@@ -143,13 +143,13 @@ def cell_comp_tf_activity_similarity(
     for interaction, cos_sim_vec in zip(
         comp_tf_interactions, comp_tf_cos_sim_mat
     ):
-        scores[interaction] = cos_sim_vec
+        scores[f"{interaction}_cosine_similarity"] = cos_sim_vec
 
     # ULM scores for TFs
     tfs = mdata.mod["tf"].var.index
     ulm_score_mat = mdata.mod["tf"].X.T
     for tf, ulm_score_vec in zip(tfs, ulm_score_mat):
-        scores[tf] = ulm_score_vec
+        scores[f"{tf}_score_ulm"] = ulm_score_vec
 
     if return_scores:
         return scores
