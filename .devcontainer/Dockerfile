@@ -1,38 +1,41 @@
-FROM rocker/r-ver:4.5.0
+FROM mambaorg/micromamba:1.5.8 AS base
+
+COPY docker_environment.yml /tmp/docker_environment.yml
 
 ARG username=mopitaner
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update \
-    && apt-get install -y git curl \
+RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
+    micromamba clean --all --yes
+
+USER root
+
+ARG MAMBA_DOCKERFILE_ACTIVATE=1
+
+ENV PATH="/opt/conda/bin:$PATH" \
+    CONDA_PREFIX="/opt/conda" \
+    CONDA_DEFAULT_ENV="mopitas-mapra" \
+    CONDA_EXE="/opt/conda/bin/micromamba" \
+    CONDA_PYTHON_EXE="/opt/conda/bin/python"
+
+RUN apt-get update && apt-get install -y --no-install-recommends git curl \
     && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && apt-get install -y nodejs \
-    && apt-get clean \
+    && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @angular/cli \
-    && useradd -m $username \
-    && apt-get install -y python3 python3-pip python3-venv \
-    && apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev
+    && apt-get clean
 
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
 
-RUN pip install --no-cache-dir \
-    numpy \
-    pandas \
-    matplotlib \
-    seaborn \
-    scanpy \
-    anndata
-RUN R -e "install.packages('BiocManager', repos='https://cran.rstudio.com/', dependencies=TRUE)" \
-    && R -e "install.packages(c('ggplot2', 'dplyr', 'tidyr', 'readr', 'devtools'), repos='https://cran.rstudio.com/', dependencies=TRUE)" \
-    && R -e "BiocManager::install(version='3.21')" \
-    && R -e "BiocManager::install(c('AUCell', 'viper'), dependencies=TRUE, ask=FALSE, update=FALSE)" \
-    && R -e "BiocManager::install('SPONGE', dependencies=TRUE, ask=FALSE, update=FALSE)"
+# Create non-root user
+RUN useradd -m $username && mkdir -p /workspaces/mopitas-mapra \
+    && chown -R $username:$username /workspaces
 
-    
+
 USER $username
-
-
 WORKDIR /workspaces/mopitas-mapra
+
+
+
+
+
 
