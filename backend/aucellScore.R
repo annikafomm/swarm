@@ -181,7 +181,6 @@ print(paste("Identified", length(RNAs.ofInterest), "genes of interest from the A
 
 #interaction_network <- convert_ensembl_to_symbols(interaction_network, 'geneA')
 #interaction_network <- convert_ensembl_to_symbols(interaction_network, 'geneB')
-#network_analysis <- convert_ensembl_to_symbols(network_analysis, 'geneB')
 
 # Load the SPONGE network
 sponge_network <- create_Sponge_modules(interaction_network, network_analysis, mscor = 0.03, padj = 0.05,
