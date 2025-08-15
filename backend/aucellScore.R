@@ -80,42 +80,6 @@ create_Genie3_gene_sets <- function(genie3network, n_cores, k = 100, cutoff = 50
 
 }
 
-convert_ensembl_to_symbols <- function(df, col) {
-  if (missing(col) || !col %in% colnames(df)) {
-    stop(paste("Column", col, "not found in the dataframe."))
-  }
-  
-  if (!requireNamespace("biomaRt", quietly = TRUE)) {
-    stop("Package 'biomaRt' is required but not installed.")
-  }
-  
-  # Connect to Ensembl mart
-  mart <- biomaRt::useMart("ensembl", dataset = "hsapiens_gene_ensembl")
-  
-  # Get gene symbols for Ensembl IDs
-  gene_symbols <- biomaRt::getBM(
-    attributes = c("ensembl_gene_id", "hgnc_symbol"),
-    filters = "ensembl_gene_id",
-    values = df[[col]],
-    mart = mart
-  )
-  
-  # Merge gene symbols into original df (inner join to keep only matches)
-  df_merged <- merge(df, gene_symbols, by.x = col, by.y = "ensembl_gene_id", all.x = FALSE, sort = FALSE)
-  
-  # Remove rows with missing or empty gene symbols
-  df_merged <- df_merged[!(is.na(df_merged$hgnc_symbol) | df_merged$hgnc_symbol == ""), ]
-  
-  # Replace Ensembl IDs with gene symbols in the original column name
-  df_merged[[col]] <- df_merged$hgnc_symbol
-  
-  # Drop the temporary hgnc_symbol column
-  df_merged$hgnc_symbol <- NULL
-  
-  # Return the updated dataframe
-  return(df_merged)
-}
-
 
 
 aucell_score <- function(sponge_network, anndata, ensembl_col) {
@@ -163,7 +127,10 @@ genie_3_network <-  args[3]
 adata <-args[4]
 ensembl_col <-  args[5]
 
+adata_prefix <- sub(".h5ad", "", basename(adata))
+
 ad <- zellkonverter::readH5AD(adata)
+
 interaction_network <- fread(interaction_network, strip.white=TRUE)
 network_analysis <- fread(network_analysis, strip.white=TRUE)
 
@@ -178,10 +145,6 @@ if (!is.null(interaction_network) && !is.null(network_analysis)) {
 
 print(paste("Identified", length(RNAs.ofInterest), "genes of interest from the AnnData object."))
 
-
-#interaction_network <- convert_ensembl_to_symbols(interaction_network, 'geneA')
-#interaction_network <- convert_ensembl_to_symbols(interaction_network, 'geneB')
-
 # Load the SPONGE network
 sponge_network <- create_Sponge_modules(interaction_network, network_analysis, mscor = 0.03, padj = 0.05,
                                         RNAs = c("ceRNA", "lncRNA", "mRNA"),
@@ -190,6 +153,9 @@ sponge_network <- create_Sponge_modules(interaction_network, network_analysis, m
 
 # Calculate AUCell scores
 aucell_scores_sponge <- aucell_score(sponge_network, ad, ensembl_col)
+aucell_scores_sponge <- AUCell::getAUC(aucell_scores_sponge)
+aucell_scores_sponge <- as.data.frame(aucell_scores_sponge)
+write.csv(aucell_scores_sponge, file = paste0("aucell_scores_sponge_", adata_prefix, ".csv"), row.names = TRUE)
 
 }
 
@@ -198,24 +164,7 @@ if (!is.null(genie_3_network)) {
   genie3_gene_sets <- create_Genie3_gene_sets(genie_3_network, n_cores = parallel::detectCores())
 
   aucell_scores_genie3 <- aucell_score(genie3_gene_sets, ad, "")
+  aucell_scores_genie3 <- AUCell::getAUC(aucell_scores_genie3)
+  aucell_scores_genie3 <- as.data.frame(aucell_scores_genie3)
+  write.csv(aucell_scores_genie3, file = paste0("aucell_scores_genie3_", adata_prefix, ".csv"), row.names = TRUE)
 }
-
-# Get dataframes from AUCell scores
-
-aucell_scores_sponge <- AUCell::getAUC(aucell_scores_sponge)
-aucell_scores_sponge <- as.data.frame(aucell_scores_sponge)
-
-aucell_scores_genie3 <- AUCell::getAUC(aucell_scores_genie3)
-aucell_scores_genie3 <- as.data.frame(aucell_scores_genie3)
-
-adata_prefix <- sub(".h5ad", "", basename(adata))
-
-  
-# Save to csv
-write.csv(aucell_scores_sponge, file = paste0("aucell_scores_sponge_", adata_prefix, ".csv"), row.names = TRUE)
-write.csv(aucell_scores_genie3, file = paste0("aucell_scores_genie3_", adata_prefix, ".csv"), row.names = TRUE)
-
-
-
-
-
