@@ -1,0 +1,37 @@
+name: base
+channels:
+  - conda-forge
+  - bioconda
+  - r
+  - defaults
+  - pytorch
+  - nvidia
+dependencies:
+  - r-base=4.4.2
+  - r-essentials
+  - r-matrix
+  - r-ggplot2
+  - r-xml
+  - r-xml2
+  - r-lme4
+  - r-igraph
+  - r-tidyverse
+  - r-devtools
+  - r-biocmanager
+  - r-domc
+  - bioconda::bioconductor-sponge
+  - bioconda::bioconductor-aucell
+  - bioconda::bioconductor-singlecellexperiment
+  - python=3.10
+  - numpy
+  - pandas
+  - scipy=1.10.*
+  - squidpy
+  - pytorch-cuda
+  - dask
+  - pip
+  - git
+  - pip:
+      - spatialde
+      - git+https://github.com/broadinstitute/Tangram.git
+      - git+https://github.com/theislab/spapros.git@bump_python3.13

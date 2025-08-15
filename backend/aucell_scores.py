@@ -58,7 +58,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Compute AUCell scores for gene signatures.")
     parser.add_argument("--adata", type=str, required=True, help="Path to the AnnData object.")
-    parser.add_argument("--reg_network_csv", type=str, help="Path to the GENIE3/Sponge CSV file.")
+    parser.add_argument("--reg_network_csv", type=str, help="Path to the GENIE3")
     parser.add_argument("--output_dir", type=str, required=True, help="Directory to save AUCell scores.")
     args = parser.parse_args()
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
         print(f"Intersecting genes: {len(intersect)} out of {len(set(gene_regulatory_csv['targetGene']))} in the regulatory network and {len(set(adata_genes))} in the AnnData object.")
         gene_signatures = get_signatures_from_genie3(gene_regulatory_csv)
     else:
-        raise ValueError("Please provide a path to the GENIE3/Sponge CSV file.")
+        raise ValueError("Please provide a path to the GENIE3.")
     
 
     
