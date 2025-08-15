@@ -1,6 +1,19 @@
 <h2>Upload your own data</h2>
+<!-- Error banner -->
+<div *ngIf="errorMsg" style="
+  margin: 12px 0; padding: 10px 12px; border-radius: 6px;
+  background: #ffecec; color: #7a0000; border: 1px solid #ffb3b3;">
+  {{ errorMsg }}
+</div>
+
+
+<!--
+Bind this form to the Reactive Form instance "form" from form-page.component.ts.
+When the user clicks "Submit", the onSubmit() method will be called.
+-->
 <form [formGroup]="form" (ngSubmit)="onSubmit()">
 
+  <!-- Dataset selection dropdown -->
   <label>Select Dataset:</label>
   <select formControlName="dataset">
     <option value="Visium">Visium</option>
@@ -9,6 +22,7 @@
 
   <br />
 
+  <!-- Analysis method selection dropdown -->
   <label>Select Method:</label>
   <select formControlName="method">
     <option value="Genie3">Genie3</option>
@@ -17,14 +31,24 @@
 
   <br /><br />
 
+  <!-- File upload: spatial dataset (.h5ad) -->
+  <!-- Calls onFileSelected() with identifier "spatial" -->
   <label>Upload spatial dataset (.h5ad):</label>
-  <input type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad" />
-
+  <input type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad" required/>
+  <br />
   <br />
 
+  <!-- File upload: single-cell dataset (.h5ad) -->
+  <!-- Calls onFileSelected() with identifier "singleCell" -->
   <label>Upload single cell dataset (.h5ad):</label>
   <input type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad" />
-
+  <br />
+  <!--
+  Only shown if a single-cell dataset has been selected (singleCellFile is set).
+  Provides two extra options:
+    1. Use Tangram for mapping: links single-cell and spatial data using Tangram.
+    2. Enable filtering (Single Cell): applies filtering to the uploaded single-cell dataset.
+  -->
   <div *ngIf="singleCellFile" style="margin-top: 4px;">
     <label>
       <input type="checkbox" formControlName="tangram" />
@@ -39,20 +63,25 @@
 
   <br />
 
+  <!-- File upload: precomputed results (Genie3 or Sponge) in CSV/TSV format -->
+  <!-- Calls onFileSelected() with identifier "precomputed" -->
   <label>Upload Genie3 or Sponge (.csv/.tsv):</label>
-  <input type="file" (change)="onFileSelected($event, 'file2')" accept=".csv,.tsv" />
+  <input type="file" (change)="onFileSelected($event, 'precomputed')" accept=".csv,.tsv" />
 
   <br />
 
   <h3>Options</h3>
 
+  <!-- Toggle normalization -->
   <label>
     <input type="checkbox" formControlName="normalization" />
     Enable normalization
+    <br />
   </label>
 
   <br />
 
+  <!-- Toggle filtering for spatial data -->
   <label>
     <input type="checkbox" formControlName="filteringSpatial" />
     Enable filtering (Spatial)
@@ -62,20 +91,29 @@
 
   <h3>Select Scores</h3>
 
+  <!--
+  Nested FormGroup: "scores"
+  Loops through availableScores and renders a checkbox for each score key.
+  The control name is dynamically bound to the score value.
+  -->
   <div formGroupName="scores">
     <label *ngFor="let score of availableScores">
       <input type="checkbox" [formControlName]="score" />
       {{ score }}
+      <br />
+      <br />
     </label>
   </div>
 
   <br />
 
+  <!-- Conditional upload: Sponge network file (only if required by selected scores) -->
   <div *ngIf="requiresSponge()">
     <label>Upload Sponge network (.csv/.tsv):</label>
     <input type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv" />
   </div>
 
+  <!-- Conditional upload: Genie3 results file (only if required by selected scores) -->
   <div *ngIf="requiresGenie()">
     <label>Upload Genie3 results (.csv/.tsv):</label>
     <input type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv" />
@@ -83,5 +121,6 @@
 
   <br />
 
+  <!-- Submit button triggers (ngSubmit) -->
   <button type="submit">Submit</button>
 </form>

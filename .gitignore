@@ -1,0 +1,12 @@
+.DS_Store
+backend/.DS_Store
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+backend/uploads/
+
+docker_environment.yml
+
+rindler.h5ad

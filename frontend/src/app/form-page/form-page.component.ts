@@ -1,107 +1,222 @@
-import { Component } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, FormControl } from '@angular/forms';
-import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router'
+// src/app/form-page/form-page.component.ts
 
+// import for an Angular component
+import { Component } from '@angular/core';
+// Imports the CommonModule (provides core Angular directives like *ngIf, *ngFor).
+import { CommonModule } from '@angular/common';
+/* Imports classes for Reactive Forms:
+   FormBuilder: helper to create form groups.
+   FormGroup: represents a collection of form controls.
+   ReactiveFormsModule: enables Reactive Forms in Angular. */
+import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+// Imports Angular's HTTP client for API requests
+import { HttpClient, HttpEventType, HttpClientModule } from '@angular/common/http';
+// Imports environment variables, e.g., the backend API URL.
+import { environment } from '../../environments/environment';
+
+/* Defines the Angular component:
+   selector: Tag name in HTML (<app-form-page>).
+   standalone: true — the component is standalone and does not need to be declared in a module.
+   imports: modules this component depends on.
+   templateUrl: path to the HTML template. */
 @Component({
   selector: 'app-form-page',
   standalone: true,
-  imports: [ReactiveFormsModule, CommonModule],
+  imports: [CommonModule, ReactiveFormsModule, HttpClientModule],
   templateUrl: './form-page.component.html',
   styleUrls: ['./form-page.component.scss'],
 })
+
+// Begins the component class definition
 export class FormPageComponent {
+  // Form object
   form: FormGroup;
-  uploadedFile: File | null = null;
-  singleCellFile: File | null = null;
-  uploadedFile2: File | null = null;
-  spongeNetworkFile: File | null = null;
-  genieFile: File | null = null;
 
-  availableScores = ['liana+', 'spongeeffects', 'squidpy', 'viper', 'aucell'];
+  // Files
+  spatialFile!: File;        // the spatial file is required
+  singleCellFile?: File;
+  precomputedFile?: File;
+  spongeNetworkFile?: File;
+  genieFile?: File;
 
-  constructor(private fb: FormBuilder, private router: Router) {
+  // This is relevant for the HTML view — which scores should be displayed/available
+  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER', 'AUCell'];
+
+  uploading = false;                  // Upload is running; set to true as soon as submit starts
+  uploadProgress: number | null = null; // used for a potential upload progress bar
+  errorMsg: string | null = null;       // used for error messages
+
+  constructor(
+    private fb: FormBuilder,   // to easily build reactive forms
+    private router: Router,    // important to navigate to another page later
+    private http: HttpClient   // to send API requests to the backend
+  ) {
+    // Build the reactive form
     this.form = this.fb.group({
-      dataset: ['Visium'],
-      method: ['Genie3'],
-      normalization: [false],
-      filteringSpatial: [false],
-      filteringSingleCell: [false],
-      tangram: [false],
+      dataset: ['', Validators.required],           // dataset name or identifier
+      method: ['', Validators.required],            // selected method (e.g., spatial)
+      species: ['', Validators.required],           // organism / species
+      tangram: [false],                             // whether Tangram alignment is activated
+      // group of score checkboxes; the key is the score name, the value is a boolean
       scores: this.fb.group({
-        'liana+': [false],
-        'spongeeffects': [false],
+        'LIANA+': [false],
+        'SPONGeffects': [false],
         'squidpy': [false],
-        'viper': [false],
-        'aucell': [false],
-      })
+        'VIPER': [false],
+        'AUCell': [false],
+      }),
     });
   }
 
-  // Upload-Funktionen
-  onFileSelected(event: Event, fileType: 'spatial' | 'singleCell' | 'file2' | 'sponge' | 'genie') {
-    const input = event.target as HTMLInputElement;
-    if (!input.files || input.files.length === 0) return;
-
-    const file = input.files[0];
-
-    switch (fileType) {
-      case 'spatial':
-        if (!file.name.endsWith('.h5ad')) return;
-        this.uploadedFile = file;
-        break;
-      case 'singleCell':
-        if (!file.name.endsWith('.h5ad')) return;
-        this.singleCellFile = file;
-        break;
-      case 'file2':
-        this.uploadedFile2 = file;
-        break;
-      case 'sponge':
-        this.spongeNetworkFile = file;
-        break;
-      case 'genie':
-        this.genieFile = file;
-        break;
-    }
+  // Convenience getter for the score checkbox group value
+  private get scoreValues(): Record<string, boolean> {
+    return (this.form.get('scores')?.value as Record<string, boolean>) || {};
   }
 
-  // Check, ob eine Score-Abhängigkeit vorliegt
+  // Returns the names of all selected scores
+  private get selectedScores(): string[] {
+    const s = this.scoreValues;
+    return Object.keys(s).filter((k) => !!s[k]);
+  }
+
+  // File selection handlers --------------------------------------------------
+
+  // Spatial dataset file (required)
+  onSpatialSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
+    if (file) this.spatialFile = file;
+  }
+
+  // Single-cell reference file (required if Tangram is enabled)
+  onSingleCellSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
+    this.singleCellFile = file ?? undefined;
+  }
+
+  // Precomputed file (if provided, network and genie files may not be required)
+  onPrecomputedSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
+    this.precomputedFile = file ?? undefined;
+  }
+
+  // SPONGE network file — required if SPONGeffects or AUCell are selected (and no precomputed file is provided)
+  onSpongeNetworkSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
+    this.spongeNetworkFile = file ?? undefined;
+  }
+
+  // GENIE/VIPER network file — required if VIPER or AUCell are selected (and no precomputed file is provided)
+  onGenieSelected(event: Event): void {
+    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
+    this.genieFile = file ?? undefined;
+  }
+
+  // Toggle a score programmatically (e.g., from the template)
+  changeScore(scoreName: string, checked: boolean): void {
+    const ctrl = (this.form.get('scores') as FormGroup)?.get(scoreName);
+    if (ctrl) ctrl.setValue(checked);
+  }
+
+  // Whether Tangram is required
+  requiresTangram(): boolean {
+    return !!this.form.value.tangram && !this.singleCellFile; // if tangram is enabled, a single-cell file must be present
+  }
+
+  // Whether a SPONGE network file is required
   requiresSponge(): boolean {
-    const scores = this.form.get('scores')?.value;
-    const spongeNeeded = scores['spongeeffects'] || scores['aucell'];
-    // Wenn file2 (oben) schon hochgeladen wurde → Sponge nicht mehr erforderlich
-    return spongeNeeded && !this.uploadedFile2;
+    const s = this.scoreValues; // gets the current value of the scores checkbox group
+    const spongeNeeded = s['SPONGeffects'] || s['AUCell']; // true if one of these two is selected
+    return spongeNeeded && !this.precomputedFile; // but only if no precomputed file was uploaded
   }
 
-  requiresGenie(): boolean {
-    const scores = this.form.get('scores')?.value;
-    const genieNeeded = scores['viper'] || scores['aucell'];
-    // Wenn file2 (oben) schon hochgeladen wurde → Genie nicht mehr erforderlich
-    return genieNeeded && !this.uploadedFile2;
+  // Same logic for the GENIE/VIPER file
+  requiresGenie(): boolean { // FIXME: everything except squidpy
+    const s = this.scoreValues;
+    const genieNeeded = s['VIPER'] || s['AUCell'];
+    return genieNeeded && !this.precomputedFile;
   }
 
+  // Final client-side validation before enabling submit
+  canSubmit(): boolean {
+    if (!this.spatialFile) return false; // is there a spatial dataset?
+    if (this.form.value.tangram && !this.singleCellFile) return false; // if tangram is enabled, a single-cell file must be uploaded
+    if (this.requiresSponge() && !this.spongeNetworkFile) return false; // same as for Tangram
+    if (this.requiresGenie() && !this.genieFile) return false;          // same logic
+    return this.form.valid;
+  }
 
-  onSubmit() {
-    const formData = new FormData();
+  onSubmit(): void {
+    // 1) Final client-side validation
+    if (!this.canSubmit()) {
+      // prevent incomplete data from being sent forward
+      return this.fail('Please complete all required fields/files before submitting.');
+    }
 
-    formData.append('dataset', this.form.value.dataset);
-    formData.append('method', this.form.value.method);
-    formData.append('normalization', this.form.value.normalization.toString());
-    formData.append('filteringSpatial', this.form.value.filteringSpatial.toString());
-    formData.append('filteringSingleCell', this.form.value.filteringSingleCell.toString());
-    formData.append('tangram', this.form.value.tangram.toString());
+    // 2) Build FormData only after validation
+    // here the multipart/form-data payload is created
+    const fd = new FormData();
+    fd.append('dataset', this.form.value.dataset);
+    fd.append('method', this.form.value.method);
+    fd.append('species', this.form.value.species);
+    fd.append('tangram', String(!!this.form.value.tangram));
 
-    // Scores als JSON
-    formData.append('scores', JSON.stringify(this.form.value.scores));
+    // Append scores as JSON array of selected names
+    fd.append('scores', JSON.stringify(this.selectedScores));
 
-    if (this.uploadedFile) formData.append('spatialFile', this.uploadedFile);
-    if (this.singleCellFile) formData.append('singleCellFile', this.singleCellFile);
-    if (this.uploadedFile2) formData.append('file2', this.uploadedFile2);
-    if (this.spongeNetworkFile) formData.append('spongeNetwork', this.spongeNetworkFile);
-    if (this.genieFile) formData.append('genieFile', this.genieFile);
+    // Required file
+    fd.append('spatial', this.spatialFile);
 
-    console.log('Form Data:', this.form.value);
-    this.router.navigate(['/plot'])
+    // Optional files depending on toggles/selection
+    if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
+    if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
+    if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
+    if (this.genieFile) fd.append('genieNetwork', this.genieFile);
+
+    // 3) Send the request
+    this.uploading = true;
+    this.uploadProgress = 0;
+
+    this.http
+      .post(`${environment.apiBaseUrl}/api/upload`, fd, {
+        reportProgress: true, // so we can show upload progress later
+        observe: 'events',
+      })
+      .subscribe({
+        next: (event) => {
+          // Update the progress bar (if any)
+          if (event.type === HttpEventType.UploadProgress) {
+            const total = (event.total ?? 0) || 0;
+            // Guard against division by zero
+            this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
+          }
+
+          // When the response arrives
+          if (event.type === HttpEventType.Response) {
+            this.uploading = false;
+            this.uploadProgress = null;
+
+            // Navigate to the results page with the returned jobId
+            // (expects the backend to respond with { jobId: string })
+            const jobId = (event.body as any)?.jobId;
+            if (!jobId) {
+              return this.fail('Upload succeeded, but no jobId was returned by the server.');
+            }
+            this.router.navigate(['/result', jobId]);
+          }
+        },
+        error: (err) => {
+          // if there is an error
+          this.uploading = false;
+          this.uploadProgress = null;
+          this.fail(err?.error?.detail || err?.error?.message || 'Upload failed.');
+        },
+      });
+  }
+
+  // For showing error messages with auto-clear
+  private fail(msg: string): void {
+    this.errorMsg = msg;
+    setTimeout(() => (this.errorMsg = null), 10000);
   }
 }
