@@ -37,7 +37,7 @@ calc_spongeEffects <- function(adata,
 create_Sponge_modules <- function(interaction_net, network_analysis, mscor, padj,
                                   RNAs, RNAs.ofInterest, n_modules, n_cores) {
   # Filter by mscor and padj
-  filtered_network_centralities <- filter_ceRNA_network(sponge_effects = interaction_network, Node_Centrality = network_analysis,
+  filtered_network_centralities <- filter_ceRNA_network(sponge_effects = interaction_net, Node_Centrality = network_analysis,
                                                         add_weighted_centrality=TRUE, mscor.threshold = mscor, padj.threshold = padj)
   print(filtered_network_centralities$Node_Centrality)
 
