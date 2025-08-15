@@ -163,7 +163,7 @@ if (!is.null(genie_3_network)) {
   # Create gene sets from the Genie3 network
   genie3_gene_sets <- create_Genie3_gene_sets(genie_3_network, n_cores = parallel::detectCores())
 
-  aucell_scores_genie3 <- aucell_score(genie3_gene_sets, ad, "")
+  aucell_scores_genie3 <- aucell_score(genie3_gene_sets, ad, NULL)
   aucell_scores_genie3 <- AUCell::getAUC(aucell_scores_genie3)
   aucell_scores_genie3 <- as.data.frame(aucell_scores_genie3)
   write.csv(aucell_scores_genie3, file = paste0("aucell_scores_genie3_", adata_prefix, ".csv"), row.names = TRUE)
