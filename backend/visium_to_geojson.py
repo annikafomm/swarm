@@ -2,12 +2,28 @@ import pandas as pd
 import numpy as np
 import scanpy as sc
 import geopandas as gpd
+import json
+import argparse
+import os
 
 
 class Hexagons:
-    def __init__(self, anndata, radius=5, scale=0.1, data_type="visium"):
+    """
+    Class to convert Visium or Transformed Xenium spatial data to GeoJSON format with hexagonal geometry.
+    This class handles the parsing of AnnData objects, Spatial scores, Gene regulatory Scores and spatial coordinates
+    to create a GeoJSON representation of the spatial data with annotated properties.
+    """
+
+
+    def __init__(self, anndata, aucell_genie3_path, aucell_sponge_path, radius=5, scale=0.1, data_type="visium"):
 
         self.anndata = anndata
+        if aucell_genie3_path and aucell_sponge_path:
+            if not os.path.exists(aucell_genie3_path):
+                raise FileNotFoundError(f"Aucell Genie3 CSV file not found: {aucell_genie3_path}")
+            if not os.path.exists(aucell_sponge_path):
+                raise FileNotFoundError(f"Aucell Sponge CSV file not found: {aucell_sponge_path}")
+            self.parse_aucell_csvs(aucell_genie3_path, aucell_sponge_path)
         self.radius = radius
         self.type = "FeatureCollection"
         self.geometry_type = "Polygon"
@@ -26,7 +42,7 @@ class Hexagons:
         return properties_dict
 
 
-
+    """
     def parse_aucell_gene_sets(self):
         uns = self.anndata.uns
         gene_sets = uns.get("genesets", None)
@@ -35,7 +51,8 @@ class Hexagons:
         else:
             print("No Aucell gene sets found in the AnnData object.")
             return {}
-
+    Methods are parse from csv files, so this is no longer used and will be removed in future commits.
+    """
 
     def hexagon_points(self,x, y, radius):
         # Scale centers
@@ -67,6 +84,13 @@ class Hexagons:
         else:
             raise ValueError(f"Unsupported data type: {self.data_type}. Supported types are 'visium' and 'xenium'.")
 
+    def parse_aucell_csvs(self, aucell_genie3_path, aucell_sponge_path):
+        print("Parsing Aucell CSV files...")
+        aucell_scores_genie3 = pd.read_csv(aucell_genie3_path, index_col=0)
+        aucell_scores_sponge = pd.read_csv(aucell_sponge_path, index_col=0)
+        self.aucell_scores_genie3 = aucell_scores_genie3
+        self.aucell_scores_sponge = aucell_scores_sponge
+        print("Aucell CSV files parsed successfully.")
 
 
     def to_geojson(self):
@@ -98,7 +122,8 @@ class Hexagons:
                 },
                 "properties": {
                     "barcode": barcode,
-                    "aucell": self.anndata.obsm.get("aucell", {}).loc[barcode].to_dict() if "aucell" in self.anndata.obsm else {},
+                    "aucell_genie3": self.aucell_scores_genie3.get(barcode, {}).to_dict() if barcode in self.aucell_scores_genie3 else {},
+                    "aucell_sponge": self.aucell_scores_sponge.get(barcode, {}).to_dict() if barcode in self.aucell_scores_sponge else {},
                     "leiden": leiden_cluster,
                     "leiden_centrality": leiden_centrality,
                     "leiden_co_occurrence": leiden_co_occurrence.tolist(),
@@ -129,23 +154,47 @@ class Hexagons:
 
 
 if __name__ == "__main__":
-    import json
-    import argparse
     parser = argparse.ArgumentParser(description="Convert Visium data to GeoJSON format.")
 
-    parser.add_argument("--adata", type=str, required=True, help="Path to the input .h5ad file.")
-    parser.add_argument("--radius", type=int, default=50, help="Radius of the hexagons.")
-    parser.add_argument("--scale", type=float, default=0.5, help="Scale factor for the hexagons.")
-    parser.add_argument("--data_type", type=str, default="visium", choices=["visium", "xenium"], help="Type of spatial data (visium or xenium).")
+    parser.add_argument("--adata","-a", type=str, required=True, help="Path to the input .h5ad file.")
+    parser.add_argument("--aucell_genie3_path","-g", type=str, required=True, help="Path to the Aucell Genie3 CSV file.")
+    parser.add_argument("--aucell_sponge_path", "-s", type=str, required=True, help="Path to the Aucell Sponge CSV file.")
+    parser.add_argument("--radius","-r", type=int, default=50, help="Radius of the hexagons.")
+    parser.add_argument("--scale", "-sc", type=float, default=0.5, help="Scale factor for the hexagons.")
+    parser.add_argument("--data_type", "-dt", type=str, default="visium", choices=["visium", "xenium"], help="Type of spatial data (visium or xenium).")
+    parser.add_argument("--outpath", "-o", type=str, default="./hexagons.geojson", help="Output path for the GeoJSON file.")
     args = parser.parse_args()
 
     spatial_data = sc.read_h5ad(args.adata)
 
-    hexagons = Hexagons(spatial_data, radius=args.radius, scale=0.4, data_type=args.data_type)
+    hexagons = Hexagons(spatial_data, radius=args.radius, scale=0.4, data_type=args.data_type, aucell_genie3_path=args.aucell_genie3_path, aucell_sponge_path=args.aucell_sponge_path)
 
     geojson_data = hexagons.to_geojson()
 
-    with open("hexagons_GSM6592049_M2.geojson", "w") as f:
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Convert Visium data to GeoJSON format.")
+
+    parser.add_argument("--adata","-a", type=str, required=True, help="Path to the input .h5ad file.")
+    parser.add_argument("--aucell_genie3_path","-g", type=str, required=False, help="Path to the Aucell Genie3 CSV file.")
+    parser.add_argument("--aucell_sponge_path", "-s", type=str, required=False, help="Path to the Aucell Sponge CSV file.")
+    parser.add_argument("--radius","-r", type=int, default=50, help="Radius of the hexagons.")
+    parser.add_argument("--scale", "-sc", type=float, default=0.5, help="Scale factor for the hexagons.")
+    parser.add_argument("--data_type", "-dt", type=str, default="visium", choices=["visium", "xenium"], help="Type of spatial data (visium or xenium).")
+    parser.add_argument("--outpath", "-o", type=str, default="./hexagons.geojson", help="Output path for the GeoJSON file.") # Files should be named after their dataset names so you can select them in the view
+    args = parser.parse_args()
+
+    spatial_data = sc.read_h5ad(args.adata)
+
+    if not args.aucell_genie3_path or not args.aucell_sponge_path:
+        hexagons = Hexagons(spatial_data, radius=args.radius, scale=args.scale, data_type=args.data_type)
+    else:
+        hexagons = Hexagons(spatial_data, radius=args.radius, scale=args.scale, data_type=args.data_type, aucell_genie3_path=args.aucell_genie3_path, aucell_sponge_path=args.aucell_sponge_path)
+
+    geojson_data = hexagons.to_geojson()
+
+    os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
+
+    with open(args.outpath, "w+") as f:
         json.dump(geojson_data, f, indent=4)
 
     print("GeoJSON file created successfully.")

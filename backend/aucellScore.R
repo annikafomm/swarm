@@ -9,11 +9,11 @@ library('AUCell')
 
 
 calc_spongeEffects <- function(adata,
-                               mscor=0.1, padj=0.05, 
-                               feature_col='feature_type', RNAs=c("lncRNA","protein_coding"), 
-                               ensembl_col=NA, n_modules=20, 
+                               mscor=0.1, padj=0.05,
+                               feature_col='feature_type', RNAs=c("lncRNA","protein_coding"),
+                               ensembl_col=NA, n_modules=20,
                                oe=TRUE, gsva=TRUE, ssgsea=TRUE, n_cores=1) {
-  
+
   # Get Expresision matrix from SingleCellExperiment object
   expr <- assay(adata, "X")
   expr <- as.matrix(expr)
@@ -45,7 +45,7 @@ create_Sponge_modules <- function(interaction_net, network_analysis, mscor, padj
                                             ceRNA_class = RNAs, centrality_measure ="Weighted_Degree", cutoff = n_modules)
 
   intersect_genes <- intersect(RNAs.ofInterest, filtered_network_centralities$Node_Centrality$gene)
-  
+
   print(paste("Number of central genes:", length(central_gene_modules)))
   print(paste("Number of genes in the network:", length(intersect_genes)))
 
@@ -87,7 +87,7 @@ aucell_score <- function(sponge_network, anndata, ensembl_col) {
   # Extract gene expression matrix
   expr_matrix <- assay(anndata, "X")
 
-  
+
 
   if (!is.null(ensembl_col) && ensembl_col != "") {
     # Get the Ensembl IDs from the AnnData object
@@ -135,12 +135,12 @@ interaction_network <- fread(interaction_network, strip.white=TRUE)
 network_analysis <- fread(network_analysis, strip.white=TRUE)
 
 if (!is.null(interaction_network) && !is.null(network_analysis)) {
-  RNAs.ofInterest <- calc_spongeEffects(ad, mscor = 0.3, padj = 0.05, 
-                                        feature_col = 'feature_type', 
-                                        RNAs = c("lncRNA", "protein_coding"), 
-                                        ensembl_col = ensembl_col, 
-                                        n_modules = 20, 
-                                        oe = TRUE, gsva = TRUE, ssgsea = TRUE, 
+  RNAs.ofInterest <- calc_spongeEffects(ad, mscor = 0.3, padj = 0.05,
+                                        feature_col = 'feature_type',
+                                        RNAs = c("lncRNA", "protein_coding"),
+                                        ensembl_col = ensembl_col,
+                                        n_modules = 20,
+                                        oe = TRUE, gsva = TRUE, ssgsea = TRUE,
                                         n_cores = parallel::detectCores())
 
 print(paste("Identified", length(RNAs.ofInterest), "genes of interest from the AnnData object."))
@@ -150,6 +150,10 @@ sponge_network <- create_Sponge_modules(interaction_network, network_analysis, m
                                         RNAs = c("ceRNA", "lncRNA", "mRNA"),
                                         RNAs.ofInterest = RNAs.ofInterest,
                                         n_modules = 10, n_cores = parallel::detectCores())
+
+# Save to json file
+sponge_network_file <- paste0("sponge_network_", adata_prefix, ".json")
+jsonlite::write_json(sponge_network, path = sponge_network_file, pretty = TRUE)
 
 # Calculate AUCell scores
 aucell_scores_sponge <- aucell_score(sponge_network, ad, ensembl_col)
@@ -161,7 +165,12 @@ write.csv(aucell_scores_sponge, file = paste0("aucell_scores_sponge_", adata_pre
 
 if (!is.null(genie_3_network)) {
   # Create gene sets from the Genie3 network
+  genie_3_gene_sets_file <- paste0("genie3_network_", adata_prefix, ".txt")
   genie3_gene_sets <- create_Genie3_gene_sets(genie_3_network, n_cores = parallel::detectCores())
+
+  # Save the Genie3 as a JSON file
+  genie3_gene_sets_file <- paste0("genie3_gene_sets_", adata_prefix, ".json")
+  jsonlite::write_json(genie3_gene_sets, path = genie3_gene_sets_file, pretty = TRUE)
 
   aucell_scores_genie3 <- aucell_score(genie3_gene_sets, ad, NULL)
   aucell_scores_genie3 <- AUCell::getAUC(aucell_scores_genie3)
