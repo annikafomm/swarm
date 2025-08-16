@@ -12,7 +12,6 @@
       ]
     }
   },
-  "remoteUser": "mopitaner",
   "forwardPorts": [4200],
   "portsAttributes": {
     "4200": { "label": "Frontend Development Server" }
