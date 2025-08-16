@@ -50,7 +50,7 @@ def ligand_receptor_relationships(
     global_scores = global_scores.rename(
         columns={
             col: (
-                f"ligand_receptor_cosine_similarity_{col}"
+                f"cosine_similarity_{col}"
                 if col in ["mean", "std"]
                 else f"ligand_receptor_{col}"
             )
