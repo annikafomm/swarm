@@ -26,6 +26,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     adata = sc.read_h5ad(args.adata)
+    adata.uns["liana_columns"] = {}
 
     if args.grn is not None:
         grn = pd.read_csv(args.grn)
