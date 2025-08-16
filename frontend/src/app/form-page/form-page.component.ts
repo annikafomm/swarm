@@ -54,10 +54,14 @@ export class FormPageComponent {
   ) {
     // Build the reactive form
     this.form = this.fb.group({
-      dataset: ['', Validators.required],           // dataset name or identifier
-      method: ['', Validators.required],            // selected method (e.g., spatial)
-      species: ['', Validators.required],           // organism / species
+      dataset: ['Visium', Validators.required],           // dataset name or identifier
+      method: ['Genie3', Validators.required],            // selected method (e.g., spatial)
       tangram: [false],                             // whether Tangram alignment is activated
+
+      normalization: [false],
+      filteringSpatial: [false],
+      filteringSingleCell: [false],
+
       // group of score checkboxes; the key is the score name, the value is a boolean
       scores: this.fb.group({
         'LIANA+': [false],
@@ -112,6 +116,32 @@ export class FormPageComponent {
     this.genieFile = file ?? undefined;
   }
 
+  onFileSelected(event: Event, type: string): void {
+    const input = event.target as HTMLInputElement;
+    if (input?.files && input.files.length > 0) {
+      const file = input.files[0];
+
+      switch (type) {
+        case 'spatial':
+          this.spatialFile = file;
+          break;
+        case 'singleCell':
+          this.singleCellFile = file;
+          break;
+        case 'precomputed':
+          this.precomputedFile = file;
+          break;
+        case 'sponge':
+          this.spongeNetworkFile = file;
+          break;
+        case 'genie':
+          this.genieFile = file;
+          break;
+      }
+    }
+  }
+
+
   // Toggle a score programmatically (e.g., from the template)
   changeScore(scoreName: string, checked: boolean): void {
     const ctrl = (this.form.get('scores') as FormGroup)?.get(scoreName);
@@ -131,11 +161,12 @@ export class FormPageComponent {
   }
 
   // Same logic for the GENIE/VIPER file
-  requiresGenie(): boolean { // FIXME: everything except squidpy
+  requiresGenie(): boolean {
     const s = this.scoreValues;
-    const genieNeeded = s['VIPER'] || s['AUCell'];
-    return genieNeeded && !this.precomputedFile;
+    const needsGenie = s['VIPER'] || s['AUCell'] || s['SPONGeffects'];
+    return needsGenie && !this.precomputedFile;
   }
+
 
   // Final client-side validation before enabling submit
   canSubmit(): boolean {
@@ -144,6 +175,11 @@ export class FormPageComponent {
     if (this.requiresSponge() && !this.spongeNetworkFile) return false; // same as for Tangram
     if (this.requiresGenie() && !this.genieFile) return false;          // same logic
     return this.form.valid;
+  }
+
+  shouldOfferGenieUpload(): boolean {
+    const s = this.scoreValues;
+    return !!s['LIANA+'];
   }
 
   onSubmit(): void {
@@ -158,20 +194,36 @@ export class FormPageComponent {
     const fd = new FormData();
     fd.append('dataset', this.form.value.dataset);
     fd.append('method', this.form.value.method);
-    fd.append('species', this.form.value.species);
     fd.append('tangram', String(!!this.form.value.tangram));
+
+    fd.append('normalization', String(!!this.form.value.normalization));
+    fd.append('filteringSpatial', String(!!this.form.value.filteringSpatial));
+    fd.append('filteringSingleCell', String(!!this.form.value.filteringSingleCell));
 
     // Append scores as JSON array of selected names
     fd.append('scores', JSON.stringify(this.selectedScores));
 
     // Required file
-    fd.append('spatial', this.spatialFile);
+    fd.append('spatialFile', this.spatialFile);
 
     // Optional files depending on toggles/selection
     if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
     if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
     if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
-    if (this.genieFile) fd.append('genieNetwork', this.genieFile);
+    //if (this.genieFile) fd.append('genieNetwork', this.genieFile); TODO
+
+
+    if (this.genieFile) {
+      fd.append('genieNetwork', this.genieFile);
+    }
+
+    const s = this.scoreValues;
+  if (s['LIANA+']) {
+    // Wenn keine Datei hochgeladen wurde, soll Backend Default nehmen
+    fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
+  }
+
+
 
     // 3) Send the request
     this.uploading = true;
@@ -206,17 +258,31 @@ export class FormPageComponent {
           }
         },
         error: (err) => {
-          // if there is an error
           this.uploading = false;
           this.uploadProgress = null;
-          this.fail(err?.error?.detail || err?.error?.message || 'Upload failed.');
+          // Übergib das ganze err.error – normalizeError macht den Rest
+          this.fail(err?.error ?? err ?? 'Upload failed.');
         },
       });
   }
 
+  private normalizeError(e: any): string {
+    if (!e) return 'Unknown error';
+    if (typeof e === 'string') return e;
+    if (Array.isArray(e)) {
+      // Mappe Arrays (z. B. [{msg:'a'},{msg:'b'}]) auf eine lesbare Liste
+      return e.map(item => this.normalizeError(item)).join('\n');
+    }
+    if (typeof e.message === 'string') return e.message;
+    if (typeof e.detail === 'string') return e.detail;
+    try { return JSON.stringify(e); } catch { return String(e); }
+  }
+
+
   // For showing error messages with auto-clear
-  private fail(msg: string): void {
-    this.errorMsg = msg;
+  private fail(msg: any): void {
+    this.errorMsg = this.normalizeError(msg);
     setTimeout(() => (this.errorMsg = null), 10000);
   }
+
 }
