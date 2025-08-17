@@ -282,4 +282,25 @@ export class FormPageComponent {
     setTimeout(() => (this.errorMsg = null), 10000);
   }
 
+  onReset(): void {
+    this.form.reset({
+      dataset: null,
+      method: null,
+      tangram: false,
+      filteringSingleCell: false,
+      normalization: false,
+      filteringSpatial: false,
+      scores: {}
+    });
+
+    this.singleCellFile = undefined;
+    this.precomputedFile = undefined;
+    this.genieFile = undefined;
+    this.spongeNetworkFile = undefined;
+
+    this.uploading = false;
+    this.uploadProgress = 0;
+    this.errorMsg = null;
+  }
+
 }

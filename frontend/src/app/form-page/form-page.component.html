@@ -150,5 +150,6 @@
 
   <div class="actions">
     <button type="submit" [disabled]="!canSubmit() || uploading">Submit</button>
+    <button type="reset" (click)="onReset()">Reset</button>
   </div>
 </form>

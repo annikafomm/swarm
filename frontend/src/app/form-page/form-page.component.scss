@@ -191,7 +191,8 @@ select, input[type="text"] {
   gap: 12px;
   margin-top: 20px;
 }
-button[type="submit"] {
+button[type="submit"],
+button[type="reset"] {
   padding: 10px 16px;
   border-radius: 12px;
   border: none;
