@@ -210,7 +210,7 @@ export class FormPageComponent {
     if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
     if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
     if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
-    //if (this.genieFile) fd.append('genieNetwork', this.genieFile); TODO
+    
 
 
     if (this.genieFile) {

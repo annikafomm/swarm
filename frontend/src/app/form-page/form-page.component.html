@@ -31,24 +31,27 @@
 
 
   <div class="section">
-    <div>
-      <label>Upload spatial dataset (.h5ad):</label>
-      <div class="file">
-        <input id="spatial" type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad">
-        <label for="spatial">
-          <span class="btn">Choose file</span>
-          <span class="file-name">{{ spatialFile?.name || 'No file selected' }}</span>
-        </label>
-      </div>
+    <label>Upload spatial dataset (.h5ad):</label>
+    <div class="file">
+      <input id="spatial" type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad">
+      <label for="spatial" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="spatialFile?.name || 'No file selected'">
+          {{ spatialFile?.name || 'No file selected' }}
+        </span>
+      </label>
     </div>
+
 
     <div style="margin-top:14px;">
       <label>Upload single cell dataset (.h5ad):</label>
       <div class="file">
         <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
-        <label for="singleCell">
+        <label for="singleCell" class="file-control">
           <span class="btn">Choose file</span>
-          <span class="file-name">{{ singleCellFile?.name || 'No file selected' }}</span>
+          <span class="file-name" [title]="singleCellFile?.name || 'No file selected'">
+            {{ singleCellFile?.name || 'No file selected' }}
+          </span>
         </label>
       </div>
     </div>
@@ -70,9 +73,11 @@
       <label>Upload Genie3 or Sponge (.csv/.tsv):</label>
       <div class="file">
         <input id="precomputed" type="file" (change)="onFileSelected($event, 'precomputed')" accept=".csv,.tsv">
-        <label for="precomputed">
+        <label for="precomputed" class="file-control">
           <span class="btn">Choose file</span>
-          <span class="file-name">{{ precomputedFile?.name || 'No file selected' }}</span>
+          <span class="file-name" [title]="precomputedFile?.name || 'No file selected'">
+            {{ precomputedFile?.name || 'No file selected' }}
+          </span>
         </label>
       </div>
     </div>
@@ -88,9 +93,11 @@
   <div class="section">
     <div class="section-title">Select Scores</div>
     <div class="checkbox-list" formGroupName="scores">
-      <label *ngFor="let score of availableScores">
+      <label *ngFor="let score of availableScores"
+       class="score-option"
+       [ngClass]="{ 'force-sponge': score === 'SPONGeffects' }">
         <input type="checkbox" [formControlName]="score" />
-        {{ score }}
+        <span class="score-text">{{ score }}</span>
       </label>
     </div>
   </div>
@@ -100,22 +107,22 @@
     <label>Upload Sponge network (.csv/.tsv):</label>
     <div class="file">
       <input id="sponge" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
-      <label for="sponge">
+      <label for="sponge" class="file-control">
         <span class="btn">Choose file</span>
         <span class="file-name">{{ spongeNetworkFile?.name || 'No file selected' }}</span>
       </label>
     </div>
   </div>
 
-  <div class="section" *ngIf="shouldOfferGenieUpload()">
+  <div class="section" *ngIf="requiresGenie() || shouldOfferGenieUpload()">
     <label>
-      Upload Genie/LIANA network (.csv/.tsv)
-      <span *ngIf="requiresGenie()">— required</span>
-      <span *ngIf="!requiresGenie()">— optional</span>
+      Upload Genie3 network (.csv/.tsv)
+      <span *ngIf="requiresGenie()">— required:</span>
+      <span *ngIf="!requiresGenie()">— optional:</span>
     </label>
     <div class="file">
       <input id="genie" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
-      <label for="genie">
+      <label for="genie" class="file-control">
         <span class="btn">Choose file</span>
         <span class="file-name">{{ genieFile?.name || 'No file selected' }}</span>
       </label>

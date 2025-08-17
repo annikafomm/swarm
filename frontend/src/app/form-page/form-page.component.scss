@@ -57,41 +57,110 @@ select, input[type="text"] {
   background: #fff;
 }
 
-/* Hübscher File-Upload */
-.file {
-  margin-top: 6px;
-}
-.file input[type="file"] { display: none; }  /* wir triggern über das Label */
-.file label {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-}
-.file .btn {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  border-radius: 999px;
-  font-weight: 600;
-}
-.file .file-name {
-  color: var(--muted);
-  font-size: 0.95rem;
+/* ---------- File Upload Controls ---------- */
+/* --- File upload (stabil & responsive) --- */
+.file { margin: 8px 0 18px; }
+
+/* Input komplett verstecken; Klick geht über <label for=…> */
+.file input[type="file"] {
+  display: none;
 }
 
-/* Checkbox-Liste in zwei Spalten */
-.checkbox-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap: 10px 18px;
-}
-.checkbox-list label {
+/* Sichtbarer Container */
+.file-control {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-weight: 500;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(15,23,42,.12);
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(2,6,23,.06);
+  transition: border-color .2s ease, box-shadow .2s ease;
+  cursor: pointer;                 /* wichtig, sonst wirkt’s „kaputt“ */
 }
+
+.file-control:hover {
+  border-color: rgba(15,23,42,.22);
+  box-shadow: 0 4px 14px rgba(2,6,23,.08);
+}
+
+.file-control:focus-visible {
+  outline: 3px solid rgba(59,130,246,.3);
+  outline-offset: 2px;
+}
+
+/* Button (schlicht) */
+.file .btn {
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background: #f3f4f6;
+  border: 1px solid rgba(15,23,42,.08);
+  box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
+}
+
+/* Dateiname: ellipsis statt Überlauf */
+.file .file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  color: #334155;
+}
+
+/* Labels dürfen umbrechen */
+.section label, .section .section-title {
+  word-break: break-word;
+}
+
+/* Mobile etwas enger */
+@media (max-width: 520px) {
+  .file-control { padding: 10px 12px; border-radius: 14px; gap: 10px; }
+  .file .btn { padding: 9px 14px; }
+}
+
+
+.checkbox-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr)); /* kleinere Mindestbreite */
+  column-gap: 16px;   /* engerer Abstand rechts */
+  row-gap: 10px;
+  grid-auto-flow: row;
+}
+
+/* Jede Checkbox + Text */
+.score-option {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  align-items: start;
+  column-gap: 8px;
+  font-weight: 400;   /* nicht fett */
+}
+
+/* SPONGeffects nach ganz oben links */
+.score-option.force-sponge {
+  order: -1;   /* ganz nach vorne */
+}
+
+/* Text normal umbrechen */
+.score-text {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+
+
+/* mobil: einspaltig */
+@media (max-width: 640px) {
+  .checkbox-list {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 /* Error + Progress */
 .error {
