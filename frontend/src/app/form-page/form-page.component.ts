@@ -128,9 +128,6 @@ export class FormPageComponent {
         case 'singleCell':
           this.singleCellFile = file;
           break;
-        case 'precomputed':
-          this.precomputedFile = file;
-          break;
         case 'sponge':
           this.spongeNetworkFile = file;
           break;
@@ -210,7 +207,7 @@ export class FormPageComponent {
     if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
     if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
     if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
-    
+
 
 
     if (this.genieFile) {

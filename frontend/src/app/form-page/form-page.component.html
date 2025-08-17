@@ -69,14 +69,28 @@
       </label>
     </div>
 
-    <div style="margin-top:14px;">
-      <label>Upload Genie3 or Sponge (.csv/.tsv):</label>
+    <div class="section" style="margin-top:14px;">
+      <label>Upload Genie3 network (.csv/.tsv):</label>
       <div class="file">
-        <input id="precomputed" type="file" (change)="onFileSelected($event, 'precomputed')" accept=".csv,.tsv">
-        <label for="precomputed" class="file-control">
+        <!-- eigene ID, aber gleiche Handler-„Rolle“ -->
+        <input id="genieTop" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
+        <label for="genieTop" class="file-control">
           <span class="btn">Choose file</span>
-          <span class="file-name" [title]="precomputedFile?.name || 'No file selected'">
-            {{ precomputedFile?.name || 'No file selected' }}
+          <span class="file-name" [title]="genieFile?.name || 'No file selected'">
+            {{ genieFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <label>Upload Sponge network (.csv/.tsv):</label>
+      <div class="file">
+        <input id="spongeTop" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
+        <label for="spongeTop" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="spongeNetworkFile?.name || 'No file selected'">
+            {{ spongeNetworkFile?.name || 'No file selected' }}
           </span>
         </label>
       </div>
