@@ -12,7 +12,6 @@ def st_small_filtering(adata):
     adata = adata[~adata.obs.mt_outlier].copy()
 
     sc.pp.filter_cells(adata, min_counts=10) # GitHub CoPilot: For spatial transcriptomics (like Xenium) typical values are 10–100.
-    sc.pp.filter_genes(adata, min_cells=1)
     
 
 def normalize(adata):

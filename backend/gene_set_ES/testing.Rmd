@@ -1,0 +1,48 @@
+---
+title: "testing"
+output: html_document
+---
+
+```{r}
+library(Matrix)
+library(data.table)
+
+source("./calc_spongEffects.R")
+```
+
+```{r}
+# Read sparse matrix
+X <- readMM("../datasets_prepro/GSM6592049_M2_prepro_X.mtx")
+rownames(X) <- fread("../datasets_prepro/GSM6592049_M2_prepro_cells.txt", header = FALSE)$V1
+
+# Read metadata
+var <- fread("../datasets_prepro/GSM6592049_M2_prepro_var.csv")
+
+ceRNA_interactions <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv")
+ceRNA_centralities <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv")
+
+ensembl <- 'ensemble_id'
+feature <- 'feature_type'
+```
+
+```{r}
+modules <- create_Sponge_modules(var, ceRNA_interactions, ceRNA_centralities, mscor=0.1, padj=0.05, feature_col=feature, RNAs=c("lncRNA","protein_coding"), ensembl_col=ensembl, n_modules=20, n_cores=1)
+
+colnames(X) <- var[,get(ensembl)]
+
+effects <- calc_spongeEffects(X, modules, oe=TRUE, gsva=TRUE, ssgsea=TRUE, n_cores=1)
+```
+
+```{r}
+fwrite(as.data.table(effects$gsva.modules, keep.rownames = "rownames"), "../datasets_prepro/GSM6592049_M2_prepro_sponge_gsva.csv")
+```
+
+```{r}
+filename <- "../datasets_prepro/GSM6592049_M2_prepro_X.mtx"
+
+file_clean <- sub("_X$", "", tools::file_path_sans_ext(basename(filename)))
+
+lapply(names(effects), function(x) file.path("..", "datasets_output", paste0("spongeffects_", x, "_sponge_", file_clean, ".csv")))
+```
+
+

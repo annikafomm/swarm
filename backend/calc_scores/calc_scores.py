@@ -6,6 +6,8 @@ import argparse
 import os
 import scanpy as sc
 import squidpy as sq
+from scipy import io
+import pandas as pd
 
 from preprocessing.preprocessing_functions import *
 
@@ -62,7 +64,7 @@ def main():
     if args.filter:
         print("Filtering ...")
         print("Number of cells and genes before filtering: ", (adata.n_obs, adata.n_vars))
-        small_filtering(adata)
+        st_small_filtering(adata)
         print("Number of cells and genes after filtering: ", (adata.n_obs, adata.n_vars))
 
     if args.normalize:
@@ -71,10 +73,8 @@ def main():
         # is_integer = np.all(np.mod(dense_layer, 1) == 0)
         normalize(adata)
 
-    # TODO: check, if adata was changed or has to be returned
-    print(adata)
-
     # Calculate spatial scores
+
 
     print("Computing the spatial neighbors ...")
     sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
@@ -134,6 +134,23 @@ def main():
     if not args.output.endswith('.h5ad'):
         args.output += '.h5ad'
     adata.write(args.output)
+
+    # TODO
+    if True: # R scores should be calculated
+        new_filename = args.output.replace('.h5ad', '')
+        # Write matrix
+        io.mmwrite(f"{new_filename}_X.mtx", adata.X)
+        # Save row (cell) names
+        pd.Series(adata.obs_names).to_csv(f"{new_filename}_cells.txt", index=False, header=False)
+
+
+        if True: # Sponge network is used
+            # Save var table
+            adata.var.to_csv(f"{new_filename}_var.csv")
+        elif True: # Genie network is used
+            # Save row (cell) names
+            pd.Series(adata.vars_names).to_csv(f"{new_filename}_genes.txt", index=False, header=False)
+
 
 if __name__ == "__main__":
     main()
