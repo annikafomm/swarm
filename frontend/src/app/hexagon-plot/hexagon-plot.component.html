@@ -22,8 +22,7 @@
             </option>
           </select>
         </div>
-          <p *ngIf="selectedGeneSetGenie3"><strong>AUCell score:</strong> {{selectedCell.properties.aucell_genie3[selectedGeneSetGenie3]}}
-          </p>
+          <h3 *ngIf="selectedGeneSetGenie3">Gene Set: {{ selectedGeneSetGenie3 }}</h3>
           <div id="aucell_graph_genie3"></div>
         </div>
   </div>

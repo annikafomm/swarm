@@ -303,7 +303,9 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     // Find neighbors for all main nodes (regulator + targets)
     allMainNodes.forEach((mainNode: string) => {
       this.genie3Network.forEach(connection => {
+
         if (connection.weight > weightThreshold) {
+
           // If mainNode is the source, add target as neighbor
           if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
             neighborSet.add(connection.target);
@@ -320,9 +322,11 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     console.log('Neighbor count:', neighborSet.size);
 
     // Add neighbor nodes
-    Array.from(neighborSet).forEach(neighbor => {
-      nodes.push({ id: neighbor, group: 2 });
-    });
+    if (nodes.length < 30) {
+      Array.from(neighborSet).forEach(neighbor => {
+        nodes.push({ id: neighbor, group: 2 });
+      });
+    }
 
     // Add ALL connections between any nodes in our network with sufficient weight
     const allNodeIds = new Set(nodes.map(n => n.id));
@@ -394,7 +398,7 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       .data(graph.edges)
       .enter()
       .append('line')
-      .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.weight) * 5))
+      .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.weight) * 10))
       .attr('stroke', (d: any) => {
         // Color edges based on weight
         const intensity = Math.min(d.weight * 10, 1);
@@ -458,7 +462,7 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
 
     // Initialize simulation with stronger forces
     const simulation = d3.forceSimulation(graph.nodes)
-      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(20).strength(0.3))
+      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(10).strength(0.5))
       .force('charge', d3.forceManyBody().strength(-500))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(15))
