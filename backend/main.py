@@ -162,6 +162,8 @@ async def read_adata(
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "ligand_receptor_p_value": "ligand_receptor",
         "ligand_receptor_category": "ligand_receptor",
+        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
+        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
     }
 
     for obsm_key, col_names in reconstruct_obsm_cols.items():
