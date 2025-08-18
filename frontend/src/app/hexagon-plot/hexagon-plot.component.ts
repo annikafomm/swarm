@@ -36,6 +36,7 @@ export class HexagonPlotComponent implements OnInit {
   public selectedCellAssociatedGeneSetsSponge: string[] = [];
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
+  public meta: { [key: string]: any } = {};
 
   public clusterCells: CellFeature[] = [];
   public clusterCellTypes: {
@@ -86,7 +87,6 @@ export class HexagonPlotComponent implements OnInit {
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
-
   constructor() {}
   ngOnInit(): void {
     this.createHexagonPlot();
@@ -134,6 +134,7 @@ export class HexagonPlotComponent implements OnInit {
 
         // This is for showing all properties for coloring
         this.features = data.features;
+        this.meta = data.meta;
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];

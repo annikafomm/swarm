@@ -132,24 +132,60 @@
     </div>
 
     <!-- TODO: find good position for liana score table. -->
-    <div
-      *ngIf="
-        colorByProperty === 'ligand_receptor_relationships' &&
-        ligandReceptorScores
-      "
-    >
+    <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
       <h4>Ligand–Receptor Global Scores</h4>
       <app-table
-        [data]="ligandReceptorScores"
+        [data]="this.meta['ligand_receptor_global_scores']"
         [actionColumns]="[
           'ligand_receptor_cosine_similarity',
           'ligand_receptor_p_value',
           'ligand_receptor_category',
         ]"
         [features]="features"
+        [updateColumn]="'ligand_receptor_relationships'"
+        (featuresUpdated)="updateHexColors()"
+      ></app-table>
+      <!-- TODO: Add sth about NMF factors -->
+    </div>
+
+    <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
+      <h4>Cell Composition TF Activity Global Scores</h4>
+      <app-table
+        [data]="this.meta['cell_comp_tf_activity_global_scores']"
+        [actionColumns]="[
+          'cell_comp_tf_activity_cosine_similarity',
+          'cell_comp_tf_activity_category',
+        ]"
+        [features]="features"
+        [updateColumn]="'cell_comp_tf_activity_similarity'"
         (featuresUpdated)="updateHexColors()"
       ></app-table>
     </div>
+  </div>
+
+  <div *ngIf="colorByProperty === 'tf_activity'">
+    <h4>TF Activity</h4>
+    <app-table
+      [data]="this.meta['tf_names']"
+      [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
+      [features]="features"
+      [updateColumn]="'tf_activity'"
+      (featuresUpdated)="updateHexColors()"
+    ></app-table>
+  </div>
+
+  <div *ngIf="colorByProperty === 'pathway_activity'">
+    <h4>Pathway Activity</h4>
+    <app-table
+      [data]="this.meta['pathway_names']"
+      [actionColumns]="[
+        'pathway_activity_score_mlm',
+        'pathway_activity_padj_mlm',
+      ]"
+      [features]="features"
+      [updateColumn]="'pathway_activity'"
+      (featuresUpdated)="updateHexColors()"
+    ></app-table>
   </div>
 
   <div class="sidenav" *ngIf="selectedCell && colorByProperty !== 'leiden'">

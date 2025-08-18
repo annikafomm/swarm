@@ -161,6 +161,31 @@ class Hexagons:
                             ].index[0]
                         ].loc[barcode]
                     ),
+                    "cell_comp_tf_activity_similarity": float(
+                        self.anndata.obsm[
+                            "cell_comp_tf_activity_cosine_similarity"
+                        ][
+                            self.anndata.uns[
+                                "cell_comp_tf_activity_global_scores"
+                            ].index[0]
+                        ].loc[
+                            barcode
+                        ]
+                    ),
+                    "tf_activity": float(
+                        self.anndata.obsm["tf_activity_score_ulm"][
+                            self.anndata.obsm["tf_activity_score_ulm"].columns[
+                                0
+                            ]
+                        ].loc[barcode],
+                    ),
+                    "pathway_activity": float(
+                        self.anndata.obsm["pathway_activity_score_mlm"][
+                            self.anndata.obsm[
+                                "pathway_activity_score_mlm"
+                            ].columns[0]
+                        ].loc[barcode]
+                    ),
                 },
             }
 
@@ -239,14 +264,25 @@ if __name__ == "__main__":
     spatial_data = sc.read_h5ad(args.adata)
 
     # Reconstruct liana columns for placeholder
-    spatial_data.obsm["ligand_receptor_cosine_similarity"] = pd.DataFrame(
-        spatial_data.obsm["ligand_receptor_cosine_similarity"],
-        columns=spatial_data.uns["liana_columns"]["ligand_receptor"],
-        index=spatial_data.obs.index,
-    )
+    reconstruct_obsm_cols = {
+        "ligand_receptor_cosine_similarity": "ligand_receptor",
+        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
+    }
+    for obsm_key, col_names in reconstruct_obsm_cols.items():
+        spatial_data.obsm[obsm_key] = pd.DataFrame(
+            spatial_data.obsm[obsm_key],
+            columns=spatial_data.uns["liana_columns"][col_names],
+            index=spatial_data.obs_names,
+        )
+
     spatial_data.uns["ligand_receptor_global_scores"] = spatial_data.uns[
         "ligand_receptor_global_scores"
     ].sort_values("cosine_similarity_std", ascending=False)
+    spatial_data.uns["cell_comp_tf_activity_global_scores"] = spatial_data.uns[
+        "cell_comp_tf_activity_global_scores"
+    ].sort_values(
+        "cosine_similarity_std", ascending=False
+    )  # or mean more sensible?
 
     if not args.aucell_genie3_path or not args.aucell_sponge_path:
         hexagons = Hexagons(
@@ -267,11 +303,23 @@ if __name__ == "__main__":
 
     geojson_data = hexagons.to_geojson()
 
-    geojson_data["meta"] = {
-        "ligand_receptor_global_scores": spatial_data.uns[
-            "ligand_receptor_global_scores"
+    geojson_data["meta"] = {}
+    meta_scores = [
+        "ligand_receptor_global_scores",
+        "cell_comp_tf_activity_global_scores",
+    ]
+    for meta_score in meta_scores:
+        geojson_data["meta"][meta_score] = spatial_data.uns[
+            meta_score
         ].to_dict()
-    }
+
+    geojson_data["meta"]["tf_names"] = spatial_data.obsm[
+        "tf_activity_score_ulm"
+    ].columns.tolist()
+
+    geojson_data["meta"]["pathway_names"] = spatial_data.obsm[
+        "pathway_activity_score_mlm"
+    ].columns.tolist()
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
 
