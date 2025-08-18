@@ -376,8 +376,10 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     };
 
     // Create the graph visualization
-    const width = 400;
-    const height = 400;
+    const width = 500;
+    const height = 300;
+    const margin = 20;
+
     const svg = d3.select('#aucell_graph_genie3')
       .append('svg')
       .attr('width', width)
@@ -452,14 +454,23 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       .style('font-weight', 'bold')
       .style('background-color', 'white')
       .style('padding', '1px')
-      .text((d: any) => d.weight.toFixed(3)); // Show 3 decimal places
+      .text((d: any) => d.weight.toFixed(2));
 
     // Initialize simulation with stronger forces
     const simulation = d3.forceSimulation(graph.nodes)
       .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(20).strength(0.3))
       .force('charge', d3.forceManyBody().strength(-500))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(15));
+      .force('collision', d3.forceCollide().radius(15))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - radius, node.y));
+        });
+      });
 
     simulation.on('tick', () => {
       link

@@ -32,6 +32,16 @@ select {
   top: 200px;
 }
 
+#aucell_graph_genie3 {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 2rem;
+  width: 500px;
+  top: 200px;
+}
+
 #main-visualization {
   margin-right: 0;
   transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
