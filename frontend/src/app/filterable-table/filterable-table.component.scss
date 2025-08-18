@@ -1,0 +1,52 @@
+.table-container {
+  height: 400px; /* fixed height */
+  width: 80%;
+  overflow-y: auto; /* vertical scroll */
+  overflow-x: auto; /* horizontal scroll if needed */
+  border: 1px solid #ccc;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed; /* fixed column widths */
+}
+
+th,
+td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+  white-space: nowrap; /* prevent wrapping */
+  overflow: hidden; /* hide overflow text */
+  text-overflow: ellipsis; /* show "..." if text too long */
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #f9f9f9;
+  z-index: 1;
+}
+
+input {
+  width: 80%;
+  margin-top: 4px;
+  font-size: 0.8em;
+}
+.sort-icons {
+  margin-left: 4px;
+}
+
+.sort-icons button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.8em;
+  padding: 0 2px;
+}
+
+.sort-icons button:hover {
+  color: blue;
+  font-weight: bold;
+}
