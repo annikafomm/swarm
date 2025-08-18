@@ -3,8 +3,6 @@
 
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
-
-
     <div style="display: flex; align-items: flex-start;">
       <div id="hexbin"></div>
       <div id="legend" style="margin-left: 2rem;"></div>
@@ -15,7 +13,20 @@
       <option *ngFor="let prop of colorableProperties" [value]="prop">{{ prop }}</option>
     </select>
 
-    <!-- Update the co-occurrence section to only show when a cluster is selected -->
+    <div *ngIf="selectedCell" class="gene-set-section">
+        <div *ngIf="selectedCellAssociatedGeneSetsGenie3.length > 0" class="gene-set-selector">
+          <label for="genie3-select">Select Genie3 Gene Set:</label>
+          <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
+            <option *ngFor="let geneSet of selectedCellAssociatedGeneSetsGenie3" [value]="geneSet">
+              {{ geneSet }}
+            </option>
+          </select>
+        </div>
+          <h3 *ngIf="selectedGeneSetGenie3">Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+          <div id="aucell_graph_genie3"></div>
+        </div>
+  </div>
+
     <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
       <div class="co-occurrence-controls">
         <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
@@ -93,20 +104,6 @@
         <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
         <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
         <p><strong>Leiden-Cluster:</strong> {{ (+selectedCell.properties.leiden)}}</p>
-        <div>
-          <label for="geneset-select">Select Geneset:</label>
-          <select [(ngModel)]="selectedGeneSet" (change)="updateAucellGraph()">
-            <option
-              *ngFor="let gs of (selectedCell?.properties?.aucell ? (selectedCell.properties.aucell | keyvalue) : [])"
-              [value]="gs.key">
-              {{ gs.key }}
-            </option>
-          </select>
-          <p *ngIf="selectedGeneSet"><strong>AUcell score:</strong> {{selectedCell.properties.aucell[selectedGeneSet]}}
-          </p>
-          <div id="aucell_graph" style="width:100%;height:250px;"></div>
-        </div>
-      </div>
     </div>
   </div>
 
@@ -145,3 +142,5 @@
         <div id="cluster-nhood-heatmap" style="width:300px;height:220px;"></div>
       </div>
     </div>
+  </div>
+</div>
