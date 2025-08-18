@@ -12,9 +12,16 @@ import { HttpClient } from '@angular/common/http';
   imports: [FormsModule, CommonModule],
 })
 export class FilterableTableComponent implements OnInit {
-  @Input() data!: { [col: string]: { [index: string]: string | number } };
+  /**
+   * If data is an object, treat as {col: {index: value}}
+   * If data is a string array, treat as index column
+   */
+  @Input() data!:
+    | { [col: string]: { [index: string]: string | number } }
+    | string[];
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
+  @Input() updateColumn!: string;
   @Output() featuresUpdated = new EventEmitter<void>();
 
   constructor(
@@ -33,16 +40,27 @@ export class FilterableTableComponent implements OnInit {
   }
 
   prepareTable() {
-    this.columns = Object.keys(this.data);
-    const indexes = Object.keys(this.data[this.columns[0]] || {});
+    if (Array.isArray(this.data)) {
+      this.columns = [];
+      this.rows = this.data.map((val) => ({
+        index: val,
+      }));
+    } else {
+      const tableData = this.data as {
+        [col: string]: { [index: string]: string | number };
+      };
 
-    this.rows = indexes.map((idx) => {
-      const row: any = { index: idx };
-      this.columns.forEach((col) => {
-        row[col] = this.data[col][idx];
+      this.columns = Object.keys(tableData);
+      const indexes = Object.keys(tableData[this.columns[0]] || {});
+
+      this.rows = indexes.map((idx) => {
+        const row: any = { index: idx };
+        this.columns.forEach((col) => {
+          row[col] = tableData[col][idx];
+        });
+        return row;
       });
-      return row;
-    });
+    }
   }
 
   get filteredRows() {
@@ -108,8 +126,7 @@ export class FilterableTableComponent implements OnInit {
             for (const feature of this.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                feature.properties.ligand_receptor_relationships =
-                  data[barcode];
+                feature.properties[this.updateColumn] = data[barcode];
               }
             }
           }
