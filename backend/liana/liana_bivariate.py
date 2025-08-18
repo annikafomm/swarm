@@ -9,7 +9,7 @@ from mudata import MuData
 
 def ligand_receptor_relationships(
     adata: sc.AnnData, return_scores: bool = False
-):
+) -> dict | None:
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
     lrdata = li.mt.bivariate(
@@ -25,24 +25,32 @@ def ligand_receptor_relationships(
         verbose=True,
     )
     # Extract ligand-receptor scores
-    lr_relationships = lrdata.var.index
-    lr_cos_sim_mat = lrdata.X.T.toarray()
-    lr_pval_mat = lrdata.layers["pvals"].T.toarray()
-    lr_cat_mat = lrdata.layers["cats"].T.toarray()
-    local_scores = pd.DataFrame()
-    for i, lr_relationship in enumerate(lr_relationships):
-        local_scores[f"{lr_relationship}_cosine-similarity"] = lr_cos_sim_mat[
-            i
-        ]
-        local_scores[f"{lr_relationship}_p-value"] = lr_pval_mat[i]
-        local_scores[f"{lr_relationship}_category"] = lr_cat_mat[i]
+    lr_relationships = lrdata.var.index.to_list()
+    lr_cos_sim_mat = lrdata.X.toarray()
+    lr_pval_mat = lrdata.layers["pvals"].toarray()
+    lr_cat_mat = lrdata.layers["cats"].toarray()
+    cos_sim_df = pd.DataFrame(
+        lr_cos_sim_mat,
+        columns=lr_relationships,
+        index=adata.obs.index,
+    )
+    pval_df = pd.DataFrame(
+        lr_pval_mat,
+        columns=lr_relationships,
+        index=adata.obs.index,
+    )
+    cat_df = pd.DataFrame(
+        lr_cat_mat,
+        columns=lr_relationships,
+        index=adata.obs.index,
+    )
 
     global_score_columns = ["mean", "std", "morans"]
     global_scores = lrdata.var[global_score_columns]
     global_scores = global_scores.rename(
         columns={
             col: (
-                f"ligand_receptor_cosine_similarity_{col}"
+                f"cosine_similarity_{col}"
                 if col in ["mean", "std"]
                 else f"ligand_receptor_{col}"
             )
@@ -71,18 +79,39 @@ def ligand_receptor_relationships(
         lrdata, obsm_key="NMF_W"
     ).set_index("index")
 
-    factor_scores = factor_scores.rename(
-        columns={
-            f"Factor{i}": f"ligand_receptor_NMF_factor_{i}"
-            for i, _ in enumerate(factor_scores.columns, 1)
-        }
-    )
-
     if return_scores:
-        return (local_scores, global_scores, factor_scores)
+        local_scores = {
+            "cosine_similarity": cos_sim_df,
+            "p_value": pval_df,
+            "category": cat_df,
+        }
+        return {
+            "local_scores": local_scores,
+            "global_scores": global_scores,
+            "NMF_factors": factor_scores,
+        }
     else:
-        adata.obs = adata.obs.join(local_scores).join(factor_scores)
-        adata.var = adata.var.join(global_scores)
+        # HACK: It would make more sense to save the dfs to obsm, but the
+        # number of columns we can write in a df in obsm (or uns) apparently is
+        # limited. If exceeded, write_h5ad fails with `OSError: Unable to
+        # synchronously create attribute (object header message is too large)`
+        # https://github.com/h5py/h5py/issues/1053
+        #
+        # As a workaround we can reconstruct the df after reading in the adata
+        # from h5ad like so:
+        # adata.obsm["ligand_receptor_cosine_similarity"] = pd.DataFrame(
+        #     adata.obsm["ligand_receptor_cosine_similarity"],
+        #     columns=adata.uns["liana_columns"]["ligand_receptor"],
+        #     index=adata.obs_names
+        # )
+        adata.obsm["ligand_receptor_cosine_similarity"] = cos_sim_df.to_numpy()
+        adata.obsm["ligand_receptor_p_value"] = pval_df.to_numpy()
+        adata.obsm["ligand_receptor_category"] = cat_df.to_numpy()
+        adata.uns["liana_columns"][
+            "ligand_receptor"
+        ] = cos_sim_df.columns.tolist()
+        adata.obsm["ligand_receptor_NMF_factors"] = factor_scores
+        adata.uns["ligand_receptor_global_scores"] = global_scores
 
 
 def cell_comp_tf_activity_similarity(
@@ -90,7 +119,7 @@ def cell_comp_tf_activity_similarity(
     net: pd.DataFrame,
     cell_comp_obsm_key: str = "tangram_ct_pred",
     return_scores: bool = False,
-):
+) -> dict | None:
     # Make sure the GRN column names are ok
     net = net.rename(
         columns={
@@ -136,22 +165,31 @@ def cell_comp_tf_activity_similarity(
         y_name="tf",
     )
 
-    scores = pd.DataFrame(index=adata.obs.index)
     # Cosine similarities
-    comp_tf_interactions = bdata.var.index
-    comp_tf_cos_sim_mat = bdata.X.T.toarray()
-    for interaction, cos_sim_vec in zip(
-        comp_tf_interactions, comp_tf_cos_sim_mat
-    ):
-        scores[f"{interaction}_cosine_similarity"] = cos_sim_vec
+    comp_tf_interactions = bdata.var.index.to_list()
+    comp_tf_cos_sim_mat = bdata.X.toarray()
+    cos_sim_df = pd.DataFrame(
+        comp_tf_cos_sim_mat,
+        columns=comp_tf_interactions,
+        index=adata.obs.index,
+    )
 
     # ULM scores for TFs
-    tfs = mdata.mod["tf"].var.index
-    ulm_score_mat = mdata.mod["tf"].X.T
-    for tf, ulm_score_vec in zip(tfs, ulm_score_mat):
-        scores[f"{tf}_score_ulm"] = ulm_score_vec
-
+    ulm_scores = adata.obsm["score_ulm"]
+    ulm_padj = adata.obsm["padj_ulm"]
     if return_scores:
-        return scores
+        return {
+            "cosine_similarity": cos_sim_df,
+            "score_ulm": ulm_scores,
+            "padj_ulm": ulm_padj,
+        }
     else:
-        adata.obs = adata.obs.join(scores)
+        adata.obsm["cell_comp_tf_activity_cosine_similarity"] = (
+            cos_sim_df.to_numpy()
+        )
+        adata.uns["liana_columns"][
+            "cell_comp_tf_activity"
+        ] = cos_sim_df.columns.tolist()
+        adata.obsm["tf_activity_score_ulm"] = ulm_scores
+        adata.obsm["tf_activity_padj_ulm"] = ulm_padj
+        del adata.obsm["score_ulm"], adata.obsm["padj_ulm"]
