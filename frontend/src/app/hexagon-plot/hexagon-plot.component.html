@@ -82,22 +82,7 @@
           <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
             *ngIf="!isLoadingSponge">
             <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-              [disabled]="!selectedGeneSetSponge" style="
-                background: linear-gradient(45deg, #4CAF50, #45a049);
-                border: none;
-                color: white;
-                padding: 12px 24px;
-                text-align: center;
-                text-decoration: none;
-                display: inline-block;
-                font-size: 14px;
-                font-weight: bold;
-                margin: 4px 2px;
-                cursor: pointer;
-                border-radius: 8px;
-                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                transition: all 0.3s ease;
-              "
+              [disabled]="!selectedGeneSetSponge"
               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
               onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
               🧬 Analyze All Sponge Genes in gProfiler

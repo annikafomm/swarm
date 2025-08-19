@@ -73,8 +73,8 @@ select {
   min-width: 180px;
 }
 
-#gprofiler-button-container:button{
-  background: linear-gradient(45deg, #4CAF50, #45a049);
+ #gprofiler-btn {
+  background-color: #007bff;
   border: none;
   color: white;
   padding: 12px 24px;
@@ -89,6 +89,7 @@ select {
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
   transition: all 0.3s ease;
 }
+
 #legend:empty {
   display: none;
 }
