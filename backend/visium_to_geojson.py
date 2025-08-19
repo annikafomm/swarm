@@ -194,23 +194,22 @@ class Hexagons:
                 },
             }
 
-            liana_score_placeholder_names = {
-                "ligand_receptor_relationships": "ligand_receptor_cosine_similarity",
-                "cell_comp_tf_activity_similarity": "cell_comp_tf_activity_cosine_similarity",
-                "tf_activity": "tf_activity_score_ulm",
-                "pathway_activity": "pathway_activity_score_mlm",
+            score_mappings = {
+                "ligand_receptor_relationships": (
+                    "ligand_receptor_cosine_similarity",
+                    "ligand_receptor_global_scores",
+                ),
+                "cell_comp_tf_activity_similarity": (
+                    "cell_comp_tf_activity_cosine_similarity",
+                    "cell_comp_tf_activity_global_scores",
+                ),
+                "tf_activity": ("tf_activity_score_ulm", None),
+                "pathway_activity": ("pathway_activity_score_mlm", None),
             }
-            liana_score_placeholder_obsm_cols = {
-                "ligand_receptor_relationships": self.anndata.uns[
-                    "ligand_receptor_global_scores"
-                ].index[0],
-                "cell_comp_tf_activity_similarity": self.anndata.uns[
-                    "cell_comp_tf_activity_global_scores"
-                ].index[0],
-            }
-            for name, obsm_key in liana_score_placeholder_names.items():
-                col = liana_score_placeholder_obsm_cols.get(name, None)
+
+            for name, (obsm_key, uns_key) in score_mappings.items():
                 if obsm_key in self.anndata.obsm:
+                    col = self.anndata.uns[uns_key] if uns_key else None
                     feature_dict["properties"][name] = self.get_obsm(
                         obsm_key, barcode, col
                     )
