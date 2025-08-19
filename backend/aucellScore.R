@@ -42,7 +42,7 @@ create_Sponge_modules <- function(interaction_net, network_analysis, mscor, padj
   print(filtered_network_centralities$Node_Centrality)
 
   central_gene_modules<-get_central_modules(central_nodes = RNAs.ofInterest, node_centrality = filtered_network_centralities$Node_Centrality,
-                                            ceRNA_class = RNAs, centrality_measure ="Weighted_Degree", cutoff = n_modules)
+                                            ceRNA_class = RNAs, centrality_measure ="Weighted_Degree", cutoff = 5)
 
   intersect_genes <- intersect(RNAs.ofInterest, filtered_network_centralities$Node_Centrality$gene)
 
@@ -135,11 +135,11 @@ interaction_network <- fread(interaction_network, strip.white=TRUE)
 network_analysis <- fread(network_analysis, strip.white=TRUE)
 
 if (!is.null(interaction_network) && !is.null(network_analysis)) {
-  RNAs.ofInterest <- calc_spongeEffects(ad, mscor = 0.3, padj = 0.05,
+  RNAs.ofInterest <- calc_spongeEffects(ad, mscor = 0.05, padj = 0.01,
                                         feature_col = 'feature_type',
                                         RNAs = c("lncRNA", "protein_coding"),
                                         ensembl_col = ensembl_col,
-                                        n_modules = 20,
+                                        n_modules = 10,
                                         oe = TRUE, gsva = TRUE, ssgsea = TRUE,
                                         n_cores = parallel::detectCores())
 
@@ -151,16 +151,28 @@ sponge_network <- create_Sponge_modules(interaction_network, network_analysis, m
                                         RNAs.ofInterest = RNAs.ofInterest,
                                         n_modules = 10, n_cores = parallel::detectCores())
 
+
+# Filter Sponge network by genes that are in the AnnData object
+sponge_network <- sponge_network[names(sponge_network) %in% RNAs.ofInterest]
+sponge_network <- lapply(sponge_network, function(gene_set) gene_set[gene_set %in% RNAs.ofInterest])
 # Save to json file
-sponge_network_file <- paste0("sponge_network_", adata_prefix, ".json")
-jsonlite::write_json(sponge_network, path = sponge_network_file, pretty = TRUE)
+sponge_genesets_file <- paste0("sponge_gene_sets_", adata_prefix, ".json")
+jsonlite::write_json(sponge_network, path = sponge_genesets_file, pretty = TRUE)
+
+print(interaction_network)
+# Filter interaction network by adjusted p-value and mscor
+filtered_network <- interaction_network[interaction_network$p.adj < 0.05 & abs(interaction_network$mscor) > 0.03, ]
+filtered_network <- filtered_network[filtered_network$geneA %in% RNAs.ofInterest & filtered_network$geneB %in% RNAs.ofInterest, ]
+
+# Save the filtered network to a file
+filtered_network_file <- paste0("breast_invasive_carcinoma_filtered_Network.tsv")
+write.table(filtered_network, file = filtered_network_file, sep = "\t", quote = FALSE, row.names = FALSE)
 
 # Calculate AUCell scores
 aucell_scores_sponge <- aucell_score(sponge_network, ad, ensembl_col)
 aucell_scores_sponge <- AUCell::getAUC(aucell_scores_sponge)
 aucell_scores_sponge <- as.data.frame(aucell_scores_sponge)
 write.csv(aucell_scores_sponge, file = paste0("aucell_scores_sponge_", adata_prefix, ".csv"), row.names = TRUE)
-
 }
 
 if (!is.null(genie_3_network)) {

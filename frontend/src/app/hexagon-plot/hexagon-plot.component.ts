@@ -40,10 +40,15 @@ export class HexagonPlotComponent implements OnInit {
     closeness_centrality: 0
   };
 
-  public genie3Network: regGraphConnection[] = [];
-  public spongeNetwork: regGraphConnection[] = [];
+  public genie3Network: genie3RegGraphConnection[] = [];
+  public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
-public geneSetsSponge: { [regulator: string]: string[] } = {};
+  public geneSetsSponge: { [regulator: string]: string[] } = {};
+
+  public maxSpongeNodes: number = 25;
+  public spongePValueCutoff: number | null = null;
+  public isLoadingSponge: boolean = false;
+  public isLoadingGenie3: boolean = false;
 
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
@@ -105,6 +110,16 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     this.g.attr('transform', event.transform.toString());
   }
 
+  public onMaxNodesChange(): void {
+    console.log('Max nodes changed to:', this.maxSpongeNodes);
+
+    // Only update if a sponge gene set is selected
+    if (this.selectedGeneSetSponge) {
+      this.isLoadingSponge = true;
+      setTimeout(() => this.updateAucellGraphSponge(), 50);
+    }
+  }
+
   private loadAndRenderData(dataPath: string): void {
     d3.json<GeoJsonData>(dataPath)
       .then((data) => {
@@ -155,8 +170,6 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
         console.error('Error loading or rendering data:', error);
       });
 
-
-
     // Read genie3 csv
     d3.csv('assets/genie3_BRCA_mrn.top_100k.csv', d3.autoType).then((rows) => {
       // Each row should have source, target, weight columns
@@ -170,12 +183,13 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       console.error('Error loading genie3 network:', error);
     });
 
-    // Read sponge network
-    d3.csv('assets/sponge_gene_sets_GSM6592049_M2.json', d3.autoType).then((rows) => {
+    // Read sponge csv filtered
+    d3.tsv('assets/breast_invasive_carcinoma_filtered_Network.tsv', d3.autoType).then((rows) => {
+      // Each row should have source, target, p_adjusted columns
       this.spongeNetwork = rows.map(row => ({
-        source: String((row as any)['source'] ?? ''),
-        target: String((row as any)['target'] ?? ''),
-        weight: Number((row as any)['weight'] ?? 0)
+        source: String((row as any)['geneA'] ?? ''),
+        target: String((row as any)['geneB'] ?? ''),
+        p_adjusted: Number((row as any)['p.adj'] ?? 0)
       }));
       console.log('Sponge network loaded:', this.spongeNetwork);
     }).catch((error) => {
@@ -184,25 +198,26 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
 
     // Read genie3 gene sets
     d3.json<{ [regulator: string]: string[] }>('assets/genie3_gene_sets_GSM6592049_M2.json')
-  .then((data) => {
-    this.geneSetsGenie3 = data || {};
-    console.log('Genie3 gene sets loaded:', Object.keys(this.geneSetsGenie3).length, 'regulators');
-  })
-  .catch((error) => {
-    console.error('Error loading genie3 gene sets:', error);
-  });
+      .then((data) => {
+        this.geneSetsGenie3 = data || {};
+        console.log('Genie3 gene sets loaded:', this.geneSetsGenie3);
+      })
+      .catch((error) => {
+        console.error('Error loading genie3 gene sets:', error);
+      });
 
     // Read sponge gene sets
     d3.json<{ [regulator: string]: string[] }>('assets/sponge_gene_sets_GSM6592049_M2.json')
-  .then((data) => {
-    this.geneSetsSponge = data || {};
-    console.log('Sponge gene sets loaded:', Object.keys(this.geneSetsSponge).length, 'regulators');
-  })
-  .catch((error) => {
-    console.error('Error loading sponge gene sets:', error);
-  });
+      .then((data) => {
+        this.geneSetsSponge = data || {};
+        console.log('Sponge gene sets loaded:', this.geneSetsSponge);
+      })
+      .catch((error) => {
+        console.error('Error loading sponge gene sets:', error);
+      });
 
   }
+
 
   public updateHexColors(): void {
     this.resetClusterExtension();
@@ -252,7 +267,7 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     this.renderLegend();
   }
 
-  public updateAucellGraph(): void {
+  public updateAucellGraphGenie3(): void {
     // Clear previous graph
     d3.select('#aucell_graph_genie3').selectAll('*').remove();
 
@@ -260,12 +275,12 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
 
     const regulator = this.selectedGeneSetGenie3;
     const targets = (this.geneSetsGenie3)[regulator] || [];
-    // Filter Targets > weight threshold
+
     const filteredTargets = targets.filter(target => {
       return this.genie3Network.some(connection =>
         connection.source === regulator &&
         connection.target === target &&
-        connection.weight > 0.03 // Adjust threshold as needed
+        connection.weight > 0.03 // TODO: Look at distribution of weights and set a more appropriate threshold
       );
     });
 
@@ -296,33 +311,31 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       }
     });
 
-    // Get neighbors of targets AND regulator with weight > threshold
-    const neighborSet = new Set<string>();
-    const allMainNodes = [regulator, ...filteredTargets]; // Include regulator in neighbor search
-
-    // Find neighbors for all main nodes (regulator + targets)
-    allMainNodes.forEach((mainNode: string) => {
-      this.genie3Network.forEach(connection => {
-
-        if (connection.weight > weightThreshold) {
-
-          // If mainNode is the source, add target as neighbor
-          if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
-            neighborSet.add(connection.target);
-          }
-          // If mainNode is the target, add source as neighbor
-          else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
-            neighborSet.add(connection.source);
-          }
-        }
-      });
-    });
-
-    console.log('Found neighbors:', Array.from(neighborSet));
-    console.log('Neighbor count:', neighborSet.size);
-
-    // Add neighbor nodes
+    // If network is small, find neighbors
     if (nodes.length < 30) {
+      const neighborSet = new Set<string>();
+      const allMainNodes = [regulator, ...filteredTargets];
+
+      allMainNodes.forEach((mainNode: string) => {
+        this.genie3Network.forEach(connection => {
+
+          if (connection.weight > weightThreshold) {
+
+            // If mainNode is the source, add target as neighbor
+            if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
+              neighborSet.add(connection.target);
+            }
+            // If mainNode is the target, add source as neighbor
+            else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
+              neighborSet.add(connection.source);
+            }
+          }
+        });
+      });
+
+      console.log('Found neighbors:', Array.from(neighborSet));
+      console.log('Neighbor count:', neighborSet.size);
+
       Array.from(neighborSet).forEach(neighbor => {
         nodes.push({ id: neighbor, group: 2 });
       });
@@ -336,9 +349,8 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
         const sourceInNetwork = allNodeIds.has(connection.source);
         const targetInNetwork = allNodeIds.has(connection.target);
 
-        // Add edge if both nodes are in our network
+
         if (sourceInNetwork && targetInNetwork) {
-          // Avoid duplicate edges
           const edgeExists = edges.some(e =>
             (e.source === connection.source && e.target === connection.target) ||
             (e.source === connection.target && e.target === connection.source)
@@ -369,7 +381,6 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       return;
     }
 
-
     // Create the graph
     const graph = {
       nodes: nodes.filter(node => node.id && node.id.length > 0),
@@ -382,12 +393,12 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     // Create the graph visualization
     const width = 500;
     const height = 300;
-    const margin = 20;
+    const textPadding = 40;
 
     const svg = d3.select('#aucell_graph_genie3')
       .append('svg')
       .attr('width', width)
-      .attr('height', height)
+      .attr('height', height + textPadding)
       .style('background-color', '#f8f9fa');
 
     // Draw links (edges)
@@ -414,23 +425,23 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
       .enter()
       .append('circle')
       .attr('r', (d: any) => {
-        switch(d.group) {
-          case 0: return 15; // regulator
-          case 1: return 12; // targets
-          case 2: return 8;  // neighbors
+        switch (d.group) {
+          case 0: return 15;
+          case 1: return 12;
+          case 2: return 8;
           case 3: return 6;
           default: return 10;
         }
       })
       .attr('fill', (d: any) => {
-        switch(d.group) {
-          case 0: return '#e41a1c'; // regulator - red
-          case 1: return '#377eb8'; // targets - blue
-          case 2: return '#4daf4a'; // neighbors - green
-          case 3: return '#ff7f00'; // high-weight - orange
+        switch (d.group) {
+          case 0: return '#e41a1c';
+          case 1: return '#377eb8';
+          case 2: return '#4daf4a';
+          case 3: return '#ff7f00';
           default: return '#999';
         }
-      });
+      })
 
     // Add labels
     const labels = svg.append('g')
@@ -497,7 +508,407 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
         .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
     });
 
+    // Add AUCell Score to the svg with 3 decimal places
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + textPadding - 10)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '14px')
+      .style('fill', '#333')
+      .text(`AUCell Score ${this.selectedGeneSetGenie3}: ${this.selectedCell?.properties.aucell_genie3?.[this.selectedGeneSetGenie3]?.toFixed(3) || 'N/A'}`);
+
     console.log('Network visualization complete');
+  }
+
+  // If you have a BrowseService with the gProfiler functionality
+  private handleNodeClick(nodeData: any): void {
+    console.log('Node clicked:', nodeData.id);
+
+    // Get all node IDs from the current graph
+    const currentGraphNodes = this.getCurrentGraphNodes();
+
+    // Generate gProfiler URL for the current set of nodes
+    const gProfilerUrl = this.generateGProfilerUrl(currentGraphNodes);
+
+    if (gProfilerUrl) {
+      // Open in new tab/window
+      window.open(gProfilerUrl, '_blank');
+    } else {
+      console.warn('Could not generate gProfiler URL');
+    }
+  }
+
+  private getCurrentGraphNodes(): string[] {
+    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
+      return [];
+    }
+
+    const regulator = this.selectedGeneSetGenie3;
+    const targets = this.geneSetsGenie3[regulator] || [];
+
+
+    return [regulator, ...targets];
+  }
+
+  // Add this method to analyze all genes in the current Genie3 gene set
+  public analyzeGeneSetInGProfiler(): void {
+    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
+      console.warn('No Genie3 gene set selected');
+      return;
+    }
+
+    const regulator = this.selectedGeneSetGenie3;
+    const targets = this.geneSetsGenie3[regulator] || [];
+
+    // Include regulator + all targets
+    const allGenes = [regulator, ...targets];
+
+    console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
+
+    const gProfilerUrl = this.generateGProfilerUrl(allGenes);
+
+    if (gProfilerUrl) {
+      // Open in new tab/window
+      window.open(gProfilerUrl, '_blank');
+    } else {
+      console.warn('Could not generate gProfiler URL for Genie3 gene set:', this.selectedGeneSetGenie3);
+    }
+  }
+
+  // Make sure you also have the generateGProfilerUrl method
+  private generateGProfilerUrl(geneIds: string[]): string | null {
+    if (!geneIds || geneIds.length === 0) {
+      return null;
+    }
+
+    // Join gene IDs with newlines (gProfiler expects one gene per line)
+    const geneList = geneIds.join('\n');
+
+    // Base gProfiler URL for functional enrichment analysis
+    const baseUrl = 'https://biit.cs.ut.ee/gprofiler/gost';
+
+    // URL encode the gene list
+    const encodedGenes = encodeURIComponent(geneList);
+
+    // Construct the full URL with parameters including auto-run
+    const gProfilerUrl = `${baseUrl}?organism=hsapiens&query=${encodedGenes}&sources=GO:MF,GO:BP,GO:CC,KEGG,REAC&user_threshold=0.05&significance_threshold_method=fdr&ordered=false&exclude_iea=false&measure_underrepresentation=false&evcodes=false&domain_scope=annotated&numeric_ns=ENTREZGENE_ACC&background=&run_query=1`;
+
+    return gProfilerUrl;
+  }
+
+
+  public updateAucellGraphSponge(): void {
+    console.log('=== updateAucellGraphSponge called ===');
+
+    // Show loading state
+    this.isLoadingSponge = true;
+    this.spongePValueCutoff = null; // Reset cutoff
+
+    // Clear previous graph
+    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+
+    if (!this.selectedGeneSetSponge || !this.spongeNetwork || this.spongeNetwork.length === 0) {
+      console.log('Missing selectedGeneSetSponge or spongeNetwork');
+
+      const svg = d3.select('#aucell_graph_sponge')
+        .append('svg')
+        .attr('width', 500)
+        .attr('height', 300);
+
+      svg.append('text')
+        .attr('x', 250)
+        .attr('y', 150)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '14px')
+        .style('fill', '#666')
+        .text('No sponge network data available');
+
+      this.isLoadingSponge = false;
+      return;
+    }
+
+    try {
+      const regulator = this.selectedGeneSetSponge;
+      const targets = (this.geneSetsSponge)[regulator] || [];
+
+      console.log('Sponge Regulator:', regulator);
+      console.log('Sponge Targets:', targets);
+      console.log('Max nodes allowed:', this.maxSpongeNodes);
+
+      // Use slider value for MAX_NODES
+      const MAX_NODES = this.maxSpongeNodes;
+      const MAX_EDGES = Math.min(100, MAX_NODES * 2); // Scale edges with nodes
+      const pThreshold = 0.01;
+
+      const nodes: { id: string, x?: number, y?: number, group: number }[] = [];
+      let allPotentialEdges: { source: string, target: string, p_adjusted: number }[] = [];
+
+      // Add regulator node
+      nodes.push({ id: regulator, group: 0 });
+
+      // Add target nodes (limited by slider)
+      const maxTargets = Math.floor(MAX_NODES * 0.6); // 60% of max nodes for targets
+      const limitedTargets = targets.slice(0, Math.min(targets.length, maxTargets));
+      limitedTargets.forEach((target: string) => {
+        nodes.push({ id: target, group: 1 });
+      });
+
+      // Pre-filter sponge network
+      const relevantConnections = this.spongeNetwork.filter(connection =>
+        connection.p_adjusted < pThreshold &&
+        (connection.source === regulator || limitedTargets.includes(connection.source) ||
+          connection.target === regulator || limitedTargets.includes(connection.target))
+      );
+
+      console.log(`Filtered connections from ${this.spongeNetwork.length} to ${relevantConnections.length}`);
+
+      // Get direct regulator-target edges
+      relevantConnections.forEach(connection => {
+        if ((connection.source === regulator && limitedTargets.includes(connection.target)) ||
+          (connection.target === regulator && limitedTargets.includes(connection.source))) {
+          allPotentialEdges.push({
+            source: connection.source,
+            target: connection.target,
+            p_adjusted: connection.p_adjusted
+          });
+        }
+      });
+
+      // Add neighbors if space available
+      if (nodes.length < MAX_NODES) {
+        const neighborSet = new Set<string>();
+        const allMainNodes = [regulator, ...limitedTargets];
+
+        const neighborConnections: Array<{ gene: string, p_adjusted: number }> = [];
+
+        allMainNodes.forEach((mainNode: string) => {
+          relevantConnections.forEach(connection => {
+            if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
+              neighborConnections.push({ gene: connection.target, p_adjusted: connection.p_adjusted });
+            } else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
+              neighborConnections.push({ gene: connection.source, p_adjusted: connection.p_adjusted });
+            }
+          });
+        });
+
+        // Sort by significance and take only top neighbors
+        neighborConnections.sort((a, b) => a.p_adjusted - b.p_adjusted);
+        const maxNeighbors = Math.min(neighborConnections.length, MAX_NODES - nodes.length);
+
+        neighborConnections.slice(0, maxNeighbors).forEach(({ gene }) => {
+          if (!neighborSet.has(gene)) {
+            neighborSet.add(gene);
+            nodes.push({ id: gene, group: 2 });
+          }
+        });
+
+        console.log('Added neighbors:', Array.from(neighborSet));
+
+        // Add edges involving neighbors
+        const allNodeIds = new Set(nodes.map(n => n.id));
+        relevantConnections.forEach(connection => {
+          const sourceInNetwork = allNodeIds.has(connection.source);
+          const targetInNetwork = allNodeIds.has(connection.target);
+
+          if (sourceInNetwork && targetInNetwork) {
+            const edgeExists = allPotentialEdges.some(e =>
+              (e.source === connection.source && e.target === connection.target) ||
+              (e.source === connection.target && e.target === connection.source)
+            );
+
+            if (!edgeExists) {
+              allPotentialEdges.push({
+                source: connection.source,
+                target: connection.target,
+                p_adjusted: connection.p_adjusted
+              });
+            }
+          }
+        });
+      }
+
+      // Filter to most significant edges
+      allPotentialEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+      const edgeLimit = Math.min(allPotentialEdges.length, MAX_EDGES);
+      const edges = allPotentialEdges.slice(0, edgeLimit);
+
+      // Set the p-value cutoff (the highest p-value that made it into the network)
+      if (edges.length > 0) {
+        this.spongePValueCutoff = edges[edges.length - 1].p_adjusted;
+      }
+
+      console.log(`Using top ${edges.length} edges out of ${allPotentialEdges.length}`);
+      console.log('P-value cutoff:', this.spongePValueCutoff);
+
+      // Remove disconnected nodes
+      const connectedNodeIds = new Set<string>();
+      edges.forEach(edge => {
+        connectedNodeIds.add(edge.source);
+        connectedNodeIds.add(edge.target);
+      });
+
+      const filteredNodes = nodes.filter(node =>
+        node.group === 0 || connectedNodeIds.has(node.id)
+      );
+
+      console.log('Final nodes:', filteredNodes.length, 'Final edges:', edges.length);
+
+      if (filteredNodes.length === 0) {
+        const svg = d3.select('#aucell_graph_sponge')
+          .append('svg')
+          .attr('width', 500)
+          .attr('height', 300);
+
+        svg.append('text')
+          .attr('x', 250)
+          .attr('y', 150)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '14px')
+          .style('fill', '#666')
+          .text(`No significant connections for ${regulator}`);
+
+        this.isLoadingSponge = false;
+        return;
+      }
+
+      // Create the graph
+      const graph = {
+        nodes: filteredNodes,
+        edges: edges
+      };
+
+      // Create visualization
+      const width = 500;
+      const height = 300;
+      const textPadding = 60; // Increased for p-value info
+
+      const svg = d3.select('#aucell_graph_sponge')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height + textPadding)
+        .style('background-color', '#f8f9fa');
+
+      // Simplified links
+      const link = svg.append('g')
+        .attr('stroke', '#999')
+        .attr('stroke-opacity', 0.6)
+        .selectAll('line')
+        .data(graph.edges)
+        .enter()
+        .append('line')
+        .attr('stroke-width', 2)
+        .attr('stroke', '#666');
+
+      // Simplified nodes
+      const node = svg.append('g')
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .selectAll('circle')
+        .data(graph.nodes)
+        .enter()
+        .append('circle')
+        .attr('r', (d: any) => {
+          switch (d.group) {
+            case 0: return 12; // regulator
+            case 1: return 10; // targets
+            case 2: return 8;  // neighbors
+            default: return 8;
+          }
+        })
+        .attr('fill', (d: any) => {
+          switch (d.group) {
+            case 0: return '#e41a1c'; // regulator - red
+            case 1: return '#377eb8'; // targets - blue
+            case 2: return '#4daf4a'; // neighbors - green
+            default: return '#999';
+          }
+        })
+        .style('cursor', 'pointer')
+        .on('click', (event: MouseEvent, d: any) => {
+          this.handleNodeClick(d);
+        })
+        .on('mouseover', function (event: MouseEvent, d: any) {
+          d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
+        })
+        .on('mouseout', function (event: MouseEvent, d: any) {
+          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+        });
+
+      // Simplified labels
+      const labels = svg.append('g')
+        .selectAll('text')
+        .data(graph.nodes)
+        .enter()
+        .append('text')
+        .attr('text-anchor', 'middle')
+        .attr('dy', '.35em')
+        .style('font-size', '10px')
+        .style('fill', '#333')
+        .style('pointer-events', 'none')
+        .text((d: any) => d.id.length > 6 ? d.id.substring(0, 6) + '...' : d.id);
+
+      // Add tooltips
+      node.append('title')
+        .text((d: any) => `${d.id}\nGroup: ${d.group === 0 ? 'Regulator' : d.group === 1 ? 'Target' : 'Neighbor'}\nClick to analyze in gProfiler`);
+
+      // Simulation
+      const simulation = d3.forceSimulation(graph.nodes)
+        .alphaDecay(0.05)
+        .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(30).strength(0.3))
+        .force('charge', d3.forceManyBody().strength(-200))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(15));
+
+      // Throttled tick updates
+      let tickCount = 0;
+      simulation.on('tick', () => {
+        tickCount++;
+        if (tickCount % 3 === 0) {
+          link
+            .attr('x1', (d: any) => d.source.x)
+            .attr('y1', (d: any) => d.source.y)
+            .attr('x2', (d: any) => d.target.x)
+            .attr('y2', (d: any) => d.target.y);
+
+          node
+            .attr('cx', (d: any) => d.x)
+            .attr('cy', (d: any) => d.y);
+
+          labels
+            .attr('x', (d: any) => d.x)
+            .attr('y', (d: any) => d.y);
+        }
+      });
+
+      // Auto-stop simulation
+      setTimeout(() => {
+        simulation.stop();
+        this.isLoadingSponge = false; // Hide loading after simulation completes
+      }, 2000);
+
+      // Add AUCell Score
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', height + textPadding - 40)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '14px')
+        .style('fill', '#333')
+        .text(`AUCell Score ${this.selectedGeneSetSponge}: ${this.selectedCell?.properties.aucell_sponge?.[this.selectedGeneSetSponge]?.toFixed(3) || 'N/A'}`);
+
+      // Add network info
+      svg.append('text')
+        .attr('x', width / 2)
+        .attr('y', height + textPadding - 25)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '12px')
+        .style('fill', '#666')
+        .text(`${edges.length} connections, ${filteredNodes.length} nodes (max: ${MAX_NODES})`);
+
+      console.log('Optimized sponge network visualization complete');
+    } catch (error) {
+      console.error('Error generating Sponge graph:', error);
+      this.isLoadingSponge = false;
+    }
   }
 
   private mouseOver(event: MouseEvent, d: CellFeature): void {
@@ -518,6 +929,7 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     const genie3GeneSets = Object.keys(cell.properties.aucell_genie3 || {})
       .filter(key => cell.properties.aucell_genie3[key] > 0.6);
     const spongeGeneSets = Object.keys(cell.properties.aucell_sponge || {})
+      .filter(key => cell.properties.aucell_sponge[key] > 0.6);
     console.log('Associated Genie3 gene sets:', genie3GeneSets);
     console.log('Associated Sponge gene sets:', spongeGeneSets);
 
@@ -544,12 +956,9 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     // First get the associated gene sets
     [this.selectedCellAssociatedGeneSetsGenie3, this.selectedCellAssociatedGeneSetsSponge] = this.getAssociatedGeneSets(cell);
 
-    // Then set the selected gene set if we have any
-    if (this.selectedCellAssociatedGeneSetsGenie3.length > 0) {
-      this.selectedGeneSetGenie3 = this.selectedCellAssociatedGeneSetsGenie3[0]; // Select the first one
-    } else {
-      this.selectedGeneSetGenie3 = null; // Clear if no gene sets found
-    }
+
+    this.selectedGeneSetGenie3 = null;
+    this.selectedGeneSetSponge = null;
 
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
@@ -563,8 +972,6 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
 
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
-
-    setTimeout(() => this.updateAucellGraph(), 0);
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -578,24 +985,39 @@ public geneSetsSponge: { [regulator: string]: string[] } = {};
     if (this.clusterCells.length > 0) {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
-      setTimeout(() => this.updateAucellGraph(), 100);
     }
 
   }
 
   public onGeneSetChange(): void {
-  console.log('Gene set changed to:', this.selectedGeneSetGenie3);
+    console.log('Genie3 Gene set:', this.selectedGeneSetGenie3);
+    console.log('Sponge Gene set:', this.selectedGeneSetSponge);
 
-  // Clear previous graph and regenerate
-  if (this.selectedGeneSetGenie3) {
-    setTimeout(() => this.updateAucellGraph(), 0);
+    d3.select('#aucell_graph_genie3').selectAll('*').remove();
+    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+
+    if (this.selectedGeneSetGenie3) {
+      console.log('Updating Genie3 graph for:', this.selectedGeneSetGenie3);
+      console.log('Genie3 targets available:', this.geneSetsGenie3[this.selectedGeneSetGenie3]?.length || 0);
+      setTimeout(() => {
+        console.log('Calling updateAucellGraphGenie3');
+        this.updateAucellGraphGenie3();
+      }, 100);
+    }
+
+    if (this.selectedGeneSetSponge) {
+      console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
+      console.log('Sponge targets available:', this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0);
+      setTimeout(() => {
+        console.log('Calling updateAucellGraphSponge');
+        this.updateAucellGraphSponge();
+      }, 100);
+    }
   }
-}
 
   public selectCellFromCluster(cell: CellFeature): void {
     this.selectedCell = cell;
     setTimeout(() => this.renderNhoodHeatmap(), 0);
-    setTimeout(() => this.updateAucellGraph(), 0);
   }
 
   public closeClusterSidenav(): void {
@@ -1023,8 +1445,15 @@ interface GeoJsonData {
   features: CellFeature[];
 }
 
-interface regGraphConnection {
+interface genie3RegGraphConnection {
   source: string;
   target: string;
   weight: number;
 }
+
+interface spongeRegGraphConnection {
+  source: string;
+  target: string;
+  p_adjusted: number;
+}
+

@@ -1,9 +1,8 @@
 <div class="hexagon-plot">
 
-
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
-    <div style="display: flex; align-items: flex-start;">
+    <div>
       <div id="hexbin"></div>
       <div id="legend" style="margin-left: 2rem;"></div>
     </div>
@@ -14,23 +13,105 @@
     </select>
 
     <div *ngIf="selectedCell" class="gene-set-section">
-        <div *ngIf="selectedCellAssociatedGeneSetsGenie3.length > 0" class="gene-set-selector">
-          <label for="genie3-select">Select Genie3 Gene Set:</label>
-          <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
-            <option *ngFor="let geneSet of selectedCellAssociatedGeneSetsGenie3" [value]="geneSet">
-              {{ geneSet }}
-            </option>
-          </select>
-        </div>
-          <h3 *ngIf="selectedGeneSetGenie3">Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+      <h2>Gene Set Analysis for Selected Cell</h2>
+      <div *ngIf="selectedCellAssociatedGeneSetsGenie3.length > 0" class="gene-set-selector"
+        style="margin-bottom: 1rem;">
+        <label for="genie3-select">Select Genie3 Gene Set:</label>
+        <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
+          <option value="">-- Select a Genie3 gene set --</option>
+          <option *ngFor="let geneSet of selectedCellAssociatedGeneSetsGenie3" [value]="geneSet">
+            {{ geneSet }}
+          </option>
+        </select>
+        <br><br>
+
+        <label for="sponge-select">Select Sponge Gene Set:</label>
+        <select id="sponge-select" [(ngModel)]="selectedGeneSetSponge" (change)="onGeneSetChange()">
+          <option value="">-- Select a Sponge gene set --</option>
+          <option *ngFor="let geneSet of selectedCellAssociatedGeneSetsSponge" [value]="geneSet">
+            {{ geneSet }}
+          </option>
+        </select>
+      </div>
+
+      <div>
+        <div *ngIf="selectedGeneSetGenie3">
+          <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
           <div id="aucell_graph_genie3"></div>
+
+          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;">
+            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetGenie3"
+              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
+              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
+              🧬 Analyze All Genie3 Genes in gProfiler
+            </button>
+          </div>
         </div>
-  </div>
+
+        <div *ngIf="selectedGeneSetSponge">
+          <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+
+          <!-- Add slider control for max nodes -->
+          <div class="sponge-controls" style="margin-bottom: 15px; text-align: center;">
+            <label for="max-nodes-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
+              Max Nodes: {{ maxSpongeNodes }}
+            </label>
+            <input type="range" id="max-nodes-slider" min="10" max="75" step="5" [(ngModel)]="maxSpongeNodes"
+              (input)="onMaxNodesChange()" style="width: 300px; cursor: pointer;" />
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+              10 ← → 75 nodes
+            </div>
+          </div>
+
+          <!-- Loading indicator for Sponge graph -->
+          <div *ngIf="isLoadingSponge" class="loading-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading Sponge network...</div>
+          </div>
+
+          <!-- Graph container (hidden while loading) -->
+          <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+
+          <!-- P-value cutoff info -->
+          <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null"
+            style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
+            P-value cutoff: {{ spongePValueCutoff | number:'1.2-4' }}
+          </div>
+
+          <!-- gProfiler button below the Sponge graph -->
+          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
+            *ngIf="!isLoadingSponge">
+            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+              [disabled]="!selectedGeneSetSponge" style="
+                background: linear-gradient(45deg, #4CAF50, #45a049);
+                border: none;
+                color: white;
+                padding: 12px 24px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 14px;
+                font-weight: bold;
+                margin: 4px 2px;
+                cursor: pointer;
+                border-radius: 8px;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                transition: all 0.3s ease;
+              "
+              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
+              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
+              🧬 Analyze All Sponge Genes in gProfiler
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
       <div class="co-occurrence-controls">
         <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
-        <div class="controls-row">
+        <div class="controls-row"
+          style="display: flex; justify-content: center; gap: 2rem; align-items: center; margin-bottom: 1rem;">
           <div class="interval-selector">
             <label for="interval-select">Interval:</label>
             <select id="interval-select" [(ngModel)]="selectedInterval" (change)="updateCoOccurrenceTable()">
@@ -49,8 +130,7 @@
         </div>
       </div>
 
-      <div class="co-occurrence-table-container">
-        <!-- 1x10 format table -->
+      <div class="co-occurrence-table-container" style="display: flex; justify-content: center;">
         <table class="co-occurrence-table" *ngIf="coOccurrenceData.length > 0">
           <thead>
             <tr>
@@ -89,8 +169,6 @@
         </button>
       </div>
     </div>
-
-
   </div>
 
   <div class="sidenav" *ngIf="selectedCell && colorByProperty !== 'leiden'">
@@ -104,6 +182,7 @@
         <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
         <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
         <p><strong>Leiden-Cluster:</strong> {{ (+selectedCell.properties.leiden)}}</p>
+      </div>
     </div>
   </div>
 
@@ -137,6 +216,7 @@
           </li>
         </ul>
       </div>
+
       <div class="cluster-nhood" *ngIf="selectedCell">
         <h4>Neighborhood Enrichment (Selected Cell)</h4>
         <div id="cluster-nhood-heatmap" style="width:300px;height:220px;"></div>
