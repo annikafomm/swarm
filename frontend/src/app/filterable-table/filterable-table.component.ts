@@ -63,6 +63,17 @@ export class FilterableTableComponent implements OnInit {
     }
   }
 
+  displayColumnName(col: string): string {
+    return col.replace(/_/g, ' ');
+  }
+
+  displayNumeric(value: any): string {
+    if (typeof value === 'number') {
+      return value.toFixed(3); // display 3 decimal places, could change
+    }
+    return value;
+  }
+
   get filteredRows() {
     let result = [...this.rows];
 

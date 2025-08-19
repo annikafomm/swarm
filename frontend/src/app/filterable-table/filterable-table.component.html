@@ -17,7 +17,7 @@
         </th>
 
         <th *ngFor="let col of columns" class="other-col">
-          {{ col }}
+          {{ displayColumnName(col) }}
           <span class="sort-icons">
             <button (click)="setSort(col, true)">▲</button>
             <button (click)="setSort(col, false)">▼</button>
@@ -28,7 +28,7 @@
           </div>
         </th>
         <th *ngFor="let action of actionColumns" class="action-col">
-          {{ action }}
+          {{ displayColumnName(action) }}
         </th>
       </tr>
     </thead>
@@ -36,9 +36,11 @@
     <tbody>
       <tr *ngFor="let row of filteredRows">
         <td class="index-col">{{ row.index }}</td>
-        <td *ngFor="let col of columns" class="other-col">{{ row[col] }}</td>
+        <td *ngFor="let col of columns" class="other-col">
+          {{ displayNumeric(row[col]) }}
+        </td>
         <td *ngFor="let action of actionColumns" class="action-col">
-          <button (click)="fetchAndUpdate(action, row.index)">Run</button>
+          <button (click)="fetchAndUpdate(action, row.index)">Show</button>
         </td>
       </tr>
     </tbody>

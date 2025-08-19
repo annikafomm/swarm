@@ -6,16 +6,18 @@
       <div id="legend" style="margin-left: 2rem"></div>
     </div>
 
-    <label for="colorBy">Color hexagons by:</label>
-    <select
-      id="colorBy"
-      [(ngModel)]="colorByProperty"
-      (change)="updateHexColors()"
-    >
-      <option *ngFor="let prop of colorableProperties" [value]="prop">
-        {{ prop }}
-      </option>
-    </select>
+    <div>
+      <label for="colorBy">Color hexagons by:</label>
+      <select
+        id="colorBy"
+        [(ngModel)]="colorByProperty"
+        (change)="updateHexColors()"
+      >
+        <option *ngFor="let prop of colorableProperties" [value]="prop">
+          {{ prop }}
+        </option>
+      </select>
+    </div>
 
     <div *ngIf="selectedCell" class="gene-set-section">
         <div *ngIf="selectedCellAssociatedGeneSetsGenie3.length > 0" class="gene-set-selector">
@@ -131,7 +133,6 @@
       </div>
     </div>
 
-    <!-- TODO: find good position for liana score table. -->
     <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
       <h4>Ligand–Receptor Global Scores</h4>
       <app-table
@@ -161,31 +162,31 @@
         (featuresUpdated)="updateHexColors()"
       ></app-table>
     </div>
-  </div>
 
-  <div *ngIf="colorByProperty === 'tf_activity'">
-    <h4>TF Activity</h4>
-    <app-table
-      [data]="this.meta['tf_names']"
-      [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
-      [features]="features"
-      [updateColumn]="'tf_activity'"
-      (featuresUpdated)="updateHexColors()"
-    ></app-table>
-  </div>
+    <div *ngIf="colorByProperty === 'tf_activity'">
+      <h4>TF Activity</h4>
+      <app-table
+        [data]="this.meta['tf_names']"
+        [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
+        [features]="features"
+        [updateColumn]="'tf_activity'"
+        (featuresUpdated)="updateHexColors()"
+      ></app-table>
+    </div>
 
-  <div *ngIf="colorByProperty === 'pathway_activity'">
-    <h4>Pathway Activity</h4>
-    <app-table
-      [data]="this.meta['pathway_names']"
-      [actionColumns]="[
-        'pathway_activity_score_mlm',
-        'pathway_activity_padj_mlm',
-      ]"
-      [features]="features"
-      [updateColumn]="'pathway_activity'"
-      (featuresUpdated)="updateHexColors()"
-    ></app-table>
+    <div *ngIf="colorByProperty === 'pathway_activity'">
+      <h4>Pathway Activity</h4>
+      <app-table
+        [data]="this.meta['pathway_names']"
+        [actionColumns]="[
+          'pathway_activity_score_mlm',
+          'pathway_activity_padj_mlm',
+        ]"
+        [features]="features"
+        [updateColumn]="'pathway_activity'"
+        (featuresUpdated)="updateHexColors()"
+      ></app-table>
+    </div>
   </div>
 
   <div class="sidenav" *ngIf="selectedCell && colorByProperty !== 'leiden'">
