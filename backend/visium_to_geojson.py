@@ -99,6 +99,11 @@ class Hexagons:
         self.aucell_scores_sponge = aucell_scores_sponge
         print("Aucell CSV files parsed successfully.")
 
+    def get_obsm(self, key, barcode, col=None, dtype=float):
+        if col is None:
+            col = self.anndata.obsm[key].columns[0]  # Default to first column
+        return dtype(self.anndata.obsm[key].loc[barcode, col])
+
     def to_geojson(self):
         hexagons = {"type": "FeatureCollection", "features": []}
         for barcode, coords in zip(self.anndata.obs.index, self.coordinates):
@@ -189,6 +194,27 @@ class Hexagons:
                 },
             }
 
+            liana_score_placeholder_names = {
+                "ligand_receptor_relationships": "ligand_receptor_cosine_similarity",
+                "cell_comp_tf_activity_similarity": "cell_comp_tf_activity_cosine_similarity",
+                "tf_activity": "tf_activity_score_ulm",
+                "pathway_activity": "pathway_activity_score_mlm",
+            }
+            liana_score_placeholder_obsm_cols = {
+                "ligand_receptor_relationships": self.anndata.uns[
+                    "ligand_receptor_global_scores"
+                ].index[0],
+                "cell_comp_tf_activity_similarity": self.anndata.uns[
+                    "cell_comp_tf_activity_global_scores"
+                ].index[0],
+            }
+            for name, obsm_key in liana_score_placeholder_names.items():
+                col = liana_score_placeholder_obsm_cols.get(name, None)
+                if obsm_key in self.anndata.obsm:
+                    feature_dict["properties"][name] = self.get_obsm(
+                        obsm_key, barcode, col
+                    )
+
             # Add additional properties from obs
             for key, value in self.obs[barcode].items():
 
@@ -268,21 +294,26 @@ if __name__ == "__main__":
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
     }
-    for obsm_key, col_names in reconstruct_obsm_cols.items():
-        spatial_data.obsm[obsm_key] = pd.DataFrame(
-            spatial_data.obsm[obsm_key],
-            columns=spatial_data.uns["liana_columns"][col_names],
-            index=spatial_data.obs_names,
-        )
+    for obsm_key, col_names_key in reconstruct_obsm_cols.items():
+        if (
+            obsm_key in spatial_data.obsm
+            and "liana_columns" in spatial_data.uns
+        ):
+            spatial_data.obsm[obsm_key] = pd.DataFrame(
+                spatial_data.obsm[obsm_key],
+                columns=spatial_data.uns["liana_columns"][col_names_key],
+                index=spatial_data.obs_names,
+            )
 
-    spatial_data.uns["ligand_receptor_global_scores"] = spatial_data.uns[
-        "ligand_receptor_global_scores"
-    ].sort_values("cosine_similarity_std", ascending=False)
-    spatial_data.uns["cell_comp_tf_activity_global_scores"] = spatial_data.uns[
-        "cell_comp_tf_activity_global_scores"
-    ].sort_values(
-        "cosine_similarity_std", ascending=False
-    )  # or mean more sensible?
+    liana_global_scores = [
+        "ligand_receptor_global_scores",
+        "cell_comp_tf_activity_global_scores",
+    ]
+    for global_score in liana_global_scores:
+        if global_score in spatial_data.uns:
+            spatial_data.uns[global_score] = spatial_data.uns[
+                global_score
+            ].sort_values("cosine_similarity_std", ascending=False)
 
     if not args.aucell_genie3_path or not args.aucell_sponge_path:
         hexagons = Hexagons(
@@ -303,23 +334,24 @@ if __name__ == "__main__":
 
     geojson_data = hexagons.to_geojson()
 
+    # Add meta information like ligand recepto pair names for api fetching
     geojson_data["meta"] = {}
-    meta_scores = [
-        "ligand_receptor_global_scores",
-        "cell_comp_tf_activity_global_scores",
-    ]
-    for meta_score in meta_scores:
-        geojson_data["meta"][meta_score] = spatial_data.uns[
-            meta_score
-        ].to_dict()
+    for global_score in liana_global_scores:
+        if global_score in spatial_data.uns:
+            geojson_data["meta"][global_score] = spatial_data.uns[
+                global_score
+            ].to_dict()
 
     colname_mapping = {
         "nmf_factors": "ligand_receptor_NMF_factors",
         "tf_names": "tf_activity_score_ulm",
         "pathway_names": "pathway_activity_score_mlm",
     }
-    for k, v in colname_mapping.items():
-        geojson_data["meta"][k] = spatial_data.obsm[v].columns.tolist()
+    for meta_key, obsm_key in colname_mapping.items():
+        if obsm_key in spatial_data.obsm:
+            geojson_data["meta"][meta_key] = spatial_data.obsm[
+                obsm_key
+            ].columns.tolist()
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
 
