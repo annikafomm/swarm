@@ -37,9 +37,29 @@
       <div>
         <div *ngIf="selectedGeneSetGenie3">
           <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
-          <div id="aucell_graph_genie3"></div>
 
-          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;">
+          <div class="genie3-controls" style="margin-bottom: 15px; text-align: center;">
+            <label for="max-nodes-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
+              Max Nodes: {{ maxGenie3Nodes }}
+            </label>
+            <input type="range" id="max-nodes-slider" min="10" max="75" step="5" [(ngModel)]="maxGenie3Nodes"
+              (input)="onMaxNodesChangeGenie3()" style="width: 300px; cursor: pointer;" />
+            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+              10 ← → 75 nodes
+            </div>
+          </div>
+
+          <!-- Loading indicator for Genie3 graph -->
+          <div *ngIf="isLoadingGenie3" class="loading-container">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading Genie3 network...</div>
+          </div>
+
+          <!-- Graph container (hidden while loading) -->
+          <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
+
+          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
+            *ngIf="!isLoadingGenie3">
             <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetGenie3"
               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
               onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
@@ -47,6 +67,11 @@
             </button>
           </div>
         </div>
+
+        <div *ngIf="!isLoadingSponge && genie3WeightCutoff !== null"
+            style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
+            Genie3 Weight Cutoff: {{ genie3WeightCutoff | number:'1.2-5' }}
+          </div>
 
         <div *ngIf="selectedGeneSetSponge">
           <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
@@ -57,7 +82,7 @@
               Max Nodes: {{ maxSpongeNodes }}
             </label>
             <input type="range" id="max-nodes-slider" min="10" max="75" step="5" [(ngModel)]="maxSpongeNodes"
-              (input)="onMaxNodesChange()" style="width: 300px; cursor: pointer;" />
+              (input)="onMaxNodesChangeSponge()" style="width: 300px; cursor: pointer;" />
             <div style="font-size: 12px; color: #666; margin-top: 5px;">
               10 ← → 75 nodes
             </div>
@@ -81,8 +106,7 @@
           <!-- gProfiler button below the Sponge graph -->
           <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
             *ngIf="!isLoadingSponge">
-            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-              [disabled]="!selectedGeneSetSponge"
+            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetSponge"
               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
               onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
               🧬 Analyze All Sponge Genes in gProfiler

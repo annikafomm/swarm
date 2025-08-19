@@ -27,6 +27,8 @@ export class HexagonPlotComponent implements OnInit {
   public colorByProperty = 'cell_type';
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
+  private previousGeneSetGenie3: string | null = null;
+  private previousGeneSetSponge: string | null = null;
   public selectedCellAssociatedGeneSetsGenie3: string[] = [];
   public selectedCellAssociatedGeneSetsSponge: string[] = [];
   public selectedInterval: number = 0;
@@ -46,7 +48,9 @@ export class HexagonPlotComponent implements OnInit {
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
   public maxSpongeNodes: number = 25;
+  public maxGenie3Nodes: number = 25;
   public spongePValueCutoff: number | null = null;
+  public genie3WeightCutoff: number | null = null;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
@@ -108,16 +112,6 @@ export class HexagonPlotComponent implements OnInit {
 
   private zoomed(event: d3.D3ZoomEvent<SVGSVGElement, unknown>): void {
     this.g.attr('transform', event.transform.toString());
-  }
-
-  public onMaxNodesChange(): void {
-    console.log('Max nodes changed to:', this.maxSpongeNodes);
-
-    // Only update if a sponge gene set is selected
-    if (this.selectedGeneSetSponge) {
-      this.isLoadingSponge = true;
-      setTimeout(() => this.updateAucellGraphSponge(), 50);
-    }
   }
 
   private loadAndRenderData(dataPath: string): void {
@@ -267,121 +261,179 @@ export class HexagonPlotComponent implements OnInit {
     this.renderLegend();
   }
 
+  public onMaxNodesChangeSponge(): void {
+    console.log('Max nodes changed to:', this.maxSpongeNodes);
+
+    // Only update if a sponge gene set is selected
+    if (this.selectedGeneSetSponge) {
+      this.isLoadingSponge = true;
+      setTimeout(() => this.updateAucellGraphSponge(), 50);
+    }
+  }
+
+  public onMaxNodesChangeGenie3(): void {
+    console.log('Max nodes changed to:', this.maxGenie3Nodes);
+    // Only update if a Genie3 gene set is selected
+    if (this.selectedGeneSetGenie3) {
+      this.isLoadingGenie3 = true;
+      setTimeout(() => this.updateAucellGraphGenie3(), 50);
+    }
+  }
+
+  public onGeneSetChange(): void {
+    console.log('Genie3 Gene set:', this.selectedGeneSetGenie3);
+    console.log('Sponge Gene set:', this.selectedGeneSetSponge);
+
+    // Check if Genie3 gene set has actually changed
+    if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
+      this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+
+      if (this.selectedGeneSetGenie3) {
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = true;
+        setTimeout(() => {
+          this.updateAucellGraphGenie3();
+        }, 100);
+      } else {
+        // Clear Genie3 graph if no gene set is selected
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = false;
+      }
+    }
+
+    // Check if Sponge gene set has actually changed
+    if (this.selectedGeneSetSponge !== this.previousGeneSetSponge) {
+      this.previousGeneSetSponge = this.selectedGeneSetSponge;
+
+      if (this.selectedGeneSetSponge) {
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
+        console.log('Sponge targets available:', this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0);
+        this.isLoadingSponge = true;
+        setTimeout(() => {
+          this.updateAucellGraphSponge();
+        }, 100);
+      } else {
+        // Clear Sponge graph if no gene set is selected
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        this.isLoadingSponge = false;
+      }
+    }
+  }
+
   public updateAucellGraphGenie3(): void {
-    // Clear previous graph
+
     d3.select('#aucell_graph_genie3').selectAll('*').remove();
 
-    if (!this.selectedGeneSetGenie3 || !this.genie3Network) return;
+
+    if (!this.selectedGeneSetGenie3 || !this.genie3Network) {
+      this.isLoadingGenie3 = false;
+      return;
+    }
 
     const regulator = this.selectedGeneSetGenie3;
     const targets = (this.geneSetsGenie3)[regulator] || [];
 
-    const filteredTargets = targets.filter(target => {
-      return this.genie3Network.some(connection =>
-        connection.source === regulator &&
-        connection.target === target &&
-        connection.weight > 0.03 // TODO: Look at distribution of weights and set a more appropriate threshold
-      );
-    });
-
-    const weightThreshold = 0.03;
-
-    console.log('Regulator:', regulator);
-    console.log('Targets:', targets);
 
     const nodes: { id: string, x?: number, y?: number, group: number }[] = [];
     const edges: { source: string, target: string, weight: number }[] = [];
 
-    // Add regulator node
+    let candidateEdges: { source: string, target: string, weight: number }[] = [];
+
+    // Helper function to get weight from Genie3 network
+    const getGenie3Weight = (source: string, target: string): number => {
+      const connection = this.genie3Network.find(conn =>
+        (conn.source === source && conn.target === target) ||
+        (conn.source === target && conn.target === source)
+      );
+      return connection ? connection.weight : 0;
+    };
+
+    // Regulator node is always added
     nodes.push({ id: regulator, group: 0 });
 
-    // Add target nodes
-    filteredTargets.forEach((target: string) => {
-      nodes.push({ id: target, group: 1 });
+    // Add target edges with actual weights
+    targets.forEach(target => {
+      const weight = getGenie3Weight(regulator, target);
+      candidateEdges.push({ source: regulator, target, weight });
     });
 
-    // Get edges from regulator to targets
-    this.genie3Network.forEach(connection => {
-      if (connection.source === regulator && filteredTargets.includes(connection.target)) {
-        edges.push({
-          source: connection.source,
-          target: connection.target,
-          weight: connection.weight
-        });
-      }
-    });
-
-    // If network is small, find neighbors
-    if (nodes.length < 30) {
+    // If network is small, find neighbors and add their edges to candidateEdges
+    if (candidateEdges.length < this.maxGenie3Nodes) {
       const neighborSet = new Set<string>();
-      const allMainNodes = [regulator, ...filteredTargets];
+      const allMainNodes = [regulator, ...targets];
 
+      // Find all neighbors connected to main nodes
       allMainNodes.forEach((mainNode: string) => {
         this.genie3Network.forEach(connection => {
-
-          if (connection.weight > weightThreshold) {
-
-            // If mainNode is the source, add target as neighbor
-            if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
-              neighborSet.add(connection.target);
-            }
-            // If mainNode is the target, add source as neighbor
-            else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
-              neighborSet.add(connection.source);
-            }
+          if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
+            neighborSet.add(connection.target);
+          } else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
+            neighborSet.add(connection.source);
           }
         });
       });
 
-      console.log('Found neighbors:', Array.from(neighborSet));
-      console.log('Neighbor count:', neighborSet.size);
+      // Add all actual edges involving neighbors
+      const allPotentialNodes = [...allMainNodes, ...Array.from(neighborSet)];
 
-      Array.from(neighborSet).forEach(neighbor => {
-        nodes.push({ id: neighbor, group: 2 });
-      });
-    }
-
-    // Add ALL connections between any nodes in our network with sufficient weight
-    const allNodeIds = new Set(nodes.map(n => n.id));
-
-    this.genie3Network.forEach(connection => {
-      if (connection.weight > weightThreshold) {
-        const sourceInNetwork = allNodeIds.has(connection.source);
-        const targetInNetwork = allNodeIds.has(connection.target);
-
-
-        if (sourceInNetwork && targetInNetwork) {
-          const edgeExists = edges.some(e =>
-            (e.source === connection.source && e.target === connection.target) ||
-            (e.source === connection.target && e.target === connection.source)
+      this.genie3Network.forEach(connection => {
+        if (allPotentialNodes.includes(connection.source) && allPotentialNodes.includes(connection.target)) {
+          // Check if this edge is not already in candidateEdges
+          const edgeExists = candidateEdges.some(edge =>
+            (edge.source === connection.source && edge.target === connection.target) ||
+            (edge.source === connection.target && edge.target === connection.source)
           );
 
           if (!edgeExists) {
-            edges.push({
+            candidateEdges.push({
               source: connection.source,
               target: connection.target,
               weight: connection.weight
             });
           }
         }
+      });
+    }
+
+    // Sort candidateEdges by weight in descending order (highest weights first)
+    candidateEdges.sort((a, b) => b.weight - a.weight);
+    // Only keep the top N edges by weight
+    candidateEdges = candidateEdges.slice(0, this.maxGenie3Nodes);
+
+    // Create nodes from all edges (source and target)
+    const nodeSet = new Set<string>();
+    candidateEdges.forEach(edge => {
+      nodeSet.add(edge.source);
+      nodeSet.add(edge.target);
+    });
+
+    // Ensure regulator is always included
+    nodeSet.add(regulator);
+
+    // Create nodes array with proper groups
+    Array.from(nodeSet).forEach(nodeId => {
+      if (nodeId === regulator) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 0 }); // regulator
+        }
+      } else if (targets.includes(nodeId)) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 1 }); // targets
+        }
+      } else {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 2 }); // neighbors
+        }
       }
     });
 
-    console.log('Final nodes:', nodes.length);
-    console.log('Final edges:', edges.length);
-    console.log('Edges:', edges);
+    // Add all candidate edges to final edges
+    edges.push(...candidateEdges);
 
 
 
-    console.log('After enhancement - Nodes:', nodes.length, 'Edges:', edges.length);
-
-
-    if (nodes.length === 0) {
-      console.warn('No nodes to display');
-      return;
-    }
-
-    // Create the graph
+    // Create the graph object
     const graph = {
       nodes: nodes.filter(node => node.id && node.id.length > 0),
       edges: edges.filter(edge =>
@@ -389,6 +441,10 @@ export class HexagonPlotComponent implements OnInit {
         nodes.some(node => node.id === edge.target)
       )
     };
+
+    // Get Genie3 weight cutoff: For current edges in the graph what is the max weight (excluding self-loops)
+    const nonSelfLoopEdges = edges.filter(edge => edge.source !== edge.target);
+    this.genie3WeightCutoff = nonSelfLoopEdges.length > 0 ? Math.max(...nonSelfLoopEdges.map(edge => edge.weight)) : null;
 
     // Create the graph visualization
     const width = 500;
@@ -456,22 +512,6 @@ export class HexagonPlotComponent implements OnInit {
       .style('fill', '#333')
       .text((d: any) => d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id);
 
-    // Add weight labels on edges
-    const edgeLabels = svg.append('g')
-      .selectAll('text')
-      .data(graph.edges)
-      .enter()
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .style('font-size', '8px')
-      .style('fill', '#666')
-      .style('font-weight', 'bold')
-      .style('background-color', 'white')
-      .style('padding', '1px')
-      .text((d: any) => d.weight.toFixed(2));
-
-    // Initialize simulation with stronger forces
     const simulation = d3.forceSimulation(graph.nodes)
       .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(10).strength(0.5))
       .force('charge', d3.forceManyBody().strength(-500))
@@ -502,25 +542,32 @@ export class HexagonPlotComponent implements OnInit {
         .attr('x', (d: any) => d.x)
         .attr('y', (d: any) => d.y);
 
-      // Position edge labels at the midpoint of each edge
-      edgeLabels
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
     });
 
-    // Add AUCell Score to the svg with 3 decimal places
+    setTimeout(() => {
+      simulation.stop();
+      this.isLoadingGenie3 = false;
+    }, 2000);
+
+    // AUCell Score Label
     svg.append('text')
       .attr('x', width / 2)
-      .attr('y', height + textPadding - 10)
+      .attr('y', height + textPadding - 40)
       .attr('text-anchor', 'middle')
       .style('font-size', '14px')
       .style('fill', '#333')
       .text(`AUCell Score ${this.selectedGeneSetGenie3}: ${this.selectedCell?.properties.aucell_genie3?.[this.selectedGeneSetGenie3]?.toFixed(3) || 'N/A'}`);
 
-    console.log('Network visualization complete');
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + textPadding - 25)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '12px')
+      .style('fill', '#666')
+      .text(`Edges: ${edges.length}, Nodes: ${nodes.length}, Max Weight: ${this.genie3WeightCutoff ? this.genie3WeightCutoff.toFixed(3) : 'N/A'}`);
+
   }
 
-  // If you have a BrowseService with the gProfiler functionality
   private handleNodeClick(nodeData: any): void {
     console.log('Node clicked:', nodeData.id);
 
@@ -531,7 +578,6 @@ export class HexagonPlotComponent implements OnInit {
     const gProfilerUrl = this.generateGProfilerUrl(currentGraphNodes);
 
     if (gProfilerUrl) {
-      // Open in new tab/window
       window.open(gProfilerUrl, '_blank');
     } else {
       console.warn('Could not generate gProfiler URL');
@@ -549,8 +595,6 @@ export class HexagonPlotComponent implements OnInit {
 
     return [regulator, ...targets];
   }
-
-  // Add this method to analyze all genes in the current Genie3 gene set
   public analyzeGeneSetInGProfiler(): void {
     if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
       console.warn('No Genie3 gene set selected');
@@ -560,7 +604,6 @@ export class HexagonPlotComponent implements OnInit {
     const regulator = this.selectedGeneSetGenie3;
     const targets = this.geneSetsGenie3[regulator] || [];
 
-    // Include regulator + all targets
     const allGenes = [regulator, ...targets];
 
     console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
@@ -598,31 +641,15 @@ export class HexagonPlotComponent implements OnInit {
 
 
   public updateAucellGraphSponge(): void {
-    console.log('=== updateAucellGraphSponge called ===');
 
-    // Show loading state
-    this.isLoadingSponge = true;
-    this.spongePValueCutoff = null; // Reset cutoff
+    // Reset p-value cutoff
+    this.spongePValueCutoff = null;
 
     // Clear previous graph
     d3.select('#aucell_graph_sponge').selectAll('*').remove();
 
     if (!this.selectedGeneSetSponge || !this.spongeNetwork || this.spongeNetwork.length === 0) {
       console.log('Missing selectedGeneSetSponge or spongeNetwork');
-
-      const svg = d3.select('#aucell_graph_sponge')
-        .append('svg')
-        .attr('width', 500)
-        .attr('height', 300);
-
-      svg.append('text')
-        .attr('x', 250)
-        .attr('y', 150)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '14px')
-        .style('fill', '#666')
-        .text('No sponge network data available');
-
       this.isLoadingSponge = false;
       return;
     }
@@ -740,12 +767,15 @@ export class HexagonPlotComponent implements OnInit {
       console.log(`Using top ${edges.length} edges out of ${allPotentialEdges.length}`);
       console.log('P-value cutoff:', this.spongePValueCutoff);
 
-      // Remove disconnected nodes
+      // Remove disconnected nodes, but ALWAYS keep the regulator (group 0)
       const connectedNodeIds = new Set<string>();
       edges.forEach(edge => {
         connectedNodeIds.add(edge.source);
         connectedNodeIds.add(edge.target);
       });
+
+      // Always include the regulator node, even if it has no connections
+      connectedNodeIds.add(regulator);
 
       const filteredNodes = nodes.filter(node =>
         node.group === 0 || connectedNodeIds.has(node.id)
@@ -753,7 +783,8 @@ export class HexagonPlotComponent implements OnInit {
 
       console.log('Final nodes:', filteredNodes.length, 'Final edges:', edges.length);
 
-      if (filteredNodes.length === 0) {
+      // Since regulator is always kept, check if we have any meaningful network
+      if (filteredNodes.length <= 1) {
         const svg = d3.select('#aucell_graph_sponge')
           .append('svg')
           .attr('width', 500)
@@ -880,10 +911,10 @@ export class HexagonPlotComponent implements OnInit {
         }
       });
 
-      // Auto-stop simulation
+
       setTimeout(() => {
         simulation.stop();
-        this.isLoadingSponge = false; // Hide loading after simulation completes
+        this.isLoadingSponge = false;
       }, 2000);
 
       // Add AUCell Score
@@ -902,7 +933,7 @@ export class HexagonPlotComponent implements OnInit {
         .attr('text-anchor', 'middle')
         .style('font-size', '12px')
         .style('fill', '#666')
-        .text(`${edges.length} connections, ${filteredNodes.length} nodes (max: ${MAX_NODES})`);
+        .text(`${edges.length} connections, ${filteredNodes.length} nodes`);
 
       console.log('Optimized sponge network visualization complete');
     } catch (error) {
@@ -951,28 +982,38 @@ export class HexagonPlotComponent implements OnInit {
       .style('stroke', 'transparent');
   }
 
-  public openSidenav(event: MouseEvent, cell: CellFeature): void {
-    this.selectedCell = cell;
-    // First get the associated gene sets
-    [this.selectedCellAssociatedGeneSetsGenie3, this.selectedCellAssociatedGeneSetsSponge] = this.getAssociatedGeneSets(cell);
+  // Regular Cell Specific Sidenav
 
+  public openSidenav(event: MouseEvent, cell: CellFeature): void {
+
+    this.selectedCell = cell;
+    console.log('Selected cell:', this.selectedCell);
+
+    [this.selectedCellAssociatedGeneSetsGenie3, this.selectedCellAssociatedGeneSetsSponge] = this.getAssociatedGeneSets(cell);
 
     this.selectedGeneSetGenie3 = null;
     this.selectedGeneSetSponge = null;
+    this.previousGeneSetGenie3 = null;
+    this.previousGeneSetSponge = null;
 
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
       this.extendCluster(cell.properties.leiden);
+      setTimeout(() => this.renderNhoodHeatmap(), 0);
     }
     else {
+      // Remove Black outline from any previously selected cell
+      this.g.selectAll<SVGPathElement, CellFeature>('path')
+        .style('stroke', 'transparent');
+
+      // Highlight the selected cell
       d3.select(event.target as SVGElement)
         .transition()
         .style('stroke', 'black');
     }
-
-
-    setTimeout(() => this.renderNhoodHeatmap(), 0);
   }
+
+  // Clusterview Specific Sidenav
 
   public openClusterSidenav(clusterId: number): void {
     this.selectedCluster = clusterId;
@@ -987,32 +1028,6 @@ export class HexagonPlotComponent implements OnInit {
       setTimeout(() => this.renderNhoodHeatmap(), 100);
     }
 
-  }
-
-  public onGeneSetChange(): void {
-    console.log('Genie3 Gene set:', this.selectedGeneSetGenie3);
-    console.log('Sponge Gene set:', this.selectedGeneSetSponge);
-
-    d3.select('#aucell_graph_genie3').selectAll('*').remove();
-    d3.select('#aucell_graph_sponge').selectAll('*').remove();
-
-    if (this.selectedGeneSetGenie3) {
-      console.log('Updating Genie3 graph for:', this.selectedGeneSetGenie3);
-      console.log('Genie3 targets available:', this.geneSetsGenie3[this.selectedGeneSetGenie3]?.length || 0);
-      setTimeout(() => {
-        console.log('Calling updateAucellGraphGenie3');
-        this.updateAucellGraphGenie3();
-      }, 100);
-    }
-
-    if (this.selectedGeneSetSponge) {
-      console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
-      console.log('Sponge targets available:', this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0);
-      setTimeout(() => {
-        console.log('Calling updateAucellGraphSponge');
-        this.updateAucellGraphSponge();
-      }, 100);
-    }
   }
 
   public selectCellFromCluster(cell: CellFeature): void {
