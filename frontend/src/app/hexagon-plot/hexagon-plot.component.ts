@@ -70,6 +70,7 @@ export class HexagonPlotComponent implements OnInit {
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
   } | null = null;
+  public showGlobalLigandReceptorScores: boolean = true;
 
   public colorScale = d3
     .scaleOrdinal<string>()
@@ -150,10 +151,6 @@ export class HexagonPlotComponent implements OnInit {
         });
 
         this.features = data.features;
-        if (data.meta && data.meta['ligand_receptor_global_scores']) {
-          this.ligandReceptorScores =
-            data.meta['ligand_receptor_global_scores'];
-        }
 
         //this.colorScale.domain([
         //  ...new Set(

@@ -313,13 +313,13 @@ if __name__ == "__main__":
             meta_score
         ].to_dict()
 
-    geojson_data["meta"]["tf_names"] = spatial_data.obsm[
-        "tf_activity_score_ulm"
-    ].columns.tolist()
-
-    geojson_data["meta"]["pathway_names"] = spatial_data.obsm[
-        "pathway_activity_score_mlm"
-    ].columns.tolist()
+    colname_mapping = {
+        "nmf_factors": "ligand_receptor_NMF_factors",
+        "tf_names": "tf_activity_score_ulm",
+        "pathway_names": "pathway_activity_score_mlm",
+    }
+    for k, v in colname_mapping.items():
+        geojson_data["meta"][k] = spatial_data.obsm[v].columns.tolist()
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
 

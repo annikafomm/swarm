@@ -17,6 +17,17 @@
           {{ prop }}
         </option>
       </select>
+
+      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+        <button
+          (click)="
+            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
+          "
+        >
+          Show
+          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+        </button>
+      </div>
     </div>
 
     <div *ngIf="selectedCell" class="gene-set-section">
@@ -134,19 +145,39 @@
     </div>
 
     <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
-      <h4>Ligand–Receptor Global Scores</h4>
-      <app-table
-        [data]="this.meta['ligand_receptor_global_scores']"
-        [actionColumns]="[
-          'ligand_receptor_cosine_similarity',
-          'ligand_receptor_p_value',
-          'ligand_receptor_category',
-        ]"
-        [features]="features"
-        [updateColumn]="'ligand_receptor_relationships'"
-        (featuresUpdated)="updateHexColors()"
-      ></app-table>
-      <!-- TODO: Add sth about NMF factors -->
+      <div
+        *ngIf="
+          showGlobalLigandReceptorScores;
+          then global_scores;
+          else nmf_scores
+        "
+      ></div>
+
+      <ng-template #global_scores>
+        <h4>Ligand–Receptor Global Scores</h4>
+        <app-table
+          [data]="this.meta['ligand_receptor_global_scores']"
+          [actionColumns]="[
+            'ligand_receptor_cosine_similarity',
+            'ligand_receptor_p_value',
+            'ligand_receptor_category',
+          ]"
+          [features]="features"
+          [updateColumn]="'ligand_receptor_relationships'"
+          (featuresUpdated)="updateHexColors()"
+        ></app-table>
+      </ng-template>
+
+      <ng-template #nmf_scores>
+        <h4>Ligand-Receptor NMF Scores</h4>
+        <app-table
+          [data]="this.meta['nmf_factors']"
+          [actionColumns]="['ligand_receptor_NMF_factors']"
+          [features]="features"
+          [updateColumn]="'ligand_receptor_relationships'"
+          (featuresUpdated)="updateHexColors()"
+        ></app-table>
+      </ng-template>
     </div>
 
     <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
