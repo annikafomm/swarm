@@ -251,7 +251,9 @@ export class FormPageComponent {
             if (!jobId) {
               return this.fail('Upload succeeded, but no jobId was returned by the server.');
             }
-            this.router.navigate(['/result', jobId]);
+            this.router.navigate(['/hexagon-plot'], {
+              queryParams: { jobId }
+            });
           }
         },
         error: (err) => {

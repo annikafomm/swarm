@@ -2,19 +2,43 @@
 
 from __future__ import annotations
 
-# Core imports
-from enum import Enum
-from pathlib import Path
+# ---------------------------------
+# Standard Library
+# ---------------------------------
 import json
+import pandas as pd
+import scanpy as sc
+import uvicorn
 import os
 import shutil
 import time
-from typing import Optional, Dict, Any
+from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, Optional
+from uuid import UUID, uuid4
 
-# FastAPI / Starlette
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+# ---------------------------------
+# Third-Party (FastAPI / Starlette)
+# ---------------------------------
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import RedirectResponse
+from fastapi_sessions.backends.implementations import InMemoryBackend
+from fastapi_sessions.frontends.implementations import (
+    CookieParameters,
+    SessionCookie,
+)
+from fastapi_sessions.session_verifier import SessionVerifier
+from pydantic import BaseModel as PydanticBaseModel
+
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -45,6 +69,51 @@ class Method(str, Enum):
     Genie3 = "Genie3"
     Sponge = "Sponge"
 
+class BaseModel(PydanticBaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
+class SessionData(BaseModel):
+    username: str
+    adata: sc.AnnData | None = None
+
+class BasicVerifier(SessionVerifier[UUID, SessionData]):
+    def __init__(
+        self,
+        *,
+        identifier: str,
+        auto_error: bool,
+        backend: InMemoryBackend[UUID, SessionData],
+        auth_http_exception: HTTPException,
+    ):
+        self._identifier = identifier
+        self._auto_error = auto_error
+        self._backend = backend
+        self._auth_http_exception = auth_http_exception
+
+    @property
+    def identifier(self):
+        return self._identifier
+
+    @property
+    def backend(self):
+        return self._backend
+
+    @property
+    def auto_error(self):
+        return self._auto_error
+
+    @property
+    def auth_http_exception(self):
+        return self._auth_http_exception
+
+    def verify_session(self, model: SessionData) -> bool:
+        """If the session exists, it is valid"""
+        return True
+
+class AnnDataPath(BaseModel):
+    path: str
+
 # -----------------------------------------------------------------------------
 # Application
 # -----------------------------------------------------------------------------
@@ -58,6 +127,27 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Uses UUID
+cookie_params = CookieParameters(secure=False, httponly=True, samesite="lax")
+
+cookie = SessionCookie(
+    cookie_name="cookie",
+    identifier="general_verifier",
+    auto_error=True,
+    secret_key="DONOTUSE",
+    cookie_params=cookie_params,
+)
+backend = InMemoryBackend[UUID, SessionData]()
+
+verifier = BasicVerifier(
+    identifier="general_verifier",
+    auto_error=True,
+    backend=backend,
+    auth_http_exception=HTTPException(
+        status_code=403, detail="invalid session"
+    ),
 )
 
 # -----------------------------------------------------------------------------
@@ -145,6 +235,8 @@ def api_root():
         },
     }
 
+
+
 # -----------------------------------------------------------------------------
 # Upload endpoint
 # -----------------------------------------------------------------------------
@@ -152,7 +244,7 @@ def api_root():
 # Main endpoint for receiving form fields and files (multipart/form-data).
 # It creates a dedicated job directory, saves all provided files there,
 # stores a config JSON for reproducibility, and returns a summary payload.
-@app.post("/api/upload")
+@app.post("/api/upload", dependencies=[Depends(cookie)])
 async def upload(
     # Required form fields (validated by Enum):
     dataset: Dataset = Form(...),
@@ -173,19 +265,22 @@ async def upload(
     precomputedFile: Optional[UploadFile] = File(None),
     spongeNetwork: Optional[UploadFile] = File(None),
     genieFile: Optional[UploadFile] = File(None),
+    session_data: "SessionData" = Depends(verifier),
 ):
     if spatialFile is None:
         raise HTTPException(status_code=400, detail="Spatial file is required")
-    
+
     # 1) Parse the scores JSON
     try:
         scores_obj: Dict[str, Any] = json.loads(scores) if scores else {}
     except Exception:
         raise HTTPException(status_code=400, detail="Field 'scores' must be valid JSON.")
 
-    # 2) Create a unique job directory (timestamp-based)
+    raw_username = session_data.username
+    user_safe = _sanitize_filename(raw_username) or "anon"
+
     job_id = f"job_{int(time.time() * 1000)}"
-    job_dir = BASE_UPLOAD_DIR / job_id
+    job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
     job_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) Save all files into that directory
@@ -216,3 +311,104 @@ async def upload(
 
     # 6) Return a clean JSON response the frontend can consume
     return payload
+
+
+@app.post("/create_session/{name}")
+async def create_session(name: str, response: Response):
+    """
+    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session/mopitas`
+    """
+    session = uuid4()
+    data = SessionData(username=name)
+
+    await backend.create(session, data)
+    cookie.attach_to_response(response, session)
+
+    return f"created session for {name}"
+
+@app.get("/whoami", dependencies=[Depends(cookie)])
+async def whoami(session_data: SessionData = Depends(verifier)):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/whoami`
+    """
+    return session_data.username
+
+@app.post("/delete_session")
+async def del_session(response: Response, session_id: UUID = Depends(cookie)):
+    """
+    Example: `curl -b cookies.txt -X POST http://127.0.0.1:3000/delete_session`
+    """
+    await backend.delete(session_id)
+    cookie.delete_from_response(response)
+    return "deleted session"
+
+@app.post("/read_adata")
+async def read_adata(
+    adata_path: AnnDataPath, session_id: UUID = Depends(cookie)
+):
+    """
+    Example:
+    ```
+    curl -b cookies.txt \
+    -H "Content-Type: application/json" \
+    -X POST http://127.0.0.1:3000/read_adata \
+    -d '{"path": "data/adata.h5ad"}'
+    ```
+    """
+    session_data = await backend.read(session_id)
+
+    adata = sc.read_h5ad(adata_path.path)
+
+    reconstruct_obsm_cols = {
+        "ligand_receptor_cosine_similarity": "ligand_receptor",
+        "ligand_receptor_p_value": "ligand_receptor",
+        "ligand_receptor_category": "ligand_receptor",
+        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
+        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
+    }
+
+    for obsm_key, col_names in reconstruct_obsm_cols.items():
+        adata.obsm[obsm_key] = pd.DataFrame(
+            adata.obsm[obsm_key],
+            columns=adata.uns["liana_columns"][col_names],
+            index=adata.obs_names,
+        )
+
+    session_data.adata = adata
+    await backend.update(session_id, session_data)
+    return {"status": "ok"}
+
+@app.get("/obs/{column}", dependencies=[Depends(cookie)])
+async def get_obs_column(
+    column: str, session_data: SessionData = Depends(verifier)
+):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type`
+    """
+    return session_data.adata.obs[column].to_dict()
+
+
+@app.get("/var/{column}", dependencies=[Depends(cookie)])
+async def get_var_column(
+    column: str, session_data: SessionData = Depends(verifier)
+):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells`
+    """
+    return session_data.adata.var[column].to_dict()
+
+
+@app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
+async def get_obsm_column(
+    table: str, column: str, session_data: SessionData = Depends(verifier)
+):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
+    """
+    return session_data.adata.obsm[table][column].to_dict()
+
+
+if __name__ == "__main__":
+    app.state.data = None
+    uvicorn.run(app, host="0.0.0.0", port=3000)
+

@@ -1,6 +1,7 @@
 import { Component, OnInit, ɵisComponentDefPendingResolution } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 
@@ -37,6 +38,8 @@ export class HexagonPlotComponent implements OnInit {
     average_clustering: 0,
     closeness_centrality: 0
   };
+
+  
 
   public selectedInterval: number = 0;
   public coOccurrenceData: number[] = [];
@@ -610,12 +613,12 @@ export class HexagonPlotComponent implements OnInit {
 
     if (this.leidenCentralityProps.includes(this.colorByProperty)) {
       // Continuous legend for centrality properties
-      const legendX = 20; 
-      const legendY = 20; 
+      const legendX = 20;
+      const legendY = 20;
       const width = 250;
       const height = 30;
 
-  
+
       const values = this.features.map(f => f.properties.leiden_centrality[this.colorByProperty]);
       const min = Math.min(...values);
       const max = Math.max(...values);
@@ -667,7 +670,7 @@ export class HexagonPlotComponent implements OnInit {
         .style('stroke-width', 1)
         .attr('rx', 3);
 
-      
+
       legendG.append('text')
         .attr('x', 0)
         .attr('y', height + 16)
@@ -676,7 +679,7 @@ export class HexagonPlotComponent implements OnInit {
         .style('fill', '#333')
         .text(min !== undefined ? min.toFixed(2) : '');
 
-  
+
       legendG.append('text')
         .attr('x', width)
         .attr('y', height + 16)
@@ -685,7 +688,7 @@ export class HexagonPlotComponent implements OnInit {
         .style('fill', '#333')
         .text(max !== undefined ? max.toFixed(2) : '');
 
-    
+
       legendG.append('text')
         .attr('x', width / 2)
         .attr('y', -10)
@@ -697,8 +700,8 @@ export class HexagonPlotComponent implements OnInit {
 
     } else {
       const cellTypes = this.colorScale.domain().sort();
-      const legendX = 20; 
-      const legendY = 6; 
+      const legendX = 20;
+      const legendY = 6;
       const itemHeight = 30;
       const itemWidth = 200;
 
