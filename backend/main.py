@@ -108,7 +108,7 @@ async def read_root():
 @app.post("/create_session/{name}")
 async def create_session(name: str, response: Response):
     """
-    Example: `curl -c cookies.txt -X POST http://127.0.0.1:8000/create_session/mopitas`
+    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session/mopitas`
     """
     session = uuid4()
     data = SessionData(username=name)
@@ -122,7 +122,7 @@ async def create_session(name: str, response: Response):
 @app.get("/whoami", dependencies=[Depends(cookie)])
 async def whoami(session_data: SessionData = Depends(verifier)):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:8000/whoami`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/whoami`
     """
     return session_data.username
 
@@ -130,7 +130,7 @@ async def whoami(session_data: SessionData = Depends(verifier)):
 @app.post("/delete_session")
 async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     """
-    Example: `curl -b cookies.txt -X POST http://127.0.0.1:8000/delete_session`
+    Example: `curl -b cookies.txt -X POST http://127.0.0.1:3000/delete_session`
     """
     await backend.delete(session_id)
     cookie.delete_from_response(response)
@@ -150,7 +150,7 @@ async def read_adata(
     ```
     curl -b cookies.txt \
     -H "Content-Type: application/json" \
-    -X POST http://127.0.0.1:8000/read_adata \
+    -X POST http://127.0.0.1:3000/read_adata \
     -d '{"path": "data/adata.h5ad"}'
     ```
     """
@@ -183,7 +183,7 @@ async def get_obs_column(
     column: str, session_data: SessionData = Depends(verifier)
 ):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:8000/obs/cell_type`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type`
     """
     return session_data.adata.obs[column].to_dict()
 
@@ -193,7 +193,7 @@ async def get_var_column(
     column: str, session_data: SessionData = Depends(verifier)
 ):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:8000/var/n_cells`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells`
     """
     return session_data.adata.var[column].to_dict()
 
@@ -203,11 +203,11 @@ async def get_obsm_column(
     table: str, column: str, session_data: SessionData = Depends(verifier)
 ):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:8000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
     """
     return session_data.adata.obsm[table][column].to_dict()
 
 
 if __name__ == "__main__":
     app.state.data = None
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=3000)
