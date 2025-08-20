@@ -174,12 +174,29 @@ def cell_comp_tf_activity_similarity(
         index=adata.obs.index,
     )
 
+    comp_tf_cat_mat = bdata.layers["cats"].toarray()
+    cat_df = pd.DataFrame(
+        comp_tf_cat_mat,
+        columns=comp_tf_interactions,
+        index=adata.obs.index,
+    )
+
+    global_score_columns = ["mean", "std"]
+    global_scores = bdata.var[global_score_columns]
+    global_scores = global_scores.rename(
+        columns={
+            col: f"cosine_similarity_{col}" for col in global_score_columns
+        }
+    )
+
     # ULM scores for TFs
     ulm_scores = adata.obsm["score_ulm"]
     ulm_padj = adata.obsm["padj_ulm"]
     if return_scores:
         return {
             "cosine_similarity": cos_sim_df,
+            "category": cat_df,
+            "global_scores": global_scores,
             "score_ulm": ulm_scores,
             "padj_ulm": ulm_padj,
         }
@@ -187,9 +204,11 @@ def cell_comp_tf_activity_similarity(
         adata.obsm["cell_comp_tf_activity_cosine_similarity"] = (
             cos_sim_df.to_numpy()
         )
+        adata.obsm["cell_comp_tf_activity_category"] = cat_df.to_numpy()
         adata.uns["liana_columns"][
             "cell_comp_tf_activity"
         ] = cos_sim_df.columns.tolist()
         adata.obsm["tf_activity_score_ulm"] = ulm_scores
         adata.obsm["tf_activity_padj_ulm"] = ulm_padj
         del adata.obsm["score_ulm"], adata.obsm["padj_ulm"]
+        adata.uns["cell_comp_tf_activity_global_scores"] = global_scores
