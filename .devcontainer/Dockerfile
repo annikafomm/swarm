@@ -30,13 +30,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
 RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/mopitas-mapra \
     && chown -R $username:$username /workspaces
 
-
 USER $username
 ENV USER=$username
 WORKDIR /workspaces/mopitas-mapra
-
-
-
-
-
-

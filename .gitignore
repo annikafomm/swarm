@@ -1,0 +1,10 @@
+.DS_Store
+backend/.DS_Store
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+backend/uploads/
+
+rindler.h5ad

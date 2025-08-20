@@ -1,87 +1,155 @@
 <h2>Upload your own data</h2>
-<form [formGroup]="form" (ngSubmit)="onSubmit()">
 
-  <label>Select Dataset:</label>
-  <select formControlName="dataset">
-    <option value="Visium">Visium</option>
-    <option value="Xenium">Xenium</option>
-  </select>
+<div *ngIf="errorMsg" class="error">
+  <pre style="margin:0; white-space:pre-wrap;">{{ errorMsg }}</pre>
+</div>
 
-  <br />
+<form [formGroup]="form" (ngSubmit)="onSubmit()" class="panel">
 
-  <label>Select Method:</label>
-  <select formControlName="method">
-    <option value="Genie3">Genie3</option>
-    <option value="Sponge">Sponge</option>
-  </select>
+  <!-- Dataset & Method -->
+  <div class="grid two">
+    <div class="field">
+      <label class="field-label">Select Dataset</label>
+      <div class="select">
+        <select formControlName="dataset">
+          <option value="Visium">Visium</option>
+          <option value="Xenium">Xenium</option>
+        </select>
+      </div>
+    </div>
 
-  <br /><br />
+    <div class="field">
+      <label class="field-label">Select Method</label>
+      <div class="select">
+        <select formControlName="method">
+          <option value="Genie3">Genie3</option>
+          <option value="Sponge">Sponge</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
-  <label>Upload spatial dataset (.h5ad):</label>
-  <input type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad" />
 
-  <br />
+  <div class="section">
+    <label>Upload spatial dataset (.h5ad)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="spatial" type="file" (change)="onFileSelected($event, 'spatial')" accept=".h5ad">
+      <label for="spatial" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="spatialFile?.name || 'No file selected'">
+          {{ spatialFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
 
-  <label>Upload single cell dataset (.h5ad):</label>
-  <input type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad" />
 
-  <div *ngIf="singleCellFile" style="margin-top: 4px;">
-    <label>
-      <input type="checkbox" formControlName="tangram" />
-      Use Tangram for mapping
-    </label>
+    <div style="margin-top:14px;">
+      <label>Upload single cell dataset (.h5ad):</label>
+      <div class="file">
+        <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
+        <label for="singleCell" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="singleCellFile?.name || 'No file selected'">
+            {{ singleCellFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Tangram-Optionen erscheinen erst, wenn eine Single-Cell-Datei gewählt wurde -->
+    <div *ngIf="singleCellFile" class="section" style="margin-top: 8px;">
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="tangram" />
+          Use Tangram for mapping
+      </label>
+    <div style="height:6px"></div>
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="filteringSingleCell" />
+          Enable filtering (Single Cell)
+      </label>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <label>Upload Genie3 network (.csv/.tsv):</label>
+      <div class="file">
+        <!-- eigene ID, aber gleiche Handler-„Rolle“ -->
+        <input id="genieTop" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
+        <label for="genieTop" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="genieFile?.name || 'No file selected'">
+            {{ genieFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <div class="section" style="margin-top:14px;">
+      <label>Upload Sponge network (.csv/.tsv):</label>
+      <div class="file">
+        <input id="spongeTop" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
+        <label for="spongeTop" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="spongeNetworkFile?.name || 'No file selected'">
+            {{ spongeNetworkFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Options</div>
+    <label><input type="checkbox" formControlName="normalization"> Enable normalization</label>
     <br />
-    <label>
-      <input type="checkbox" formControlName="filteringSingleCell" />
-      Enable filtering (Single Cell)
-    </label>
+    <label><input type="checkbox" formControlName="filteringSpatial"> Enable filtering (Spatial)</label>
   </div>
 
-  <br />
-
-  <label>Upload Genie3 or Sponge (.csv/.tsv):</label>
-  <input type="file" (change)="onFileSelected($event, 'file2')" accept=".csv,.tsv" />
-
-  <br />
-
-  <h3>Options</h3>
-
-  <label>
-    <input type="checkbox" formControlName="normalization" />
-    Enable normalization
-  </label>
-
-  <br />
-
-  <label>
-    <input type="checkbox" formControlName="filteringSpatial" />
-    Enable filtering (Spatial)
-  </label>
-
-  <br />
-
-  <h3>Select Scores</h3>
-
-  <div formGroupName="scores">
-    <label *ngFor="let score of availableScores">
-      <input type="checkbox" [formControlName]="score" />
-      {{ score }}
-    </label>
+  <div class="section">
+    <div class="section-title">Select Scores</div>
+    <div class="checkbox-list" formGroupName="scores">
+      <label *ngFor="let score of availableScores"
+       class="score-option"
+       [ngClass]="{ 'force-sponge': score === 'SPONGeffects' }">
+        <input type="checkbox" [formControlName]="score" />
+        <span class="score-text">{{ score }}</span>
+      </label>
+    </div>
   </div>
 
-  <br />
-
-  <div *ngIf="requiresSponge()">
+  <!-- Conditional uploads -->
+  <div class="section" *ngIf="requiresSponge()">
     <label>Upload Sponge network (.csv/.tsv):</label>
-    <input type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv" />
+    <div class="file">
+      <input id="sponge" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
+      <label for="sponge" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name">{{ spongeNetworkFile?.name || 'No file selected' }}</span>
+      </label>
+    </div>
   </div>
 
-  <div *ngIf="requiresGenie()">
-    <label>Upload Genie3 results (.csv/.tsv):</label>
-    <input type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv" />
+  <div class="section" *ngIf="requiresGenie() || shouldOfferGenieUpload()">
+    <label>
+      Upload Genie3 network (.csv/.tsv)
+      <span *ngIf="requiresGenie()">— required:</span>
+      <span *ngIf="!requiresGenie()">— optional:</span>
+    </label>
+    <div class="file">
+      <input id="genie" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
+      <label for="genie" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name">{{ genieFile?.name || 'No file selected' }}</span>
+      </label>
+    </div>
   </div>
 
-  <br />
+  <!-- Upload-Fortschritt -->
+  <div *ngIf="uploading" class="progress">
+    <div class="bar" [style.width.%]="uploadProgress || 0"></div>
+  </div>
 
-  <button type="submit">Submit</button>
+  <div class="actions">
+    <button type="submit" [disabled]="!canSubmit() || uploading">Submit</button>
+    <button type="reset" (click)="onReset()">Reset</button>
+  </div>
 </form>
