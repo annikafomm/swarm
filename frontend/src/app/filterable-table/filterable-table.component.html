@@ -1,0 +1,48 @@
+<div class="table-container">
+  <table>
+    <thead>
+      <tr>
+        <th class="index-col">
+          Index
+          <span class="sort-icons">
+            <button (click)="setSort('index', true)">▲</button>
+            <button (click)="setSort('index', false)">▼</button>
+          </span>
+          <div>
+            <input
+              [(ngModel)]="filters['index']"
+              placeholder="Type to filter..."
+            />
+          </div>
+        </th>
+
+        <th *ngFor="let col of columns" class="other-col">
+          {{ displayColumnName(col) }}
+          <span class="sort-icons">
+            <button (click)="setSort(col, true)">▲</button>
+            <button (click)="setSort(col, false)">▼</button>
+          </span>
+
+          <div *ngIf="rows.length && typeof rows[0][col] === 'string'">
+            <input [(ngModel)]="filters[col]" placeholder="Type to filter..." />
+          </div>
+        </th>
+        <th *ngFor="let action of actionColumns" class="action-col">
+          {{ displayColumnName(action) }}
+        </th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr *ngFor="let row of filteredRows">
+        <td class="index-col">{{ row.index }}</td>
+        <td *ngFor="let col of columns" class="other-col">
+          {{ displayNumeric(row[col]) }}
+        </td>
+        <td *ngFor="let action of actionColumns" class="action-col">
+          <button (click)="fetchAndUpdate(action, row.index)">Show</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>

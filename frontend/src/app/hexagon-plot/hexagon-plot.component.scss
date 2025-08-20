@@ -1,10 +1,9 @@
 :host {
   background-color: #fff;
-  font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+  font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
   min-height: 100vh;
 }
-
 
 label {
   font-weight: 600;
@@ -32,7 +31,21 @@ select {
   top: 200px;
 }
 
+#aucell_graph_genie3 {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 2rem;
+  width: 500px;
+  top: 200px;
+}
+
 #main-visualization {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   margin-right: 0;
   transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   margin-top: 1rem;
@@ -375,7 +388,7 @@ select {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
-  font-family: 'Segoe UI', 'Roboto', Arial, sans-serif;
+  font-family: "Segoe UI", "Roboto", Arial, sans-serif;
 
   th,
   td {
@@ -434,7 +447,7 @@ select {
       text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 
       &::after {
-        content: '⭐';
+        content: "⭐";
         position: absolute;
         top: 2px;
         right: 2px;
@@ -450,7 +463,7 @@ select {
       color: #e65100;
 
       &::before {
-        content: '●';
+        content: "●";
         position: absolute;
         top: 2px;
         left: 2px;
@@ -540,7 +553,7 @@ select {
   margin: 1rem;
 
   &::before {
-    content: '📊';
+    content: "📊";
     display: block;
     font-size: 2rem;
     margin-bottom: 0.5rem;

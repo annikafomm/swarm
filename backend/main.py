@@ -217,11 +217,13 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
 def health():
     return {"ok": True}
 
+  
 # Redirect the root URL to the interactive API docs (Swagger UI).
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/docs")
 
+  
 # Small JSON index describing key endpoints (for human orientation).
 @app.get("/api", include_in_schema=False)
 def api_root():
@@ -312,7 +314,7 @@ async def upload(
     # 6) Return a clean JSON response the frontend can consume
     return payload
 
-
+  
 @app.post("/create_session/{name}")
 async def create_session(name: str, response: Response):
     """
@@ -326,6 +328,7 @@ async def create_session(name: str, response: Response):
 
     return f"created session for {name}"
 
+  
 @app.get("/whoami", dependencies=[Depends(cookie)])
 async def whoami(session_data: SessionData = Depends(verifier)):
     """
@@ -333,6 +336,7 @@ async def whoami(session_data: SessionData = Depends(verifier)):
     """
     return session_data.username
 
+  
 @app.post("/delete_session")
 async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     """
@@ -342,6 +346,7 @@ async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     cookie.delete_from_response(response)
     return "deleted session"
 
+  
 @app.post("/read_adata")
 async def read_adata(
     adata_path: AnnDataPath, session_id: UUID = Depends(cookie)
@@ -378,6 +383,7 @@ async def read_adata(
     await backend.update(session_id, session_data)
     return {"status": "ok"}
 
+  
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
 async def get_obs_column(
     column: str, session_data: SessionData = Depends(verifier)
@@ -411,4 +417,3 @@ async def get_obsm_column(
 if __name__ == "__main__":
     app.state.data = None
     uvicorn.run(app, host="0.0.0.0", port=3000)
-

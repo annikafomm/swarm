@@ -10,7 +10,7 @@ import { SessionService } from './session.service';
   selector: 'app-root',
   imports: [HexagonPlotComponent, CommonModule, FormPageComponent],
   templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+  styleUrl: './app.component.scss',
 })
 export class AppComponent implements OnInit {
   constructor(
