@@ -6,43 +6,68 @@ output: html_document
 ```{r}
 library(Matrix)
 library(data.table)
+library(viper)
 
-source("./calc_spongEffects.R")
+source("./utils.R")
 ```
 
 ```{r}
-# Read sparse matrix
-X <- readMM("../datasets_prepro/GSM6592049_M2_prepro_X.mtx")
-rownames(X) <- fread("../datasets_prepro/GSM6592049_M2_prepro_cells.txt", header = FALSE)$V1
-
 # Read metadata
-var <- fread("../datasets_prepro/GSM6592049_M2_prepro_var.csv")
+var <- fread("../datasets_scores/GSM6592049_M2_prepro/var.csv")
 
+# Read sparse matrix
+X <- readMM("../datasets_scores/GSM6592049_M2_prepro/expr.mtx")
+rownames(X) <- fread("../datasets_scores/GSM6592049_M2_prepro/cells.txt", header = FALSE)$V1
+colnames(X) <- var[,V1]
+expr <- t(as.matrix(X))
+```
+
+```{r}
+nrow(regulon_df)
+
+regulon_df %>%
+  arrange(weight) %>%
+  head(100000)
+
+```
+
+
+```{r}
+# Read regulon file
+regulon_df <- fread("../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv")
+vregulons <- create_Genie_modules(regulon_df, expr, 100000, ".", 20, 20)
+  
+regulons <- lapply(vregulons, function(x) names(x$tfmode))
+```
+
+
+
+```{r}
 ceRNA_interactions <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv")
 ceRNA_centralities <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv")
 
-ensembl <- 'ensemble_id'
-feature <- 'feature_type'
+modules <- create_Sponge_modules(var, ceRNA_interactions, ceRNA_centralities, mscor=0.1, padj=0.05, feature_col='feature_type', RNAs=c("lncRNA","protein_coding"), ensembl_col="ensembl_ids", n_modules, n_cores)
+
+```
+
+
+```{r}
+# Initialize empty matrix
+n <- length(regulons)
+overlap_mat <- matrix(0, nrow = n, ncol = n,
+                      dimnames = list(names(regulons), names(regulons)))
+
+# Fill in with intersection sizes
+for (i in seq_len(n)) {
+  for (j in seq_len(n)) {
+    overlap_mat[i, j] <- length(intersect(regulons[[i]], regulons[[j]]))/length(regulons[[i]])
+  }
+}
+
+overlap_mat
 ```
 
 ```{r}
-modules <- create_Sponge_modules(var, ceRNA_interactions, ceRNA_centralities, mscor=0.1, padj=0.05, feature_col=feature, RNAs=c("lncRNA","protein_coding"), ensembl_col=ensembl, n_modules=20, n_cores=1)
-
-colnames(X) <- var[,get(ensembl)]
-
-effects <- calc_spongeEffects(X, modules, oe=TRUE, gsva=TRUE, ssgsea=TRUE, n_cores=1)
+apply(overlap_mat, 1, function(x) sum(x>0))
 ```
-
-```{r}
-fwrite(as.data.table(effects$gsva.modules, keep.rownames = "rownames"), "../datasets_prepro/GSM6592049_M2_prepro_sponge_gsva.csv")
-```
-
-```{r}
-filename <- "../datasets_prepro/GSM6592049_M2_prepro_X.mtx"
-
-file_clean <- sub("_X$", "", tools::file_path_sans_ext(basename(filename)))
-
-lapply(names(effects), function(x) file.path("..", "datasets_output", paste0("spongeffects_", x, "_sponge_", file_clean, ".csv")))
-```
-
 

@@ -18,7 +18,7 @@ def main():
 
     # input and output file paths
     parser.add_argument('-input', type=str, required=True, help='Input AnnData file path')
-    parser.add_argument('-output', type=str, default='output.h5ad', help='Output AnnData file path')
+    parser.add_argument('-output_dir', type=str, required=True, help='Output dir file path')
 
     # preprocessing options
     parser.add_argument('-filter', action='store_true', help='Apply filtering')
@@ -94,10 +94,9 @@ def main():
         
         # Compute Leiden clusters if not already present
         if args.cluster == "leiden" and "leiden" not in adata.obs.keys():
-            print("Computing the neighborhood graph (leiden cluster) ...")
-            sc.pp.neighbors(adata) # compute a neighborhood graph of the observations
             print("Computing Leiden clusters ...")
-            sc.tl.leiden(adata, flavor="igraph", n_iterations=2, directed=False) # not user configurable, because makeshift solution for when no cluster key is provided
+            # neighbors, umap, leiden
+            clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
 
     # Compute centrality scores
     if args.centrality_scores:
@@ -129,27 +128,24 @@ def main():
 
     #  TODO: tidy up andata --> delete entries, that are not used further
     
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir, exist_ok=True)
+    
     # save AnnData object in file
     print("Saving AnnData object ...")
-    if not args.output.endswith('.h5ad'):
-        args.output += '.h5ad'
-    adata.write(args.output)
+    adata.write(os.path.join(args.output_dir, f"{os.path.basename(args.input)}_scores.h5ad"))
 
     # TODO
     if True: # R scores should be calculated
-        new_filename = args.output.replace('.h5ad', '')
+        new_dir = os.path.join(args.output_dir, f"{os.path.basename(args.input)}")
+        os.makedirs(new_dir, exist_ok=True)
+
         # Write matrix
-        io.mmwrite(f"{new_filename}_X.mtx", adata.X)
-        # Save row (cell) names
-        pd.Series(adata.obs_names).to_csv(f"{new_filename}_cells.txt", index=False, header=False)
-
-
-        if True: # Sponge network is used
-            # Save var table
-            adata.var.to_csv(f"{new_filename}_var.csv")
-        elif True: # Genie network is used
-            # Save row (cell) names
-            pd.Series(adata.vars_names).to_csv(f"{new_filename}_genes.txt", index=False, header=False)
+        io.mmwrite(os.path.join(new_dir, "expr.mtx"), adata.X)
+        # Save row names (cells)
+        pd.Series(adata.obs_names).to_csv(os.path.join(new_dir, "cells.txt"), index=False, header=False)
+        # Save var object
+        adata.var.to_csv(os.path.join(new_dir, "var.csv"))
 
 
 if __name__ == "__main__":

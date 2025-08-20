@@ -1,0 +1,64 @@
+Pipeline started at 2025-08-20 15:44:04
+
+Input parameters (JSON):
+{
+  "indir": "../datasets_scores/GSM6592049_M2_prepro",
+  "outdir": "../datasets_scores/GSM6592049_M2_scores",
+  "sponge_network": "../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv",
+  "sponge_analysis": "../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv",
+  "genie_network": "../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv",
+  "aucell": true,
+  "oe": true,
+  "gsva": true,
+  "ssgsea": true,
+  "viper": true,
+  "mscor": 0.1,
+  "padj": 0.05,
+  "feature_col": "feature_type",
+  "ensembl_col": "ensemble_id",
+  "RNA_types": "lncRNA,protein_coding",
+  "max_modules": 20,
+  "n_cores": 1,
+  "top_n": 100000,
+  "k_reg_genes": 20,
+  "n_regulons": 20,
+  "help": false
+}
+Loading expression matrix (and additional files) ...
+  Expression matrix loaded in 0 min 7 sec
+Loading SPONGE network and create SPONGE modules ...
+  SPONGE network loaded in 0 min 38 sec
+  SPONGE modules created in 0 min 32 sec
+  SPONGE modules written in 0 min 0 sec
+Calculating SPONGeffects-OE scores (SPONGE) ...
+  SPONGeffects-OE scores computed in 7 min 48 sec
+  SPONGeffects-OE scores written in 0 min 0 sec
+Calculating SPONGeffects-GSVA scores (SPONGE) ...
+  SPONGeffects-GSVA scores computed in 0 min 31 sec
+  SPONGeffects-GSVA scores written in 0 min 0 sec
+Calculating SPONGeffects-ssGSEA scores (SPONGE) ...
+  SPONGeffects-ssGSEA scores computed in 0 min 34 sec
+  SPONGeffects-ssGSEA scores written in 0 min 0 sec
+Calculating AUCell scores (SPONGE) ...
+  AUCell scores computed in 0 min 25 sec
+  AUCell scores written in 0 min 0 sec
+Loading GENIE3 network and create regulons ...
+  GENIE3 network loaded in 0 min 0 sec
+  GENIE3 regulons created in 1 min 12 sec
+  GENIE3 regulons written in 0 min 0 sec
+Calculating SPONGeffects-OE scores (GENIE3) ...
+  SPONGeffects-OE scores computed in 11 min 2 sec
+  SPONGeffects-OE scores written in 0 min 0 sec
+Calculating SPONGeffects-GSVA scores (GENIE3) ...
+  SPONGeffects-GSVA scores computed in 0 min 18 sec
+  SPONGeffects-GSVA scores written in 0 min 0 sec
+Calculating SPONGeffects-ssGSEA scores (GENIE3) ...
+  SPONGeffects-ssGSEA scores computed in 0 min 30 sec
+  SPONGeffects-ssGSEA scores written in 0 min 0 sec
+Calculating AUCell scores (GENIE3) ...
+  AUCell scores computed in 0 min 8 sec
+  AUCell scores written in 0 min 0 sec
+Calculating VIPER scores ...
+  VIPER scores computed in 0 min 3 sec
+  VIPER scores written in 0 min 0 sec
+Pipeline finished at 2025-08-20 16:07:55
