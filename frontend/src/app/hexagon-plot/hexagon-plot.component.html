@@ -17,14 +17,14 @@
         </option>
       </select>
 
-      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
         <button
-          (click)="
-            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
-          "
+          type="button"
+          class="hx-btn hx-btn-pill hx-btn-upload"
+          [attr.aria-pressed]="showGlobalLigandReceptorScores"
+          (click)="showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores"
         >
-          Show
-          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+          Show {{ showGlobalLigandReceptorScores ? 'NMF factors' : 'global scores' }}
         </button>
       </div>
     </div>
