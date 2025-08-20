@@ -20,8 +20,9 @@ export class HexagonPlotComponent implements OnInit {
   // Define to use Math functions in the html template
   public Math = Math;
   // GeoJson
-  public dataPath = 'assets/hexagons_GSM6592049_M2_aucell.geojson';
-  public dataSetTitle = this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
+  public dataPath = 'assets/hexagons_GSM6592049_M2.geojson';
+  public dataSetTitle =
+    this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
   // Map svg and g elements
   private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
@@ -65,8 +66,18 @@ export class HexagonPlotComponent implements OnInit {
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
-  public colorableProperties = ['cell_type', 'leiden', 'degree_centrality', 'average_clustering', 'closeness_centrality'];
-  public leidenCentralityProps = ["degree_centrality", "average_clustering", "closeness_centrality"];
+  public colorableProperties = [
+    'cell_type',
+    'leiden',
+    'degree_centrality',
+    'average_clustering',
+    'closeness_centrality',
+  ];
+  public leidenCentralityProps = [
+    'degree_centrality',
+    'average_clustering',
+    'closeness_centrality',
+  ];
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
   } | null = null;
@@ -198,49 +209,65 @@ export class HexagonPlotComponent implements OnInit {
       });
 
     // Read genie3 csv
-    d3.csv('assets/genie3_BRCA_mrn.top_100k.csv', d3.autoType).then((rows) => {
-      // Each row should have source, target, weight columns
-      this.genie3Network = rows.map(row => ({
-        source: String((row as any)['regulatoryGene'] ?? ''),
-        target: String((row as any)['targetGene'] ?? ''),
-        weight: Number((row as any)['weight'] ?? 0)
-      }));
-      console.log('Genie3 network loaded:', this.genie3Network);
-    }).catch((error) => {
-      console.error('Error loading genie3 network:', error);
-    });
+    d3.csv('assets/genie3_BRCA_mrn.top_100k.csv', d3.autoType)
+      .then((rows) => {
+        // Each row should have source, target, weight columns
+        this.genie3Network = rows.map((row) => ({
+          source: String((row as any)['regulatoryGene'] ?? ''),
+          target: String((row as any)['targetGene'] ?? ''),
+          weight: Number((row as any)['weight'] ?? 0),
+        }));
+        console.log('Genie3 network loaded:', this.genie3Network);
+      })
+      .catch((error) => {
+        console.error('Error loading genie3 network:', error);
+      });
 
     // Read sponge network
-    d3.csv('assets/sponge_gene_sets_GSM6592049_M2.json', d3.autoType).then((rows) => {
-      this.spongeNetwork = rows.map(row => ({
-        source: String((row as any)['source'] ?? ''),
-        target: String((row as any)['target'] ?? ''),
-        weight: Number((row as any)['weight'] ?? 0)
-      }));
-      console.log('Sponge network loaded:', this.spongeNetwork);
-    }).catch((error) => {
-      console.error('Error loading sponge network:', error);
-    });
+    d3.csv('assets/sponge_gene_sets_GSM6592049_M2.json', d3.autoType)
+      .then((rows) => {
+        this.spongeNetwork = rows.map((row) => ({
+          source: String((row as any)['source'] ?? ''),
+          target: String((row as any)['target'] ?? ''),
+          weight: Number((row as any)['weight'] ?? 0),
+        }));
+        console.log('Sponge network loaded:', this.spongeNetwork);
+      })
+      .catch((error) => {
+        console.error('Error loading sponge network:', error);
+      });
 
     // Read genie3 gene sets
-    d3.json<{ [regulator: string]: string[] }>('assets/genie3_gene_sets_GSM6592049_M2.json')
-  .then((data) => {
-    this.geneSetsGenie3 = data || {};
-    console.log('Genie3 gene sets loaded:', Object.keys(this.geneSetsGenie3).length, 'regulators');
-  })
-  .catch((error) => {
-    console.error('Error loading genie3 gene sets:', error);
-  });
+    d3.json<{ [regulator: string]: string[] }>(
+      'assets/genie3_gene_sets_GSM6592049_M2.json',
+    )
+      .then((data) => {
+        this.geneSetsGenie3 = data || {};
+        console.log(
+          'Genie3 gene sets loaded:',
+          Object.keys(this.geneSetsGenie3).length,
+          'regulators',
+        );
+      })
+      .catch((error) => {
+        console.error('Error loading genie3 gene sets:', error);
+      });
 
     // Read sponge gene sets
-    d3.json<{ [regulator: string]: string[] }>('assets/sponge_gene_sets_GSM6592049_M2.json')
-  .then((data) => {
-    this.geneSetsSponge = data || {};
-    console.log('Sponge gene sets loaded:', Object.keys(this.geneSetsSponge).length, 'regulators');
-  })
-  .catch((error) => {
-    console.error('Error loading sponge gene sets:', error);
-  });
+    d3.json<{ [regulator: string]: string[] }>(
+      'assets/sponge_gene_sets_GSM6592049_M2.json',
+    )
+      .then((data) => {
+        this.geneSetsSponge = data || {};
+        console.log(
+          'Sponge gene sets loaded:',
+          Object.keys(this.geneSetsSponge).length,
+          'regulators',
+        );
+      })
+      .catch((error) => {
+        console.error('Error loading sponge gene sets:', error);
+      });
   }
 
   //public updateHexColors(): void {
@@ -393,13 +420,14 @@ export class HexagonPlotComponent implements OnInit {
     if (!this.selectedGeneSetGenie3 || !this.genie3Network) return;
 
     const regulator = this.selectedGeneSetGenie3;
-    const targets = (this.geneSetsGenie3)[regulator] || [];
+    const targets = this.geneSetsGenie3[regulator] || [];
     // Filter Targets > weight threshold
-    const filteredTargets = targets.filter(target => {
-      return this.genie3Network.some(connection =>
-        connection.source === regulator &&
-        connection.target === target &&
-        connection.weight > 0.03 // Adjust threshold as needed
+    const filteredTargets = targets.filter((target) => {
+      return this.genie3Network.some(
+        (connection) =>
+          connection.source === regulator &&
+          connection.target === target &&
+          connection.weight > 0.03, // Adjust threshold as needed
       );
     });
 
@@ -408,8 +436,8 @@ export class HexagonPlotComponent implements OnInit {
     console.log('Regulator:', regulator);
     console.log('Targets:', targets);
 
-    const nodes: { id: string, x?: number, y?: number, group: number }[] = [];
-    const edges: { source: string, target: string, weight: number }[] = [];
+    const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    const edges: { source: string; target: string; weight: number }[] = [];
 
     // Add regulator node
     nodes.push({ id: regulator, group: 0 });
@@ -420,12 +448,15 @@ export class HexagonPlotComponent implements OnInit {
     });
 
     // Get edges from regulator to targets
-    this.genie3Network.forEach(connection => {
-      if (connection.source === regulator && filteredTargets.includes(connection.target)) {
+    this.genie3Network.forEach((connection) => {
+      if (
+        connection.source === regulator &&
+        filteredTargets.includes(connection.target)
+      ) {
         edges.push({
           source: connection.source,
           target: connection.target,
-          weight: connection.weight
+          weight: connection.weight,
         });
       }
     });
@@ -436,16 +467,20 @@ export class HexagonPlotComponent implements OnInit {
 
     // Find neighbors for all main nodes (regulator + targets)
     allMainNodes.forEach((mainNode: string) => {
-      this.genie3Network.forEach(connection => {
-
+      this.genie3Network.forEach((connection) => {
         if (connection.weight > weightThreshold) {
-
           // If mainNode is the source, add target as neighbor
-          if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
+          if (
+            connection.source === mainNode &&
+            !allMainNodes.includes(connection.target)
+          ) {
             neighborSet.add(connection.target);
           }
           // If mainNode is the target, add source as neighbor
-          else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
+          else if (
+            connection.target === mainNode &&
+            !allMainNodes.includes(connection.source)
+          ) {
             neighborSet.add(connection.source);
           }
         }
@@ -457,15 +492,15 @@ export class HexagonPlotComponent implements OnInit {
 
     // Add neighbor nodes
     if (nodes.length < 30) {
-      Array.from(neighborSet).forEach(neighbor => {
+      Array.from(neighborSet).forEach((neighbor) => {
         nodes.push({ id: neighbor, group: 2 });
       });
     }
 
     // Add ALL connections between any nodes in our network with sufficient weight
-    const allNodeIds = new Set(nodes.map(n => n.id));
+    const allNodeIds = new Set(nodes.map((n) => n.id));
 
-    this.genie3Network.forEach(connection => {
+    this.genie3Network.forEach((connection) => {
       if (connection.weight > weightThreshold) {
         const sourceInNetwork = allNodeIds.has(connection.source);
         const targetInNetwork = allNodeIds.has(connection.target);
@@ -473,16 +508,19 @@ export class HexagonPlotComponent implements OnInit {
         // Add edge if both nodes are in our network
         if (sourceInNetwork && targetInNetwork) {
           // Avoid duplicate edges
-          const edgeExists = edges.some(e =>
-            (e.source === connection.source && e.target === connection.target) ||
-            (e.source === connection.target && e.target === connection.source)
+          const edgeExists = edges.some(
+            (e) =>
+              (e.source === connection.source &&
+                e.target === connection.target) ||
+              (e.source === connection.target &&
+                e.target === connection.source),
           );
 
           if (!edgeExists) {
             edges.push({
               source: connection.source,
               target: connection.target,
-              weight: connection.weight
+              weight: connection.weight,
             });
           }
         }
@@ -493,24 +531,26 @@ export class HexagonPlotComponent implements OnInit {
     console.log('Final edges:', edges.length);
     console.log('Edges:', edges);
 
-
-
-    console.log('After enhancement - Nodes:', nodes.length, 'Edges:', edges.length);
-
+    console.log(
+      'After enhancement - Nodes:',
+      nodes.length,
+      'Edges:',
+      edges.length,
+    );
 
     if (nodes.length === 0) {
       console.warn('No nodes to display');
       return;
     }
 
-
     // Create the graph
     const graph = {
-      nodes: nodes.filter(node => node.id && node.id.length > 0),
-      edges: edges.filter(edge =>
-        nodes.some(node => node.id === edge.source) &&
-        nodes.some(node => node.id === edge.target)
-      )
+      nodes: nodes.filter((node) => node.id && node.id.length > 0),
+      edges: edges.filter(
+        (edge) =>
+          nodes.some((node) => node.id === edge.source) &&
+          nodes.some((node) => node.id === edge.target),
+      ),
     };
 
     // Create the graph visualization
@@ -518,14 +558,16 @@ export class HexagonPlotComponent implements OnInit {
     const height = 300;
     const margin = 20;
 
-    const svg = d3.select('#aucell_graph_genie3')
+    const svg = d3
+      .select('#aucell_graph_genie3')
       .append('svg')
       .attr('width', width)
       .attr('height', height)
       .style('background-color', '#f8f9fa');
 
     // Draw links (edges)
-    const link = svg.append('g')
+    const link = svg
+      .append('g')
       .attr('stroke', '#999')
       .attr('stroke-opacity', 0.6)
       .selectAll('line')
@@ -540,7 +582,8 @@ export class HexagonPlotComponent implements OnInit {
       });
 
     // Draw nodes
-    const node = svg.append('g')
+    const node = svg
+      .append('g')
       .attr('stroke', '#fff')
       .attr('stroke-width', 1.5)
       .selectAll('circle')
@@ -548,39 +591,53 @@ export class HexagonPlotComponent implements OnInit {
       .enter()
       .append('circle')
       .attr('r', (d: any) => {
-        switch(d.group) {
-          case 0: return 15; // regulator
-          case 1: return 12; // targets
-          case 2: return 8;  // neighbors
-          case 3: return 6;
-          default: return 10;
+        switch (d.group) {
+          case 0:
+            return 15; // regulator
+          case 1:
+            return 12; // targets
+          case 2:
+            return 8; // neighbors
+          case 3:
+            return 6;
+          default:
+            return 10;
         }
       })
       .attr('fill', (d: any) => {
-        switch(d.group) {
-          case 0: return '#e41a1c'; // regulator - red
-          case 1: return '#377eb8'; // targets - blue
-          case 2: return '#4daf4a'; // neighbors - green
-          case 3: return '#ff7f00'; // high-weight - orange
-          default: return '#999';
+        switch (d.group) {
+          case 0:
+            return '#e41a1c'; // regulator - red
+          case 1:
+            return '#377eb8'; // targets - blue
+          case 2:
+            return '#4daf4a'; // neighbors - green
+          case 3:
+            return '#ff7f00'; // high-weight - orange
+          default:
+            return '#999';
         }
       });
 
     // Add labels
-    const labels = svg.append('g')
+    const labels = svg
+      .append('g')
       .selectAll('text')
       .data(graph.nodes)
       .enter()
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', '.35em')
-      .style('font-size', (d: any) => d.group === 0 ? '12px' : '10px')
-      .style('font-weight', (d: any) => d.group === 0 ? 'bold' : 'normal')
+      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+      .style('font-weight', (d: any) => (d.group === 0 ? 'bold' : 'normal'))
       .style('fill', '#333')
-      .text((d: any) => d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id);
+      .text((d: any) =>
+        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+      );
 
     // Add weight labels on edges
-    const edgeLabels = svg.append('g')
+    const edgeLabels = svg
+      .append('g')
       .selectAll('text')
       .data(graph.edges)
       .enter()
@@ -595,14 +652,29 @@ export class HexagonPlotComponent implements OnInit {
       .text((d: any) => d.weight.toFixed(2));
 
     // Initialize simulation with stronger forces
-    const simulation = d3.forceSimulation(graph.nodes)
-      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(10).strength(0.5))
+    const simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(graph.edges)
+          .id((d: any) => d.id)
+          .distance(10)
+          .strength(0.5),
+      )
       .force('charge', d3.forceManyBody().strength(-500))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(15))
       .force('boundary', () => {
         graph.nodes.forEach((node: any) => {
-          const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
+          const radius =
+            node.group === 0
+              ? 15
+              : node.group === 1
+                ? 12
+                : node.group === 2
+                  ? 8
+                  : 6;
 
           node.x = Math.max(radius, Math.min(width - radius, node.x));
 
@@ -617,13 +689,9 @@ export class HexagonPlotComponent implements OnInit {
         .attr('x2', (d: any) => d.target.x)
         .attr('y2', (d: any) => d.target.y);
 
-      node
-        .attr('cx', (d: any) => d.x)
-        .attr('cy', (d: any) => d.y);
+      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
 
-      labels
-        .attr('x', (d: any) => d.x)
-        .attr('y', (d: any) => d.y);
+      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
 
       // Position edge labels at the midpoint of each edge
       edgeLabels
@@ -649,15 +717,15 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   private getAssociatedGeneSets(cell: CellFeature): string[][] {
-    const genie3GeneSets = Object.keys(cell.properties.aucell_genie3 || {})
-      .filter(key => cell.properties.aucell_genie3[key] > 0.6);
-    const spongeGeneSets = Object.keys(cell.properties.aucell_sponge || {})
+    const genie3GeneSets = Object.keys(
+      cell.properties.aucell_genie3 || {},
+    ).filter((key) => cell.properties.aucell_genie3[key] > 0.6);
+    const spongeGeneSets = Object.keys(cell.properties.aucell_sponge || {});
     console.log('Associated Genie3 gene sets:', genie3GeneSets);
     console.log('Associated Sponge gene sets:', spongeGeneSets);
 
     return [genie3GeneSets, spongeGeneSets];
   }
-
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
     if (
@@ -680,7 +748,10 @@ export class HexagonPlotComponent implements OnInit {
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
     this.selectedCell = cell;
     // First get the associated gene sets
-    [this.selectedCellAssociatedGeneSetsGenie3, this.selectedCellAssociatedGeneSetsSponge] = this.getAssociatedGeneSets(cell);
+    [
+      this.selectedCellAssociatedGeneSetsGenie3,
+      this.selectedCellAssociatedGeneSetsSponge,
+    ] = this.getAssociatedGeneSets(cell);
 
     // Then set the selected gene set if we have any
     if (this.selectedCellAssociatedGeneSetsGenie3.length > 0) {
@@ -721,13 +792,13 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public onGeneSetChange(): void {
-  console.log('Gene set changed to:', this.selectedGeneSetGenie3);
+    console.log('Gene set changed to:', this.selectedGeneSetGenie3);
 
-  // Clear previous graph and regenerate
-  if (this.selectedGeneSetGenie3) {
-    setTimeout(() => this.updateAucellGraph(), 0);
+    // Clear previous graph and regenerate
+    if (this.selectedGeneSetGenie3) {
+      setTimeout(() => this.updateAucellGraph(), 0);
+    }
   }
-}
 
   public selectCellFromCluster(cell: CellFeature): void {
     this.selectedCell = cell;
@@ -1168,8 +1239,6 @@ export class HexagonPlotComponent implements OnInit {
       const legendY = 20;
       const width = 250;
       const height = 30;
-
-      const values = this.features.map(f => f.properties.leiden_centrality[this.colorByProperty]);
 
       // Create gradient for continuous legend
       const defs = this.svg.select('defs').empty()
