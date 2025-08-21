@@ -15,3 +15,5 @@ backend/gene_set_ES/.Rprofile
 backend/gene_set_ES/.RData*
 
 .Rproj.user
+
+settings.json
