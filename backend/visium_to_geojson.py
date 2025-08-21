@@ -95,6 +95,10 @@ class Hexagons:
             )
 
     def get_obsm(self, key, barcode, col=None, dtype=float):
+        """
+        Return `adata.obsm[key].loc[barcode, col]` where col defaults to the
+        first column of the dataframe.
+        """
         if col is None:
             col = self.anndata.obsm[key].columns[0]  # Default to first column
         return dtype(self.anndata.obsm[key].loc[barcode, col])
@@ -103,8 +107,8 @@ class Hexagons:
         hexagons = {"type": "FeatureCollection", "features": []}
         for barcode, coords in zip(self.anndata.obs.index, self.coordinates):
             if (
-                "in_tissue" in self.obs
-                and self.obs[barcode]["in_tissue"] is False
+                "in_tissue" in self.obs[barcode]
+                and self.obs[barcode]["in_tissue"] == 0
             ):
                 continue
 
@@ -156,9 +160,9 @@ class Hexagons:
                         ].tolist()
                     )
 
-                property_dict["centroid"]: (
-                    self.centers[barcode] if barcode in self.centers else None
-                )
+            property_dict["centroid"] = (
+                self.centers[barcode] if barcode in self.centers else None
+            )
 
             score_mappings = {
                 "ligand_receptor_relationships": (
@@ -208,7 +212,7 @@ class Hexagons:
 def load_adata(path: str) -> sc.AnnData:
     spatial_data = sc.read_h5ad(path)
 
-    # Reconstruct liana columns for placeholder
+    # Reconstruct liana columns for placeholder fields in the geojson
     reconstruct_obsm_cols = {
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
@@ -283,6 +287,8 @@ if __name__ == "__main__":
 
     spatial_data = load_adata(args.adata)
 
+    # Sort global liana scores by cosine similarity std
+    # We do this so that the tables appear sorted on the website
     liana_global_scores = [
         "ligand_receptor_global_scores",
         "cell_comp_tf_activity_global_scores",
@@ -304,7 +310,7 @@ if __name__ == "__main__":
 
     geojson_data = hexagons.to_geojson()
 
-    # Add meta information like ligand recepto pair names for api fetching
+    # Add meta information like ligand receptor pair names for api fetching
     geojson_data["meta"] = {}
     for global_score in liana_global_scores:
         if global_score in spatial_data.uns:
