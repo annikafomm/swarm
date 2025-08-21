@@ -1,0 +1,200 @@
+---
+title: "spongEffects"
+author: "R. Ellenrieder"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# A) Loading dependencies for spongEffects
+```{r}
+library(SPONGE)
+library(doParallel)
+library(foreach)
+library(dplyr)
+
+# Register your backend here
+num.of.cores <- 1
+cl <- makeCluster(num.of.cores) 
+registerDoParallel(cl)
+```
+
+# B) Formats of the inputs necessary for spongEffect
+
+spatial expression object
+```{r}
+library(anndata)
+adata <- read_h5ad("../datasets_prepro_leidenalg/GSM6592055_M8-prepro.h5ad")
+```
+
+## gene expression datasets 
+
+- gene x sample expression matrix, with gene names as rownames. The type of gene identifier is up to the user but must be consistent between gene expression and ceRNA network.
+
+```{r}
+# Expression matrix (may be sparse)
+expr <- adata$X
+
+# Convert to dense matrix if needed
+if (inherits(expr, "dgRMatrix")) {
+  expr <- as.matrix(expr)
+}
+
+expr <- t(expr)
+
+# Preview
+expr[1:5, 1:8]
+```
+```{r}
+#test <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkInteractions_full.csv", nrows=6)
+#test
+```
+
+## ceRNA network, ceRNA network centrality measures (the ceRNA network and the centrality measures were created using the SPONGE vignette).
+
+Centrality measures are going to be used to define sponge modules.
+
+```{r}
+library(data.table)
+
+ceRNA_interactions <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv")
+
+head(ceRNA_interactions)
+```
+
+
+```{r}
+ceRNA_centralities <- fread("../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv")
+
+head(ceRNA_centralities)
+```
+
+# C) Filter ceRNA network and add weighted centrality measures information 
+
+Computationally inferred ceRNA networks often identify spurious associations between RNAs. Therefore, it is good practice to filter out ceRNA networks for weakly associated edges. More at List et al. 2019 and related vignette.
+
+In this example, we filter the ceRNA network for size effects (i.e. mscor) and statistical significance. Next, we want to identify the most important nodes in the network as seed genes for ceRNA modules. Various network centrality measures have been proposed in the literature to assess node importance. In the spongEffects paper and in this example, we used a weighted centrality, i.e. we consider the sum of weights of edges attached to a node rather than just the node degree. Node centralities can be computed via the sponge_node_centralities() function. The thresholds used here are purely indicative and are likely to be modified when real data are used. If you want to use the centralities of the unfiltered network, you can add your centralities to the Node_Centrality parameter of the filter_ceRNA_network() function. The centralities will be filtered and returned accordingly. If you want the centralities newly caculated based on the filtered network, you need to use the sponge_node_centralities() function on the filtered ceRNA network returned from the filter_ceRNA_network() function.
+
+```{r}
+# thresholds like in paper
+filtered_network_centralities <- filter_ceRNA_network(sponge_effects = ceRNA_interactions, Node_Centrality = ceRNA_centralities, add_weighted_centrality=T, mscor.threshold = 0.1, padj.threshold = 0.05)
+```
+
+
+```{r}
+# 728666          6069
+# make network smaller
+
+ceRNA_interactions %>% 
+  filter(p.adj <= 0.0001 & mscor >= 0.14) %>%
+  select(mscor, p.adj) %>%
+  dim
+
+filtered_network_centralities <- filter_ceRNA_network(sponge_effects = ceRNA_interactions, Node_Centrality = ceRNA_centralities, add_weighted_centrality=T, mscor.threshold = 0.14, padj.threshold = 0.0001)
+
+dim(filtered_network_centralities$Sponge.filtered)
+dim(filtered_network_centralities$Node_Centrality)
+```
+
+
+
+
+# D) Discover modules 
+
+Different classes of RNAs can be investigated as central nodes for the SPONGE modules. The user can identify their own class of interest, by modifying the filtering function or by using their own gene names. 
+Finally, it is possible to determine the type of degree centrality used to rank the importance of potential central nodes. Possibilities are: degree, eigenvector, betweenness, page_rank, or Weighted_Degree
+
+Different number of central nodes can be selected via the cutoff parameter.
+
+
+
+```{r}
+unique(adata$var$feature_type)
+```
+
+
+Discover modules
+```{r}
+RNAs <- c("lncRNA","protein_coding")
+RNAs.ofInterest <- adata$var %>% 
+  filter(feature_type %in% RNAs) %>%
+  pull(ensemble_id)
+
+central_gene_modules<-get_central_modules(central_nodes = RNAs.ofInterest, node_centrality = filtered_network_centralities$Node_Centrality, ceRNA_class = RNAs, centrality_measure = "Weighted_Degree", cutoff = 20)
+
+head(central_gene_modules)
+```
+
+# E) Define SPONGE modules 
+We define SPONGE modules based on a first-neighbout approach, taking into account all classes of potential RNAs around the central nodes identified above. We give the possibility to the user to consider the central node as part of the module or not (remove.central).
+
+```{r}
+Sponge.modules <- define_modules(network = filtered_network_centralities$Sponge.filtered, central.modules = central_gene_modules, remove.central = F, set.parallel = F)
+# Module size distribution
+Size.modules <- sapply(Sponge.modules, length)
+```
+
+```{r}
+Size.modules
+```
+
+
+# F) Calculate Enrichment Scores (i.e., spongEffects scores) 
+
+we implemented three different single sample gene set enrichment approaches to score the modules per sample, Overall Enrichment (OE), single-sample Gene Set Enrichment Analysis (ssGSEA), and Gene Set Variation Analysis (GSVA). The choice of the optimal method may vary by the data set but when we compared the three algorithms in the spongEffects paper we did not observe large differences.
+
+For this example, we run the OE algorithm
+
+```{r}
+identical(rownames(adata$var), rownames(expr))
+
+rownames(expr) <- adata$var$ensemble_id
+
+Sponge.modules <- Sponge.modules[Size.modules > 1]
+```
+
+```{r}
+train.modules <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "OE", cores=1)
+```
+
+```{r}
+train.modules
+```
+
+
+
+```{r}
+library(GSVA)
+
+# Prepare your gene set (modules) and expression matrix (expr)
+gsvaPar <- gsvaParam(exprData = expr, geneSets = Sponge.modules, minSize = 1, maxSize = 2000)
+train.modules.gsva <- as.data.frame(gsva(gsvaPar, verbose=FALSE))
+
+
+# train.modules.gsva <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "gsva", cores=1)
+```
+
+```{r}
+train.modules.gsva
+```
+
+
+```{r}
+# Prepare your gene set (modules) and expression matrix (expr)
+ssgseaPar <- ssgseaParam(exprData = expr, geneSets = Sponge.modules, minSize = 1, maxSize = 2000)
+train.modules.ssgsea <- as.data.frame(gsva(ssgseaPar, verbose=FALSE))
+
+#train.modules.ssgsea <- enrichment_modules(Expr.matrix = expr, modules = Sponge.modules, bin.size = 10, min.size = 1, max.size = 2000, min.expr = 1, method = "ssgsea", cores=1)
+```
+
+```{r}
+train.modules.ssgsea
+```
+
+
+
+
+
+
+
+
+

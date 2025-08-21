@@ -1,3 +1,23 @@
+# Ignore all h5ad files
+*.h5ad
+*.parquet
+*.h5
+
+# Ignore network files
+backend/networks
+
+# Ignore renv folder
+backend/calc_R_scores/renv
+# Ignore R environment files
+backend/calc_R_scores/.Rproj.user
+backend/calc_R_scores/.Rhistory
+backend/calc_R_scores/.Rprofile
+backend/calc_R_scores/.RData*
+
+.Rproj.user
+
+settings.json
+
 .DS_Store
 backend/.DS_Store
 
