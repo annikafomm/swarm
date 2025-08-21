@@ -1,8 +1,0 @@
-name: r_bioc_sponge_aucell
-channels:
-  - conda-forge
-  - bioconda
-  - r
-dependencies:
-  - r-base=4.3.1
-

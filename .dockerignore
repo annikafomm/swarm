@@ -1,0 +1,58 @@
+# ───── Git & editor junk ─────
+.git
+.gitignore
+.vscode
+*.swp
+*.tmp
+*~
+
+# ───── Python cache & build ─────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ───── Node.js dependencies ─────
+node_modules/
+
+# ───── R / Jupyter junk ─────
+.Rhistory
+.RData
+.Rproj.user/
+.ipynb_checkpoints
+
+# ───── Logs & temp data ─────
+*.log
+*.out
+*.err
+
+# ───── Local envs ─────
+.env
+.venv/
+venv/
+env/
+
+# ───── Project-specific heavy folders ─────
+# Backend big data & outputs
+backend/datasets/
+backend/datasets_prepro/
+backend/datasets_scores/
+backend/networks/
+backend/outputs/
+backend/results/
+
+# Frontend: don’t bake into image, mount instead
+frontend/
+
+# Notebooks: usually mounted, not copied into image
+notebooks/
+
+# Images & large binaries not needed in build
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.pdf
