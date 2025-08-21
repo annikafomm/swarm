@@ -1,0 +1,294 @@
+<div class="hexagon-plot">
+  <div id="main-visualization" [class.with-sidenav]="selectedCell">
+    <div style="display: flex; align-items: flex-start">
+      <div id="hexbin"></div>
+      <div id="legend" style="margin-left: 2rem"></div>
+    </div>
+
+    <div>
+      <label for="colorBy">Color hexagons by:</label>
+      <select
+        id="colorBy"
+        [(ngModel)]="colorByProperty"
+        (change)="updateHexColors()"
+      >
+        <option *ngFor="let prop of colorableProperties" [value]="prop">
+          {{ prop }}
+        </option>
+      </select>
+
+      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+        <button
+          (click)="
+            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
+          "
+        >
+          Show
+          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+        </button>
+      </div>
+    </div>
+
+    <div *ngIf="selectedCell" class="gene-set-section">
+      <div
+        *ngIf="selectedCellAssociatedGeneSetsGenie3.length > 0"
+        class="gene-set-selector"
+      >
+        <label for="genie3-select">Select Genie3 Gene Set:</label>
+        <select
+          id="genie3-select"
+          [(ngModel)]="selectedGeneSetGenie3"
+          (change)="onGeneSetChange()"
+        >
+          <option
+            *ngFor="let geneSet of selectedCellAssociatedGeneSetsGenie3"
+            [value]="geneSet"
+          >
+            {{ geneSet }}
+          </option>
+        </select>
+      </div>
+      <h3 *ngIf="selectedGeneSetGenie3">
+        Gene Set: {{ selectedGeneSetGenie3 }}
+      </h3>
+      <div id="aucell_graph_genie3"></div>
+    </div>
+  </div>
+
+  <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
+    <div class="co-occurrence-controls">
+      <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
+      <div class="controls-row">
+        <div class="interval-selector">
+          <label for="interval-select">Interval:</label>
+          <select
+            id="interval-select"
+            [(ngModel)]="selectedInterval"
+            (change)="updateCoOccurrenceTable()"
+          >
+            <option
+              *ngFor="let i of [].constructor(maxInterval + 1); let idx = index"
+              [value]="idx"
+            >
+              Interval {{ idx }}
+            </option>
+          </select>
+          <span class="interval-info">(0-{{ maxInterval }})</span>
+        </div>
+
+        <div class="stats-display" *ngIf="coOccurrenceData.length > 0">
+          <span class="stat-item">Min: {{ getIntervalStats().min }}</span>
+          <span class="stat-item">Max: {{ getIntervalStats().max }}</span>
+          <span class="stat-item">Avg: {{ getIntervalStats().avg }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="co-occurrence-table-container">
+      <!-- 1x10 format table -->
+      <table class="co-occurrence-table" *ngIf="coOccurrenceData.length > 0">
+        <thead>
+          <tr>
+            <th>Target Cluster</th>
+            <th *ngFor="let i of [].constructor(clusterCount); let idx = index">
+              {{ idx }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="cluster-header">Cluster {{ selectedCluster }}</td>
+            <td
+              *ngFor="let value of coOccurrenceData; let j = index"
+              [class.high-cooccurrence]="value > coOccurrenceThreshold"
+              [class.diagonal]="selectedCluster === j"
+              [style.background-color]="getCoOccurrenceColor(value)"
+              [title]="
+                'Cluster ' + selectedCluster + ' → Cluster ' + j + ': ' + value
+              "
+            >
+              {{ value | number: "1.0-3" }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div *ngIf="coOccurrenceData.length === 0" class="no-data">
+        No co-occurrence data available for Cluster {{ selectedCluster }} at
+        interval {{ selectedInterval }}
+      </div>
+    </div>
+
+    <div class="interval-navigation">
+      <button
+        class="nav-btn"
+        (click)="
+          selectedInterval = Math.max(0, selectedInterval - 1);
+          updateCoOccurrenceTable()
+        "
+        [disabled]="selectedInterval === 0"
+      >
+        ← Previous
+      </button>
+      <span class="current-interval"
+        >Interval {{ selectedInterval }} of {{ maxInterval }}</span
+      >
+      <button
+        class="nav-btn"
+        (click)="
+          selectedInterval = Math.min(maxInterval, selectedInterval + 1);
+          updateCoOccurrenceTable()
+        "
+        [disabled]="selectedInterval === maxInterval"
+      >
+        Next →
+      </button>
+    </div>
+  </div>
+
+  <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+    <div
+      *ngIf="
+        showGlobalLigandReceptorScores;
+        then global_scores;
+        else nmf_scores
+      "
+    ></div>
+
+    <ng-template #global_scores>
+      <h4>Ligand–Receptor Global Scores</h4>
+      <app-table
+        [data]="this.meta['ligand_receptor_global_scores']"
+        [actionColumns]="[
+          'ligand_receptor_cosine_similarity',
+          'ligand_receptor_p_value',
+          'ligand_receptor_category',
+        ]"
+        [features]="features"
+        [updateColumn]="'ligand_receptor_relationships'"
+        (featuresUpdated)="updateHexColors()"
+      ></app-table>
+    </ng-template>
+
+    <ng-template #nmf_scores>
+      <h4>Ligand-Receptor NMF Scores</h4>
+      <app-table
+        [data]="this.meta['nmf_factors']"
+        [actionColumns]="['ligand_receptor_NMF_factors']"
+        [features]="features"
+        [updateColumn]="'ligand_receptor_relationships'"
+        (featuresUpdated)="updateHexColors()"
+      ></app-table>
+    </ng-template>
+  </div>
+
+  <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
+    <h4>Cell Composition TF Activity Global Scores</h4>
+    <app-table
+      [data]="this.meta['cell_comp_tf_activity_global_scores']"
+      [actionColumns]="[
+        'cell_comp_tf_activity_cosine_similarity',
+        'cell_comp_tf_activity_category',
+      ]"
+      [features]="features"
+      [updateColumn]="'cell_comp_tf_activity_similarity'"
+      (featuresUpdated)="updateHexColors()"
+    ></app-table>
+  </div>
+
+  <div *ngIf="colorByProperty === 'tf_activity'">
+    <h4>TF Activity</h4>
+    <app-table
+      [data]="this.meta['tf_names']"
+      [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
+      [features]="features"
+      [updateColumn]="'tf_activity'"
+      (featuresUpdated)="updateHexColors()"
+    ></app-table>
+  </div>
+
+  <div *ngIf="colorByProperty === 'pathway_activity'">
+    <h4>Pathway Activity</h4>
+    <app-table
+      [data]="this.meta['pathway_names']"
+      [actionColumns]="[
+        'pathway_activity_score_mlm',
+        'pathway_activity_padj_mlm',
+      ]"
+      [features]="features"
+      [updateColumn]="'pathway_activity'"
+      (featuresUpdated)="updateHexColors()"
+    ></app-table>
+  </div>
+</div>
+
+<div class="sidenav" *ngIf="selectedCell && colorByProperty !== 'leiden'">
+  <div class="sidenav-header">
+    <h2>Cell Details</h2>
+    <button class="close-btn" (click)="closeSidenav()">×</button>
+  </div>
+
+  <div class="sidenav-content">
+    <div *ngIf="selectedCell">
+      <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
+      <p><strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}</p>
+      <p>
+        <strong>Leiden-Cluster:</strong> {{ +selectedCell.properties.leiden }}
+      </p>
+    </div>
+  </div>
+
+  <div class="cluster-sidenav" [class.open]="selectedCluster !== null">
+    <div class="cluster-sidenav-header">
+      <h3>Cluster {{ selectedCluster }}</h3>
+      <button class="close-btn" (click)="closeClusterSidenav()">×</button>
+    </div>
+
+    <div class="cluster-sidenav-content" *ngIf="selectedCluster !== null">
+      <div class="cluster-stats">
+        <h4>Cluster Statistics</h4>
+        <p><strong>Cells in cluster:</strong> {{ clusterCells.length }}</p>
+        <p><strong>Cluster ID:</strong> {{ selectedCluster }}</p>
+      </div>
+
+      <div class="cell-types">
+        <h4>Cell Type Distribution</h4>
+        <div class="cell-type-item" *ngFor="let cellType of clusterCellTypes">
+          <div
+            class="cell-type-color"
+            [style.background-color]="colorScale(cellType.type)"
+          ></div>
+          <span
+            >{{ cellType.type }}: {{ cellType.count }} ({{
+              cellType.percentage
+            }}%)</span
+          >
+        </div>
+      </div>
+
+      <div class="cluster-centrality">
+        <h4>Leiden Centrality Averages</h4>
+        <ul class="centrality-list">
+          <li>
+            <strong>Degree Centrality:</strong>
+            {{ clusterCentralityAvg.degree_centrality | number: "1.2-2" }}
+          </li>
+          <li>
+            <strong>Average Clustering:</strong>
+            {{ clusterCentralityAvg.average_clustering | number: "1.2-2" }}
+          </li>
+          <li>
+            <strong>Closeness Centrality:</strong>
+            {{ clusterCentralityAvg.closeness_centrality | number: "1.2-2" }}
+          </li>
+        </ul>
+      </div>
+      <div class="cluster-nhood" *ngIf="selectedCell">
+        <h4>Neighborhood Enrichment (Selected Cell)</h4>
+        <div
+          id="cluster-nhood-heatmap"
+          style="width: 300px; height: 220px"
+        ></div>
+      </div>
+    </div>
+  </div>
+</div>
