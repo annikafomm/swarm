@@ -1,12 +1,14 @@
-import { Component, OnInit, ɵisComponentDefPendingResolution } from '@angular/core';
+import { Component, Injectable, OnInit, ɵisComponentDefPendingResolution } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
+import { MatIcon } from '@angular/material/icon';
+import {MatIconRegistry} from '@angular/material/icon';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatIcon],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss'
@@ -48,7 +50,7 @@ export class HexagonPlotComponent implements OnInit {
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
   public maxSpongeNodes: number = 25;
-  public maxGenie3Nodes: number = 25;
+  public maxGenie3Edges: number = 25;
   public spongePValueCutoff: number | null = null;
   public genie3WeightCutoff: number | null = null;
   public isLoadingSponge: boolean = false;
@@ -271,8 +273,8 @@ export class HexagonPlotComponent implements OnInit {
     }
   }
 
-  public onMaxNodesChangeGenie3(): void {
-    console.log('Max nodes changed to:', this.maxGenie3Nodes);
+  public onMaxEdgesChangeGenie3(): void {
+    console.log('Max nodes changed to:', this.maxGenie3Edges);
     // Only update if a Genie3 gene set is selected
     if (this.selectedGeneSetGenie3) {
       this.isLoadingGenie3 = true;
@@ -323,8 +325,9 @@ export class HexagonPlotComponent implements OnInit {
 
   public updateAucellGraphGenie3(): void {
 
-    d3.select('#aucell_graph_genie3').selectAll('*').remove();
+    this.genie3WeightCutoff
 
+    d3.select('#aucell_graph_genie3').selectAll('*').remove();
 
     if (!this.selectedGeneSetGenie3 || !this.genie3Network) {
       this.isLoadingGenie3 = false;
@@ -349,19 +352,29 @@ export class HexagonPlotComponent implements OnInit {
       return connection ? connection.weight : 0;
     };
 
-    // Regulator node is always added
-    nodes.push({ id: regulator, group: 0 });
+   // Filter network for edges that involve a target or a regulator
+   this.genie3Network.forEach(connection => {
+     if ((connection.source === regulator || connection.target === regulator) ||
+         targets.includes(connection.source) || targets.includes(connection.target)) {
+       candidateEdges.push({
+         source: connection.source,
+         target: connection.target,
+         weight: connection.weight
+       });
+     }
+   });
 
-    // Add target edges with actual weights
-    targets.forEach(target => {
-      const weight = getGenie3Weight(regulator, target);
-      candidateEdges.push({ source: regulator, target, weight });
-    });
+   /*  const remainingEdges = this.maxGenie3Edges - candidateEdges.length;
+    let neighborEdges: { source: string, target: string, weight: number }[] = []; */
 
+    candidateEdges.sort((a,b)=> b.weight - a.weight);
+    candidateEdges = candidateEdges.slice(0, this.maxGenie3Edges);
+/*
     // If network is small, find neighbors and add their edges to candidateEdges
-    if (candidateEdges.length < this.maxGenie3Nodes) {
+    if (candidateEdges.length < this.maxGenie3Edges) {
       const neighborSet = new Set<string>();
       const allMainNodes = [regulator, ...targets];
+
 
       // Find all neighbors connected to main nodes
       allMainNodes.forEach((mainNode: string) => {
@@ -374,7 +387,6 @@ export class HexagonPlotComponent implements OnInit {
         });
       });
 
-      // Add all actual edges involving neighbors
       const allPotentialNodes = [...allMainNodes, ...Array.from(neighborSet)];
 
       this.genie3Network.forEach(connection => {
@@ -386,7 +398,7 @@ export class HexagonPlotComponent implements OnInit {
           );
 
           if (!edgeExists) {
-            candidateEdges.push({
+            neighborEdges.push({
               source: connection.source,
               target: connection.target,
               weight: connection.weight
@@ -396,10 +408,8 @@ export class HexagonPlotComponent implements OnInit {
       });
     }
 
-    // Sort candidateEdges by weight in descending order (highest weights first)
-    candidateEdges.sort((a, b) => b.weight - a.weight);
-    // Only keep the top N edges by weight
-    candidateEdges = candidateEdges.slice(0, this.maxGenie3Nodes);
+   neighborEdges.sort((a, b) => b.weight - a.weight);
+   neighborEdges = neighborEdges.slice(0, remainingEdges); */
 
     // Create nodes from all edges (source and target)
     const nodeSet = new Set<string>();
@@ -407,9 +417,19 @@ export class HexagonPlotComponent implements OnInit {
       nodeSet.add(edge.source);
       nodeSet.add(edge.target);
     });
-
-    // Ensure regulator is always included
+    // Add regulator to nodeset
     nodeSet.add(regulator);
+
+    // For the existing nodes reinsert all edges the nodes had before filtering
+    this.genie3Network.forEach(connection => {
+      if (nodeSet.has(connection.source) && nodeSet.has(connection.target)) {
+        candidateEdges.push({
+          source: connection.source,
+          target: connection.target,
+          weight: connection.weight
+        });
+      }
+    });
 
     // Create nodes array with proper groups
     Array.from(nodeSet).forEach(nodeId => {
@@ -442,9 +462,8 @@ export class HexagonPlotComponent implements OnInit {
       )
     };
 
-    // Get Genie3 weight cutoff: For current edges in the graph what is the max weight (excluding self-loops)
-    const nonSelfLoopEdges = edges.filter(edge => edge.source !== edge.target);
-    this.genie3WeightCutoff = nonSelfLoopEdges.length > 0 ? Math.max(...nonSelfLoopEdges.map(edge => edge.weight)) : null;
+    // Get Genie3 weight cutoff
+    this.genie3WeightCutoff = edges.length > 0 ? Math.min(...edges.map(edge => edge.weight)) : null;
 
     // Create the graph visualization
     const width = 500;
@@ -498,6 +517,36 @@ export class HexagonPlotComponent implements OnInit {
           default: return '#999';
         }
       })
+      .style('cursor', 'pointer')
+      .on('click', (event: MouseEvent, d: any) => {
+        this.handleNodeClick(d);
+      })
+      .on('mouseover', function (event: MouseEvent, d: any) {
+        d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
+      })
+      .on('mouseout', function (event: MouseEvent, d: any) {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
+      });
+
+
+
+    node.call(
+      d3.drag<SVGCircleElement, any>()
+        .on('start', function (event, d) {
+          if (!event.active) simulation.alphaTarget(0.3).restart();
+          d.fx = d.x;
+          d.fy = d.y;
+        })
+        .on('drag', function (event, d) {
+          d.fx = event.x;
+          d.fy = event.y;
+        })
+        .on('end', function (event, d) {
+          if (!event.active) simulation.alphaTarget(0);
+          d.fx = null;
+          d.fy = null;
+        })
+);
 
     // Add labels
     const labels = svg.append('g')
@@ -510,20 +559,21 @@ export class HexagonPlotComponent implements OnInit {
       .style('font-size', (d: any) => d.group === 0 ? '12px' : '10px')
       .style('font-weight', (d: any) => d.group === 0 ? 'bold' : 'normal')
       .style('fill', '#333')
+      .style('pointer-events', 'none')
       .text((d: any) => d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id);
 
     const simulation = d3.forceSimulation(graph.nodes)
       .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(10).strength(0.5))
       .force('charge', d3.forceManyBody().strength(-500))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(15))
+      .force('collision', d3.forceCollide().radius(10))
       .force('boundary', () => {
         graph.nodes.forEach((node: any) => {
           const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
 
           node.x = Math.max(radius, Math.min(width - radius, node.x));
 
-          node.y = Math.max(radius, Math.min(height - radius, node.y));
+          node.y = Math.max(radius, Math.min(height - textPadding - radius, node.y));
         });
       });
 
@@ -564,7 +614,7 @@ export class HexagonPlotComponent implements OnInit {
       .attr('text-anchor', 'middle')
       .style('font-size', '12px')
       .style('fill', '#666')
-      .text(`Edges: ${edges.length}, Nodes: ${nodes.length}, Max Weight: ${this.genie3WeightCutoff ? this.genie3WeightCutoff.toFixed(3) : 'N/A'}`);
+      .text(`Edges: ${edges.length}, Nodes: ${nodes.length}, Weight: ${this.genie3WeightCutoff ? this.genie3WeightCutoff.toFixed(3) : 'N/A'}`);
 
   }
 
@@ -642,7 +692,6 @@ export class HexagonPlotComponent implements OnInit {
 
   public updateAucellGraphSponge(): void {
 
-    // Reset p-value cutoff
     this.spongePValueCutoff = null;
 
     // Clear previous graph
@@ -654,293 +703,294 @@ export class HexagonPlotComponent implements OnInit {
       return;
     }
 
-    try {
-      const regulator = this.selectedGeneSetSponge;
-      const targets = (this.geneSetsSponge)[regulator] || [];
+    const regulator = this.selectedGeneSetSponge;
+    const targets = (this.geneSetsSponge)[regulator] || [];
 
-      console.log('Sponge Regulator:', regulator);
-      console.log('Sponge Targets:', targets);
-      console.log('Max nodes allowed:', this.maxSpongeNodes);
+    // Prefilter SpongeNetwork interactions between [targets, regulator]
+    const filteredSpongeNetwork = this.spongeNetwork.filter(conn =>
+      (targets.includes(conn.source) || conn.target === regulator) ||
+      (targets.includes(conn.source) || targets.includes(conn.target))
+    );
+    console.log('Filtered Sponge Network:', filteredSpongeNetwork);
 
-      // Use slider value for MAX_NODES
-      const MAX_NODES = this.maxSpongeNodes;
-      const MAX_EDGES = Math.min(100, MAX_NODES * 2); // Scale edges with nodes
-      const pThreshold = 0.01;
 
-      const nodes: { id: string, x?: number, y?: number, group: number }[] = [];
-      let allPotentialEdges: { source: string, target: string, p_adjusted: number }[] = [];
 
-      // Add regulator node
-      nodes.push({ id: regulator, group: 0 });
+    const nodes: {id:string, x?: number, y?: number, group: number}[] = [];
+    const edges: { source: string, target: string, p_adjusted: number }[] = [];
 
-      // Add target nodes (limited by slider)
-      const maxTargets = Math.floor(MAX_NODES * 0.6); // 60% of max nodes for targets
-      const limitedTargets = targets.slice(0, Math.min(targets.length, maxTargets));
-      limitedTargets.forEach((target: string) => {
-        nodes.push({ id: target, group: 1 });
+    let candidateEdges: { source: string, target: string, p_adjusted: number }[] = [];
+
+    const getSpongePAdjusted = (source: string, target: string): number => {
+      const edge = filteredSpongeNetwork.find(conn => (conn.source === source && conn.target === target) ||
+        (conn.source === target && conn.target === source));
+      return edge ? edge.p_adjusted : 1;
+    };
+
+    nodes.push({ id: regulator, group: 0 });
+
+    // Add target edges with actual p_adjusted values
+    targets.forEach((target: string) => {
+      if (candidateEdges.length < this.maxSpongeNodes) {
+        candidateEdges.push({
+          source: regulator,
+          target: target,
+          p_adjusted: getSpongePAdjusted(regulator, target)
+        });
+      }
+    });
+
+
+    // If network is small, find neighbors and add their edges to candidateEdges
+    if(candidateEdges.length < this.maxSpongeNodes) {
+      const neighborSet = new Set<string>();
+      const allMainNodes = [regulator, ...targets];
+
+      allMainNodes.forEach((mainNode: string) => {
+        filteredSpongeNetwork.forEach(connection => {
+          if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
+            neighborSet.add(connection.target);
+          } else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
+            neighborSet.add(connection.source);
+          }
+        });
       });
 
-      // Pre-filter sponge network
-      const relevantConnections = this.spongeNetwork.filter(connection =>
-        connection.p_adjusted < pThreshold &&
-        (connection.source === regulator || limitedTargets.includes(connection.source) ||
-          connection.target === regulator || limitedTargets.includes(connection.target))
-      );
+      // Add all actual edges involving neighbors
+      const allPotentialNodes = [...allMainNodes, ...Array.from(neighborSet)];
 
-      console.log(`Filtered connections from ${this.spongeNetwork.length} to ${relevantConnections.length}`);
-
-      // Get direct regulator-target edges
-      relevantConnections.forEach(connection => {
-        if ((connection.source === regulator && limitedTargets.includes(connection.target)) ||
-          (connection.target === regulator && limitedTargets.includes(connection.source))) {
-          allPotentialEdges.push({
-            source: connection.source,
-            target: connection.target,
-            p_adjusted: connection.p_adjusted
-          });
+      filteredSpongeNetwork.forEach(connection => {
+        if (allPotentialNodes.includes(connection.source) && allPotentialNodes.includes(connection.target)) {
+          const edgeExists = candidateEdges.some(edge => (
+            (edge.source === connection.source && edge.target === connection.target) ||
+            (edge.source === connection.target && edge.target === connection.source)
+          ));
+          if (!edgeExists) {
+            candidateEdges.push({
+              source: connection.source,
+              target: connection.target,
+              p_adjusted: connection.p_adjusted
+            });
+          }
         }
       });
 
-      // Add neighbors if space available
-      if (nodes.length < MAX_NODES) {
-        const neighborSet = new Set<string>();
-        const allMainNodes = [regulator, ...limitedTargets];
+      candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+      candidateEdges = candidateEdges.slice(0, this.maxSpongeNodes);
 
-        const neighborConnections: Array<{ gene: string, p_adjusted: number }> = [];
-
-        allMainNodes.forEach((mainNode: string) => {
-          relevantConnections.forEach(connection => {
-            if (connection.source === mainNode && !allMainNodes.includes(connection.target)) {
-              neighborConnections.push({ gene: connection.target, p_adjusted: connection.p_adjusted });
-            } else if (connection.target === mainNode && !allMainNodes.includes(connection.source)) {
-              neighborConnections.push({ gene: connection.source, p_adjusted: connection.p_adjusted });
-            }
-          });
-        });
-
-        // Sort by significance and take only top neighbors
-        neighborConnections.sort((a, b) => a.p_adjusted - b.p_adjusted);
-        const maxNeighbors = Math.min(neighborConnections.length, MAX_NODES - nodes.length);
-
-        neighborConnections.slice(0, maxNeighbors).forEach(({ gene }) => {
-          if (!neighborSet.has(gene)) {
-            neighborSet.add(gene);
-            nodes.push({ id: gene, group: 2 });
-          }
-        });
-
-        console.log('Added neighbors:', Array.from(neighborSet));
-
-        // Add edges involving neighbors
-        const allNodeIds = new Set(nodes.map(n => n.id));
-        relevantConnections.forEach(connection => {
-          const sourceInNetwork = allNodeIds.has(connection.source);
-          const targetInNetwork = allNodeIds.has(connection.target);
-
-          if (sourceInNetwork && targetInNetwork) {
-            const edgeExists = allPotentialEdges.some(e =>
-              (e.source === connection.source && e.target === connection.target) ||
-              (e.source === connection.target && e.target === connection.source)
-            );
-
-            if (!edgeExists) {
-              allPotentialEdges.push({
-                source: connection.source,
-                target: connection.target,
-                p_adjusted: connection.p_adjusted
-              });
-            }
-          }
-        });
-      }
-
-      // Filter to most significant edges
-      allPotentialEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-      const edgeLimit = Math.min(allPotentialEdges.length, MAX_EDGES);
-      const edges = allPotentialEdges.slice(0, edgeLimit);
-
-      // Set the p-value cutoff (the highest p-value that made it into the network)
-      if (edges.length > 0) {
-        this.spongePValueCutoff = edges[edges.length - 1].p_adjusted;
-      }
-
-      console.log(`Using top ${edges.length} edges out of ${allPotentialEdges.length}`);
-      console.log('P-value cutoff:', this.spongePValueCutoff);
-
-      // Remove disconnected nodes, but ALWAYS keep the regulator (group 0)
-      const connectedNodeIds = new Set<string>();
-      edges.forEach(edge => {
-        connectedNodeIds.add(edge.source);
-        connectedNodeIds.add(edge.target);
+      const nodeSet = new Set<string>();
+      candidateEdges.forEach(edge => {
+        nodeSet.add(edge.source);
+        nodeSet.add(edge.target);
       });
 
-      // Always include the regulator node, even if it has no connections
-      connectedNodeIds.add(regulator);
+      nodeSet.add(regulator);
 
-      const filteredNodes = nodes.filter(node =>
-        node.group === 0 || connectedNodeIds.has(node.id)
-      );
-
-      console.log('Final nodes:', filteredNodes.length, 'Final edges:', edges.length);
-
-      // Since regulator is always kept, check if we have any meaningful network
-      if (filteredNodes.length <= 1) {
-        const svg = d3.select('#aucell_graph_sponge')
-          .append('svg')
-          .attr('width', 500)
-          .attr('height', 300);
-
-        svg.append('text')
-          .attr('x', 250)
-          .attr('y', 150)
-          .attr('text-anchor', 'middle')
-          .style('font-size', '14px')
-          .style('fill', '#666')
-          .text(`No significant connections for ${regulator}`);
-
-        this.isLoadingSponge = false;
-        return;
+      Array.from(nodeSet).forEach(nodeId => {
+      if (nodeId === regulator) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 0 }); // regulator
+        }
+      } else if (targets.includes(nodeId)) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 1 }); // targets
+        }
+      } else {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 2 }); // neighbors
+        }
       }
+    });
 
-      // Create the graph
-      const graph = {
-        nodes: filteredNodes,
-        edges: edges
-      };
+    edges.push(...candidateEdges);
 
-      // Create visualization
-      const width = 500;
-      const height = 300;
-      const textPadding = 60; // Increased for p-value info
+    // Create graph object
+    const graph = {
+      nodes: nodes.filter(node => node.id && node.id.length > 0),
+      edges: edges.filter(edge =>
+        nodes.some(node => node.id === edge.source) &&
+        nodes.some(node => node.id === edge.target)
+      )
+    };
 
+    this.spongePValueCutoff = edges.length > 0 ? Math.min(...edges.map(edge => edge.p_adjusted)) : null;
+
+
+    // Since regulator is always kept, check if we have any meaningful network
+    if (graph.nodes.length <= 1) {
       const svg = d3.select('#aucell_graph_sponge')
         .append('svg')
-        .attr('width', width)
-        .attr('height', height + textPadding)
-        .style('background-color', '#f8f9fa');
+        .attr('width', 500)
+        .attr('height', 300);
 
-      // Simplified links
-      const link = svg.append('g')
-        .attr('stroke', '#999')
-        .attr('stroke-opacity', 0.6)
-        .selectAll('line')
-        .data(graph.edges)
-        .enter()
-        .append('line')
-        .attr('stroke-width', 2)
-        .attr('stroke', '#666');
-
-      // Simplified nodes
-      const node = svg.append('g')
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2)
-        .selectAll('circle')
-        .data(graph.nodes)
-        .enter()
-        .append('circle')
-        .attr('r', (d: any) => {
-          switch (d.group) {
-            case 0: return 12; // regulator
-            case 1: return 10; // targets
-            case 2: return 8;  // neighbors
-            default: return 8;
-          }
-        })
-        .attr('fill', (d: any) => {
-          switch (d.group) {
-            case 0: return '#e41a1c'; // regulator - red
-            case 1: return '#377eb8'; // targets - blue
-            case 2: return '#4daf4a'; // neighbors - green
-            default: return '#999';
-          }
-        })
-        .style('cursor', 'pointer')
-        .on('click', (event: MouseEvent, d: any) => {
-          this.handleNodeClick(d);
-        })
-        .on('mouseover', function (event: MouseEvent, d: any) {
-          d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
-        })
-        .on('mouseout', function (event: MouseEvent, d: any) {
-          d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
-        });
-
-      // Simplified labels
-      const labels = svg.append('g')
-        .selectAll('text')
-        .data(graph.nodes)
-        .enter()
-        .append('text')
+      svg.append('text')
+        .attr('x', 250)
+        .attr('y', 150)
         .attr('text-anchor', 'middle')
-        .attr('dy', '.35em')
-        .style('font-size', '10px')
-        .style('fill', '#333')
-        .style('pointer-events', 'none')
-        .text((d: any) => d.id.length > 6 ? d.id.substring(0, 6) + '...' : d.id);
+        .style('font-size', '14px')
+        .style('fill', '#666')
+        .text(`No significant connections for ${regulator}`);
 
-      // Add tooltips
-      node.append('title')
-        .text((d: any) => `${d.id}\nGroup: ${d.group === 0 ? 'Regulator' : d.group === 1 ? 'Target' : 'Neighbor'}\nClick to analyze in gProfiler`);
+      this.isLoadingSponge = false;
+      return;
+    }
 
-      // Simulation
-      const simulation = d3.forceSimulation(graph.nodes)
-        .alphaDecay(0.05)
-        .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(30).strength(0.3))
-        .force('charge', d3.forceManyBody().strength(-200))
-        .force('center', d3.forceCenter(width / 2, height / 2))
-        .force('collision', d3.forceCollide().radius(15));
+    // Create visualization
+    const width = 500;
+    const height = 300;
+    const textPadding = 40;
 
-      // Throttled tick updates
-      let tickCount = 0;
-      simulation.on('tick', () => {
-        tickCount++;
-        if (tickCount % 3 === 0) {
-          link
-            .attr('x1', (d: any) => d.source.x)
-            .attr('y1', (d: any) => d.source.y)
-            .attr('x2', (d: any) => d.target.x)
-            .attr('y2', (d: any) => d.target.y);
+    const svg = d3.select('#aucell_graph_sponge')
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height + textPadding)
+      .style('background-color', '#f8f9fa');
 
-          node
-            .attr('cx', (d: any) => d.x)
-            .attr('cy', (d: any) => d.y);
+    // Simplified links
+    const link = svg.append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(graph.edges)
+      .enter()
+      .append('line')
+      .attr('stroke-width', 2)
+      .attr('stroke', '#666');
 
-          labels
-            .attr('x', (d: any) => d.x)
-            .attr('y', (d: any) => d.y);
+    // Simplified nodes
+    const node = svg.append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .selectAll('circle')
+      .data(graph.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => {
+        switch (d.group) {
+          case 0: return 12;
+          case 1: return 10;
+          case 2: return 8;
+          default: return 8;
         }
+      })
+      .attr('fill', (d: any) => {
+        switch (d.group) {
+          case 0: return '#e41a1c';
+          case 1: return '#377eb8';
+          case 2: return '#4daf4a';
+          default: return '#999';
+        }
+      })
+      .style('cursor', 'pointer')
+      .on('click', (event: MouseEvent, d: any) => {
+        this.handleNodeClick(d);
+      })
+      .on('mouseover', function (event: MouseEvent, d: any) {
+        d3.select(this).attr('stroke', '#333').attr('stroke-width', 3);
+      })
+      .on('mouseout', function (event: MouseEvent, d: any) {
+        d3.select(this).attr('stroke', '#fff').attr('stroke-width', 2);
       });
 
 
-      setTimeout(() => {
-        simulation.stop();
-        this.isLoadingSponge = false;
-      }, 2000);
+    node.call(
+  d3.drag<SVGCircleElement, any>()
+    .on('start', function (event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    })
+    .on('drag', function (event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    })
+    .on('end', function (event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    })
+);
 
-      // Add AUCell Score
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height + textPadding - 40)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '14px')
-        .style('fill', '#333')
-        .text(`AUCell Score ${this.selectedGeneSetSponge}: ${this.selectedCell?.properties.aucell_sponge?.[this.selectedGeneSetSponge]?.toFixed(3) || 'N/A'}`);
+    // Simplified labels
+    const labels = svg.append('g')
+      .selectAll('text')
+      .data(graph.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .style('font-size', '10px')
+      .style('fill', '#333')
+      .style('pointer-events', 'none')
+      .text((d: any) => d.id.length > 6 ? d.id.substring(0, 6) + '...' : d.id);
 
-      // Add network info
-      svg.append('text')
-        .attr('x', width / 2)
-        .attr('y', height + textPadding - 25)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '12px')
-        .style('fill', '#666')
-        .text(`${edges.length} connections, ${filteredNodes.length} nodes`);
+    // Add tooltips
+    node.append('title')
+      .text((d: any) => `${d.id}\nGroup: ${d.group === 0 ? 'Regulator' : d.group === 1 ? 'Target' : 'Neighbor'}\nClick to analyze in gProfiler`);
 
-      console.log('Optimized sponge network visualization complete');
-    } catch (error) {
-      console.error('Error generating Sponge graph:', error);
+    // Simulation
+    const simulation = d3.forceSimulation(graph.nodes)
+      .alphaDecay(0.05)
+      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(30).strength(0.3))
+      .force('charge', d3.forceManyBody().strength(-200))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(10))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - textPadding - radius, node.y));
+        });
+      });
+
+    // Throttled tick updates
+    let tickCount = 0;
+    simulation.on('tick', () => {
+      tickCount++;
+      if (tickCount % 3 === 0) {
+        link
+          .attr('x1', (d: any) => d.source.x)
+          .attr('y1', (d: any) => d.source.y)
+          .attr('x2', (d: any) => d.target.x)
+          .attr('y2', (d: any) => d.target.y);
+
+        node
+          .attr('cx', (d: any) => d.x)
+          .attr('cy', (d: any) => d.y);
+
+        labels
+          .attr('x', (d: any) => d.x)
+          .attr('y', (d: any) => d.y);
+      }
+    });
+
+
+    setTimeout(() => {
+      simulation.stop();
       this.isLoadingSponge = false;
-    }
+    }, 2000);
+
+    // Add AUCell Score
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + textPadding - 40)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '14px')
+      .style('fill', '#333')
+      .text(`AUCell Score ${this.selectedGeneSetSponge}: ${this.selectedCell?.properties.aucell_sponge?.[this.selectedGeneSetSponge]?.toFixed(3) || 'N/A'}`);
+
+    // Add network info
+    svg.append('text')
+      .attr('x', width / 2)
+      .attr('y', height + textPadding - 25)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '12px')
+      .style('fill', '#666')
+      .text(`${edges.length} connections, ${graph.nodes.length} nodes`);
+
   }
+}
 
   private mouseOver(event: MouseEvent, d: CellFeature): void {
     d3.selectAll('.Country')

@@ -39,13 +39,13 @@
           <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
 
           <div class="genie3-controls" style="margin-bottom: 15px; text-align: center;">
-            <label for="max-nodes-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
-              Max Nodes: {{ maxGenie3Nodes }}
+            <label for="max-edges-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
+              Min Best Edges: {{ maxGenie3Edges }}
             </label>
-            <input type="range" id="max-nodes-slider" min="10" max="75" step="5" [(ngModel)]="maxGenie3Nodes"
-              (input)="onMaxNodesChangeGenie3()" style="width: 300px; cursor: pointer;" />
+            <input type="range" id="max-edges-slider" min="10" max="75" step="5" [(ngModel)]="maxGenie3Edges"
+              (input)="onMaxEdgesChangeGenie3()" style="width: 300px; cursor: pointer;" />
             <div style="font-size: 12px; color: #666; margin-top: 5px;">
-              10 ← → 75 nodes
+              10 ← → 75 edges
             </div>
           </div>
 
@@ -71,7 +71,7 @@
         <div *ngIf="!isLoadingSponge && genie3WeightCutoff !== null"
             style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
             Genie3 Weight Cutoff: {{ genie3WeightCutoff | number:'1.2-5' }}
-          </div>
+        </div>
 
         <div *ngIf="selectedGeneSetSponge">
           <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
@@ -88,16 +88,15 @@
             </div>
           </div>
 
-          <!-- Loading indicator for Sponge graph -->
+
           <div *ngIf="isLoadingSponge" class="loading-container">
             <div class="loading-spinner"></div>
             <div class="loading-text">Loading Sponge network...</div>
           </div>
 
-          <!-- Graph container (hidden while loading) -->
           <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
 
-          <!-- P-value cutoff info -->
+
           <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null"
             style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
             P-value cutoff: {{ spongePValueCutoff | number:'1.2-4' }}
@@ -112,6 +111,7 @@
               🧬 Analyze All Sponge Genes in gProfiler
             </button>
           </div>
+
         </div>
       </div>
     </div>
