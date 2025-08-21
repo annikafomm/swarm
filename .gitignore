@@ -7,12 +7,12 @@
 backend/networks
 
 # Ignore renv folder
-backend/gene_set_ES/renv
+backend/calc_R_scores/renv
 # Ignore R environment files
-backend/gene_set_ES/.Rproj.user
-backend/gene_set_ES/.Rhistory
-backend/gene_set_ES/.Rprofile
-backend/gene_set_ES/.RData*
+backend/calc_R_scores/.Rproj.user
+backend/calc_R_scores/.Rhistory
+backend/calc_R_scores/.Rprofile
+backend/calc_R_scores/.RData*
 
 .Rproj.user
 
