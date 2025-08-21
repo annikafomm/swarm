@@ -69,38 +69,11 @@
       </label>
     </div>
 
-    <div class="section" style="margin-top:14px;">
-      <label>Upload Genie3 network (.csv/.tsv):</label>
-      <div class="file">
-        <!-- eigene ID, aber gleiche Handler-„Rolle“ -->
-        <input id="genieTop" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
-        <label for="genieTop" class="file-control">
-          <span class="btn">Choose file</span>
-          <span class="file-name" [title]="genieFile?.name || 'No file selected'">
-            {{ genieFile?.name || 'No file selected' }}
-          </span>
-        </label>
-      </div>
-    </div>
-
-    <div class="section" style="margin-top:14px;">
-      <label>Upload Sponge network (.csv/.tsv):</label>
-      <div class="file">
-        <input id="spongeTop" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
-        <label for="spongeTop" class="file-control">
-          <span class="btn">Choose file</span>
-          <span class="file-name" [title]="spongeNetworkFile?.name || 'No file selected'">
-            {{ spongeNetworkFile?.name || 'No file selected' }}
-          </span>
-        </label>
-      </div>
-    </div>
   </div>
 
   <div class="section">
     <div class="section-title">Options</div>
     <label><input type="checkbox" formControlName="normalization"> Enable normalization</label>
-    <br />
     <label><input type="checkbox" formControlName="filteringSpatial"> Enable filtering (Spatial)</label>
   </div>
 
@@ -118,13 +91,26 @@
 
   <!-- Conditional uploads -->
   <div class="section" *ngIf="requiresSponge()">
-    <label>Upload Sponge network (.csv/.tsv):</label>
+    <label>Sponge files <span class="required">*</span> (both required):</label>
+
     <div class="file">
-      <input id="sponge" type="file" (change)="onFileSelected($event, 'sponge')" accept=".csv,.tsv">
-      <label for="sponge" class="file-control">
-        <span class="btn">Choose file</span>
-        <span class="file-name">{{ spongeNetworkFile?.name || 'No file selected' }}</span>
+      <input id="spongeAnalysis" type="file" (change)="onFileSelected($event, 'spongeAnalysis')" accept=".csv,.tsv">
+      <label for="spongeAnalysis" class="file-control">
+        <span class="btn">Choose <br> networkanalysis</span>
+        <span class="file-name">{{ spongeAnalysisFile?.name || 'No file selected' }}</span>
       </label>
+    </div>
+
+    <div class="file" style="margin-top:8px;">
+      <input id="spongeInteractions" type="file" (change)="onFileSelected($event, 'spongeInteractions')" accept=".csv,.tsv">
+      <label for="spongeInteractions" class="file-control">
+        <span class="btn">Choose <br> networkinteractions</span>
+        <span class="file-name">{{ spongeInteractionsFile?.name || 'No file selected' }}</span>
+      </label>
+    </div>
+
+    <div class="hint" *ngIf="requiresSponge() && (!spongeAnalysisFile || !spongeInteractionsFile)" style="margin-top:6px;">
+      Please upload <em>both</em> SPONGE files (networkanalysis &amp; networkinteractions).
     </div>
   </div>
 

@@ -38,6 +38,8 @@ export class FormPageComponent {
   singleCellFile?: File;
   precomputedFile?: File;
   spongeNetworkFile?: File;
+  spongeAnalysisFile?: File;
+  spongeInteractionsFile?: File;
   genieFile?: File;
 
   // This is relevant for the HTML view — which scores should be displayed/available
@@ -128,6 +130,13 @@ export class FormPageComponent {
         case 'singleCell':
           this.singleCellFile = file;
           break;
+        case 'spongeAnalysis':
+          this.spongeAnalysisFile = file;
+          break;
+        case 'spongeInteractions':
+          this.spongeInteractionsFile = file;
+          break;
+
         case 'sponge':
           this.spongeNetworkFile = file;
           break;
@@ -152,11 +161,11 @@ export class FormPageComponent {
 
   // Whether a SPONGE network file is required
   requiresSponge(): boolean {
-    const s = this.scoreValues; // gets the current value of the scores checkbox group
-    const spongeNeeded = s['SPONGeffects'] || s['AUCell']; // true if one of these two is selected
-    return spongeNeeded && !this.precomputedFile; // but only if no precomputed file was uploaded
+    const s = this.scoreValues;
+    const byScore = s['SPONGeffects'] || s['AUCell'];
+    const byMethod = this.form.value.method === 'Sponge';
+    return (byScore || byMethod) && !this.precomputedFile;
   }
-
   // Same logic for the GENIE/VIPER file
   requiresGenie(): boolean {
     const s = this.scoreValues;
@@ -165,11 +174,12 @@ export class FormPageComponent {
   }
 
 
+
   // Final client-side validation before enabling submit
   canSubmit(): boolean {
     if (!this.spatialFile) return false; // is there a spatial dataset?
     if (this.form.value.tangram && !this.singleCellFile) return false; // if tangram is enabled, a single-cell file must be uploaded
-    if (this.requiresSponge() && !this.spongeNetworkFile) return false; // same as for Tangram
+    if (this.requiresSponge() && (!this.spongeAnalysisFile || !this.spongeInteractionsFile)) return false; // same as for Tangram
     if (this.requiresGenie() && !this.genieFile) return false;          // same logic
     return this.form.valid;
   }
@@ -206,8 +216,10 @@ export class FormPageComponent {
     // Optional files depending on toggles/selection
     if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
     if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
-    if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
+    if (this.spongeAnalysisFile) fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
+    if (this.spongeInteractionsFile) fd.append('spongeNetworkInteractions', this.spongeInteractionsFile);
 
+    
 
 
     if (this.genieFile) {
@@ -299,6 +311,8 @@ export class FormPageComponent {
     this.precomputedFile = undefined;
     this.genieFile = undefined;
     this.spongeNetworkFile = undefined;
+    this.spongeAnalysisFile = undefined;
+    this.spongeInteractionsFile = undefined;
 
     this.uploading = false;
     this.uploadProgress = 0;

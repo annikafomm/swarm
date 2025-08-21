@@ -265,7 +265,8 @@ async def upload(
     spatialFile: UploadFile = File(...),
     singleCellFile: Optional[UploadFile] = File(None),
     precomputedFile: Optional[UploadFile] = File(None),
-    spongeNetwork: Optional[UploadFile] = File(None),
+    spongeNetworkAnalysis: Optional[UploadFile] = File(None),
+    spongeNetworkInteractions: Optional[UploadFile] = File(None),
     genieFile: Optional[UploadFile] = File(None),
     session_data: "SessionData" = Depends(verifier),
 ):
@@ -278,7 +279,47 @@ async def upload(
     except Exception:
         raise HTTPException(status_code=400, detail="Field 'scores' must be valid JSON.")
 
-    raw_username = session_data.username
+    
+    # --- Validation rules ----------------------------------------------------
+    # Helper: normalize scores to a set of names (list/obj tolerant)
+    def _scores_to_set(obj):
+        try:
+            if isinstance(obj, dict):
+                # allow object like {"LIANA+": true, ...}
+                return {k for k, v in obj.items() if v}
+            if isinstance(obj, list):
+                return set(obj)
+            return set()
+        except Exception:
+            return set()
+
+    scores_set = _scores_to_set(scores_obj)
+
+    sponge_needed = (("SPONGeffects" in scores_set) or ("AUCell" in scores_set) or (method == Method.Sponge)) and (precomputedFile is None)
+    genie_needed = (("VIPER" in scores_set) or ("AUCell" in scores_set) or ("SPONGeffects" in scores_set)) and (precomputedFile is None)
+
+    # spatial always required (already enforced by FastAPI type); double-check for safety
+    if spatialFile is None:
+        raise HTTPException(status_code=400, detail="Spatial file is required.")
+
+    # If tangram true -> singleCell required
+    if tangram and (singleCellFile is None):
+        raise HTTPException(status_code=400, detail="Tangram is enabled: singleCell file is required.")
+
+    # SPONGE pair requirement
+    if sponge_needed:
+        missing = []
+        if spongeNetworkAnalysis is None:
+            missing.append("spongeNetworkAnalysis")
+        if spongeNetworkInteractions is None:
+            missing.append("spongeNetworkInteractions")
+        if missing:
+            raise HTTPException(status_code=400, detail=f"SPONGE requires both files: {', '.join(missing)} missing.")
+
+    # GENIE/VIPER requirement
+    if genie_needed and (genieFile is None):
+        raise HTTPException(status_code=400, detail="VIPER/AUCell/SPONGeffects selected: genieNetwork file is required (unless precomputed is provided).")
+raw_username = session_data.username
     user_safe = _sanitize_filename(raw_username) or "anon"
 
     job_id = f"job_{int(time.time() * 1000)}"
@@ -290,7 +331,8 @@ async def upload(
         "spatialFile": save_file(spatialFile, job_dir),
         "singleCellFile": save_file(singleCellFile, job_dir),
         "precomputedFile": save_file(precomputedFile, job_dir),
-        "spongeNetwork": save_file(spongeNetwork, job_dir),
+        "spongeNetworkAnalysis": save_file(spongeNetworkAnalysis, job_dir),
+        "spongeNetworkInteractions": save_file(spongeNetworkInteractions, job_dir),
         "genieFile": save_file(genieFile, job_dir),
     }
 
