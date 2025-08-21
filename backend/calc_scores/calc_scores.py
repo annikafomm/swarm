@@ -9,6 +9,10 @@ import squidpy as sq
 from scipy import io
 import pandas as pd
 
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+
 from preprocessing.preprocessing_functions import *
 
 def main():
@@ -18,7 +22,7 @@ def main():
 
     # input and output file paths
     parser.add_argument('-input', type=str, required=True, help='Input AnnData file path')
-    parser.add_argument('-output_dir', type=str, required=True, help='Output dir file path')
+    parser.add_argument('-outdir', type=str, required=True, help='Output dir file path')
 
     # preprocessing options
     parser.add_argument('-filter', action='store_true', help='Apply filtering')
@@ -116,7 +120,6 @@ def main():
 
     # Compute Moran's I 
     if args.moranI:
-        print(args.attr, args.genes)
         print("Computing Moran's I ...")
         sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
 
@@ -128,24 +131,22 @@ def main():
 
     #  TODO: tidy up andata --> delete entries, that are not used further
     
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir, exist_ok=True)
+    if not os.path.exists(args.outdir):
+        os.makedirs(args.outdir, exist_ok=True)
     
     # save AnnData object in file
     print("Saving AnnData object ...")
-    adata.write(os.path.join(args.output_dir, f"{os.path.basename(args.input)}_scores.h5ad"))
+    adata.write(os.path.join(args.outdir, f"{os.path.basename(args.input)}_scores.h5ad"))
 
     # TODO
     if True: # R scores should be calculated
-        new_dir = os.path.join(args.output_dir, f"{os.path.basename(args.input)}")
-        os.makedirs(new_dir, exist_ok=True)
-
+        
         # Write matrix
-        io.mmwrite(os.path.join(new_dir, "expr.mtx"), adata.X)
+        io.mmwrite(os.path.join(args.outdir, "expr.mtx"), adata.X)
         # Save row names (cells)
-        pd.Series(adata.obs_names).to_csv(os.path.join(new_dir, "cells.txt"), index=False, header=False)
+        pd.Series(adata.obs_names).to_csv(os.path.join(args.outdir, "cells.txt"), index=False, header=False)
         # Save var object
-        adata.var.to_csv(os.path.join(new_dir, "var.csv"))
+        adata.var.to_csv(os.path.join(args.outdir, "var.tsv"), sep='\t')
 
 
 if __name__ == "__main__":

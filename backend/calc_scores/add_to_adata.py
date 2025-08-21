@@ -14,26 +14,27 @@ def main():
     parser = argparse.ArgumentParser(description="Add R scores to adata file.")
 
     # input file paths
-    parser.add_argument('-adata', type=str, required=True, help='Input AnnData file path')
     parser.add_argument('-indir', type=str, required=True, help='Input dir file path')
 
     args = parser.parse_args()
 
-
-    # Load the data
-    print("Reading adata file ...")
-    if not os.path.exists(args.adata):
-        raise FileNotFoundError(f"AnnData file {args.adata} does not exist.")
-
-    if args.adata.endswith('.h5ad'):
-        adata = sc.read_h5ad(args.adata)
-    else:
-        raise ValueError("Unsupported file format. Please provide a .h5ad or .zarr file.")
-
-    
     if not (os.path.exists(args.indir) and os.path.isdir(args.indir)):
         raise FileNotFoundError(f"Folder {args.indir} does not exist.")
     
+    # Load the data
+    print("Reading adata file ...")
+    
+    adata_path = ""
+    found_h5ad = False
+    for filename in os.listdir(args.indir):
+        if filename.endswith('.h5ad'):
+            adata_path = os.path.join(args.indir, filename)
+            adata = sc.read_h5ad(adata_path)
+            found_h5ad = True
+ 
+    if not found_h5ad:
+        raise FileNotFoundError(f"There is no .h5ad file in {args.indir}.")
+
 
     for filename in os.listdir(args.indir):
         if filename.endswith('.csv'):
@@ -45,10 +46,8 @@ def main():
                 adata.obsm[df_name] = df.T
             else:
                 print(f"There is already an element with name {df_name} in obsm.")
-    
-    
-    for filename in os.listdir(args.indir):
-        if filename.endswith('.json'):
+        
+        elif filename.endswith('.json'):
             file_path = os.path.join(args.indir, filename)
             with open(file_path, "r") as f:
                 data_dict = json.load(f)
@@ -61,7 +60,7 @@ def main():
 
     # save AnnData object in file
     print("Saving AnnData object ...")
-    adata.write(args.adata, overwrite=True)
+    adata.write(adata_path, overwrite=True)
 
 
 if __name__ == "__main__":
