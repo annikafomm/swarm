@@ -6,9 +6,6 @@ from __future__ import annotations
 # Standard Library
 # ---------------------------------
 import json
-import pandas as pd
-import scanpy as sc
-import uvicorn
 import os
 import shutil
 import time
@@ -16,6 +13,10 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import UUID, uuid4
+
+import pandas as pd
+import scanpy as sc
+import uvicorn
 
 # ---------------------------------
 # Third-Party (FastAPI / Starlette)
@@ -30,7 +31,6 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.responses import RedirectResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
 from fastapi_sessions.frontends.implementations import (
     CookieParameters,
@@ -39,7 +39,7 @@ from fastapi_sessions.frontends.implementations import (
 from fastapi_sessions.session_verifier import SessionVerifier
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import EmailStr
-
+from starlette.responses import RedirectResponse
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -53,7 +53,9 @@ BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 # Example: ALLOWED_ORIGINS="https://myapp.com,https://staging.myapp.com"
 ALLOWED_ORIGINS = [
     o.strip()
-    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200").split(",")
+    for o in os.getenv(
+        "ALLOWED_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200"
+    ).split(",")
     if o.strip()
 ]
 
@@ -61,22 +63,27 @@ ALLOWED_ORIGINS = [
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
 MAX_FILE_MB: Optional[int] = None
 
+
 # Enumerations for strict validation of form fields.
 class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+
 class Method(str, Enum):
     Genie3 = "Genie3"
     Sponge = "Sponge"
+
 
 class BaseModel(PydanticBaseModel):
     class Config:
         arbitrary_types_allowed = True
 
+
 class SessionData(BaseModel):
     username: str
     adata: sc.AnnData | None = None
+
 
 class BasicVerifier(SessionVerifier[UUID, SessionData]):
     def __init__(
@@ -112,8 +119,10 @@ class BasicVerifier(SessionVerifier[UUID, SessionData]):
         """If the session exists, it is valid"""
         return True
 
+
 class AnnDataPath(BaseModel):
     path: str
+
 
 # -----------------------------------------------------------------------------
 # Application
@@ -154,6 +163,7 @@ verifier = BasicVerifier(
 # -----------------------------------------------------------------------------
 # Utility helpers
 # -----------------------------------------------------------------------------
+
 
 def _sanitize_filename(name: str) -> str:
     """
@@ -213,6 +223,7 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
 # Convenience endpoints
 # -----------------------------------------------------------------------------
 
+
 # Simple health check used by load balancers, monitors, or quick manual checks.
 @app.get("/health")
 def health():
@@ -239,10 +250,10 @@ def api_root():
     }
 
 
-
 # -----------------------------------------------------------------------------
 # Upload endpoint
 # -----------------------------------------------------------------------------
+
 
 # Main endpoint for receiving form fields and files (multipart/form-data).
 # It creates a dedicated job directory, saves all provided files there,
@@ -252,13 +263,11 @@ async def upload(
     # Required form fields (validated by Enum):
     dataset: Dataset = Form(...),
     method: Method = Form(...),
-
     # Boolean options (checkboxes on the frontend):
     normalization: bool = Form(...),
     filteringSpatial: bool = Form(...),
     filteringSingleCell: bool = Form(...),
     tangram: bool = Form(...),
-
     # JSON string with selected scores (parsed below):
     scores: str = Form(...),
     useDefaultLiana: Optional[bool] = Form(None),
@@ -266,7 +275,6 @@ async def upload(
     spongeOptions: Optional[str] = Form(None),
     squidpyOptions: Optional[str] = Form(None),
     lianaOptions: Optional[str] = Form(None),
-
     # Files (spatial is required; others are optional):
     email: EmailStr = Form(...),
     spatialFile: UploadFile = File(...),
@@ -284,7 +292,9 @@ async def upload(
     try:
         scores_obj: Dict[str, Any] = json.loads(scores) if scores else {}
     except Exception:
-        raise HTTPException(status_code=400, detail="Field 'scores' must be valid JSON.")
+        raise HTTPException(
+            status_code=400, detail="Field 'scores' must be valid JSON."
+        )
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
@@ -293,7 +303,9 @@ async def upload(
         try:
             return json.loads(val)
         except Exception:
-            raise HTTPException(status_code=400, detail=f"Field '{name}' must be valid JSON.")
+            raise HTTPException(
+                status_code=400, detail=f"Field '{name}' must be valid JSON."
+            )
 
     options = {
         "tangram": _parse_json_field("tangramOptions", tangramOptions),
@@ -319,16 +331,29 @@ async def upload(
 
     scores_set = _scores_to_set(scores_obj)
 
-    sponge_needed = (("SPONGeffects" in scores_set) or ("AUCell" in scores_set) or (method == Method.Sponge)) and (precomputedFile is None)
-    genie_needed = (("VIPER" in scores_set) or ("AUCell" in scores_set) or ("SPONGeffects" in scores_set)) and (precomputedFile is None)
+    sponge_needed = (
+        ("SPONGeffects" in scores_set)
+        or ("AUCell" in scores_set)
+        or (method == Method.Sponge)
+    ) and (precomputedFile is None)
+    genie_needed = (
+        ("VIPER" in scores_set)
+        or ("AUCell" in scores_set)
+        or ("SPONGeffects" in scores_set)
+    ) and (precomputedFile is None)
 
     # spatial always required (already enforced by FastAPI type); double-check for safety
     if spatialFile is None:
-        raise HTTPException(status_code=400, detail="Spatial file is required.")
+        raise HTTPException(
+            status_code=400, detail="Spatial file is required."
+        )
 
     # If tangram true -> singleCell required
     if tangram and (singleCellFile is None):
-        raise HTTPException(status_code=400, detail="Tangram is enabled: singleCell file is required.")
+        raise HTTPException(
+            status_code=400,
+            detail="Tangram is enabled: singleCell file is required.",
+        )
 
     # SPONGE pair requirement
     if sponge_needed:
@@ -338,11 +363,17 @@ async def upload(
         if spongeNetworkInteractions is None:
             missing.append("spongeNetworkInteractions")
         if missing:
-            raise HTTPException(status_code=400, detail=f"SPONGE requires both files: {', '.join(missing)} missing.")
+            raise HTTPException(
+                status_code=400,
+                detail=f"SPONGE requires both files: {', '.join(missing)} missing.",
+            )
 
     # GENIE/VIPER requirement
     if genie_needed and (genieFile is None):
-        raise HTTPException(status_code=400, detail="VIPER/AUCell/SPONGeffects selected: genieNetwork file is required (unless precomputed is provided).")
+        raise HTTPException(
+            status_code=400,
+            detail="VIPER/AUCell/SPONGeffects selected: genieNetwork file is required (unless precomputed is provided).",
+        )
     raw_username = session_data.username
     user_safe = _sanitize_filename(raw_username) or "anon"
 
@@ -356,7 +387,9 @@ async def upload(
         "singleCellFile": save_file(singleCellFile, job_dir),
         "precomputedFile": save_file(precomputedFile, job_dir),
         "spongeNetworkAnalysis": save_file(spongeNetworkAnalysis, job_dir),
-        "spongeNetworkInteractions": save_file(spongeNetworkInteractions, job_dir),
+        "spongeNetworkInteractions": save_file(
+            spongeNetworkInteractions, job_dir
+        ),
         "genieFile": save_file(genieFile, job_dir),
     }
 
@@ -378,7 +411,9 @@ async def upload(
     }
 
     # 5) Persist a copy of the payload next to the uploaded files
-    (job_dir / f"{job_id}_config.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    (job_dir / f"{job_id}_config.json").write_text(
+        json.dumps(payload, indent=2), encoding="utf-8"
+    )
 
     # 6) Return a clean JSON response the frontend can consume
     return payload
@@ -442,11 +477,12 @@ async def read_adata(
     }
 
     for obsm_key, col_names in reconstruct_obsm_cols.items():
-        adata.obsm[obsm_key] = pd.DataFrame(
-            adata.obsm[obsm_key],
-            columns=adata.uns["liana_columns"][col_names],
-            index=adata.obs_names,
-        )
+        if obsm_key in adata.obsm:
+            adata.obsm[obsm_key] = pd.DataFrame(
+                adata.obsm[obsm_key],
+                columns=adata.uns["liana_columns"][col_names],
+                index=adata.obs_names,
+            )
 
     session_data.adata = adata
     await backend.update(session_id, session_data)
