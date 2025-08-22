@@ -519,6 +519,20 @@ async def get_obsm_column(
     return session_data.adata.obsm[table][column].to_dict()
 
 
+@app.get("/X/{gene}", dependencies=[Depends(cookie)])
+async def get_X_by_gene(
+    gene: str, session_data: SessionData = Depends(verifier)
+):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860`
+    """
+    expressions = session_data.adata[:, gene].X.toarray().flatten().tolist()
+    gene_names = session_data.adata.var.index
+    return {
+        gene_name: expression
+        for gene_name, expression in zip(gene_names, expressions)
+    }
+
+
 if __name__ == "__main__":
-    app.state.data = None
     uvicorn.run(app, host="0.0.0.0", port=3000)
