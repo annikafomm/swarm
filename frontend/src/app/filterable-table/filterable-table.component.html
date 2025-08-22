@@ -80,18 +80,23 @@
       </tbody>
     </table>
   </div>
-  <br />
-  <!-- Pagination controls -->
-  <div class="pagination">
-    <button (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1">
-      Prev
-    </button>
-    <span>Page {{ currentPage }} of {{ totalPages }}</span>
-    <button
-      (click)="setPage(currentPage + 1)"
-      [disabled]="currentPage === totalPages"
-    >
-      Next
-    </button>
-  </div>
+</div>
+<br />
+<!-- Pagination controls -->
+<div class="pagination">
+  <button
+    class="btn btn-pill"
+    (click)="setPage(currentPage - 1)"
+    [disabled]="currentPage === 1"
+  >
+    Prev
+  </button>
+  <span>Page {{ currentPage }} of {{ totalPages }}</span>
+  <button
+    class="btn btn-pill"
+    (click)="setPage(currentPage + 1)"
+    [disabled]="currentPage === totalPages"
+  >
+    Next
+  </button>
 </div>
