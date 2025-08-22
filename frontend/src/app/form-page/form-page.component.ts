@@ -72,6 +72,88 @@ export class FormPageComponent {
         'VIPER': [false],
         'AUCell': [false],
       }),
+      spongeOptions: this.fb.group({
+        enrichmentMethod: ['GSVA', Validators.required],                 // 'GSVA' | 'ssGSEA' | 'AUCell'
+        mScoreThreshold: [0.1, [Validators.min(0), Validators.max(1)]],  // 0..1 (Default 0.1)
+        pAdj: [0.05, [Validators.min(0), Validators.max(1)]],            // 0..1 (Default 0.05)
+        ensemblIdKey: ['ensembl_id', Validators.required],
+        featureKey: ['feature_type', Validators.required],
+        rnaTypes: ['lncRNA,protein_coding', Validators.required],
+        maxModules: [null, [Validators.min(1)]],
+      }),
+      // Optionen für Squidpy
+      squidpyOptions: this.fb.group({
+      // Methoden: MoransI | gearyC | centrality_score | co_occurrence | neighborhood_enrichment
+      method: ['MoransI', Validators.required],
+
+      // nur relevant wenn MoransI oder gearyC
+      nPermutations: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]],
+      twoTailed: [false],
+      corrMethod: ['fdr_bh', Validators.required],
+
+      clusterKey: ['leiden'],
+
+      coOccurInterval: [50, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Default 50
+      coOccurNSplits: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Optional (None)
+
+      // nur neighborhood_enrichment
+      neighLibraryKey: [null],                                  // Optional (String)
+      neighNPerms: [1000, [Validators.min(1), Validators.max(100000), Validators.pattern(/^\d+$/)]], // Default 1000, max 100000
+      }),
+
+      // LIANA+ Optionen (optional)
+      lianaOptions: this.fb.group({
+      // Name der Spalte mit den celltype compositions
+      ctCompositionKey: ['tangram_ct_pred'],   // optional, Default: 'tangram_ct_pred'
+      }),
+
+      // Tangram Optionen (optional)
+      tangramOptions: this.fb.group({
+      // Name der Spalte mit den cell types
+      cellTypeKey: [null],                     // optional, kein Default (leer lassen = None)
+      }),
+    });
+    // SPONGeffects-Options zunächst deaktivieren
+    this.spongeOptions.disable({ emitEvent: false });
+
+    this.squidpyOptions.disable({ emitEvent: false });
+    this.form.get('scores.squidpy')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.squidpyOptions.enable() : this.squidpyOptions.disable();
+    // LIANA+ Optionen ein/aus je nach Checkbox
+    this.lianaOptions.disable({ emitEvent: false });
+    this.form.get('scores.LIANA+')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.lianaOptions.enable() : this.lianaOptions.disable();
+    });
+
+    // Tangram-Optionen ein/aus je nach Toggle
+    this.tangramOptions.disable({ emitEvent: false });
+    this.form.get('tangram')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.tangramOptions.enable() : this.tangramOptions.disable();
+    });
+});
+
+// Validatoren für Autokorrelations-Parameter nur bei MoransI/gearyC
+this.squidpyOptions.get('method')!.valueChanges.subscribe((m: string) => {
+  const needAuto = m === 'MoransI' || m === 'gearyC';
+  const nPerm = this.squidpyOptions.get('nPermutations')!;
+  const corr  = this.squidpyOptions.get('corrMethod')!;
+  if (needAuto) {
+    nPerm.setValidators([Validators.min(1), Validators.pattern(/^\d+$/)]);
+    corr.setValidators([Validators.required]);
+  } else {
+    nPerm.clearValidators();
+    corr.clearValidators();
+  }
+  nPerm.updateValueAndValidity({ emitEvent: false });
+  corr.updateValueAndValidity({ emitEvent: false });
+});
+
+
+  // Aktivieren/Deaktivieren abhängig von der Checkbox "SPONGeffects"
+  this.form.get('scores.SPONGeffects')!.valueChanges
+    .subscribe((isOn: boolean) => {
+      const grp = this.form.get('spongeOptions')!;
+      if (isOn) grp.enable(); else grp.disable();
     });
   }
 
@@ -184,6 +266,24 @@ export class FormPageComponent {
     return this.form.valid;
   }
 
+  get spongeOptions(): FormGroup {
+    return this.form.get('spongeOptions') as FormGroup;
+  }
+  get squidpyOptions(): FormGroup {
+    return this.form.get('squidpyOptions') as FormGroup;
+  }
+  get lianaOptions(): FormGroup {
+    return this.form.get('lianaOptions') as FormGroup;
+  }
+  get tangramOptions(): FormGroup {
+    return this.form.get('tangramOptions') as FormGroup;
+  }
+
+  squidpyCorrMethods = [
+    'bonferroni','sidak','holm-sidak','holm','simes-hochberg',
+    'hommel','fdr_bh','fdr_by','fdr_tsbh','fdr_tsbky'
+  ];
+
   shouldOfferGenieUpload(): boolean {
     const s = this.scoreValues;
     return !!s['LIANA+'];
@@ -219,7 +319,6 @@ export class FormPageComponent {
     if (this.spongeAnalysisFile) fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
     if (this.spongeInteractionsFile) fd.append('spongeNetworkInteractions', this.spongeInteractionsFile);
 
-    
 
 
     if (this.genieFile) {
