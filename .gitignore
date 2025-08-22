@@ -14,6 +14,8 @@ backend/calc_R_scores/.Rhistory
 backend/calc_R_scores/.Rprofile
 backend/calc_R_scores/.RData*
 
+backend/results/*
+
 .Rproj.user
 
 settings.json
