@@ -38,6 +38,7 @@ from fastapi_sessions.frontends.implementations import (
 )
 from fastapi_sessions.session_verifier import SessionVerifier
 from pydantic import BaseModel as PydanticBaseModel
+from pydantic import EmailStr
 
 
 # -----------------------------------------------------------------------------
