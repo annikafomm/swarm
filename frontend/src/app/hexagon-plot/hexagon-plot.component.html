@@ -27,6 +27,12 @@
           Show {{ showGlobalLigandReceptorScores ? 'NMF factors' : 'global scores' }}
         </button>
       </div>
+      <div *ngIf="colorByProperty === 'gene_expression'">
+        <button (click)="showMoranI = !showMoranI">
+          Show
+          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+        </button>
+      </div>
     </div>
 
     <div *ngIf="selectedCell" class="gene-set-section">
@@ -168,7 +174,7 @@
         <app-table
           [data]="this.meta['ligand_receptor_global_scores']"
           [actionColumns]="[
-            'ligand_receptor_cosine_similarity',
+            'ligand_receptor_cosine_similarity]',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]"
@@ -185,6 +191,31 @@
           [actionColumns]="['ligand_receptor_NMF_factors']"
           [features]="features"
           [updateColumn]="'ligand_receptor_relationships'"
+          (featuresUpdated)="updateHexColors()"
+        ></app-table>
+      </ng-template>
+    </div>
+
+    <div *ngIf="colorByProperty === 'gene_expression'">
+      <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+      <ng-template #moranI>
+        <h4>Moran's I</h4>
+        <app-table
+          [data]="this.meta['moranI']"
+          [actionColumns]="['gene_expression']"
+          [features]="features"
+          [updateColumn]="'gene_expression'"
+          (featuresUpdated)="updateHexColors()"
+        ></app-table>
+      </ng-template>
+
+      <ng-template #gearyC>
+        <h4>Geary's C</h4>
+        <app-table
+          [data]="this.meta['gearyC']"
+          [actionColumns]="['gene_expression']"
+          [features]="features"
+          [updateColumn]="'gene_expression'"
           (featuresUpdated)="updateHexColors()"
         ></app-table>
       </ng-template>

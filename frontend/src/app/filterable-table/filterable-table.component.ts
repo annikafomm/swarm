@@ -122,13 +122,12 @@ export class FilterableTableComponent implements OnInit {
   }
 
   async fetchAndUpdate(columnName: string, index: string) {
+    let isGeneExpression = columnName === 'gene_expression';
+    let request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${index}`
+      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
     this.sessionService
-      .callWithSession(() =>
-        this.http.get(
-          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`,
-          { withCredentials: true },
-        ),
-      )
+      .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
         next: (res) => {
           const data = res as { [barcode: string]: any };
@@ -141,14 +140,24 @@ export class FilterableTableComponent implements OnInit {
               }
             }
           }
-          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+          if (isGeneExpression) {
+            console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else {
+            console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+          }
+
           this.featuresUpdated.emit();
         },
-        error: (err) =>
-          console.error(
-            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
-            err,
-          ),
+        error: (err) => {
+          if (isGeneExpression) {
+            console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else {
+            console.error(
+              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+              err,
+            );
+          }
+        },
       });
   }
 }
