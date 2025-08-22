@@ -1,0 +1,18 @@
+name: aucell_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.10
+  - scanpy
+  - numpy
+  - pandas
+  - ipykernel
+  - matplotlib
+  - pip
+  - pip:
+      - pyscenic
+
+ 
