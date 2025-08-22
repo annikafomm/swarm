@@ -38,7 +38,6 @@ env/
 # Backend big data & outputs
 backend/datasets/
 backend/datasets_prepro/
-backend/datasets_scores/
 backend/networks/
 backend/outputs/
 backend/results/
@@ -50,6 +49,7 @@ frontend/
 notebooks/
 
 # Images & large binaries not needed in build
+*.h5ad
 *.png
 *.jpg
 *.jpeg

@@ -22,6 +22,9 @@ dependencies:
   - bioconda::bioconductor-sponge
   - bioconda::bioconductor-aucell
   - bioconda::bioconductor-singlecellexperiment
+  - bioconda::bioconductor-viper
+  - bioconda::bioconductor-gsva
+  - conda-forge::r-optparse
   - python=3.10
   - numpy
   - pandas

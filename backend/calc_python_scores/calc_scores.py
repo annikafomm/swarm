@@ -8,6 +8,7 @@ import scanpy as sc
 import squidpy as sq
 from scipy import io
 import pandas as pd
+import time
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -15,14 +16,28 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from preprocessing.preprocessing_functions import *
 
+def log_message(msg, logfile, indent=0):
+    prefix = " " * indent
+    line = f"{prefix}{msg}"
+    print(line)  # console
+    with open(logfile, "a") as f:
+        f.write(line + "\n")  # write once, no extra blank lines
+
+def format_runtime(t0):
+    elapsed = time.time() - t0  # seconds since start
+    mins = int(elapsed // 60)
+    secs = int(round(elapsed % 60))
+    return f"{mins} min {secs} sec"
+
+
 def main():
     # Parser
-
     parser = argparse.ArgumentParser(description="Calculate spatial scores for spatial omics data.")
 
     # input and output file paths
     parser.add_argument('-input', type=str, required=True, help='Input AnnData file path')
     parser.add_argument('-outdir', type=str, required=True, help='Output dir file path')
+    parser.add_argument('-log', type=str, required=True, help='Path to the log file')
 
     # preprocessing options
     parser.add_argument('-filter', action='store_true', help='Apply filtering')
@@ -32,7 +47,7 @@ def main():
     parser.add_argument('-moranI', action='store_true', help='Compute Moran\'s I')
     parser.add_argument('-gearyC', action='store_true', help='Compute Geary\'s C')
 
-    parser.add_argument('-centrality_scores', action='store_true', help='Compute all centrality scores (closeness, average clustering, degree)')    
+    parser.add_argument('-centrality_scores', action='store_true', help='Compute all centrality scores (closeness, average clustering, degree)')
     parser.add_argument('-co_occurrence', action='store_true', help='Compute co-occurrence probability')
     parser.add_argument('-nhood_enrichment', action='store_true', help='Compute neighborhood enrichment')
 
@@ -52,103 +67,141 @@ def main():
 
     args = parser.parse_args()
 
+    # Prepare log file
+    logfile = args.log
+    log_message(f"Python score pipeline started at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
+    
 
     # Load the data
-    print("Reading input file ...")
     if not os.path.exists(args.input):
         raise FileNotFoundError(f"Input file {args.input} does not exist.")
 
     if args.input.endswith('.h5ad'):
+        log_message("Loading AnnData object ...", logfile)
+
+        t0 = time.time()
         adata = sc.read_h5ad(args.input)
+        log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 2)
     else:
         raise ValueError("Unsupported file format. Please provide a .h5ad or .zarr file.")
 
+    
     # Preprocessing
 
     if args.filter:
-        print("Filtering ...")
-        print("Number of cells and genes before filtering: ", (adata.n_obs, adata.n_vars))
+        log_message("Filtering the ST data ...", logfile)
+        log_message(f"Number of cells before filtering: {adata.n_obs}", logfile, 2)
+        t0 = time.time()
+
         st_small_filtering(adata)
-        print("Number of cells and genes after filtering: ", (adata.n_obs, adata.n_vars))
+
+        log_message(f"Number of cells after filtering: {adata.n_obs}", logfile, 2)
+        log_message(f"ST data filtered in {format_runtime(t0)}", logfile, 2)
 
     if args.normalize:
-        print("Normalization ...")
+        log_message("Normalizing the ST data ...", logfile)
+        t0 = time.time()
         # TODO: add check if counts are already normalized
         # is_integer = np.all(np.mod(dense_layer, 1) == 0)
         normalize(adata)
+        log_message(f"ST data normalized in {format_runtime(t0)}", logfile, 2)
 
     # Calculate spatial scores
+    if args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
 
+        if args.library_key != None and args.library_key not in adata.obs.keys():
+                raise ValueError(f"Library key '{args.library_key}' not found in adata.obs. Please provide a valid library key.")
 
-    print("Computing the spatial neighbors ...")
-    sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
-
-    if args.library_key != None and args.library_key not in adata.obs.keys():
-            raise ValueError(f"Library key '{args.library_key}' not found in adata.obs. Please provide a valid library key.")
-    
-    if args.corr_method not in ['bonferroni', 'sidak', 'holm-sidak', 'holm', 'simes-hochberg', 'hommel', 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky']:
-        raise ValueError(f"Correlation method '{args.corr_method}' not available.")
-    
-    # TODO: Grenze für n_perms
-
-    # check if the cluster key exists in adata.obs if needed
-    if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
-        if args.cluster not in adata.obs.keys() and args.cluster != "leiden":
-            raise ValueError(f"Cluster key '{args.cluster}' not found in adata.obs. Please provide a valid cluster key.")
+        if args.corr_method not in ['bonferroni', 'sidak', 'holm-sidak', 'holm', 'simes-hochberg', 'hommel', 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky']:
+            raise ValueError(f"Correlation method '{args.corr_method}' not available.")
         
-        # Compute Leiden clusters if not already present
-        if args.cluster == "leiden" and "leiden" not in adata.obs.keys():
-            print("Computing Leiden clusters ...")
-            # neighbors, umap, leiden
-            clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
 
-    # Compute centrality scores
-    if args.centrality_scores:
-        print("Computing centrality scores ...")
-        sq.gr.centrality_scores(adata, cluster_key=args.cluster, show_progress_bar=True)
+        log_message("Prepping score calculation ...", logfile)
 
-    # Compute co-occurrence probability
-    if args.co_occurrence:
-        print("Computing co-occurrence probability ...")
-        sq.gr.co_occurrence(adata, cluster_key=args.cluster, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
+        t0 = time.time()
+        sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
+        log_message(f"Spatial neighbors calculated in {format_runtime(t0)}", logfile, 2)
 
-    # Compute neighborhood enrichment
-    if args.nhood_enrichment:
-        print("Computing neighborhood enrichment ...")
-        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
-    
+        # TODO: Grenze für n_perms
 
-    # Compute Moran's I 
-    if args.moranI:
-        print("Computing Moran's I ...")
-        sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+        # check if the cluster key exists in adata.obs if needed
+        if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
+            if args.cluster not in adata.obs.keys() and args.cluster != "leiden":
+                raise ValueError(f"Cluster key '{args.cluster}' not found in adata.obs. Please provide a valid cluster key.")
 
-    # Compute Geary's C
-    if args.gearyC:
-        print("Computing Geary's C ...")
-        sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+            # Compute Leiden clusters if not already present
+            if args.cluster == "leiden" and "leiden" not in adata.obs.keys():
+                t0 = time.time()
+                # neighbors, umap, leiden
+                clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
+                log_message(f"Clusters calculated in {format_runtime(t0)}", logfile, 2)
+
+
+        log_message("Calculating squidpy scores ...", logfile)
+        
+        # Compute centrality scores
+        if args.centrality_scores:
+            t0 = time.time()
+            sq.gr.centrality_scores(adata, cluster_key=args.cluster, show_progress_bar=True)
+            log_message(f"Centrality scores calculated in {format_runtime(t0)}", logfile, 2)
+
+
+        # Compute co-occurrence probability
+        if args.co_occurrence:
+            t0 = time.time()
+            sq.gr.co_occurrence(adata, cluster_key=args.cluster, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
+            log_message(f"Co-occurrence probabilities calculated in {format_runtime(t0)}", logfile, 2)
+
+        # Compute neighborhood enrichment
+        if args.nhood_enrichment:
+            t0 = time.time()
+            sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
+            log_message(f"Neighborhood enrichment calculated in {format_runtime(t0)}", logfile, 2)
+
+
+
+
+        # Compute Moran's I
+        if args.moranI:
+            t0 = time.time()
+            sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+            log_message(f"Moran's I scores calculated in {format_runtime(t0)}", logfile, 2)
+
+        # Compute Geary's C
+        if args.gearyC:
+            t0 = time.time()
+            sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+            log_message(f"Geary's C scores calculated in {format_runtime(t0)}", logfile, 2)
 
 
     #  TODO: tidy up andata --> delete entries, that are not used further
-    
-    if not os.path.exists(args.outdir):
-        os.makedirs(args.outdir, exist_ok=True)
-    
+
     # save AnnData object in file
-    print("Saving AnnData object ...")
-    adata.write(os.path.join(args.outdir, f"{os.path.basename(args.input)}_scores.h5ad"))
+    log_message("Saving calculations ...", logfile)
+
+    t0 = time.time()
+    filename = os.path.basename(args.input).replace(".h5ad", "_scores.h5ad")
+    adata.write(os.path.join(args.outdir, filename))
+    log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 2)
 
     # TODO
     if True: # R scores should be calculated
-        
+        folder_path = os.path.join(args.outdir, "expr_info")
+        t0 = time.time()
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+
         # Write matrix
-        io.mmwrite(os.path.join(args.outdir, "expr.mtx"), adata.X)
+        io.mmwrite(os.path.join(folder_path, "expr.mtx"), adata.X)
         # Save row names (cells)
-        pd.Series(adata.obs_names).to_csv(os.path.join(args.outdir, "cells.txt"), index=False, header=False)
+        pd.Series(adata.obs_names).to_csv(os.path.join(folder_path, "cells.txt"), index=False, header=False)
         # Save var object
-        adata.var.to_csv(os.path.join(args.outdir, "var.tsv"), sep='\t')
+        adata.var.to_csv(os.path.join(folder_path, "var.csv"))
+
+        log_message(f"Expression matrix written in {format_runtime(t0)}", logfile, 2)
+    
+    log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
 
 
 if __name__ == "__main__":
     main()
-    
