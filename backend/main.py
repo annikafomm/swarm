@@ -217,13 +217,13 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
 def health():
     return {"ok": True}
 
-  
+
 # Redirect the root URL to the interactive API docs (Swagger UI).
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/docs")
 
-  
+
 # Small JSON index describing key endpoints (for human orientation).
 @app.get("/api", include_in_schema=False)
 def api_root():
@@ -260,12 +260,19 @@ async def upload(
 
     # JSON string with selected scores (parsed below):
     scores: str = Form(...),
+    useDefaultLiana: Optional[bool] = Form(None),
+    tangramOptions: Optional[str] = Form(None),
+    spongeOptions: Optional[str] = Form(None),
+    squidpyOptions: Optional[str] = Form(None),
+    lianaOptions: Optional[str] = Form(None),
 
     # Files (spatial is required; others are optional):
+    email: EmailStr = Form(...),
     spatialFile: UploadFile = File(...),
     singleCellFile: Optional[UploadFile] = File(None),
     precomputedFile: Optional[UploadFile] = File(None),
-    spongeNetwork: Optional[UploadFile] = File(None),
+    spongeNetworkAnalysis: Optional[UploadFile] = File(None),
+    spongeNetworkInteractions: Optional[UploadFile] = File(None),
     genieFile: Optional[UploadFile] = File(None),
     session_data: "SessionData" = Depends(verifier),
 ):
@@ -278,6 +285,63 @@ async def upload(
     except Exception:
         raise HTTPException(status_code=400, detail="Field 'scores' must be valid JSON.")
 
+    # 1b) Option-JSONs sicher parsen
+    def _parse_json_field(name: str, val: Optional[str]):
+        if val in (None, "", "null"):
+            return None
+        try:
+            return json.loads(val)
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Field '{name}' must be valid JSON.")
+
+    options = {
+        "tangram": _parse_json_field("tangramOptions", tangramOptions),
+        "sponge": _parse_json_field("spongeOptions", spongeOptions),
+        "squidpy": _parse_json_field("squidpyOptions", squidpyOptions),
+        "liana": _parse_json_field("lianaOptions", lianaOptions),
+    }
+    # None-Einträge entfernen
+    options = {k: v for k, v in options.items() if v is not None}
+
+    # --- Validation rules ----------------------------------------------------
+    # Helper: normalize scores to a set of names (list/obj tolerant)
+    def _scores_to_set(obj):
+        try:
+            if isinstance(obj, dict):
+                # allow object like {"LIANA+": true, ...}
+                return {k for k, v in obj.items() if v}
+            if isinstance(obj, list):
+                return set(obj)
+            return set()
+        except Exception:
+            return set()
+
+    scores_set = _scores_to_set(scores_obj)
+
+    sponge_needed = (("SPONGeffects" in scores_set) or ("AUCell" in scores_set) or (method == Method.Sponge)) and (precomputedFile is None)
+    genie_needed = (("VIPER" in scores_set) or ("AUCell" in scores_set) or ("SPONGeffects" in scores_set)) and (precomputedFile is None)
+
+    # spatial always required (already enforced by FastAPI type); double-check for safety
+    if spatialFile is None:
+        raise HTTPException(status_code=400, detail="Spatial file is required.")
+
+    # If tangram true -> singleCell required
+    if tangram and (singleCellFile is None):
+        raise HTTPException(status_code=400, detail="Tangram is enabled: singleCell file is required.")
+
+    # SPONGE pair requirement
+    if sponge_needed:
+        missing = []
+        if spongeNetworkAnalysis is None:
+            missing.append("spongeNetworkAnalysis")
+        if spongeNetworkInteractions is None:
+            missing.append("spongeNetworkInteractions")
+        if missing:
+            raise HTTPException(status_code=400, detail=f"SPONGE requires both files: {', '.join(missing)} missing.")
+
+    # GENIE/VIPER requirement
+    if genie_needed and (genieFile is None):
+        raise HTTPException(status_code=400, detail="VIPER/AUCell/SPONGeffects selected: genieNetwork file is required (unless precomputed is provided).")
     raw_username = session_data.username
     user_safe = _sanitize_filename(raw_username) or "anon"
 
@@ -290,7 +354,8 @@ async def upload(
         "spatialFile": save_file(spatialFile, job_dir),
         "singleCellFile": save_file(singleCellFile, job_dir),
         "precomputedFile": save_file(precomputedFile, job_dir),
-        "spongeNetwork": save_file(spongeNetwork, job_dir),
+        "spongeNetworkAnalysis": save_file(spongeNetworkAnalysis, job_dir),
+        "spongeNetworkInteractions": save_file(spongeNetworkInteractions, job_dir),
         "genieFile": save_file(genieFile, job_dir),
     }
 
@@ -298,6 +363,7 @@ async def upload(
     payload = {
         "ok": True,
         "jobId": job_id,
+        "email": str(email),
         "dataset": dataset.value,
         "method": method.value,
         "normalization": normalization,
@@ -305,6 +371,8 @@ async def upload(
         "filteringSingleCell": filteringSingleCell,
         "tangram": tangram,
         "scores": scores_obj,
+        "useDefaultLiana": useDefaultLiana,
+        "options": options,
         "files": saved_files,
     }
 
@@ -314,7 +382,7 @@ async def upload(
     # 6) Return a clean JSON response the frontend can consume
     return payload
 
-  
+
 @app.post("/create_session/{name}")
 async def create_session(name: str, response: Response):
     """
@@ -328,7 +396,7 @@ async def create_session(name: str, response: Response):
 
     return f"created session for {name}"
 
-  
+
 @app.get("/whoami", dependencies=[Depends(cookie)])
 async def whoami(session_data: SessionData = Depends(verifier)):
     """
@@ -336,7 +404,7 @@ async def whoami(session_data: SessionData = Depends(verifier)):
     """
     return session_data.username
 
-  
+
 @app.post("/delete_session")
 async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     """
@@ -346,7 +414,7 @@ async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     cookie.delete_from_response(response)
     return "deleted session"
 
-  
+
 @app.post("/read_adata")
 async def read_adata(
     adata_path: AnnDataPath, session_id: UUID = Depends(cookie)
@@ -383,7 +451,7 @@ async def read_adata(
     await backend.update(session_id, session_data)
     return {"status": "ok"}
 
-  
+
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
 async def get_obs_column(
     column: str, session_data: SessionData = Depends(verifier)

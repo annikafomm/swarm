@@ -38,10 +38,12 @@ export class FormPageComponent {
   singleCellFile?: File;
   precomputedFile?: File;
   spongeNetworkFile?: File;
+  spongeAnalysisFile?: File;
+  spongeInteractionsFile?: File;
   genieFile?: File;
 
   // This is relevant for the HTML view — which scores should be displayed/available
-  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER', 'AUCell'];
+  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER'];
 
   uploading = false;                  // Upload is running; set to true as soon as submit starts
   uploadProgress: number | null = null; // used for a potential upload progress bar
@@ -56,6 +58,7 @@ export class FormPageComponent {
     this.form = this.fb.group({
       dataset: ['Visium', Validators.required],           // dataset name or identifier
       method: ['Genie3', Validators.required],            // selected method (e.g., spatial)
+      email: ['', [Validators.required, Validators.email]],
       tangram: [false],                             // whether Tangram alignment is activated
 
       normalization: [false],
@@ -68,8 +71,89 @@ export class FormPageComponent {
         'SPONGeffects': [false],
         'squidpy': [false],
         'VIPER': [false],
-        'AUCell': [false],
       }),
+      spongeOptions: this.fb.group({
+        enrichmentMethod: ['GSVA', Validators.required],                 // 'GSVA' | 'ssGSEA' | 'AUCell'
+        mScoreThreshold: [0.1, [Validators.min(0), Validators.max(1)]],  // 0..1 (Default 0.1)
+        pAdj: [0.05, [Validators.min(0), Validators.max(1)]],            // 0..1 (Default 0.05)
+        ensemblIdKey: ['ensembl_id', Validators.required],
+        featureKey: ['feature_type', Validators.required],
+        rnaTypes: ['lncRNA,protein_coding', Validators.required],
+        maxModules: [null, [Validators.min(1)]],
+      }),
+      // Optionen für Squidpy
+      squidpyOptions: this.fb.group({
+      // Methoden: MoransI | gearyC | centrality_score | co_occurrence | neighborhood_enrichment
+      method: ['MoransI', Validators.required],
+
+      // nur relevant wenn MoransI oder gearyC
+      nPermutations: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]],
+      twoTailed: [false],
+      corrMethod: ['fdr_bh', Validators.required],
+
+      clusterKey: ['leiden'],
+
+      coOccurInterval: [50, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Default 50
+      coOccurNSplits: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Optional (None)
+
+      // nur neighborhood_enrichment
+      neighLibraryKey: [null],                                  // Optional (String)
+      neighNPerms: [1000, [Validators.min(1), Validators.max(100000), Validators.pattern(/^\d+$/)]], // Default 1000, max 100000
+      }),
+
+      // LIANA+ Optionen (optional)
+      lianaOptions: this.fb.group({
+      // Name der Spalte mit den celltype compositions
+      ctCompositionKey: ['tangram_ct_pred'],   // optional, Default: 'tangram_ct_pred'
+      }),
+
+      // Tangram Optionen (optional)
+      tangramOptions: this.fb.group({
+      // Name der Spalte mit den cell types
+      cellTypeKey: [null],                     // optional, kein Default (leer lassen = None)
+      }),
+    });
+    // SPONGeffects-Options zunächst deaktivieren
+    this.spongeOptions.disable({ emitEvent: false });
+
+    this.squidpyOptions.disable({ emitEvent: false });
+    this.form.get('scores.squidpy')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.squidpyOptions.enable() : this.squidpyOptions.disable();
+    // LIANA+ Optionen ein/aus je nach Checkbox
+    this.lianaOptions.disable({ emitEvent: false });
+    this.form.get('scores.LIANA+')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.lianaOptions.enable() : this.lianaOptions.disable();
+    });
+
+    // Tangram-Optionen ein/aus je nach Toggle
+    this.tangramOptions.disable({ emitEvent: false });
+    this.form.get('tangram')!.valueChanges.subscribe((isOn: boolean) => {
+      isOn ? this.tangramOptions.enable() : this.tangramOptions.disable();
+    });
+});
+
+// Validatoren für Autokorrelations-Parameter nur bei MoransI/gearyC
+this.squidpyOptions.get('method')!.valueChanges.subscribe((m: string) => {
+  const needAuto = m === 'MoransI' || m === 'gearyC';
+  const nPerm = this.squidpyOptions.get('nPermutations')!;
+  const corr  = this.squidpyOptions.get('corrMethod')!;
+  if (needAuto) {
+    nPerm.setValidators([Validators.min(1), Validators.pattern(/^\d+$/)]);
+    corr.setValidators([Validators.required]);
+  } else {
+    nPerm.clearValidators();
+    corr.clearValidators();
+  }
+  nPerm.updateValueAndValidity({ emitEvent: false });
+  corr.updateValueAndValidity({ emitEvent: false });
+});
+
+
+  // Aktivieren/Deaktivieren abhängig von der Checkbox "SPONGeffects"
+  this.form.get('scores.SPONGeffects')!.valueChanges
+    .subscribe((isOn: boolean) => {
+      const grp = this.form.get('spongeOptions')!;
+      if (isOn) grp.enable(); else grp.disable();
     });
   }
 
@@ -128,6 +212,13 @@ export class FormPageComponent {
         case 'singleCell':
           this.singleCellFile = file;
           break;
+        case 'spongeAnalysis':
+          this.spongeAnalysisFile = file;
+          break;
+        case 'spongeInteractions':
+          this.spongeInteractionsFile = file;
+          break;
+
         case 'sponge':
           this.spongeNetworkFile = file;
           break;
@@ -152,11 +243,11 @@ export class FormPageComponent {
 
   // Whether a SPONGE network file is required
   requiresSponge(): boolean {
-    const s = this.scoreValues; // gets the current value of the scores checkbox group
-    const spongeNeeded = s['SPONGeffects'] || s['AUCell']; // true if one of these two is selected
-    return spongeNeeded && !this.precomputedFile; // but only if no precomputed file was uploaded
+    const s = this.scoreValues;
+    const byScore = s['SPONGeffects'] || s['AUCell'];
+    const byMethod = this.form.value.method === 'Sponge';
+    return (byScore || byMethod) && !this.precomputedFile;
   }
-
   // Same logic for the GENIE/VIPER file
   requiresGenie(): boolean {
     const s = this.scoreValues;
@@ -165,14 +256,33 @@ export class FormPageComponent {
   }
 
 
+
   // Final client-side validation before enabling submit
   canSubmit(): boolean {
     if (!this.spatialFile) return false; // is there a spatial dataset?
     if (this.form.value.tangram && !this.singleCellFile) return false; // if tangram is enabled, a single-cell file must be uploaded
-    if (this.requiresSponge() && !this.spongeNetworkFile) return false; // same as for Tangram
+    if (this.requiresSponge() && (!this.spongeAnalysisFile || !this.spongeInteractionsFile)) return false; // same as for Tangram
     if (this.requiresGenie() && !this.genieFile) return false;          // same logic
     return this.form.valid;
   }
+
+  get spongeOptions(): FormGroup {
+    return this.form.get('spongeOptions') as FormGroup;
+  }
+  get squidpyOptions(): FormGroup {
+    return this.form.get('squidpyOptions') as FormGroup;
+  }
+  get lianaOptions(): FormGroup {
+    return this.form.get('lianaOptions') as FormGroup;
+  }
+  get tangramOptions(): FormGroup {
+    return this.form.get('tangramOptions') as FormGroup;
+  }
+
+  squidpyCorrMethods = [
+    'bonferroni','sidak','holm-sidak','holm','simes-hochberg',
+    'hommel','fdr_bh','fdr_by','fdr_tsbh','fdr_tsbky'
+  ];
 
   shouldOfferGenieUpload(): boolean {
     const s = this.scoreValues;
@@ -182,13 +292,13 @@ export class FormPageComponent {
   onSubmit(): void {
     // 1) Final client-side validation
     if (!this.canSubmit()) {
-      // prevent incomplete data from being sent forward
       return this.fail('Please complete all required fields/files before submitting.');
     }
 
-    // 2) Build FormData only after validation
-    // here the multipart/form-data payload is created
+    // 2) Build FormData
     const fd = new FormData();
+    fd.append('email', this.form.get('email')!.value);
+
     fd.append('dataset', this.form.value.dataset);
     fd.append('method', this.form.value.method);
     fd.append('tangram', String(!!this.form.value.tangram));
@@ -197,72 +307,74 @@ export class FormPageComponent {
     fd.append('filteringSpatial', String(!!this.form.value.filteringSpatial));
     fd.append('filteringSingleCell', String(!!this.form.value.filteringSingleCell));
 
-    // Append scores as JSON array of selected names
+    // Scores als JSON-Array
     fd.append('scores', JSON.stringify(this.selectedScores));
 
-    // Required file
+    // Pflichtdatei
     fd.append('spatialFile', this.spatialFile);
 
-    // Optional files depending on toggles/selection
-    if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
-    if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
-    if (this.spongeNetworkFile) fd.append('spongeNetwork', this.spongeNetworkFile);
+    // Optionale Dateien – konsistente Keys
+    if (this.singleCellFile)         fd.append('singleCellFile', this.singleCellFile);
+    if (this.precomputedFile)        fd.append('precomputedFile', this.precomputedFile);
+    if (this.spongeAnalysisFile)     fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
+    if (this.spongeInteractionsFile) fd.append('spongeNetworkInteractions', this.spongeInteractionsFile);
+    if (this.genieFile)              fd.append('genieFile', this.genieFile);
 
+    // Scores-Map nur EIN mal lesen
+    const s = this.scoreValues;
 
-
-    if (this.genieFile) {
-      fd.append('genieNetwork', this.genieFile);
+    // Nur wenn LIANA+ aktiv ist, Default-Flag mitschicken
+    if (s['LIANA+']) {
+      fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
     }
 
-    const s = this.scoreValues;
-  if (s['LIANA+']) {
-    // Wenn keine Datei hochgeladen wurde, soll Backend Default nehmen
-    fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
-  }
+    // ---- Options-Gruppen anhängen ----
+    // getRawValue() greift auch bei (noch) disabled Controls; Fallback auf .value
+    const raw = (grp: any) =>
+      (grp && typeof grp.getRawValue === 'function') ? grp.getRawValue() : (grp?.value ?? {});
 
-
+    if (this.form.value.tangram) {
+      fd.append('tangramOptions', JSON.stringify(raw(this.tangramOptions)));
+    }
+    if (s['SPONGeffects']) {
+      fd.append('spongeOptions', JSON.stringify(raw(this.spongeOptions)));
+    }
+    if (s['squidpy']) {
+      fd.append('squidpyOptions', JSON.stringify(raw(this.squidpyOptions)));
+    }
+    if (s['LIANA+']) {
+      fd.append('lianaOptions', JSON.stringify(raw(this.lianaOptions)));
+    }
+    // ---- Ende Optionen ----
 
     // 3) Send the request
     this.uploading = true;
     this.uploadProgress = 0;
 
-    this.http
-      .post(`${environment.apiBaseUrl}/api/upload`, fd, {
-        reportProgress: true, // so we can show upload progress later
-        observe: 'events',
-      })
-      .subscribe({
-        next: (event) => {
-          // Update the progress bar (if any)
-          if (event.type === HttpEventType.UploadProgress) {
-            const total = (event.total ?? 0) || 0;
-            // Guard against division by zero
-            this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
-          }
-
-          // When the response arrives
-          if (event.type === HttpEventType.Response) {
-            this.uploading = false;
-            this.uploadProgress = null;
-
-            // Navigate to the results page with the returned jobId
-            // (expects the backend to respond with { jobId: string })
-            const jobId = (event.body as any)?.jobId;
-            if (!jobId) {
-              return this.fail('Upload succeeded, but no jobId was returned by the server.');
-            }
-            this.router.navigate(['/hexagon-plot'], {
-              queryParams: { jobId }
-            });
-          }
-        },
-        error: (err) => {
+    this.http.post(`${environment.apiBaseUrl}/api/upload`, fd, {
+      reportProgress: true,
+      observe: 'events',
+    })
+    .subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const total = (event.total ?? 0) || 0;
+          this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
+        }
+        if (event.type === HttpEventType.Response) {
           this.uploading = false;
           this.uploadProgress = null;
-          // Übergib das ganze err.error – normalizeError macht den Rest
-          this.fail(err?.error ?? err ?? 'Upload failed.');
-        },
-      });
+          const jobId = (event.body as any)?.jobId;
+          if (!jobId) return this.fail('Upload succeeded, but no jobId was returned by the server.');
+          this.router.navigate(['/hexagon-plot'], { queryParams: { jobId } });
+        }
+      },
+      error: (err) => {
+        this.uploading = false;
+        this.uploadProgress = null;
+        this.fail(err?.error ?? err ?? 'Upload failed.');
+      },
+    });
   }
 
   private normalizeError(e: any): string {
@@ -299,6 +411,8 @@ export class FormPageComponent {
     this.precomputedFile = undefined;
     this.genieFile = undefined;
     this.spongeNetworkFile = undefined;
+    this.spongeAnalysisFile = undefined;
+    this.spongeInteractionsFile = undefined;
 
     this.uploading = false;
     this.uploadProgress = 0;
