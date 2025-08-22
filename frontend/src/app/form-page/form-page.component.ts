@@ -43,7 +43,7 @@ export class FormPageComponent {
   genieFile?: File;
 
   // This is relevant for the HTML view — which scores should be displayed/available
-  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER', 'AUCell'];
+  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER'];
 
   uploading = false;                  // Upload is running; set to true as soon as submit starts
   uploadProgress: number | null = null; // used for a potential upload progress bar
@@ -58,6 +58,7 @@ export class FormPageComponent {
     this.form = this.fb.group({
       dataset: ['Visium', Validators.required],           // dataset name or identifier
       method: ['Genie3', Validators.required],            // selected method (e.g., spatial)
+      email: ['', [Validators.required, Validators.email]],
       tangram: [false],                             // whether Tangram alignment is activated
 
       normalization: [false],
@@ -70,7 +71,6 @@ export class FormPageComponent {
         'SPONGeffects': [false],
         'squidpy': [false],
         'VIPER': [false],
-        'AUCell': [false],
       }),
       spongeOptions: this.fb.group({
         enrichmentMethod: ['GSVA', Validators.required],                 // 'GSVA' | 'ssGSEA' | 'AUCell'
@@ -292,13 +292,13 @@ this.squidpyOptions.get('method')!.valueChanges.subscribe((m: string) => {
   onSubmit(): void {
     // 1) Final client-side validation
     if (!this.canSubmit()) {
-      // prevent incomplete data from being sent forward
       return this.fail('Please complete all required fields/files before submitting.');
     }
 
-    // 2) Build FormData only after validation
-    // here the multipart/form-data payload is created
+    // 2) Build FormData
     const fd = new FormData();
+    fd.append('email', this.form.get('email')!.value);
+
     fd.append('dataset', this.form.value.dataset);
     fd.append('method', this.form.value.method);
     fd.append('tangram', String(!!this.form.value.tangram));
@@ -307,73 +307,74 @@ this.squidpyOptions.get('method')!.valueChanges.subscribe((m: string) => {
     fd.append('filteringSpatial', String(!!this.form.value.filteringSpatial));
     fd.append('filteringSingleCell', String(!!this.form.value.filteringSingleCell));
 
-    // Append scores as JSON array of selected names
+    // Scores als JSON-Array
     fd.append('scores', JSON.stringify(this.selectedScores));
 
-    // Required file
+    // Pflichtdatei
     fd.append('spatialFile', this.spatialFile);
 
-    // Optional files depending on toggles/selection
-    if (this.singleCellFile) fd.append('singleCell', this.singleCellFile);
-    if (this.precomputedFile) fd.append('precomputed', this.precomputedFile);
-    if (this.spongeAnalysisFile) fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
+    // Optionale Dateien – konsistente Keys
+    if (this.singleCellFile)         fd.append('singleCellFile', this.singleCellFile);
+    if (this.precomputedFile)        fd.append('precomputedFile', this.precomputedFile);
+    if (this.spongeAnalysisFile)     fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
     if (this.spongeInteractionsFile) fd.append('spongeNetworkInteractions', this.spongeInteractionsFile);
+    if (this.genieFile)              fd.append('genieFile', this.genieFile);
 
+    // Scores-Map nur EIN mal lesen
+    const s = this.scoreValues;
 
-
-    if (this.genieFile) {
-      fd.append('genieNetwork', this.genieFile);
+    // Nur wenn LIANA+ aktiv ist, Default-Flag mitschicken
+    if (s['LIANA+']) {
+      fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
     }
 
-    const s = this.scoreValues;
-  if (s['LIANA+']) {
-    // Wenn keine Datei hochgeladen wurde, soll Backend Default nehmen
-    fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
-  }
+    // ---- Options-Gruppen anhängen ----
+    // getRawValue() greift auch bei (noch) disabled Controls; Fallback auf .value
+    const raw = (grp: any) =>
+      (grp && typeof grp.getRawValue === 'function') ? grp.getRawValue() : (grp?.value ?? {});
 
-
+    if (this.form.value.tangram) {
+      fd.append('tangramOptions', JSON.stringify(raw(this.tangramOptions)));
+    }
+    if (s['SPONGeffects']) {
+      fd.append('spongeOptions', JSON.stringify(raw(this.spongeOptions)));
+    }
+    if (s['squidpy']) {
+      fd.append('squidpyOptions', JSON.stringify(raw(this.squidpyOptions)));
+    }
+    if (s['LIANA+']) {
+      fd.append('lianaOptions', JSON.stringify(raw(this.lianaOptions)));
+    }
+    // ---- Ende Optionen ----
 
     // 3) Send the request
     this.uploading = true;
     this.uploadProgress = 0;
 
-    this.http
-      .post(`${environment.apiBaseUrl}/api/upload`, fd, {
-        reportProgress: true, // so we can show upload progress later
-        observe: 'events',
-      })
-      .subscribe({
-        next: (event) => {
-          // Update the progress bar (if any)
-          if (event.type === HttpEventType.UploadProgress) {
-            const total = (event.total ?? 0) || 0;
-            // Guard against division by zero
-            this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
-          }
-
-          // When the response arrives
-          if (event.type === HttpEventType.Response) {
-            this.uploading = false;
-            this.uploadProgress = null;
-
-            // Navigate to the results page with the returned jobId
-            // (expects the backend to respond with { jobId: string })
-            const jobId = (event.body as any)?.jobId;
-            if (!jobId) {
-              return this.fail('Upload succeeded, but no jobId was returned by the server.');
-            }
-            this.router.navigate(['/hexagon-plot'], {
-              queryParams: { jobId }
-            });
-          }
-        },
-        error: (err) => {
+    this.http.post(`${environment.apiBaseUrl}/api/upload`, fd, {
+      reportProgress: true,
+      observe: 'events',
+    })
+    .subscribe({
+      next: (event) => {
+        if (event.type === HttpEventType.UploadProgress) {
+          const total = (event.total ?? 0) || 0;
+          this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
+        }
+        if (event.type === HttpEventType.Response) {
           this.uploading = false;
           this.uploadProgress = null;
-          // Übergib das ganze err.error – normalizeError macht den Rest
-          this.fail(err?.error ?? err ?? 'Upload failed.');
-        },
-      });
+          const jobId = (event.body as any)?.jobId;
+          if (!jobId) return this.fail('Upload succeeded, but no jobId was returned by the server.');
+          this.router.navigate(['/hexagon-plot'], { queryParams: { jobId } });
+        }
+      },
+      error: (err) => {
+        this.uploading = false;
+        this.uploadProgress = null;
+        this.fail(err?.error ?? err ?? 'Upload failed.');
+      },
+    });
   }
 
   private normalizeError(e: any): string {
