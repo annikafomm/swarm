@@ -527,10 +527,10 @@ async def get_X_by_gene(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860`
     """
     expressions = session_data.adata[:, gene].X.toarray().flatten().tolist()
-    gene_names = session_data.adata.var.index
+    barcodes = session_data.adata.obs.index
     return {
-        gene_name: expression
-        for gene_name, expression in zip(gene_names, expressions)
+        barcode: expression
+        for barcode, expression in zip(barcodes, expressions)
     }
 
 
