@@ -33,6 +33,30 @@ export class AppComponent implements OnInit {
         next: (res) => console.log('[Backend] Loaded adata', res),
         error: (err) => console.error('[Backend] Failed to load adata', err),
       });
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.post(`${this.sessionService.apiUrl}/read_network_genie`,
+          { path: '../backend/data/genie_network_filt.csv' },
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => console.log('[Backend] Loaded network_genie', res),
+        error: (err) => console.error('[Backend] Failed to load network_genie', err),
+      });
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.post(`${this.sessionService.apiUrl}/read_network_sponge`,
+          { path: '../backend/data/sponge_network_filt.csv' },
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => console.log('[Backend] Loaded network_sponge', res),
+        error: (err) => console.error('[Backend] Failed to load network_sponge', err),
+      });
   }
 
   title = 'frontend';
