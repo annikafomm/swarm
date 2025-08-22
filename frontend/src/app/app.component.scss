@@ -8,8 +8,7 @@
 .main {
   display: flex;
   justify-content: center;
-  align-items: center;
-  min-height: calc(100vh - 60px);
+  padding: 1rem;
 }
 
 .content {
@@ -20,8 +19,12 @@
   height: 100%;
 }
 
+.spacer {
+  flex: 1;
+}
+
 .top-bar {
-  width: 100%;
+  width: 98%;
   background: linear-gradient(90deg, #e0e7ef 0%, #c9d6ff 100%);
   color: #23272f;
   display: flex;
@@ -32,6 +35,12 @@
   z-index: 2000;
   gap: 2rem;
   box-sizing: border-box;
+}
+
+.nav-buttons {
+  display: flex;
+  flex: 1;              /* nimmt den restlichen Platz nach dem Titel */
+  align-items: center;
 }
 
 .app-title {
