@@ -7,12 +7,28 @@
             <div class="th-top">
               Index
               <span class="sort-icons">
-                <button class="btn-ghost icon" (click)="setSort('index', true)"  aria-label="aufsteigend sortieren">▲</button>
-                <button class="btn-ghost icon" (click)="setSort('index', false)" aria-label="absteigend sortieren">▼</button>
+                <button
+                  class="btn-ghost icon"
+                  (click)="setSort('index', true)"
+                  aria-label="aufsteigend sortieren"
+                >
+                  ▲
+                </button>
+                <button
+                  class="btn-ghost icon"
+                  (click)="setSort('index', false)"
+                  aria-label="absteigend sortieren"
+                >
+                  ▼
+                </button>
               </span>
             </div>
             <div class="th-filter">
-              <input class="input" [(ngModel)]="filters['index']" placeholder="Type to filter..." />
+              <input
+                class="input"
+                [(ngModel)]="filters['index']"
+                placeholder="Type to filter..."
+              />
             </div>
           </th>
 
@@ -20,16 +36,26 @@
             <div class="th-top">
               {{ displayColumnName(col) }}
               <span class="sort-icons">
-                <button class="btn-ghost icon" (click)="setSort(col, true)">▲</button>
-                <button class="btn-ghost icon" (click)="setSort(col, false)">▼</button>
+                <button class="btn-ghost icon" (click)="setSort(col, true)">
+                  ▲
+                </button>
+                <button class="btn-ghost icon" (click)="setSort(col, false)">
+                  ▼
+                </button>
               </span>
             </div>
 
-            <div class="th-filter" *ngIf="rows.length && typeof rows[0][col] === 'string'">
-              <input class="input" [(ngModel)]="filters[col]" placeholder="Type to filter..." />
+            <div
+              class="th-filter"
+              *ngIf="rows.length && typeof rows[0][col] === 'string'"
+            >
+              <input
+                class="input"
+                [(ngModel)]="filters[col]"
+                placeholder="Type to filter..."
+              />
             </div>
           </th>
-
           <th *ngFor="let action of actionColumns" class="action-col">
             {{ displayColumnName(action) }}
           </th>
@@ -37,16 +63,35 @@
       </thead>
 
       <tbody>
-        <tr *ngFor="let row of filteredRows">
+        <tr *ngFor="let row of pagedRows">
           <td class="index-col">{{ row.index }}</td>
           <td *ngFor="let col of columns" class="other-col">
             {{ displayNumeric(row[col]) }}
           </td>
           <td *ngFor="let action of actionColumns" class="action-col">
-            <button class="btn btn-pill" (click)="fetchAndUpdate(action, row.index)">Show</button>
+            <button
+              class="btn btn-pill"
+              (click)="fetchAndUpdate(action, row.index)"
+            >
+              Show
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
+  </div>
+  <br />
+  <!-- Pagination controls -->
+  <div class="pagination">
+    <button (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1">
+      Prev
+    </button>
+    <span>Page {{ currentPage }} of {{ totalPages }}</span>
+    <button
+      (click)="setPage(currentPage + 1)"
+      [disabled]="currentPage === totalPages"
+    >
+      Next
+    </button>
   </div>
 </div>

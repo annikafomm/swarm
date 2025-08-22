@@ -35,6 +35,10 @@ export class FilterableTableComponent implements OnInit {
   sortColumn: string | null = null;
   sortAsc: boolean = true;
 
+  // Pagination
+  pageSize = 50; // number of rows per page
+  currentPage = 1;
+
   ngOnInit() {
     this.prepareTable();
   }
@@ -105,6 +109,22 @@ export class FilterableTableComponent implements OnInit {
     }
 
     return result;
+  }
+
+  // Return only rows for current page
+  get pagedRows() {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredRows.slice(start, start + this.pageSize);
+  }
+
+  get totalPages() {
+    return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
+  }
+
+  setPage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
   }
 
   toggleSort(col: string) {
