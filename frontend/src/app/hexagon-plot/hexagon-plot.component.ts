@@ -1412,156 +1412,6 @@ export class HexagonPlotComponent implements OnInit {
       });
   }
 
-  //private renderLegend(): void {
-  //  // Remove any existing legend
-  //  this.svg.selectAll('.svg-legend').remove();
-  //
-  //  if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-  //    // Continuous legend for centrality properties
-  //    const legendX = 20;
-  //    const legendY = 20;
-  //    const width = 250;
-  //    const height = 30;
-  //
-  //    const values = this.features.map(
-  //      (f) => f.properties.leiden_centrality[this.colorByProperty],
-  //    );
-  //    const min = Math.min(...values);
-  //    const max = Math.max(...values);
-  //
-  //    // Create gradient for continuous legend
-  //    const defs = this.svg.select('defs').empty()
-  //      ? this.svg.append('defs')
-  //      : this.svg.select('defs');
-  //
-  //    // Remove existing gradient
-  //    defs.select('#svg-legend-gradient').remove();
-  //
-  //    const gradient = defs
-  //      .append('linearGradient')
-  //      .attr('id', 'svg-legend-gradient')
-  //      .attr('x1', '0%')
-  //      .attr('x2', '100%')
-  //      .attr('y1', '0%')
-  //      .attr('y2', '0%');
-  //
-  //    // Create gradient stops based on the color scale
-  //    const numStops = 10;
-  //    for (let i = 0; i <= numStops; i++) {
-  //      const t = i / numStops;
-  //      const value = min + t * (max - min);
-  //      gradient
-  //        .append('stop')
-  //        .attr('offset', `${t * 100}%`)
-  //        .attr('stop-color', this.continuousColorScale(value));
-  //    }
-  //
-  //    const legendG = this.svg
-  //      .append('g')
-  //      .attr('class', 'svg-legend')
-  //      .attr('transform', `translate(${legendX},${legendY})`);
-  //
-  //    // Add background for better visibility
-  //    legendG
-  //      .append('rect')
-  //      .attr('x', -10)
-  //      .attr('y', -25)
-  //      .attr('width', width + 30)
-  //      .attr('height', height + 60)
-  //      .style('fill', 'rgba(255, 255, 255, 0.9)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 5);
-  //
-  //    // Add the gradient rectangle
-  //    legendG
-  //      .append('rect')
-  //      .attr('width', width)
-  //      .attr('height', height)
-  //      .style('fill', 'url(#svg-legend-gradient)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 3);
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', 0)
-  //      .attr('y', height + 16)
-  //      .attr('text-anchor', 'start')
-  //      .style('font-size', '20px')
-  //      .style('fill', '#333')
-  //      .text(min !== undefined ? min.toFixed(2) : '');
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', width)
-  //      .attr('y', height + 16)
-  //      .attr('text-anchor', 'end')
-  //      .style('font-size', '20px')
-  //      .style('fill', '#333')
-  //      .text(max !== undefined ? max.toFixed(2) : '');
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', width / 2)
-  //      .attr('y', -10)
-  //      .attr('text-anchor', 'middle')
-  //      .style('font-size', '20px')
-  //      .style('font-weight', 'bold')
-  //      .style('fill', '#333')
-  //      .text(this.colorByProperty.replace(/_/g, ' '));
-  //  } else {
-  //    const cellTypes = this.colorScale.domain().sort();
-  //    const legendX = 20;
-  //    const legendY = 6;
-  //    const itemHeight = 30;
-  //    const itemWidth = 200;
-  //
-  //    const legendG = this.svg
-  //      .append('g')
-  //      .attr('class', 'svg-legend')
-  //      .attr('transform', `translate(${legendX},${legendY})`);
-  //
-  //    // Add background for categorical legend
-  //    const backgroundHeight = cellTypes.length * itemHeight + 20;
-  //    legendG
-  //      .append('rect')
-  //      .attr('x', -10)
-  //      .attr('y', -10)
-  //      .attr('width', itemWidth + 20)
-  //      .attr('height', backgroundHeight)
-  //      .style('fill', 'rgba(255, 255, 255, 0.9)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 5);
-  //
-  //    cellTypes.forEach((cellType, i) => {
-  //      const legendItem = legendG
-  //        .append('g')
-  //        .attr('transform', `translate(0, ${i * itemHeight})`);
-  //
-  //      // Color rectangle
-  //      legendItem
-  //        .append('rect')
-  //        .attr('width', 30)
-  //        .attr('height', 20)
-  //        .style('fill', this.colorScale(cellType))
-  //        .style('stroke', '#333')
-  //        .style('stroke-width', 0.5)
-  //        .attr('rx', 2);
-  //
-  //      // Label
-  //      legendItem
-  //        .append('text')
-  //        .attr('x', 40)
-  //        .attr('y', 12)
-  //        .style('font-size', '16px')
-  //        .style('fill', '#333')
-  //        .text(cellType);
-  //    });
-  //  }
-  //}
-
   public onRegulatoryScoreChange(): void {
 
     if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3 && this.selectedGeneSetSponge) {
@@ -1578,10 +1428,12 @@ export class HexagonPlotComponent implements OnInit {
     if (this.currentLegendType === 'continuous') {
       // Continuous legend
       const [min, max] = this.currentLegendDomain as number[];
-      const legendX = 20;
-      const legendY = 20;
+      const legendX = -100;
+      const legendY = 50;
       const width = 250;
       const height = 30;
+      const fontSize = 24;
+      const padding = 15;
 
       // Create gradient for continuous legend
       const defs = this.svg.select('defs').empty()
@@ -1613,13 +1465,44 @@ export class HexagonPlotComponent implements OnInit {
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
+      // Measure title text width for dynamic background
+      const titleText = this.colorByProperty.replace(/_/g, ' ');
+      const tempSvg = this.svg.append('g').style('opacity', 0);
+      const titleWidth = tempSvg.append('text')
+        .text(titleText)
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .node()?.getBBox().width || 0;
+
+      // Measure min value
+      const minText = min.toFixed(2);
+      const minWidth = tempSvg.append('text')
+        .text(minText)
+        .style('font-size', `${fontSize}px`)
+        .node()?.getBBox().width || 0;
+
+      // Measure max value
+      const maxText = max.toFixed(2);
+      const maxWidth = tempSvg.append('text')
+        .text(maxText)
+        .style('font-size', `${fontSize}px`)
+        .node()?.getBBox().width || 0;
+
+      tempSvg.remove();
+
+      // Calculate required dimensions
+      const textHeight = fontSize * 1.2; // Approximate text height
+      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+      const bgWidth = requiredWidth + padding * 2;
+      const bgHeight = height + textHeight * 2 + padding * 3;
+
       // Background
       legendG
         .append('rect')
-        .attr('x', -10)
-        .attr('y', -25)
-        .attr('width', width + 30)
-        .attr('height', height + 60)
+        .attr('x', -padding)
+        .attr('y', -padding - textHeight)
+        .attr('width', bgWidth)
+        .attr('height', bgHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
         .style('stroke', '#ccc')
         .style('stroke-width', 1)
@@ -1628,6 +1511,8 @@ export class HexagonPlotComponent implements OnInit {
       // Gradient rectangle
       legendG
         .append('rect')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', 0)
         .attr('width', width)
         .attr('height', height)
         .style('fill', 'url(#svg-legend-gradient)')
@@ -1635,41 +1520,59 @@ export class HexagonPlotComponent implements OnInit {
         .style('stroke-width', 1)
         .attr('rx', 3);
 
-      // Min / Max labels
+      // Min label
       legendG
         .append('text')
-        .attr('x', 0)
-        .attr('y', height + 16)
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', height + textHeight)
         .attr('text-anchor', 'start')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('fill', '#333')
-        .text(min.toFixed(2));
+        .text(minText);
 
+      // Max label
       legendG
         .append('text')
-        .attr('x', width)
-        .attr('y', height + 16)
+        .attr('x', (bgWidth - width) / 2 - padding + width)
+        .attr('y', height + textHeight)
         .attr('text-anchor', 'end')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('fill', '#333')
-        .text(max.toFixed(2));
+        .text(maxText);
 
+      // Title
       legendG
         .append('text')
-        .attr('x', width / 2)
-        .attr('y', -10)
+        .attr('x', bgWidth / 2 - padding)
+        .attr('y', -5)
         .attr('text-anchor', 'middle')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('font-weight', 'bold')
         .style('fill', '#333')
-        .text(this.colorByProperty.replace(/_/g, ' '));
+        .text(titleText);
     } else {
       // Categorical legend
       const categories = this.currentLegendDomain as string[];
-      const legendX = 20;
-      const legendY = 6;
-      const itemHeight = 30;
-      const itemWidth = 200;
+      const legendX = -100;
+      const legendY = 10;
+      const itemHeight = 40;
+      const rectHeight = 20;
+      const rectWidth = 30;
+      const fontSize = 24;
+
+      // Create temporary text elements to measure actual width
+      const tempSvg = this.svg.append('g').style('opacity', 0);
+      const textNodes = tempSvg.selectAll('text')
+        .data(categories)
+        .enter()
+        .append('text')
+        .text(d => d)
+        .style('font-size', `${fontSize}px`);
+
+      const maxTextWidth = Math.max(...textNodes.nodes().map(node => (node as SVGGraphicsElement).getBBox().width));
+      tempSvg.remove();
+
+      const itemWidth = Math.max(200, maxTextWidth + 60); // Minimum 200px, but expand if needed
 
       const legendG = this.svg
         .append('g')
@@ -1689,25 +1592,37 @@ export class HexagonPlotComponent implements OnInit {
         .attr('rx', 5);
 
       categories.forEach((cat, i) => {
+        const yPosition = i * itemHeight;
         const legendItem = legendG
           .append('g')
-          .attr('transform', `translate(0, ${i * itemHeight})`);
+          .attr('transform', `translate(0, ${yPosition})`);
 
+        // Color rectangle - centered vertically within the item height
+        const rectY = (itemHeight - rectHeight) / 2;
         legendItem
           .append('rect')
-          .attr('width', 30)
-          .attr('height', 20)
+          .attr('y', rectY)
+          .attr('width', rectWidth)
+          .attr('height', rectHeight)
           .style('fill', this.colorScale(cat))
           .style('stroke', '#333')
           .style('stroke-width', 0.5)
           .attr('rx', 2);
 
+        // Text - aligned with the center of the rectangle
+        const textY = rectY + rectHeight / 2; // Center of rectangle
         legendItem
           .append('text')
-          .attr('x', 40)
-          .attr('y', 12)
-          .style('font-size', '16px')
+          .attr('x', rectWidth + 10) // 10px spacing from rectangle
+          .attr('y', textY)
+          .attr('dy', '0.35em') // Perfect vertical centering for text
+          .style('font-size', `${fontSize}px`)
           .style('fill', '#333')
+          .text(cat);
+
+        // Add tooltip for full text
+        legendItem
+          .append('title')
           .text(cat);
       });
     }
