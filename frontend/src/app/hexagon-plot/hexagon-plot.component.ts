@@ -1562,9 +1562,20 @@ export class HexagonPlotComponent implements OnInit {
       const rectHeight = 20;
       const rectWidth = 30;
       const fontSize = 24;
+      const titlePadding = 15;
 
       // Create temporary text elements to measure actual width
       const tempSvg = this.svg.append('g').style('opacity', 0);
+
+      // Measure title text
+      const titleText = this.colorByProperty.replace(/_/g, ' ');
+      const titleWidth = tempSvg.append('text')
+        .text(titleText)
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .node()?.getBBox().width || 0;
+
+      // Measure category text widths
       const textNodes = tempSvg.selectAll('text')
         .data(categories)
         .enter()
@@ -1575,27 +1586,44 @@ export class HexagonPlotComponent implements OnInit {
       const maxTextWidth = Math.max(...textNodes.nodes().map(node => (node as SVGGraphicsElement).getBBox().width));
       tempSvg.remove();
 
-      const itemWidth = Math.max(200, maxTextWidth + 60); // Minimum 200px, but expand if needed
+      const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
 
       const legendG = this.svg
         .append('g')
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      const backgroundHeight = categories.length * itemHeight + 20;
+      // Calculate title height and total background height
+      const titleHeight = fontSize + titlePadding;
+      const backgroundHeight = categories.length * itemHeight + 20 + titleHeight;
+      const backgroundWidth = itemWidth + 20;
+
+      // Background - positioned to include title space
       legendG
         .append('rect')
         .attr('x', -10)
         .attr('y', -10)
-        .attr('width', itemWidth + 20)
+        .attr('width', backgroundWidth)
         .attr('height', backgroundHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
         .style('stroke', '#ccc')
         .style('stroke-width', 1)
         .attr('rx', 5);
 
+      // Add title
+      legendG
+        .append('text')
+        .attr('x', backgroundWidth / 2 - 10)
+        .attr('y', titlePadding + fontSize / 2)
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(titleText);
+
       categories.forEach((cat, i) => {
-        const yPosition = i * itemHeight;
+        const yPosition = i * itemHeight + titleHeight;
         const legendItem = legendG
           .append('g')
           .attr('transform', `translate(0, ${yPosition})`);
@@ -1613,12 +1641,12 @@ export class HexagonPlotComponent implements OnInit {
           .attr('rx', 2);
 
         // Text - aligned with the center of the rectangle
-        const textY = rectY + rectHeight / 2; // Center of rectangle
+        const textY = rectY + rectHeight / 2;
         legendItem
           .append('text')
-          .attr('x', rectWidth + 10) // 10px spacing from rectangle
+          .attr('x', rectWidth + 10)
           .attr('y', textY)
-          .attr('dy', '0.35em') // Perfect vertical centering for text
+          .attr('dy', '0.35em')
           .style('font-size', `${fontSize}px`)
           .style('fill', '#333')
           .text(cat);
