@@ -366,10 +366,7 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public updateHexColors(): void {
-
     this.resetClusterExtension();
-
-
 
     if (this.selectedCell && this.selectedCluster) {
       this.selectedCluster = null;
@@ -394,12 +391,19 @@ export class HexagonPlotComponent implements OnInit {
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
 
+    // Check if all values are integers (for categorical treatment)
+    const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
+
+    // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
+    const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
+    const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
+
     const sel = this.g
       .selectAll<SVGPathElement, CellFeature>('path')
       .data(this.features);
 
-    if (allNumbers && numericValues.length > 0) {
-      // continuous scale
+    if (allNumbers && !shouldTreatAsCategorical && numericValues.length > 0) {
+      // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
       if (min === max) {
@@ -422,7 +426,7 @@ export class HexagonPlotComponent implements OnInit {
           return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
         });
     } else {
-      // categorical scale
+      // categorical scale - for non-numeric, integers with few unique values, or mixed data
       const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
       this.colorScale.domain(domain);
       this.currentLegendDomain = domain;
@@ -439,7 +443,6 @@ export class HexagonPlotComponent implements OnInit {
           return this.colorScale(String(raw));
         });
     }
-
 
     this.renderLegend();
   }
