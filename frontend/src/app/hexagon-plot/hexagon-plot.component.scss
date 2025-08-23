@@ -2,7 +2,7 @@
   background-color: #fff;
   font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
-  min-height: 100vh;
+  min-height: calc(100vh - 70px);
 }
 
 label {
@@ -129,17 +129,18 @@ select {
 
 @media (max-width: 900px) {
   .hexagon-plot {
+    position: relative;
     padding: 1rem;
     margin-right: 0;
   }
 }
 
 .sidenav {
-  position: fixed;
+  position: absolute;
   top: 70px;
   right: 0;
   width: 400px;
-  height: calc(100vh - 70px);
+  height: calc(100vh - 25px);
   background: white;
   box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
   z-index: 1000;
@@ -149,11 +150,11 @@ select {
 }
 
 .cluster-sidenav {
-  position: fixed;
+  position: absolute;
   top: 70px;
   right: -400px;
   width: 400px;
-  height: calc(100vh - 70px);
+  height: calc(100vh - 25px);
   background: white;
   box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
   transition: right 0.3s ease;

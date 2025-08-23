@@ -1,5 +1,5 @@
 <div class="hexagon-plot">
-  <div id="main-visualization" [class.with-sidenav]="selectedCell">
+  <div id="main-visualization" [class.with-sidenav]="selectedCell || selectedCluster !==null">
     <div style="display: flex; align-items: flex-start">
       <div id="hexbin"></div>
       <div id="legend" style="margin-left: 2rem"></div>
