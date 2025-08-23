@@ -1,14 +1,17 @@
 import {
   Component,
   OnInit,
-  ɵisComponentDefPendingResolution,
+  Input,
+  Output,
+  EventEmitter
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
+import { HttpClient } from '@angular/common/http';
+import { SessionService } from '../session.service';
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -17,11 +20,21 @@ import { FilterableTableComponent } from '../filterable-table/filterable-table.c
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
 })
+
+
+
 export class HexagonPlotComponent implements OnInit {
+
+  constructor(
+    private http: HttpClient,
+    private sessionService: SessionService,
+  ) { }
+
   // Define to use Math functions in the html template
   public Math = Math;
+
   // GeoJson
-  public dataPath = 'assets/hexagons_GSM6592049_M2.geojson';
+  public dataPath = 'assets/hexagons.geojson';
   public dataSetTitle =
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
@@ -34,8 +47,12 @@ export class HexagonPlotComponent implements OnInit {
   public colorByProperty = 'cell_type';
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
-  public selectedCellAssociatedGeneSetsGenie3: string[] = [];
-  public selectedCellAssociatedGeneSetsSponge: string[] = [];
+  public selectedRegulatoryScore: string | null = null;
+  public selectedCellRegulatoryScores: { [key: string]: number } | null = null;
+  private previousGeneSetGenie3: string | null = null;
+  private previousGeneSetSponge: string | null = null;
+
+
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
   public meta: { [key: string]: any } = {};
@@ -51,15 +68,22 @@ export class HexagonPlotComponent implements OnInit {
     average_clustering: number;
     closeness_centrality: number;
   } = {
-    degree_centrality: 0,
-    average_clustering: 0,
-    closeness_centrality: 0,
-  };
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
 
-  public genie3Network: regGraphConnection[] = [];
-  public spongeNetwork: regGraphConnection[] = [];
+  public genie3Network: genie3RegGraphConnection[] = [];
+  public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
+
+  public minGenie3Edges: number = 25;
+  public minSpongeEdges: number = 25;
+  public genie3WeightCutoff: number | null = null;
+  public spongePValueCutoff: number | null = null;
+  public isLoadingSponge: boolean = false;
+  public isLoadingGenie3: boolean = false;
 
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
@@ -100,7 +124,6 @@ export class HexagonPlotComponent implements OnInit {
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
-  constructor() {}
   ngOnInit(): void {
     this.createHexagonPlot();
     this.loadAndRenderData(this.dataPath);
@@ -148,11 +171,24 @@ export class HexagonPlotComponent implements OnInit {
         // This is for showing all properties for coloring
         this.features = data.features;
         this.meta = data.meta;
+        this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+        this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+        this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+        this.selectedGeneSetGenie3 = Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+        this.selectedGeneSetSponge = Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+
+
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
           return typeof val === 'string' || typeof val === 'number';
         });
+
+        this.colorableProperties.push('regulatory_scores')
+
+        // sort in alphabetical order
+
+        this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         const width = 1200;
         const height = 1000;
@@ -209,8 +245,24 @@ export class HexagonPlotComponent implements OnInit {
         console.error('Error loading or rendering data:', error);
       });
 
+
+
+    /* d3.csv('assets/sponge_network_smaller.csv', d3.autoType)
+      .then((rows) => {
+        console.log('WEird')
+        this.spongeNetwork = rows.map((row) => ({
+          source: String((row as any)['geneA'] ?? ''),
+          target: String((row as any)['geneB'] ?? ''),
+          p_adjusted: Number((row as any)['p.adj'] ?? 0),
+        }));
+        console.log('Sponge network loaded:', this.spongeNetwork);
+      })
+      .catch((error) => {
+        console.error('Error loading sponge network:', error);
+      });
+
     // Read genie3 csv
-    d3.csv('assets/genie3_BRCA_mrn.top_100k.csv', d3.autoType)
+    d3.csv('assets/genie_network_filt.csv', d3.autoType)
       .then((rows) => {
         // Each row should have source, target, weight columns
         this.genie3Network = rows.map((row) => ({
@@ -223,52 +275,8 @@ export class HexagonPlotComponent implements OnInit {
       .catch((error) => {
         console.error('Error loading genie3 network:', error);
       });
+ */
 
-    // Read sponge network
-    d3.csv('assets/sponge_gene_sets_GSM6592049_M2.json', d3.autoType)
-      .then((rows) => {
-        this.spongeNetwork = rows.map((row) => ({
-          source: String((row as any)['source'] ?? ''),
-          target: String((row as any)['target'] ?? ''),
-          weight: Number((row as any)['weight'] ?? 0),
-        }));
-        console.log('Sponge network loaded:', this.spongeNetwork);
-      })
-      .catch((error) => {
-        console.error('Error loading sponge network:', error);
-      });
-
-    // Read genie3 gene sets
-    d3.json<{ [regulator: string]: string[] }>(
-      'assets/genie3_gene_sets_GSM6592049_M2.json',
-    )
-      .then((data) => {
-        this.geneSetsGenie3 = data || {};
-        console.log(
-          'Genie3 gene sets loaded:',
-          Object.keys(this.geneSetsGenie3).length,
-          'regulators',
-        );
-      })
-      .catch((error) => {
-        console.error('Error loading genie3 gene sets:', error);
-      });
-
-    // Read sponge gene sets
-    d3.json<{ [regulator: string]: string[] }>(
-      'assets/sponge_gene_sets_GSM6592049_M2.json',
-    )
-      .then((data) => {
-        this.geneSetsSponge = data || {};
-        console.log(
-          'Sponge gene sets loaded:',
-          Object.keys(this.geneSetsSponge).length,
-          'regulators',
-        );
-      })
-      .catch((error) => {
-        console.error('Error loading sponge gene sets:', error);
-      });
   }
 
   //public updateHexColors(): void {
@@ -339,8 +347,29 @@ export class HexagonPlotComponent implements OnInit {
     return NaN;
   }
 
+  public onColorbyPropertyChange(): void {
+    if (this.colorByProperty === 'regulatory_scores') {
+      if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3) {
+        console.log(this.selectedRegulatoryScore, this.selectedGeneSetGenie3)
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+        this.updateAucellGraphGenie3();
+        this.updateAucellGraphSponge();
+
+      }
+      else if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+        this.updateAucellGraphGenie3();
+        this.updateAucellGraphSponge();
+      }
+    }
+    this.updateHexColors();
+  }
+
   public updateHexColors(): void {
+
     this.resetClusterExtension();
+
+
 
     if (this.selectedCell && this.selectedCluster) {
       this.selectedCluster = null;
@@ -394,7 +423,7 @@ export class HexagonPlotComponent implements OnInit {
         });
     } else {
       // categorical scale
-      const domain = [...new Set(valuesRaw.map((v) => String(v)))];
+      const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
       this.colorScale.domain(domain);
       this.currentLegendDomain = domain;
       this.currentLegendType = 'categorical';
@@ -411,138 +440,103 @@ export class HexagonPlotComponent implements OnInit {
         });
     }
 
+
     this.renderLegend();
   }
 
-  public updateAucellGraph(): void {
-    // Clear previous graph
+  public updateAucellGraphGenie3(): void {
+    console.log('Updating AUCELL graph for Genie3...');
+    this.isLoadingGenie3 = true;
     d3.select('#aucell_graph_genie3').selectAll('*').remove();
 
-    if (!this.selectedGeneSetGenie3 || !this.genie3Network) return;
+    if (!this.selectedGeneSetGenie3 || !this.genie3Network) {
+      this.isLoadingGenie3 = false;
+      return;
+    }
 
     const regulator = this.selectedGeneSetGenie3;
     const targets = this.geneSetsGenie3[regulator] || [];
-    // Filter Targets > weight threshold
-    const filteredTargets = targets.filter((target) => {
-      return this.genie3Network.some(
-        (connection) =>
-          connection.source === regulator &&
-          connection.target === target &&
-          connection.weight > 0.03, // Adjust threshold as needed
-      );
-    });
-
-    const weightThreshold = 0.03;
-
-    console.log('Regulator:', regulator);
-    console.log('Targets:', targets);
 
     const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     const edges: { source: string; target: string; weight: number }[] = [];
 
-    // Add regulator node
-    nodes.push({ id: regulator, group: 0 });
+    let candidateEdges: { source: string, target: string, weight: number }[] = [];
 
-    // Add target nodes
-    filteredTargets.forEach((target: string) => {
-      nodes.push({ id: target, group: 1 });
-    });
 
-    // Get edges from regulator to targets
-    this.genie3Network.forEach((connection) => {
-      if (
-        connection.source === regulator &&
-        filteredTargets.includes(connection.target)
-      ) {
-        edges.push({
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(this.selectedGeneSetGenie3 ? this.selectedGeneSetGenie3 : '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res as { regulatoryGene: string, targetGene: string, weight: number }[];
+          console.log('Data', data)
+          this.genie3Network = data.map((d) => ({
+            source: d.regulatoryGene,
+            target: d.targetGene,
+            weight: d.weight,
+          }));
+
+          this.genie3Network.forEach(connection => {
+      if ((connection.source === regulator || connection.target === regulator) ||
+        targets.includes(connection.source) || targets.includes(connection.target)) {
+        candidateEdges.push({
           source: connection.source,
           target: connection.target,
-          weight: connection.weight,
+          weight: connection.weight
         });
       }
     });
 
-    // Get neighbors of targets AND regulator with weight > threshold
-    const neighborSet = new Set<string>();
-    const allMainNodes = [regulator, ...filteredTargets]; // Include regulator in neighbor search
+    console.log('Candidate edges before filtering:', candidateEdges);
 
-    // Find neighbors for all main nodes (regulator + targets)
-    allMainNodes.forEach((mainNode: string) => {
-      this.genie3Network.forEach((connection) => {
-        if (connection.weight > weightThreshold) {
-          // If mainNode is the source, add target as neighbor
-          if (
-            connection.source === mainNode &&
-            !allMainNodes.includes(connection.target)
-          ) {
-            neighborSet.add(connection.target);
-          }
-          // If mainNode is the target, add source as neighbor
-          else if (
-            connection.target === mainNode &&
-            !allMainNodes.includes(connection.source)
-          ) {
-            neighborSet.add(connection.source);
-          }
-        }
-      });
+    candidateEdges.sort((a, b) => b.weight - a.weight);
+    candidateEdges = candidateEdges.slice(0, this.minGenie3Edges);
+
+    this.genie3WeightCutoff = candidateEdges.length > 0 ? Math.min(...candidateEdges.map(edge => edge.weight)) : null;
+
+    // Create nodes from all edges (source and target)
+    const nodeSet = new Set<string>();
+    candidateEdges.forEach(edge => {
+      nodeSet.add(edge.source);
+      nodeSet.add(edge.target);
+    });
+    // Add regulator to nodeset
+    nodeSet.add(regulator);
+
+    // For the nodes with top edges we reinset their original edges
+
+    this.genie3Network.forEach(connection => {
+      if (nodeSet.has(connection.source) && nodeSet.has(connection.target)) {
+        candidateEdges.push({
+          source: connection.source,
+          target: connection.target,
+          weight: connection.weight
+        });
+      }
     });
 
-    console.log('Found neighbors:', Array.from(neighborSet));
-    console.log('Neighbor count:', neighborSet.size);
-
-    // Add neighbor nodes
-    if (nodes.length < 30) {
-      Array.from(neighborSet).forEach((neighbor) => {
-        nodes.push({ id: neighbor, group: 2 });
-      });
-    }
-
-    // Add ALL connections between any nodes in our network with sufficient weight
-    const allNodeIds = new Set(nodes.map((n) => n.id));
-
-    this.genie3Network.forEach((connection) => {
-      if (connection.weight > weightThreshold) {
-        const sourceInNetwork = allNodeIds.has(connection.source);
-        const targetInNetwork = allNodeIds.has(connection.target);
-
-        // Add edge if both nodes are in our network
-        if (sourceInNetwork && targetInNetwork) {
-          // Avoid duplicate edges
-          const edgeExists = edges.some(
-            (e) =>
-              (e.source === connection.source &&
-                e.target === connection.target) ||
-              (e.source === connection.target &&
-                e.target === connection.source),
-          );
-
-          if (!edgeExists) {
-            edges.push({
-              source: connection.source,
-              target: connection.target,
-              weight: connection.weight,
-            });
-          }
+    // Create nodes array with proper groups
+    Array.from(nodeSet).forEach(nodeId => {
+      if (nodeId === regulator) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 0 }); // regulator
+        }
+      } else if (targets.includes(nodeId)) {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 1 }); // targets
+        }
+      } else {
+        if (!nodes.some(n => n.id === nodeId)) {
+          nodes.push({ id: nodeId, group: 2 }); // neighbors
         }
       }
     });
 
-    console.log('Final nodes:', nodes.length);
-    console.log('Final edges:', edges.length);
-    console.log('Edges:', edges);
-
-    console.log(
-      'After enhancement - Nodes:',
-      nodes.length,
-      'Edges:',
-      edges.length,
-    );
-
-    if (nodes.length === 0) {
-      console.warn('No nodes to display');
-      return;
-    }
+    edges.push(...candidateEdges);
 
     // Create the graph
     const graph = {
@@ -554,10 +548,11 @@ export class HexagonPlotComponent implements OnInit {
       ),
     };
 
+
+
     // Create the graph visualization
     const width = 500;
     const height = 300;
-    const margin = 20;
 
     const svg = d3
       .select('#aucell_graph_genie3')
@@ -636,46 +631,17 @@ export class HexagonPlotComponent implements OnInit {
         d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
       );
 
-    // Add weight labels on edges
-    const edgeLabels = svg
-      .append('g')
-      .selectAll('text')
-      .data(graph.edges)
-      .enter()
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .style('font-size', '8px')
-      .style('fill', '#666')
-      .style('font-weight', 'bold')
-      .style('background-color', 'white')
-      .style('padding', '1px')
-      .text((d: any) => d.weight.toFixed(2));
+
 
     // Initialize simulation with stronger forces
-    const simulation = d3
-      .forceSimulation(graph.nodes)
-      .force(
-        'link',
-        d3
-          .forceLink(graph.edges)
-          .id((d: any) => d.id)
-          .distance(10)
-          .strength(0.5),
-      )
+    const simulation = d3.forceSimulation(graph.nodes)
+      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(30).strength(0.5))
       .force('charge', d3.forceManyBody().strength(-500))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(15))
+      .force('collision', d3.forceCollide().radius(30))
       .force('boundary', () => {
         graph.nodes.forEach((node: any) => {
-          const radius =
-            node.group === 0
-              ? 15
-              : node.group === 1
-                ? 12
-                : node.group === 2
-                  ? 8
-                  : 6;
+          const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
 
           node.x = Math.max(radius, Math.min(width - radius, node.x));
 
@@ -690,17 +656,342 @@ export class HexagonPlotComponent implements OnInit {
         .attr('x2', (d: any) => d.target.x)
         .attr('y2', (d: any) => d.target.y);
 
-      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+      node
+        .attr('cx', (d: any) => d.x)
+        .attr('cy', (d: any) => d.y);
 
-      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+      labels
+        .attr('x', (d: any) => d.x)
+        .attr('y', (d: any) => d.y);
 
-      // Position edge labels at the midpoint of each edge
-      edgeLabels
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
     });
 
+    this.isLoadingGenie3 = false;
+
     console.log('Network visualization complete');
+          console.log('Genie3 Network:', this.genie3Network);
+          console.log(`[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`);
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load Genie Connections for["${this.selectedGeneSetGenie3}]`,
+            err,
+          ),
+      });
+
+    console.log('Genie3 Network 2:', this.genie3Network);
+  }
+
+  public updateAucellGraphSponge(): void {
+
+    console.log('Updating AUCELL graph for Sponge...');
+    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+
+    if (!this.selectedGeneSetSponge || !this.spongeNetwork) {
+      return;
+    }
+
+    this.isLoadingSponge = true;
+    const regulator = this.selectedGeneSetSponge;
+    const targets = this.geneSetsSponge[regulator] || [];
+
+    const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    const edges: { source: string; target: string; p_adjusted: number }[] = [];
+
+    let candidateEdges: { source: string, target: string, p_adjusted: number }[] = []
+/*
+    this.spongeNetwork.forEach(connection => {
+     if ((connection.source === regulator || connection.target === regulator) ||
+         targets.includes(connection.source) || targets.includes(connection.target)) {
+       candidateEdges.push({
+         source: connection.source,
+         target: connection.target,
+         p_adjusted: connection.p_adjusted
+       });
+     }
+   }) */;
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res as { "geneA": string, "geneB": string, "p.adj": number, "mscor": number }[];
+
+          this.isLoadingSponge = true;
+
+          console.log('Sponge Network:', data);
+
+          this.spongeNetwork = data.map((d) => ({
+            source: d.geneA,
+            target: d.geneB,
+            p_adjusted: d['p.adj'],
+            mscore: d['mscor']
+          }));
+
+          // Push all edges of filtered Network (filtered to geneset edges)
+          candidateEdges.push(...this.spongeNetwork.filter(connection => {
+            return (connection.source === regulator || connection.target === regulator ||
+              targets.includes(connection.source) || targets.includes(connection.target));
+          }));
+          // Sort such that smallest p_values are kept
+          candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+          candidateEdges = candidateEdges.slice(0, this.minSpongeEdges);
+
+          this.spongePValueCutoff = candidateEdges.length > 0 ? Math.max(...candidateEdges.map(edge => edge.p_adjusted)) : null;
+
+          // Create nodes from all edges (source and target)
+          const nodeSet = new Set<string>();
+          candidateEdges.forEach(edge => {
+            nodeSet.add(edge.source);
+            nodeSet.add(edge.target);
+          });
+          // Add regulator to nodeset
+          nodeSet.add(regulator);
+
+
+          this.spongeNetwork.forEach(connection => {
+            if (nodeSet.has(connection.source) && nodeSet.has(connection.target)) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                p_adjusted: connection.p_adjusted
+              });
+            }
+          });
+
+          edges.push(...candidateEdges);
+
+          // Create nodes array with proper groups
+          Array.from(nodeSet).forEach(nodeId => {
+            if (nodeId === regulator) {
+              if (!nodes.some(n => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 0 }); // regulator
+              }
+            } else if (targets.includes(nodeId)) {
+              if (!nodes.some(n => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 1 }); // targets
+              }
+            } else {
+              if (!nodes.some(n => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 2 }); // neighbors
+              }
+            }
+          });
+
+          // Create the graph
+          const graph = {
+            nodes: nodes.filter((node) => node.id && node.id.length > 0),
+            edges: edges.filter(
+              (edge) =>
+                nodes.some((node) => node.id === edge.source) &&
+                nodes.some((node) => node.id === edge.target),
+            ),
+          };
+
+
+          // Create the graph visualization
+          const width = 500;
+          const height = 300;
+
+
+          const svg = d3
+            .select('#aucell_graph_sponge')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background-color', '#f8f9fa');
+
+          // Draw links (edges)
+          const link = svg
+            .append('g')
+            .attr('stroke', '#999')
+            .attr('stroke-opacity', 0.6)
+            .selectAll('line')
+            .data(graph.edges)
+            .enter()
+            .append('line')
+            .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.p_adjusted) * 10))
+            .attr('stroke', (d: any) => {
+              // Color edges based on p_adjusted
+              const intensity = Math.min(d.p_adjusted * 10, 1);
+              return d3.interpolateReds(0.3 + intensity * 0.7);
+            });
+
+          // Draw nodes
+          const node = svg
+            .append('g')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .selectAll('circle')
+            .data(graph.nodes)
+            .enter()
+            .append('circle')
+            .attr('r', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return 15; // regulator
+                case 1:
+                  return 12; // targets
+                case 2:
+                  return 8; // neighbors
+                case 3:
+                  return 6;
+                default:
+                  return 10;
+              }
+            })
+            .attr('fill', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return '#e41a1c'; // regulator - red
+                case 1:
+                  return '#377eb8'; // targets - blue
+                case 2:
+                  return '#4daf4a'; // neighbors - green
+                case 3:
+                  return '#ff7f00'; // high-weight - orange
+                default:
+                  return '#999';
+              }
+            });
+
+          // Add labels
+          const labels = svg
+            .append('g')
+            .selectAll('text')
+            .data(graph.nodes)
+            .enter()
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '.35em')
+            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+            .style('font-weight', (d: any) => (d.group === 0 ? 'bold' : 'normal'))
+            .style('fill', '#333')
+            .text((d: any) =>
+              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+            );
+
+
+          // Initialize simulation with stronger forces
+          const simulation = d3
+            .forceSimulation(graph.nodes)
+            .force(
+              'link',
+              d3
+                .forceLink(graph.edges)
+                .id((d: any) => d.id)
+                .distance(20)
+                .strength(0.5),
+            )
+            .force('charge', d3.forceManyBody().strength(-500))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(30))
+            .force('boundary', () => {
+              graph.nodes.forEach((node: any) => {
+                const radius =
+                  node.group === 0
+                    ? 15
+                    : node.group === 1
+                      ? 12
+                      : node.group === 2
+                        ? 8
+                        : 6;
+
+                node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+                node.y = Math.max(radius, Math.min(height - radius, node.y));
+              });
+            });
+
+          simulation.on('tick', () => {
+            link
+              .attr('x1', (d: any) => d.source.x)
+              .attr('y1', (d: any) => d.source.y)
+              .attr('x2', (d: any) => d.target.x)
+              .attr('y2', (d: any) => d.target.y);
+
+            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+
+          });
+
+          this.isLoadingSponge = false;
+
+          console.log('Network visualization complete');
+
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+            err,
+          ),
+      });
+
+  }
+
+  public onMinEdgesChangeSponge(): void {
+
+    if (this.selectedGeneSetSponge) {
+      this.isLoadingSponge = true;
+      setTimeout(() => this.updateAucellGraphSponge(), 50);
+    }
+  }
+
+  public onMinEdgesChangeGenie3(): void {
+    if (this.selectedGeneSetGenie3) {
+      this.isLoadingGenie3 = true;
+      setTimeout(() => this.updateAucellGraphGenie3(), 50);
+    }
+  }
+
+  public analyzeGeneSetInGProfiler(): void {
+    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
+      console.warn('No Genie3 gene set selected');
+      return;
+    }
+
+    const regulator = this.selectedGeneSetGenie3;
+    const targets = this.geneSetsGenie3[regulator] || [];
+
+    const allGenes = [regulator, ...targets];
+
+    console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
+
+    const gProfilerUrl = this.generateGProfilerUrl(allGenes);
+
+    if (gProfilerUrl) {
+      // Open in new tab/window
+      window.open(gProfilerUrl, '_blank');
+    } else {
+      console.warn('Could not generate gProfiler URL for Genie3 gene set:', this.selectedGeneSetGenie3);
+    }
+  }
+
+  // Make sure you also have the generateGProfilerUrl method
+  private generateGProfilerUrl(geneIds: string[]): string | null {
+    if (!geneIds || geneIds.length === 0) {
+      return null;
+    }
+
+    // Join gene IDs with newlines (gProfiler expects one gene per line)
+    const geneList = geneIds.join('\n');
+
+    // Base gProfiler URL for functional enrichment analysis
+    const baseUrl = 'https://biit.cs.ut.ee/gprofiler/gost';
+
+    // URL encode the gene list
+    const encodedGenes = encodeURIComponent(geneList);
+
+    // Construct the full URL with parameters including auto-run
+    const gProfilerUrl = `${baseUrl}?organism=hsapiens&query=${encodedGenes}&sources=GO:MF,GO:BP,GO:CC,KEGG,REAC&user_threshold=0.05&significance_threshold_method=fdr&ordered=false&exclude_iea=false&measure_underrepresentation=false&evcodes=false&domain_scope=annotated&numeric_ns=ENTREZGENE_ACC&background=&run_query=1`;
+
+    return gProfilerUrl;
   }
 
   private mouseOver(event: MouseEvent, d: CellFeature): void {
@@ -715,17 +1006,6 @@ export class HexagonPlotComponent implements OnInit {
       .duration(200)
       .style('opacity', 0.8)
       .style('stroke', 'black');
-  }
-
-  private getAssociatedGeneSets(cell: CellFeature): string[][] {
-    const genie3GeneSets = Object.keys(
-      cell.properties.aucell_genie3 || {},
-    ).filter((key) => cell.properties.aucell_genie3[key] > 0.6);
-    const spongeGeneSets = Object.keys(cell.properties.aucell_sponge || {});
-    console.log('Associated Genie3 gene sets:', genie3GeneSets);
-    console.log('Associated Sponge gene sets:', spongeGeneSets);
-
-    return [genie3GeneSets, spongeGeneSets];
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
@@ -748,18 +1028,6 @@ export class HexagonPlotComponent implements OnInit {
 
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
     this.selectedCell = cell;
-    // First get the associated gene sets
-    [
-      this.selectedCellAssociatedGeneSetsGenie3,
-      this.selectedCellAssociatedGeneSetsSponge,
-    ] = this.getAssociatedGeneSets(cell);
-
-    // Then set the selected gene set if we have any
-    if (this.selectedCellAssociatedGeneSetsGenie3.length > 0) {
-      this.selectedGeneSetGenie3 = this.selectedCellAssociatedGeneSetsGenie3[0]; // Select the first one
-    } else {
-      this.selectedGeneSetGenie3 = null; // Clear if no gene sets found
-    }
 
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
@@ -772,7 +1040,7 @@ export class HexagonPlotComponent implements OnInit {
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
 
-    setTimeout(() => this.updateAucellGraph(), 0);
+    setTimeout(() => this.updateAucellGraphGenie3(), 0);
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -788,23 +1056,57 @@ export class HexagonPlotComponent implements OnInit {
     if (this.clusterCells.length > 0) {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
-      setTimeout(() => this.updateAucellGraph(), 100);
+      setTimeout(() => this.updateAucellGraphGenie3(), 100);
     }
   }
 
   public onGeneSetChange(): void {
-    console.log('Gene set changed to:', this.selectedGeneSetGenie3);
+    // Check if Genie3 gene set has actually changed
+    if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
+      this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
 
-    // Clear previous graph and regenerate
-    if (this.selectedGeneSetGenie3) {
-      setTimeout(() => this.updateAucellGraph(), 0);
+      if (this.selectedGeneSetGenie3) {
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = true;
+        setTimeout(() => {
+          this.updateAucellGraphGenie3();
+          if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3) {
+            this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+          }
+        }, 100);
+      } else {
+        // Clear Genie3 graph if no gene set is selected
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = false;
+      }
+    }
+
+    if (this.selectedGeneSetSponge !== this.previousGeneSetSponge) {
+      this.previousGeneSetSponge = this.selectedGeneSetSponge;
+
+      if (this.selectedGeneSetSponge) {
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
+        console.log('Sponge targets available:', this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0);
+        this.isLoadingSponge = true;
+        setTimeout(() => {
+          this.updateAucellGraphSponge();
+          if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
+            this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+          }
+        }, 100);
+      } else {
+        // Clear Sponge graph if no gene set is selected
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        this.isLoadingSponge = false;
+      }
     }
   }
 
   public selectCellFromCluster(cell: CellFeature): void {
     this.selectedCell = cell;
     setTimeout(() => this.renderNhoodHeatmap(), 0);
-    setTimeout(() => this.updateAucellGraph(), 0);
+    setTimeout(() => this.updateAucellGraphGenie3(), 0);
   }
 
   public closeClusterSidenav(): void {
@@ -1079,6 +1381,37 @@ export class HexagonPlotComponent implements OnInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
+  async fetchAndUpdate(columnName: string, index: string) {
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res as { [barcode: string]: any };
+
+          if (this.features) {
+            for (const feature of this.features) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[this.colorByProperty] = data[barcode];
+              }
+            }
+          }
+          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+          this.updateHexColors();
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
+            err,
+          ),
+      });
+  }
+
   //private renderLegend(): void {
   //  // Remove any existing legend
   //  this.svg.selectAll('.svg-legend').remove();
@@ -1228,6 +1561,15 @@ export class HexagonPlotComponent implements OnInit {
   //    });
   //  }
   //}
+
+  public onRegulatoryScoreChange(): void {
+
+    if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3 && this.selectedGeneSetSponge) {
+      this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+    } else if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
+      this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+    }
+  }
 
   private renderLegend(): void {
     // Remove any existing legend
@@ -1389,12 +1731,12 @@ interface CellProperties {
   leiden_centrality: { [key: string]: number };
   leiden_co_occurrence: number[][];
   [key: string]:
-    | string
-    | number
-    | number[]
-    | []
-    | undefined
-    | { [key: string]: any };
+  | string
+  | number
+  | number[]
+  | []
+  | undefined
+  | { [key: string]: any };
 }
 
 interface CellFeature {
@@ -1409,8 +1751,14 @@ interface GeoJsonData {
   meta: { [key: string]: any };
 }
 
-interface regGraphConnection {
+interface genie3RegGraphConnection {
   source: string;
   target: string;
   weight: number;
+}
+
+interface spongeRegGraphConnection {
+  source: string;
+  target: string;
+  p_adjusted: number;
 }
