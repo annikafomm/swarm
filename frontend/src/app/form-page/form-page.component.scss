@@ -217,11 +217,27 @@ button[disabled] {
 @media (max-width: 640px) { .grid.two { grid-template-columns: 1fr; } }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
+.field textarea,
 .field-label {
   font-weight: 700;
   color: #111827;
   letter-spacing: .2px;
 }
+.field input[type="text"],
+.field input[type="number"],
+.field input[type="email"],
+.select select {
+  height: 44px;            /* angenehme Klickfläche */
+}
+.field input:focus,
+.select select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: #aeb8fe;
+  box-shadow: 0 0 0 3px rgba(174,184,254,.25);
+}
+
+
 
 /* Custom select */
 .select {
@@ -263,5 +279,18 @@ button[disabled] {
   color: red;
   margin-left: 2px;
 }
+
+/* Pfeile in Chrome/Edge/Safari ausblenden */
+.no-spin::-webkit-outer-spin-button,
+.no-spin::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Pfeile in Firefox ausblenden */
+.no-spin[type="number"] {
+  -moz-appearance: textfield;
+}
+
 
 

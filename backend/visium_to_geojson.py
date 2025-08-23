@@ -7,6 +7,20 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+grn_score_names = (
+    "aucell_scores",
+    "spongeffects_GSVA_scores",
+    "spongeffects_ssGSEA_scores",
+    "viper_scores",
+)
+
+genie3_score_names = [name + "_genie3" for name in grn_score_names]
+sponge_score_names = [
+    name + "_sponge"
+    for name in grn_score_names
+    if not name.startswith("viper")  # Viper score not available for sponge
+]
+
 
 class Hexagons:
     """
@@ -18,20 +32,12 @@ class Hexagons:
     def __init__(
         self,
         anndata,
-        aucell_genie3_path,
-        aucell_sponge_path,
         radius=5,
         scale=0.1,
         data_type="visium",
     ):
 
         self.anndata = anndata
-
-        print("Parsing Aucell CSV files...")
-        self.aucell_scores_genie3 = self.parse_aucell_csv(aucell_genie3_path)
-        self.aucell_scores_sponge = self.parse_aucell_csv(aucell_sponge_path)
-        print("Aucell CSV files parsed successfully.")
-
         self.radius = radius
         self.type = "FeatureCollection"
         self.geometry_type = "Polygon"
@@ -39,13 +45,6 @@ class Hexagons:
         self.data_type = data_type
         self.coordinates, self.centers = self.parse_coordinates()
         self.obs = self.parse_obs()
-
-    def parse_aucell_csv(self, aucell_path):
-        return (
-            pd.read_csv(aucell_path, index_col=0)
-            if aucell_path is not None
-            else None
-        )
 
     def parse_obs(self):
         obs = self.anndata.obs
@@ -116,22 +115,6 @@ class Hexagons:
                 "barcode": barcode,
             }
 
-            if (
-                self.aucell_scores_genie3 is not None
-                and barcode in self.aucell_scores_genie3
-            ):
-                property_dict["aucell_genie3"] = self.aucell_scores_genie3[
-                    barcode
-                ].to_dict()
-
-            if (
-                self.aucell_scores_sponge is not None
-                and barcode in self.aucell_scores_sponge
-            ):
-                property_dict["aucell_sponge"] = self.aucell_scores_sponge[
-                    barcode
-                ].to_dict()
-
             leiden_cluster = (
                 int(self.anndata.obs.get("leiden", {}).get(barcode, -1))
                 if "leiden" in self.anndata.obs.columns
@@ -163,6 +146,14 @@ class Hexagons:
             property_dict["centroid"] = (
                 self.centers[barcode] if barcode in self.centers else None
             )
+
+            for score in genie3_score_names + sponge_score_names:
+                if score in self.anndata.obsm:
+                    first_col = self.anndata.obsm[score].columns[0]
+                    property_dict["network_scores"] = self.anndata.obsm[
+                        score
+                    ].loc[barcode, first_col]
+                    break
 
             score_mappings = {
                 "ligand_receptor_relationships": (
@@ -244,20 +235,6 @@ if __name__ == "__main__":
         help="Path to the input .h5ad file.",
     )
     parser.add_argument(
-        "--aucell_genie3_path",
-        "-g",
-        default=None,
-        type=str,
-        help="Path to the Aucell Genie3 CSV file.",
-    )
-    parser.add_argument(
-        "--aucell_sponge_path",
-        "-s",
-        default=None,
-        type=str,
-        help="Path to the Aucell Sponge CSV file.",
-    )
-    parser.add_argument(
         "--radius", "-r", type=int, default=50, help="Radius of the hexagons."
     )
     parser.add_argument(
@@ -304,30 +281,61 @@ if __name__ == "__main__":
         radius=args.radius,
         scale=args.scale,
         data_type=args.data_type,
-        aucell_genie3_path=args.aucell_genie3_path,
-        aucell_sponge_path=args.aucell_sponge_path,
     )
 
     geojson_data = hexagons.to_geojson()
 
     # Add meta information like ligand receptor pair names for api fetching
-    geojson_data["meta"] = {}
+    meta_dict = {}
     for global_score in liana_global_scores:
         if global_score in spatial_data.uns:
-            geojson_data["meta"][global_score] = spatial_data.uns[
-                global_score
-            ].to_dict()
+            meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
 
+    # The names in the tuple are options; all should have the same column names
+    # but we don't want to rely on one obsm key being there
     colname_mapping = {
-        "nmf_factors": "ligand_receptor_NMF_factors",
-        "tf_names": "tf_activity_score_ulm",
-        "pathway_names": "pathway_activity_score_mlm",
+        "nmf_factors": ("ligand_receptor_NMF_factors"),
+        "tf_names": ("tf_activity_score_ulm", "pathway_activity_padj_ulm"),
+        "pathway_names": (
+            "pathway_activity_score_mlm",
+            "pathway_activity_padj_mlm",
+        ),
+        # "genie3_geneset_names": genie3_score_names,
+        # "sponge_geneset_names": sponge_score_names,
     }
-    for meta_key, obsm_key in colname_mapping.items():
-        if obsm_key in spatial_data.obsm:
-            geojson_data["meta"][meta_key] = spatial_data.obsm[
-                obsm_key
-            ].columns.tolist()
+    for meta_key, obsm_key_options in colname_mapping.items():
+        for obsm_key in obsm_key_options:
+            if obsm_key in spatial_data.obsm:
+                meta_dict[meta_key] = spatial_data.obsm[
+                    obsm_key
+                ].columns.tolist()
+                break
+
+    for geneset_key in ["genie_genesets", "sponge_genesets"]:
+        if geneset_key in spatial_data.uns:
+            genesets = {}
+            for k, v in spatial_data.uns[geneset_key].items():
+                genesets[k] = v.tolist()
+            meta_dict[geneset_key] = genesets
+
+    available_grn_score_names = [
+        grn_score_name
+        for grn_score_name in genie3_score_names + sponge_score_names
+        if grn_score_name in spatial_data.obsm
+    ]
+
+    if len(available_grn_score_names) > 0:
+        meta_dict["grn_score_names"] = available_grn_score_names
+
+    if (
+        "leiden_co_occurrence" in spatial_data.uns
+        and "interval" in spatial_data.uns["leiden_co_occurrence"]
+    ):
+        meta_dict["interval"] = spatial_data.uns["leiden_co_occurrence"][
+            "interval"
+        ].tolist()
+
+    geojson_data["meta"] = meta_dict
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
 

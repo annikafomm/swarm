@@ -685,3 +685,55 @@ select {
     background: #a8a8a8;
   }
 }
+
+:host {
+  --hx-border: #e5e7eb;
+  --hx-bg: #f3f4f6;
+  --hx-bg-hover: #e5e7eb;
+  --hx-text: #111827;
+  --hx-muted: #6b7280;
+  --hx-focus: #93c5fd;
+  --hx-focus-ring: rgba(59,130,246,.25);
+}
+
+.hx-toolbar {
+  margin: 8px 0 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hx-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--hx-text);
+  background: var(--hx-bg);
+  border: 1px solid var(--hx-border);
+  border-radius: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s ease, box-shadow .15s ease, transform .05s ease;
+}
+.hx-btn:hover   { background: var(--hx-bg-hover); }
+.hx-btn:active  { transform: translateY(1px); }
+.hx-btn:focus {
+  outline: none;
+  border-color: var(--hx-focus);
+  box-shadow: 0 0 0 3px var(--hx-focus-ring);
+}
+
+.hx-btn-pill { border-radius: 9999px; }
+
+.hx-btn-ghost {
+  background: transparent;
+  border: 0;
+  color: var(--hx-muted);
+  padding: 4px 6px;
+  border-radius: 10px;
+}
+.hx-btn-ghost:hover { background: var(--hx-bg); color: var(--hx-text); }

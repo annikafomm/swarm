@@ -81,7 +81,7 @@ create_Genie_modules <- function(regulon_df, expr, top=100000, dir, k, n_regulon
   # calculate regulons
   setnames(regulon_df, c("regulatoryGene", "targetGene", "weight"), c("tf", "target", "mi"))
   
-  file <- file.path(dir, "genie3_aracne_format.txt")
+  file <- file.path(dir, "Rscores", "genie3_aracne_format.txt")
   fwrite(regulon_df, file, sep = "\t", col.names = FALSE)
   
   expr_filt <- expr[apply(expr, 1, sd) > 0, ]
@@ -102,4 +102,20 @@ mean_top_n_likelihood <- function(regulon, n) {
   weights <- regulon$likelihood
   top_weights <- sort(weights, decreasing = TRUE)[1:min(n, length(weights))]
   return(mean(top_weights))
+}
+
+
+
+filter_network <- function(network, genesets, type=c("Sponge", "Genie")) {
+  genes <- unique(c(unlist(genesets), names(genesets)))
+  
+  if (type == "Sponge") {
+    net_filt <- network[(geneA %in% genes) | (geneB %in% genes)]
+  } else if (type == "Genie") {
+    net_filt <- network[(regulatoryGene %in% genes) | (targetGene %in% genes)]
+  } else {
+    net_filt <- NA
+  }
+  
+  return(net_filt)
 }

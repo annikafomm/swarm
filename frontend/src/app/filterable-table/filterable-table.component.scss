@@ -1,69 +1,163 @@
-.table-container {
-  height: 400px; /* fixed height */
-  width: 100%;
-  overflow: auto; /* scroll if needed */
-  border: 1px solid #ccc;
-}
+/* ===============================
+   Filterable Table – fixed height, vertical scroll
+   Upload-Form Look + Sticky-Header FIX (keine Bleed-Throughs)
+   =============================== */
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: auto; /* fixed column widths */
-}
+   :host {
+    --ftable-height: 420px;     /* Höhe der scrollbaren Tabelle */
+    --radius: 16px;
+    --radius-pill: 9999px;
+    --border-color: #e5e7eb;
+    --bg-card: #ffffff;
+    --bg-soft: #f8fafc;
+    --bg-hover: #f3f4f6;
+    --text: #111827;
+    --muted: #6b7280;
+    --focus: #93c5fd;
+    --focus-ring: rgba(59,130,246,.25);
+  }
 
-th,
-td {
-  padding: 8px;
-  border: 1px solid #ddd;
-  text-align: left;
-  white-space: nowrap; /* prevent wrapping */
-  overflow: hidden; /* hide overflow text */
-  text-overflow: ellipsis; /* show "..." if text too long */
-}
+  /* Headerzellen dürfen Inhalt überstehen lassen */
+  .ftable thead th,
+  .ftable thead .th-filter {
+    overflow: visible;   /* wichtig: nicht hidden */
+  }
 
-th {
-  white-space: normal; /* allow wrapping in header cells */
-  overflow: visible; /* show full content, not clipped */
-  text-overflow: unset; /* remove ellipsis */
-  word-break: normal; /* break long words if needed */
-  hyphens: auto;
-}
+  .ftable thead .th-filter .input {
+    height: 32px;                 /* kleiner als die Zellenhöhe */
+    padding: 0 12px;
+    border-radius: 9999px;        /* rund */
+    box-sizing: border-box;
+    border: 1px solid #d0d7de;
+  }
 
-thead th {
-  position: sticky;
-  top: 0;
-  background: #f9f9f9;
-  z-index: 2;
-}
 
-.index-col {
-  position: sticky;
-  left: 0;
-  white-space: nowrap;
-  width: auto;
-  max-width: 300px;
-  z-index: 1;
-}
 
-input {
-  width: 80%;
-  margin-top: 4px;
-  font-size: 0.8em;
-}
+  .table-container.upload-style {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    outline: 1px solid var(--border-color);
+    outline-offset: 0;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
 
-.sort-icons {
-  margin-left: 4px;
-}
+    .table-scroll {
+      position: relative;
+      height: var(--ftable-height);
+      max-height: var(--ftable-height);
+      overflow-y: auto;
+      overflow-x: auto;
+      scrollbar-gutter: stable both-edges;
+      overscroll-behavior: contain;
+      background: #fff;                 /* verhindert Durchscheinen */
+      transform: translateZ(0);         /* Sticky-Repaint-Fix (Chrome/Safari) */
+    }
 
-.sort-icons button {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.8em;
-  padding: 0 2px;
-}
+    table.ftable {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      color: var(--text);
 
-.sort-icons button:hover {
-  color: blue;
-  font-weight: bold;
-}
+      /* ---------- STICKY HEADER (Bleed-Through-Fix) ---------- */
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 5;                     /* über Body-Zellen */
+        background: var(--bg-soft);
+        border-bottom: 1px solid var(--border-color);
+        padding: 14px 16px;
+        vertical-align: bottom;
+        background-clip: padding-box;
+      }
+      /* zusätzlicher Hintergrund unter jedem th, deckt Mikrolücken ab */
+      thead th::before {
+        content: "";
+        position: absolute;
+        z-index: -1;
+        left: -2px; right: -2px; top: -2px; bottom: -1px;
+        background: var(--bg-soft);
+      }
+      /* verhindert zweite Linie direkt unter dem Header */
+      tbody tr:first-child td { border-top: 0; }
+
+      thead th .th-top {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; margin-bottom: 8px;
+      }
+      thead th .th-filter { margin-top: 4px; }
+
+      tbody td {
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-color);
+        vertical-align: middle;
+        background: #fff;
+      }
+      tbody tr:hover { background: #fafafa; }
+
+      .index-col { min-width: 220px; }
+      .other-col { min-width: 140px; }
+      .action-col { white-space: nowrap; }
+
+      /* Inputs im Upload-Form-Look */
+      .input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-pill);
+        -webkit-appearance: none;
+        appearance: none;
+        -webkit-tap-highlight-color: transparent;
+        background: #fff;
+        font-size: 14px;
+        color: var(--text);
+        outline: none;
+        transition: box-shadow .15s ease, border-color .15s ease;
+        &::placeholder { color: var(--muted); }
+        &:focus {
+          border-radius: var(--radius-pill);
+          border-color: var(--focus);
+          box-shadow: 0 0 0 3px var(--focus-ring);
+        }
+      }
+
+      /* Buttons (z. B. "Show") */
+      .btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        border: 1px solid var(--border-color);
+        background: var(--bg-hover);
+        padding: 8px 14px; border-radius: 12px;
+        font-weight: 600; font-size: 14px; line-height: 1;
+        cursor: pointer; white-space: nowrap;
+        transition: background .15s ease, transform .05s ease, box-shadow .15s ease;
+        &:hover { background: #e5e7eb; }
+        &:active { transform: translateY(1px); }
+        &:focus {
+          outline: none; border-color: var(--focus);
+          box-shadow: 0 0 0 3px var(--focus-ring);
+        }
+      }
+      .btn-pill { border-radius: var(--radius-pill); }
+      .btn-ghost {
+        border: 0; background: transparent; color: var(--muted);
+        padding: 4px 6px; border-radius: 10px; cursor: pointer;
+        transition: background .15s ease, color .15s ease;
+        &:hover { background: var(--bg-hover); color: var(--text); }
+        &:active { transform: translateY(1px); }
+      }
+      .icon { line-height: 1; font-size: 14px; }
+
+      /* keine Ellipsis/Abschneiden im Header, damit nichts „durchschimmert“ */
+      th, td { overflow: visible; text-overflow: clip; }
+      thead th, thead th .th-top { white-space: normal; word-break: break-word; }
+    }
+  }
+
+  /* kompakter auf kleineren Screens */
+  @media (max-width: 768px) { :host { --ftable-height: 360px; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .table-container.upload-style table.ftable .btn,
+    .table-container.upload-style table.ftable .input {
+      transition: none;
+    }
+  }

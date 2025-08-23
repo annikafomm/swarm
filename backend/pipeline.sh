@@ -1,45 +1,59 @@
 #!/bin/bash
 # filepath: backend/testing_scores.sh
+# Purpose: Run Python and R score calculations on a given dataset and log results
+
+set -euo pipefail  # Stop on errors, undefined variables, and pipeline errors
 
 # Get the directory of the current script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-INPUT="$SCRIPT_DIR/datasets_prepro/GSM6592049_M2_prepro.h5ad" 
-sponge_network="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv"
-sponge_analysis="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv"
+# Input paths and parameter values
+UPLOAD_DIR="results"
+INPUT="$SCRIPT_DIR/datasets_prepro/GSM6592049_M2_prepro.h5ad"
 
-base=$(basename "$INPUT" .h5ad)
+SPONGE_NETWORK="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv"
+SPONGE_ANALYSIS="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv"
 
-params="defaults_small" 
-OUT_DIR="$SCRIPT_DIR/results/${base}_$params" 
+# Extract base name of input file
+BASE_NAME=$(basename "$INPUT" .h5ad)
 
+# Random folder name from predefined choices
+BASE_DIR_CHOICES=("plasmidpoop" "junkDNA420" "kackhaufen1" "dumpase1")
+BASE_DIR=${BASE_DIR_CHOICES[$RANDOM % ${#BASE_DIR_CHOICES[@]}]}
+
+# Create output directory
+OUT_DIR="$SCRIPT_DIR/$UPLOAD_DIR/$BASE_DIR"
 mkdir -p "$OUT_DIR"
 
-LOGFILE_PATH="$OUT_DIR/scores_pipeline.log"
-# Empty the log file at the start
-> "$LOGFILE_PATH"
+# Log file
+LOGFILE="$OUT_DIR/scores.log"
+> "$LOGFILE"
 
-echo "Processing $INPUT" | tee -a "$LOGFILE_PATH"
+# Run Python score calculation
+python "$SCRIPT_DIR/calc_python_scores/calc_scores.py" \
+    -input "$INPUT" \
+    -outdir "$OUT_DIR" \
+    -log "$LOGFILE" \
+    -moranI
 
-cd "$SCRIPT_DIR/calc_scores"
-python calc_scores.py -input "$INPUT" -outdir "$OUT_DIR" -moranI >> "$LOGFILE_PATH" 2>&1 
-cd "$SCRIPT_DIR"
+# Run R score calculation
+Rscript "$SCRIPT_DIR/calc_R_scores/calc_scores.R" \
+    --dir "$OUT_DIR" \
+    --log "$LOGFILE" \
+    --sponge_network "$SPONGE_NETWORK" \
+    --sponge_analysis "$SPONGE_ANALYSIS" \
+    --ensembl_col ensemble_id \
+    --aucell
 
-echo "Calculated squidpy scores" | tee -a "$LOGFILE_PATH"
+# Add R scores to AnnData
+python "$SCRIPT_DIR/calc_scores/add_to_adata.py" \
+    -indir "$OUT_DIR" \
+    -log "$LOGFILE"
 
-# Change to the R project directory
-cd "$SCRIPT_DIR/gene_set_ES"
-Rscript calc_scores.R --dir "$OUT_DIR" --log "$LOGFILE_PATH" --sponge_network "$sponge_network" --sponge_analysis "$sponge_analysis" --ensembl_col ensemble_id --aucell
-cd "$SCRIPT_DIR"
+# Optional cleanup
+# rm -rf "$OUT_DIR/expr_info"
+# rm -rf "$OUT_DIR/Rscores"
 
-echo "Calculated R scores" | tee -a "$LOGFILE_PATH"
+echo "Finished! Check out the log file and the AnnData object in $OUT_DIR for details." | tee -a "$LOGFILE"
 
-python "$SCRIPT_DIR/calc_scores/add_to_adata.py" -indir "$OUT_DIR"
-
-echo "Finished! You can find the file with all computed scores here: $OUT_DIR/${base}_scores.h5ad" | tee -a "$LOGFILE_PATH"
-
-
-powershell -c "(New-Object Media.SoundPlayer 'C:\Windows\Media\Windows Notify.wav').PlaySync()"
-echo "All files processed. Check $LOGFILE_PATH for details." | tee -a "$LOGFILE_PATH"
-# End of script
 exit 0
