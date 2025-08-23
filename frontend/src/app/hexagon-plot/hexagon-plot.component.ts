@@ -107,7 +107,7 @@ export class HexagonPlotComponent implements OnInit {
     [col: string]: { [index: string]: string | number };
   } | null = null;
   public showGlobalLigandReceptorScores: boolean = true;
-
+  public showMoranI: boolean = true;
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([

@@ -16,4 +16,6 @@ curl -b cookies.txt http://127.0.0.1:3000/var/n_cells &> /dev/null && echo "var 
 
 curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC &> /dev/null && echo "obsm check successful"
 
+curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860 &> /dev/null && echo "X check successful"
+
 curl -b cookies.txt -X POST http://127.0.0.1:3000/delete_session && echo ""

@@ -35,6 +35,10 @@ export class FilterableTableComponent implements OnInit {
   sortColumn: string | null = null;
   sortAsc: boolean = true;
 
+  // Pagination
+  pageSize = 50; // number of rows per page
+  currentPage = 1;
+
   ngOnInit() {
     this.prepareTable();
   }
@@ -107,6 +111,22 @@ export class FilterableTableComponent implements OnInit {
     return result;
   }
 
+  // Return only rows for current page
+  get pagedRows() {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredRows.slice(start, start + this.pageSize);
+  }
+
+  get totalPages() {
+    return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
+  }
+
+  setPage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
   toggleSort(col: string) {
     if (this.sortColumn === col) {
       this.sortAsc = !this.sortAsc;
@@ -122,13 +142,12 @@ export class FilterableTableComponent implements OnInit {
   }
 
   async fetchAndUpdate(columnName: string, index: string) {
+    let isGeneExpression = columnName === 'gene_expression';
+    let request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${index}`
+      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
     this.sessionService
-      .callWithSession(() =>
-        this.http.get(
-          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`,
-          { withCredentials: true },
-        ),
-      )
+      .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
         next: (res) => {
           const data = res as { [barcode: string]: any };
@@ -141,14 +160,24 @@ export class FilterableTableComponent implements OnInit {
               }
             }
           }
-          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+          if (isGeneExpression) {
+            console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else {
+            console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+          }
+
           this.featuresUpdated.emit();
         },
-        error: (err) =>
-          console.error(
-            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
-            err,
-          ),
+        error: (err) => {
+          if (isGeneExpression) {
+            console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else {
+            console.error(
+              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+              err,
+            );
+          }
+        },
       });
   }
 }

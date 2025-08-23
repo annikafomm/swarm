@@ -21,6 +21,8 @@ sponge_score_names = [
     if not name.startswith("viper")  # Viper score not available for sponge
 ]
 
+genewise_scores = ["moranI", "gearyC"]
+
 
 class Hexagons:
     """
@@ -102,8 +104,27 @@ class Hexagons:
             col = self.anndata.obsm[key].columns[0]  # Default to first column
         return dtype(self.anndata.obsm[key].loc[barcode, col])
 
+    def get_X(self, barcode, gene=None, dtype=float):
+        """
+        Return `adata[barcode, gene].X.toarray()` where gene defaults to the
+        first gene in var.index. If the result is a single number, return as
+        dtype.
+        """
+        if gene is None:
+            gene = self.anndata.var.index[0]
+        expressions = self.anndata[barcode, gene].X.toarray()
+        if expressions.size == 1:
+            return dtype(expressions.flatten()[0])
+
     def to_geojson(self):
         hexagons = {"type": "FeatureCollection", "features": []}
+
+        gene_expression_of_interest = None
+        for score in genewise_scores:
+            if score in self.anndata.uns:
+                gene_expression_of_interest = self.anndata.uns[score].index[0]
+                break  # Moran's I has prio over Geary's C
+
         for barcode, coords in zip(self.anndata.obs.index, self.coordinates):
             if (
                 "in_tissue" in self.obs[barcode]
@@ -173,6 +194,22 @@ class Hexagons:
                     col = self.anndata.uns[uns_key] if uns_key else None
                     property_dict[name] = self.get_obsm(obsm_key, barcode, col)
 
+            for score in genewise_scores:
+                if gene_expression_of_interest is not None:
+                    property_dict["gene_expression"] = self.get_X(
+                        barcode, gene_expression_of_interest
+                    )
+                    break
+
+            # Add additional properties from obs
+            for key, value in self.obs[barcode].items():
+                if value is None or value == "":
+                    continue
+                # Check for NaN if value is a float
+                if isinstance(value, float) and np.isnan(value):
+                    value = None
+                property_dict[key] = value
+
             feature_dict = {
                 "type": "Feature",
                 "geometry": {
@@ -181,19 +218,6 @@ class Hexagons:
                 },
                 "properties": property_dict,
             }
-
-            # Add additional properties from obs
-            for key, value in self.obs[barcode].items():
-
-                if value is None or value == "":
-                    continue
-                # Check for NaN if value is a float
-                if isinstance(value, float) and np.isnan(value):
-                    value = None
-
-                feature_dict["properties"][key] = value
-
-            # Add leiden properties from uns--
 
             hexagons["features"].append(feature_dict)
 
@@ -266,15 +290,17 @@ if __name__ == "__main__":
 
     # Sort global liana scores by cosine similarity std
     # We do this so that the tables appear sorted on the website
-    liana_global_scores = [
-        "ligand_receptor_global_scores",
-        "cell_comp_tf_activity_global_scores",
-    ]
-    for global_score in liana_global_scores:
+    global_scores_sort_keys = {
+        "ligand_receptor_global_scores": "cosine_similarity_std",
+        "cell_comp_tf_activity_global_scores": "cosine_similarity_std",
+        "moranI": "I",
+        "gearyC": "C",
+    }
+    for global_score, sort_key in global_scores_sort_keys.items():
         if global_score in spatial_data.uns:
             spatial_data.uns[global_score] = spatial_data.uns[
                 global_score
-            ].sort_values("cosine_similarity_std", ascending=False)
+            ].sort_values(sort_key, ascending=False)
 
     hexagons = Hexagons(
         spatial_data,
@@ -287,7 +313,7 @@ if __name__ == "__main__":
 
     # Add meta information like ligand receptor pair names for api fetching
     meta_dict = {}
-    for global_score in liana_global_scores:
+    for global_score in global_scores_sort_keys:
         if global_score in spatial_data.uns:
             meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
 
