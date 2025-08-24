@@ -152,8 +152,8 @@ class Hexagons:
                         .to_dict()
                     )
 
-                if "leiden_co_occurence" in self.anndata.uns:
-                    property_dict["leiden_co_occurence"] = self.anndata.uns[
+                if "leiden_co_occurrence" in self.anndata.uns:
+                    property_dict["leiden_co_occurrence"] = self.anndata.uns[
                         "leiden_co_occurrence"
                     ]["occ"][leiden_cluster].tolist()
 
