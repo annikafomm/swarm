@@ -64,7 +64,7 @@
 
       <tbody>
         <tr *ngFor="let row of pagedRows">
-          <td class="index-col">{{ row.index }}</td>
+          <td class="index-col">{{ truncateMiddle(row.index) }}</td>
           <td *ngFor="let col of columns" class="other-col">
             {{ displayNumeric(row[col]) }}
           </td>
