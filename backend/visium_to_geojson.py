@@ -191,7 +191,9 @@ class Hexagons:
 
             for name, (obsm_key, uns_key) in score_mappings.items():
                 if obsm_key in self.anndata.obsm:
-                    col = self.anndata.uns[uns_key] if uns_key else None
+                    col = (
+                        self.anndata.uns[uns_key].index[0] if uns_key else None
+                    )
                     property_dict[name] = self.get_obsm(obsm_key, barcode, col)
 
             for score in genewise_scores:
@@ -320,7 +322,7 @@ if __name__ == "__main__":
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
     colname_mapping = {
-        "nmf_factors": ("ligand_receptor_NMF_factors"),
+        "nmf_factors": ("ligand_receptor_NMF_factors",),
         "tf_names": ("tf_activity_score_ulm", "pathway_activity_padj_ulm"),
         "pathway_names": (
             "pathway_activity_score_mlm",
