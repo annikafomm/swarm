@@ -188,7 +188,7 @@ select {
   top: 70px;
   right: 0;
   width: 400px;
-  height: calc(100vh - 25px);
+  bottom: 0;
   background: white;
   box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
   z-index: 1000;
@@ -200,9 +200,9 @@ select {
 .cluster-sidenav {
   position: absolute;
   top: 70px;
-  right: -400px;
+  right: 0;
   width: 400px;
-  height: calc(100vh - 25px);
+  bottom: 0;
   background: white;
   box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
   transition: right 0.3s ease;
@@ -210,10 +210,6 @@ select {
   overflow-y: auto;
   border-top-left-radius: 18px;
   border-bottom-left-radius: 18px;
-
-  &.open {
-    right: 0;
-  }
 }
 
 .cluster-sidenav-header {

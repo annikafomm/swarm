@@ -290,6 +290,7 @@ button[disabled] {
 /* Pfeile in Firefox ausblenden */
 .no-spin[type="number"] {
   -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 

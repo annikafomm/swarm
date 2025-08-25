@@ -374,7 +374,7 @@
     </div>
   </div>
 
-  <div class="cluster-sidenav" [class.open]="selectedCluster !== null">
+  <div class="cluster-sidenav" *ngIf="selectedCluster !== null">
     <div class="cluster-sidenav-header">
       <h3>Cluster {{ selectedCluster }}</h3>
       <button class="close-btn" (click)="closeClusterSidenav()">×</button>
