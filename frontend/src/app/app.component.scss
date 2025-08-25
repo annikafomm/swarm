@@ -2,7 +2,13 @@
   background-color: #fff;
   font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
+  --topbar-h: 70px;
   min-height: calc(100vh - 70px);
+}
+
+.app-shell {               /* ein Wrapper um main + sidenav */
+  position: relative;      /* Bezug für absolute */
+  min-height: 100svh;      /* mindestens Viewport-Höhe */
 }
 
 .main {
@@ -75,7 +81,7 @@
   top: 70px;
   left: 0;
   width: 300px;
-  height: calc(100vh - 70px);
+  bottom: 0;
   z-index: 1000;
 }
 
