@@ -115,6 +115,11 @@
       border-top: 1px solid var(--border-color);
       vertical-align: middle;
       background: #fff;
+
+      // Truncate long text
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     tbody tr:hover {
       background: #fafafa;
