@@ -417,8 +417,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
-        .style('stroke-width', 1)
-        .style('stroke', 'transparent')
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -436,8 +436,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
-        .style('stroke-width', 1)
-        .style('stroke', 'transparent')
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -1047,13 +1047,13 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(200)
       .style('opacity', 0.5)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'black');
+      .attr('stroke', 'black');
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
@@ -1068,15 +1068,16 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
   }
 
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
+    this.resetClusterExtension();
     this.selectedCell = cell;
 
     if (this.colorByProperty === 'leiden') {
@@ -1085,7 +1086,7 @@ export class HexagonPlotComponent implements OnInit {
     } else {
       d3.select(event.target as SVGElement)
         .transition()
-        .style('stroke', 'black');
+        .attr('stroke', 'black');
     }
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
@@ -1220,10 +1221,13 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => {
-        if (d.properties.leiden === selectedCluster) {
-          // Scale the hexagon coordinates outward
-          return this.getScaledPath(d, 1.1); // 10% larger
-        }
+        // Extending the hexagon size by 1.1 is barely noticeable,
+        // plus it's infinitely annoying resetting size when switching
+        // away from leiden clustering.
+        //if (d.properties.leiden === selectedCluster) {
+        //  // Scale the hexagon coordinates outward
+        //  return this.getScaledPath(d, 1.1); // 10% larger
+        //}
         // Return original path for non-selected hexagons
         const projection = d3.geoIdentity().fitSize([1200, 1000], {
           type: 'FeatureCollection',
@@ -1232,10 +1236,10 @@ export class HexagonPlotComponent implements OnInit {
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
         return pathGenerator(d) || '';
       })
-      .style('stroke-width', (d: CellFeature) => {
+      .attr('stroke-width', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '3px' : '1px';
       })
-      .style('stroke', (d: CellFeature) => {
+      .attr('stroke', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
       })
       // Remove mouseleave event to prevent resetting outline
@@ -1293,8 +1297,8 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-      .style('stroke-width', '1px')
-      .style('stroke', 'transparent')
+      .attr('stroke-width', '1px')
+      .attr('stroke', 'transparent')
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
@@ -1594,8 +1598,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', bgWidth)
         .attr('height', bgHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
       // Gradient rectangle
@@ -1606,8 +1610,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', width)
         .attr('height', height)
         .style('fill', 'url(#svg-legend-gradient)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 3);
 
       // Min label
@@ -1702,8 +1706,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', backgroundWidth)
         .attr('height', backgroundHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
       // Add title
@@ -1732,8 +1736,8 @@ export class HexagonPlotComponent implements OnInit {
           .attr('width', rectWidth)
           .attr('height', rectHeight)
           .style('fill', this.colorScale(cat))
-          .style('stroke', '#333')
-          .style('stroke-width', 0.5)
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
           .attr('rx', 2);
 
         // Text - aligned with the center of the rectangle
