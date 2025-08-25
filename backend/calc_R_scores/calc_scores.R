@@ -105,11 +105,12 @@ main <- function() {
   log_message("Loading expression matrix (and additional files) ...", logfile)
   t0 <- Sys.time()
 
-  expr <- readMM(file.path(args$dir, "expr_info", "expr.mtx"))
-  if (file.exists(file.path(args$dir, "expr_info", "cells.txt"))) {
-    rownames(expr) <- fread(file.path(args$dir, "expr_info", "cells.txt"), header = FALSE)$V1
+  dir_expr <- file.path(args$dir, "expr_info")
+  expr <- readMM(file.path(dir_expr, "expr.mtx"))
+  if (file.exists(file.path(dir_expr, "cells.txt"))) {
+    rownames(expr) <- fread(file.path(dir_expr, "cells.txt"), header = FALSE)$V1
   }
-  var_df <- fread(file.path(args$dir, "expr_info", "var.csv"))
+  var_df <- fread(file.path(dir_expr, "var.csv"))
   expr <- t(as.matrix(expr))
 
   if (nrow(expr) != nrow(var_df)) {
@@ -150,15 +151,20 @@ main <- function() {
       log_message("With the chosen parameters no SPONGE modules could be created.", logfile, 2)
       modules_exist <- FALSE
     } else {
+      outdir_scores <- file.path(args$dir, "Rscores")
+      if (!dir.exists(outdir_scores)) {
+        dir.create(outdir_scores, recursive = TRUE, showWarnings = FALSE)
+      }
+
       t0 <- Sys.time()
 
-      write_json(sponge_modules, path = file.path(args$dir, "Rscores", "sponge_genesets.json"), pretty = TRUE, auto_unbox = TRUE)
+      write_json(sponge_modules, path = file.path(outdir_scores, "sponge_genesets.json"), pretty = TRUE, auto_unbox = TRUE)
 
       log_message(sprintf("SPONGE modules written in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
       filt_sponge_network <- filter_network(ceRNA_interactions, sponge_modules, "Sponge")
-      fwrite(filt_sponge_network, file.path(args$dir, "Rscores", "sponge_network_filtered.csv"))
+      fwrite(filt_sponge_network, file.path(args$dir, "sponge_network_filtered.csv"))
 
       log_message(sprintf("SPONGE network filtered and written in %s", format_runtime(t0)), logfile, 2)
 
@@ -175,7 +181,7 @@ main <- function() {
       log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
-      write.csv(gsva_scores, file = file.path(args$dir, "Rscores", "spongeffects_GSVA_scores_sponge.csv"), row.names = TRUE)
+      write.csv(gsva_scores, file = file.path(outdir_scores, "spongeffects_GSVA_scores_sponge.csv"), row.names = TRUE)
 
       log_message(sprintf("SPONGeffects-GSVA scores written in %s", format_runtime(t0)), logfile, 2)
     }
@@ -189,7 +195,7 @@ main <- function() {
       log_message(sprintf("SPONGeffects-ssGSEA scores computed in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
-      write.csv(ssgsea_scores, file = file.path(args$dir, "Rscores", "spongeffects_ssGSEA_scores_sponge.csv"), row.names = TRUE)
+      write.csv(ssgsea_scores, file = file.path(outdir_scores, "spongeffects_ssGSEA_scores_sponge.csv"), row.names = TRUE)
 
       log_message(sprintf("SPONGeffects-ssGSEA scores written in %s", format_runtime(t0)), logfile, 2)
     }
@@ -204,7 +210,7 @@ main <- function() {
       log_message(sprintf("AUCell scores computed in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
-      write.csv(aucell_scores, file = file.path(args$dir, "Rscores", "aucell_scores_sponge.csv"), row.names = TRUE)
+      write.csv(aucell_scores, file = file.path(outdir_scores, "aucell_scores_sponge.csv"), row.names = TRUE)
 
       log_message(sprintf("AUCell scores written in %s", format_runtime(t0)), logfile, 2)
     }
@@ -224,9 +230,15 @@ main <- function() {
     regulon_df <- fread(args$genie_network)
 
     log_message(sprintf("GENIE3 network loaded in %s", format_runtime(t0)), logfile, 2)
+
+    outdir_scores <- file.path(args$dir, "Rscores")
+    if (!dir.exists(outdir_scores)) {
+      dir.create(outdir_scores, recursive = TRUE, showWarnings = FALSE)
+    }
+    
     t0 <- Sys.time()
 
-    vregulons <- create_Genie_modules(regulon_df, expr=expr, top=args$top_n, dir=args$dir, args$k_reg_genes, args$n_regulons)
+    vregulons <- create_Genie_modules(regulon_df, expr=expr, top=args$top_n, dir=outdir_scores, args$k_reg_genes, args$n_regulons)
     regulons <- lapply(vregulons, function(vr) names(vr$tfmode))
 
     log_message(sprintf("GENIE3 regulons created in %s", format_runtime(t0)), logfile, 2)
@@ -237,13 +249,14 @@ main <- function() {
       log_message("With the chosen parameters no regulons could be created.", logfile, 2)
       modules_exist <- FALSE
     } else {
-      write_json(regulons, path = file.path(args$dir, "Rscores", "genie_genesets.json"), pretty = TRUE, auto_unbox = TRUE)
+
+      write_json(regulons, path = file.path(outdir_scores, "genie_genesets.json"), pretty = TRUE, auto_unbox = TRUE)
 
       log_message(sprintf("GENIE3 regulons written in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
       filt_genie_network <- filter_network(regulon_df, regulons, "Genie")
-      fwrite(filt_genie_network, file.path(args$dir, "Rscores", "genie_network_filtered.csv"))
+      fwrite(filt_genie_network, file.path(args$dir, "genie_network_filtered.csv"))
 
       log_message(sprintf("GENIE3 network filtered and written in %s", format_runtime(t0)), logfile, 2)
 
@@ -260,7 +273,7 @@ main <- function() {
         log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 2)
         t0 <- Sys.time()
 
-        write.csv(gsva_scores, file = file.path(args$dir, "Rscores", "spongeffects_GSVA_scores_genie3.csv"), row.names = TRUE)
+        write.csv(gsva_scores, file = file.path(outdir_scores, "spongeffects_GSVA_scores_genie3.csv"), row.names = TRUE)
 
         log_message(sprintf("SPONGeffects-GSVA scores written in %s", format_runtime(t0)), logfile, 2)
       }
@@ -274,7 +287,7 @@ main <- function() {
         log_message(sprintf("SPONGeffects-ssGSEA scores computed in %s", format_runtime(t0)), logfile, 2)
         t0 <- Sys.time()
 
-        write.csv(ssgsea_scores, file = file.path(args$dir, "Rscores", "spongeffects_ssGSEA_scores_genie3.csv"), row.names = TRUE)
+        write.csv(ssgsea_scores, file = file.path(outdir_scores, "spongeffects_ssGSEA_scores_genie3.csv"), row.names = TRUE)
 
         log_message(sprintf("SPONGeffects-ssGSEA scores written in %s", format_runtime(t0)), logfile, 2)
       }
@@ -289,7 +302,7 @@ main <- function() {
         log_message(sprintf("AUCell scores computed in %s", format_runtime(t0)), logfile, 2)
         t0 <- Sys.time()
 
-        write.csv(aucell_scores, file = file.path(args$dir, "Rscores", "aucell_scores_genie3.csv"), row.names = TRUE)
+        write.csv(aucell_scores, file = file.path(outdir_scores, "aucell_scores_genie3.csv"), row.names = TRUE)
 
         log_message(sprintf("AUCell scores written in %s", format_runtime(t0)), logfile, 2)
       }
@@ -305,7 +318,7 @@ main <- function() {
       log_message(sprintf("VIPER scores computed in %s", format_runtime(t0)), logfile, 2)
       t0 <- Sys.time()
 
-      write.csv(vpres, file = file.path(args$dir, "Rscores", "viper_scores_genie3.csv"), row.names = TRUE)
+      write.csv(vpres, file = file.path(outdir_scores, "viper_scores_genie3.csv"), row.names = TRUE)
 
       log_message(sprintf("VIPER scores written in %s", format_runtime(t0)), logfile, 2)
     }

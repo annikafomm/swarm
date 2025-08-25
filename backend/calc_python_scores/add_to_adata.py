@@ -59,9 +59,10 @@ def main():
 
 
     t0 = time.time()
-    for filename in os.listdir(os.path.join(args.indir, "Rscores")):
+    scores_path = os.path.join(args.indir, "Rscores")
+    for filename in os.listdir(scores_path):
         if filename.endswith('.csv'):
-            file_path = os.path.join(args.indir, filename)
+            file_path = os.path.join(scores_path, filename)
             df = pd.read_csv(file_path, index_col=0)
 
             df_name = filename.replace(".csv", "")
@@ -70,7 +71,7 @@ def main():
             adata.obsm[df_name] = df.T
         
         elif filename.endswith('.json'):
-            file_path = os.path.join(args.indir, filename)
+            file_path = os.path.join(scores_path, filename)
             with open(file_path, "r") as f:
                 data_dict = json.load(f)
 

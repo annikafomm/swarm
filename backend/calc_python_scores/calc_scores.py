@@ -69,7 +69,7 @@ def main():
 
     # Prepare log file
     logfile = args.log
-    log_message(f"Python score pipeline started at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
+    log_message(f"Python score pipeline started at {time.strftime('%Y-%m-%d %H:%M:%S')}", logfile)
     
 
     # Load the data
