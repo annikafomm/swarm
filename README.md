@@ -10,7 +10,7 @@ https://docs.google.com/spreadsheets/d/1RH_lB4OEUEgZMIYu59_RTwcPmkC-ciyApEnlhvPS
 
 ## Overview
 
-<img width="1072" height="921" alt="Screenshot from 2025-08-14 14-33-33" src="https://github.com/user-attachments/assets/145f8ff9-9150-4cda-9d2e-c2eb8f3f7c35" />
+![Overview](overview.png)
 
 ## Backend
 
