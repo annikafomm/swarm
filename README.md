@@ -95,3 +95,19 @@ The web-tool is working with the anndata-format. This is a tutorial on how count
     - MLM score: stored in `adata.obsm["pathway_activity_score_mlm"]` as DataFrame with pathways as columns.
     - MLM p-adjusted value: stored in `adata.obsm["pathway_activity_padj_mlm"]` as DataFrame with pathways as columns.
 
+We furthermore use GRNs computed using sponge and genie3, both CSV-formatted.
+
+Genie:
+
+```csv
+regulatoryGene,targetGene,weight
+FOXM1,KIF20A,0.06364686682258
+```
+
+Sponge:
+
+```csv
+geneA,geneB,df,cor,pcor,mscor,p.val,p.adj
+ENSG00000182141,ENSG00000258630,1,0.121684631317227,0.0764637550413806,0.0452208762758468,0.029426,0.519790968019617
+```
+
