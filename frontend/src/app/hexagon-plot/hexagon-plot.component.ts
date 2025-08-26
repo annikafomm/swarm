@@ -1556,6 +1556,7 @@ export class HexagonPlotComponent implements OnInit {
     } else {
       // Categorical legend
       const categories = this.currentLegendDomain as string[];
+      categories.sort();
       const legendX = -100;
       const legendY = 10;
       const itemHeight = 40;
