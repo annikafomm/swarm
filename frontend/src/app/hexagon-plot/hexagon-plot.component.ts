@@ -1,10 +1,4 @@
-import {
-  Component,
-  OnInit,
-  Input,
-  Output,
-  EventEmitter
-} from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
@@ -20,15 +14,11 @@ import { SessionService } from '../session.service';
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
 })
-
-
-
 export class HexagonPlotComponent implements OnInit {
-
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
-  ) { }
+  ) {}
 
   // Define to use Math functions in the html template
   public Math = Math;
@@ -52,7 +42,6 @@ export class HexagonPlotComponent implements OnInit {
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
 
-
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
   public meta: { [key: string]: any } = {};
@@ -68,10 +57,10 @@ export class HexagonPlotComponent implements OnInit {
     average_clustering: number;
     closeness_centrality: number;
   } = {
-      degree_centrality: 0,
-      average_clustering: 0,
-      closeness_centrality: 0,
-    };
+    degree_centrality: 0,
+    average_clustering: 0,
+    closeness_centrality: 0,
+  };
 
   public genie3Network: genie3RegGraphConnection[] = [];
   public spongeNetwork: spongeRegGraphConnection[] = [];
@@ -171,12 +160,14 @@ export class HexagonPlotComponent implements OnInit {
         // This is for showing all properties for coloring
         this.features = data.features;
         this.meta = data.meta;
-        this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+        this.selectedRegulatoryScore =
+          this.meta['grn_score_names']?.[0] || null;
         this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
         this.geneSetsSponge = this.meta['sponge_genesets'] || {};
-        this.selectedGeneSetGenie3 = Object.keys(this.meta['genie_genesets'] || {})[0] || null;
-        this.selectedGeneSetSponge = Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
-
+        this.selectedGeneSetGenie3 =
+          Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+        this.selectedGeneSetSponge =
+          Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
 
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
@@ -184,7 +175,7 @@ export class HexagonPlotComponent implements OnInit {
           return typeof val === 'string' || typeof val === 'number';
         });
 
-        this.colorableProperties.push('regulatory_scores')
+        this.colorableProperties.push('regulatory_scores');
 
         // sort in alphabetical order
 
@@ -245,8 +236,6 @@ export class HexagonPlotComponent implements OnInit {
         console.error('Error loading or rendering data:', error);
       });
 
-
-
     /* d3.csv('assets/sponge_network_smaller.csv', d3.autoType)
       .then((rows) => {
         console.log('WEird')
@@ -276,7 +265,6 @@ export class HexagonPlotComponent implements OnInit {
         console.error('Error loading genie3 network:', error);
       });
  */
-
   }
 
   //public updateHexColors(): void {
@@ -349,15 +337,25 @@ export class HexagonPlotComponent implements OnInit {
 
   public onColorbyPropertyChange(): void {
     if (this.colorByProperty === 'regulatory_scores') {
-      if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3) {
-        console.log(this.selectedRegulatoryScore, this.selectedGeneSetGenie3)
-        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+      if (
+        this.selectedRegulatoryScore?.endsWith('genie3') &&
+        this.selectedGeneSetGenie3
+      ) {
+        console.log(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+        this.fetchAndUpdate(
+          this.selectedRegulatoryScore,
+          this.selectedGeneSetGenie3,
+        );
         this.updateAucellGraphGenie3();
         this.updateAucellGraphSponge();
-
-      }
-      else if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
-        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+      } else if (
+        this.selectedRegulatoryScore?.endsWith('sponge') &&
+        this.selectedGeneSetSponge
+      ) {
+        this.fetchAndUpdate(
+          this.selectedRegulatoryScore,
+          this.selectedGeneSetSponge,
+        );
         this.updateAucellGraphGenie3();
         this.updateAucellGraphSponge();
       }
@@ -392,7 +390,8 @@ export class HexagonPlotComponent implements OnInit {
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
 
     // Check if all values are integers (for categorical treatment)
-    const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
+    const allIntegers =
+      allNumbers && numericValues.every((n) => Number.isInteger(n));
 
     // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
@@ -418,6 +417,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -435,7 +436,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
-        .style('stroke', 'transparent')
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -463,8 +465,8 @@ export class HexagonPlotComponent implements OnInit {
     const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     const edges: { source: string; target: string; weight: number }[] = [];
 
-    let candidateEdges: { source: string, target: string, weight: number }[] = [];
-
+    let candidateEdges: { source: string; target: string; weight: number }[] =
+      [];
 
     this.sessionService
       .callWithSession(() =>
@@ -475,205 +477,231 @@ export class HexagonPlotComponent implements OnInit {
       )
       .subscribe({
         next: (res) => {
-          const data = res as { regulatoryGene: string, targetGene: string, weight: number }[];
-          console.log('Data', data)
+          const data = res as {
+            regulatoryGene: string;
+            targetGene: string;
+            weight: number;
+          }[];
+          console.log('Data', data);
           this.genie3Network = data.map((d) => ({
             source: d.regulatoryGene,
             target: d.targetGene,
             weight: d.weight,
           }));
 
-          this.genie3Network.forEach(connection => {
-      if ((connection.source === regulator || connection.target === regulator) ||
-        targets.includes(connection.source) || targets.includes(connection.target)) {
-        candidateEdges.push({
-          source: connection.source,
-          target: connection.target,
-          weight: connection.weight
-        });
-      }
-    });
+          this.genie3Network.forEach((connection) => {
+            if (
+              connection.source === regulator ||
+              connection.target === regulator ||
+              targets.includes(connection.source) ||
+              targets.includes(connection.target)
+            ) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                weight: connection.weight,
+              });
+            }
+          });
 
-    console.log('Candidate edges before filtering:', candidateEdges);
+          console.log('Candidate edges before filtering:', candidateEdges);
 
-    candidateEdges.sort((a, b) => b.weight - a.weight);
-    candidateEdges = candidateEdges.slice(0, this.minGenie3Edges);
+          candidateEdges.sort((a, b) => b.weight - a.weight);
+          candidateEdges = candidateEdges.slice(0, this.minGenie3Edges);
 
-    this.genie3WeightCutoff = candidateEdges.length > 0 ? Math.min(...candidateEdges.map(edge => edge.weight)) : null;
+          this.genie3WeightCutoff =
+            candidateEdges.length > 0
+              ? Math.min(...candidateEdges.map((edge) => edge.weight))
+              : null;
 
-    // Create nodes from all edges (source and target)
-    const nodeSet = new Set<string>();
-    candidateEdges.forEach(edge => {
-      nodeSet.add(edge.source);
-      nodeSet.add(edge.target);
-    });
-    // Add regulator to nodeset
-    nodeSet.add(regulator);
+          // Create nodes from all edges (source and target)
+          const nodeSet = new Set<string>();
+          candidateEdges.forEach((edge) => {
+            nodeSet.add(edge.source);
+            nodeSet.add(edge.target);
+          });
+          // Add regulator to nodeset
+          nodeSet.add(regulator);
 
-    // For the nodes with top edges we reinset their original edges
+          // For the nodes with top edges we reinset their original edges
 
-    this.genie3Network.forEach(connection => {
-      if (nodeSet.has(connection.source) && nodeSet.has(connection.target)) {
-        candidateEdges.push({
-          source: connection.source,
-          target: connection.target,
-          weight: connection.weight
-        });
-      }
-    });
+          this.genie3Network.forEach((connection) => {
+            if (
+              nodeSet.has(connection.source) &&
+              nodeSet.has(connection.target)
+            ) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                weight: connection.weight,
+              });
+            }
+          });
 
-    // Create nodes array with proper groups
-    Array.from(nodeSet).forEach(nodeId => {
-      if (nodeId === regulator) {
-        if (!nodes.some(n => n.id === nodeId)) {
-          nodes.push({ id: nodeId, group: 0 }); // regulator
-        }
-      } else if (targets.includes(nodeId)) {
-        if (!nodes.some(n => n.id === nodeId)) {
-          nodes.push({ id: nodeId, group: 1 }); // targets
-        }
-      } else {
-        if (!nodes.some(n => n.id === nodeId)) {
-          nodes.push({ id: nodeId, group: 2 }); // neighbors
-        }
-      }
-    });
+          // Create nodes array with proper groups
+          Array.from(nodeSet).forEach((nodeId) => {
+            if (nodeId === regulator) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 0 }); // regulator
+              }
+            } else if (targets.includes(nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 1 }); // targets
+              }
+            } else {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 2 }); // neighbors
+              }
+            }
+          });
 
-    edges.push(...candidateEdges);
+          edges.push(...candidateEdges);
 
-    // Create the graph
-    const graph = {
-      nodes: nodes.filter((node) => node.id && node.id.length > 0),
-      edges: edges.filter(
-        (edge) =>
-          nodes.some((node) => node.id === edge.source) &&
-          nodes.some((node) => node.id === edge.target),
-      ),
-    };
+          // Create the graph
+          const graph = {
+            nodes: nodes.filter((node) => node.id && node.id.length > 0),
+            edges: edges.filter(
+              (edge) =>
+                nodes.some((node) => node.id === edge.source) &&
+                nodes.some((node) => node.id === edge.target),
+            ),
+          };
 
+          // Create the graph visualization
+          const width = 500;
+          const height = 300;
 
+          const svg = d3
+            .select('#aucell_graph_genie3')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background-color', '#f8f9fa');
 
-    // Create the graph visualization
-    const width = 500;
-    const height = 300;
+          // Draw links (edges)
+          const link = svg
+            .append('g')
+            .attr('stroke', '#999')
+            .attr('stroke-opacity', 0.6)
+            .selectAll('line')
+            .data(graph.edges)
+            .enter()
+            .append('line')
+            .attr('stroke-width', (d: any) =>
+              Math.max(1, Math.sqrt(d.weight) * 10),
+            )
+            .attr('stroke', (d: any) => {
+              // Color edges based on weight
+              const intensity = Math.min(d.weight * 10, 1);
+              return d3.interpolateReds(0.3 + intensity * 0.7);
+            });
 
-    const svg = d3
-      .select('#aucell_graph_genie3')
-      .append('svg')
-      .attr('width', width)
-      .attr('height', height)
-      .style('background-color', '#f8f9fa');
+          // Draw nodes
+          const node = svg
+            .append('g')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .selectAll('circle')
+            .data(graph.nodes)
+            .enter()
+            .append('circle')
+            .attr('r', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return 15; // regulator
+                case 1:
+                  return 12; // targets
+                case 2:
+                  return 8; // neighbors
+                case 3:
+                  return 6;
+                default:
+                  return 10;
+              }
+            })
+            .attr('fill', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return '#e41a1c'; // regulator - red
+                case 1:
+                  return '#377eb8'; // targets - blue
+                case 2:
+                  return '#4daf4a'; // neighbors - green
+                case 3:
+                  return '#ff7f00'; // high-weight - orange
+                default:
+                  return '#999';
+              }
+            });
 
-    // Draw links (edges)
-    const link = svg
-      .append('g')
-      .attr('stroke', '#999')
-      .attr('stroke-opacity', 0.6)
-      .selectAll('line')
-      .data(graph.edges)
-      .enter()
-      .append('line')
-      .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.weight) * 10))
-      .attr('stroke', (d: any) => {
-        // Color edges based on weight
-        const intensity = Math.min(d.weight * 10, 1);
-        return d3.interpolateReds(0.3 + intensity * 0.7);
-      });
+          // Add labels
+          const labels = svg
+            .append('g')
+            .selectAll('text')
+            .data(graph.nodes)
+            .enter()
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '.35em')
+            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+            .style('font-weight', (d: any) =>
+              d.group === 0 ? 'bold' : 'normal',
+            )
+            .style('fill', '#333')
+            .text((d: any) =>
+              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+            );
 
-    // Draw nodes
-    const node = svg
-      .append('g')
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
-      .selectAll('circle')
-      .data(graph.nodes)
-      .enter()
-      .append('circle')
-      .attr('r', (d: any) => {
-        switch (d.group) {
-          case 0:
-            return 15; // regulator
-          case 1:
-            return 12; // targets
-          case 2:
-            return 8; // neighbors
-          case 3:
-            return 6;
-          default:
-            return 10;
-        }
-      })
-      .attr('fill', (d: any) => {
-        switch (d.group) {
-          case 0:
-            return '#e41a1c'; // regulator - red
-          case 1:
-            return '#377eb8'; // targets - blue
-          case 2:
-            return '#4daf4a'; // neighbors - green
-          case 3:
-            return '#ff7f00'; // high-weight - orange
-          default:
-            return '#999';
-        }
-      });
+          // Initialize simulation with stronger forces
+          const simulation = d3
+            .forceSimulation(graph.nodes)
+            .force(
+              'link',
+              d3
+                .forceLink(graph.edges)
+                .id((d: any) => d.id)
+                .distance(30)
+                .strength(0.5),
+            )
+            .force('charge', d3.forceManyBody().strength(-500))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(30))
+            .force('boundary', () => {
+              graph.nodes.forEach((node: any) => {
+                const radius =
+                  node.group === 0
+                    ? 15
+                    : node.group === 1
+                      ? 12
+                      : node.group === 2
+                        ? 8
+                        : 6;
 
-    // Add labels
-    const labels = svg
-      .append('g')
-      .selectAll('text')
-      .data(graph.nodes)
-      .enter()
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.35em')
-      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-      .style('font-weight', (d: any) => (d.group === 0 ? 'bold' : 'normal'))
-      .style('fill', '#333')
-      .text((d: any) =>
-        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-      );
+                node.x = Math.max(radius, Math.min(width - radius, node.x));
 
+                node.y = Math.max(radius, Math.min(height - radius, node.y));
+              });
+            });
 
+          simulation.on('tick', () => {
+            link
+              .attr('x1', (d: any) => d.source.x)
+              .attr('y1', (d: any) => d.source.y)
+              .attr('x2', (d: any) => d.target.x)
+              .attr('y2', (d: any) => d.target.y);
 
-    // Initialize simulation with stronger forces
-    const simulation = d3.forceSimulation(graph.nodes)
-      .force('link', d3.forceLink(graph.edges).id((d: any) => d.id).distance(30).strength(0.5))
-      .force('charge', d3.forceManyBody().strength(-500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(30))
-      .force('boundary', () => {
-        graph.nodes.forEach((node: any) => {
-          const radius = node.group === 0 ? 15 : node.group === 1 ? 12 : node.group === 2 ? 8 : 6;
+            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
 
-          node.x = Math.max(radius, Math.min(width - radius, node.x));
+            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+          });
 
-          node.y = Math.max(radius, Math.min(height - radius, node.y));
-        });
-      });
+          this.isLoadingGenie3 = false;
 
-    simulation.on('tick', () => {
-      link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
-
-      node
-        .attr('cx', (d: any) => d.x)
-        .attr('cy', (d: any) => d.y);
-
-      labels
-        .attr('x', (d: any) => d.x)
-        .attr('y', (d: any) => d.y);
-
-    });
-
-    this.isLoadingGenie3 = false;
-
-    console.log('Network visualization complete');
+          console.log('Network visualization complete');
           console.log('Genie3 Network:', this.genie3Network);
-          console.log(`[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`);
+          console.log(
+            `[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`,
+          );
         },
         error: (err) =>
           console.error(
@@ -686,7 +714,6 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public updateAucellGraphSponge(): void {
-
     console.log('Updating AUCELL graph for Sponge...');
     d3.select('#aucell_graph_sponge').selectAll('*').remove();
 
@@ -701,8 +728,12 @@ export class HexagonPlotComponent implements OnInit {
     const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     const edges: { source: string; target: string; p_adjusted: number }[] = [];
 
-    let candidateEdges: { source: string, target: string, p_adjusted: number }[] = []
-/*
+    let candidateEdges: {
+      source: string;
+      target: string;
+      p_adjusted: number;
+    }[] = [];
+    /*
     this.spongeNetwork.forEach(connection => {
      if ((connection.source === regulator || connection.target === regulator) ||
          targets.includes(connection.source) || targets.includes(connection.target)) {
@@ -712,9 +743,7 @@ export class HexagonPlotComponent implements OnInit {
          p_adjusted: connection.p_adjusted
        });
      }
-   }) */;
-
-    this.sessionService
+   }) */ this.sessionService
       .callWithSession(() =>
         this.http.get(
           `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
@@ -723,7 +752,12 @@ export class HexagonPlotComponent implements OnInit {
       )
       .subscribe({
         next: (res) => {
-          const data = res as { "geneA": string, "geneB": string, "p.adj": number, "mscor": number }[];
+          const data = res as {
+            geneA: string;
+            geneB: string;
+            'p.adj': number;
+            mscor: number;
+          }[];
 
           this.isLoadingSponge = true;
 
@@ -733,36 +767,47 @@ export class HexagonPlotComponent implements OnInit {
             source: d.geneA,
             target: d.geneB,
             p_adjusted: d['p.adj'],
-            mscore: d['mscor']
+            mscore: d['mscor'],
           }));
 
           // Push all edges of filtered Network (filtered to geneset edges)
-          candidateEdges.push(...this.spongeNetwork.filter(connection => {
-            return (connection.source === regulator || connection.target === regulator ||
-              targets.includes(connection.source) || targets.includes(connection.target));
-          }));
+          candidateEdges.push(
+            ...this.spongeNetwork.filter((connection) => {
+              return (
+                connection.source === regulator ||
+                connection.target === regulator ||
+                targets.includes(connection.source) ||
+                targets.includes(connection.target)
+              );
+            }),
+          );
           // Sort such that smallest p_values are kept
           candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
           candidateEdges = candidateEdges.slice(0, this.minSpongeEdges);
 
-          this.spongePValueCutoff = candidateEdges.length > 0 ? Math.max(...candidateEdges.map(edge => edge.p_adjusted)) : null;
+          this.spongePValueCutoff =
+            candidateEdges.length > 0
+              ? Math.max(...candidateEdges.map((edge) => edge.p_adjusted))
+              : null;
 
           // Create nodes from all edges (source and target)
           const nodeSet = new Set<string>();
-          candidateEdges.forEach(edge => {
+          candidateEdges.forEach((edge) => {
             nodeSet.add(edge.source);
             nodeSet.add(edge.target);
           });
           // Add regulator to nodeset
           nodeSet.add(regulator);
 
-
-          this.spongeNetwork.forEach(connection => {
-            if (nodeSet.has(connection.source) && nodeSet.has(connection.target)) {
+          this.spongeNetwork.forEach((connection) => {
+            if (
+              nodeSet.has(connection.source) &&
+              nodeSet.has(connection.target)
+            ) {
               candidateEdges.push({
                 source: connection.source,
                 target: connection.target,
-                p_adjusted: connection.p_adjusted
+                p_adjusted: connection.p_adjusted,
               });
             }
           });
@@ -770,17 +815,17 @@ export class HexagonPlotComponent implements OnInit {
           edges.push(...candidateEdges);
 
           // Create nodes array with proper groups
-          Array.from(nodeSet).forEach(nodeId => {
+          Array.from(nodeSet).forEach((nodeId) => {
             if (nodeId === regulator) {
-              if (!nodes.some(n => n.id === nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
                 nodes.push({ id: nodeId, group: 0 }); // regulator
               }
             } else if (targets.includes(nodeId)) {
-              if (!nodes.some(n => n.id === nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
                 nodes.push({ id: nodeId, group: 1 }); // targets
               }
             } else {
-              if (!nodes.some(n => n.id === nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
                 nodes.push({ id: nodeId, group: 2 }); // neighbors
               }
             }
@@ -796,11 +841,9 @@ export class HexagonPlotComponent implements OnInit {
             ),
           };
 
-
           // Create the graph visualization
           const width = 500;
           const height = 300;
-
 
           const svg = d3
             .select('#aucell_graph_sponge')
@@ -818,7 +861,9 @@ export class HexagonPlotComponent implements OnInit {
             .data(graph.edges)
             .enter()
             .append('line')
-            .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.p_adjusted) * 10))
+            .attr('stroke-width', (d: any) =>
+              Math.max(1, Math.sqrt(d.p_adjusted) * 10),
+            )
             .attr('stroke', (d: any) => {
               // Color edges based on p_adjusted
               const intensity = Math.min(d.p_adjusted * 10, 1);
@@ -873,12 +918,13 @@ export class HexagonPlotComponent implements OnInit {
             .attr('text-anchor', 'middle')
             .attr('dy', '.35em')
             .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-            .style('font-weight', (d: any) => (d.group === 0 ? 'bold' : 'normal'))
+            .style('font-weight', (d: any) =>
+              d.group === 0 ? 'bold' : 'normal',
+            )
             .style('fill', '#333')
             .text((d: any) =>
               d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
             );
-
 
           // Initialize simulation with stronger forces
           const simulation = d3
@@ -921,13 +967,11 @@ export class HexagonPlotComponent implements OnInit {
             node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
 
             labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
-
           });
 
           this.isLoadingSponge = false;
 
           console.log('Network visualization complete');
-
         },
         error: (err) =>
           console.error(
@@ -935,11 +979,9 @@ export class HexagonPlotComponent implements OnInit {
             err,
           ),
       });
-
   }
 
   public onMinEdgesChangeSponge(): void {
-
     if (this.selectedGeneSetSponge) {
       this.isLoadingSponge = true;
       setTimeout(() => this.updateAucellGraphSponge(), 50);
@@ -972,7 +1014,10 @@ export class HexagonPlotComponent implements OnInit {
       // Open in new tab/window
       window.open(gProfilerUrl, '_blank');
     } else {
-      console.warn('Could not generate gProfiler URL for Genie3 gene set:', this.selectedGeneSetGenie3);
+      console.warn(
+        'Could not generate gProfiler URL for Genie3 gene set:',
+        this.selectedGeneSetGenie3,
+      );
     }
   }
 
@@ -1002,34 +1047,37 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(200)
       .style('opacity', 0.5)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'black');
+      .attr('stroke', 'black');
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
     if (
       this.selectedCell &&
-      d.properties.barcode === this.selectedCell.properties.barcode
+      (d.properties.barcode === this.selectedCell.properties.barcode ||
+        (this.colorByProperty === 'leiden' &&
+          d.properties.leiden === this.selectedCell.properties.leiden))
     )
       return;
     d3.selectAll('.Country')
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
   }
 
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
+    this.resetClusterExtension();
     this.selectedCell = cell;
 
     if (this.colorByProperty === 'leiden') {
@@ -1038,7 +1086,7 @@ export class HexagonPlotComponent implements OnInit {
     } else {
       d3.select(event.target as SVGElement)
         .transition()
-        .style('stroke', 'black');
+        .attr('stroke', 'black');
     }
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
@@ -1073,8 +1121,14 @@ export class HexagonPlotComponent implements OnInit {
         this.isLoadingGenie3 = true;
         setTimeout(() => {
           this.updateAucellGraphGenie3();
-          if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3) {
-            this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+          if (
+            this.selectedRegulatoryScore?.endsWith('genie3') &&
+            this.selectedGeneSetGenie3
+          ) {
+            this.fetchAndUpdate(
+              this.selectedRegulatoryScore,
+              this.selectedGeneSetGenie3,
+            );
           }
         }, 100);
       } else {
@@ -1090,12 +1144,21 @@ export class HexagonPlotComponent implements OnInit {
       if (this.selectedGeneSetSponge) {
         d3.select('#aucell_graph_sponge').selectAll('*').remove();
         console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
-        console.log('Sponge targets available:', this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0);
+        console.log(
+          'Sponge targets available:',
+          this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0,
+        );
         this.isLoadingSponge = true;
         setTimeout(() => {
           this.updateAucellGraphSponge();
-          if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
-            this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+          if (
+            this.selectedRegulatoryScore?.endsWith('sponge') &&
+            this.selectedGeneSetSponge
+          ) {
+            this.fetchAndUpdate(
+              this.selectedRegulatoryScore,
+              this.selectedGeneSetSponge,
+            );
           }
         }, 100);
       } else {
@@ -1158,10 +1221,13 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => {
-        if (d.properties.leiden === selectedCluster) {
-          // Scale the hexagon coordinates outward
-          return this.getScaledPath(d, 1.1); // 10% larger
-        }
+        // Extending the hexagon size by 1.1 is barely noticeable,
+        // plus it's infinitely annoying resetting size when switching
+        // away from leiden clustering.
+        //if (d.properties.leiden === selectedCluster) {
+        //  // Scale the hexagon coordinates outward
+        //  return this.getScaledPath(d, 1.1); // 10% larger
+        //}
         // Return original path for non-selected hexagons
         const projection = d3.geoIdentity().fitSize([1200, 1000], {
           type: 'FeatureCollection',
@@ -1170,10 +1236,10 @@ export class HexagonPlotComponent implements OnInit {
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
         return pathGenerator(d) || '';
       })
-      .style('stroke-width', (d: CellFeature) => {
+      .attr('stroke-width', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '3px' : '1px';
       })
-      .style('stroke', (d: CellFeature) => {
+      .attr('stroke', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
       })
       // Remove mouseleave event to prevent resetting outline
@@ -1231,8 +1297,8 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-      .style('stroke-width', '1px')
-      .style('stroke', 'transparent')
+      .attr('stroke-width', '1px')
+      .attr('stroke', 'transparent')
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
@@ -1416,11 +1482,23 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public onRegulatoryScoreChange(): void {
-
-    if (this.selectedRegulatoryScore?.endsWith('genie3') && this.selectedGeneSetGenie3 && this.selectedGeneSetSponge) {
-      this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
-    } else if (this.selectedRegulatoryScore?.endsWith('sponge') && this.selectedGeneSetSponge) {
-      this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge);
+    if (
+      this.selectedRegulatoryScore?.endsWith('genie3') &&
+      this.selectedGeneSetGenie3 &&
+      this.selectedGeneSetSponge
+    ) {
+      this.fetchAndUpdate(
+        this.selectedRegulatoryScore,
+        this.selectedGeneSetGenie3,
+      );
+    } else if (
+      this.selectedRegulatoryScore?.endsWith('sponge') &&
+      this.selectedGeneSetSponge
+    ) {
+      this.fetchAndUpdate(
+        this.selectedRegulatoryScore,
+        this.selectedGeneSetSponge,
+      );
     }
   }
 
@@ -1471,31 +1549,44 @@ export class HexagonPlotComponent implements OnInit {
       // Measure title text width for dynamic background
       const titleText = this.colorByProperty.replace(/_/g, ' ');
       const tempSvg = this.svg.append('g').style('opacity', 0);
-      const titleWidth = tempSvg.append('text')
-        .text(titleText)
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .node()?.getBBox().width || 0;
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
 
       // Measure min value
       const minText = min.toFixed(2);
-      const minWidth = tempSvg.append('text')
-        .text(minText)
-        .style('font-size', `${fontSize}px`)
-        .node()?.getBBox().width || 0;
+      const minWidth =
+        tempSvg
+          .append('text')
+          .text(minText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
 
       // Measure max value
       const maxText = max.toFixed(2);
-      const maxWidth = tempSvg.append('text')
-        .text(maxText)
-        .style('font-size', `${fontSize}px`)
-        .node()?.getBBox().width || 0;
+      const maxWidth =
+        tempSvg
+          .append('text')
+          .text(maxText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
 
       tempSvg.remove();
 
       // Calculate required dimensions
       const textHeight = fontSize * 1.2; // Approximate text height
-      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+      const requiredWidth = Math.max(
+        width,
+        titleWidth,
+        minWidth + maxWidth + 20,
+      );
       const bgWidth = requiredWidth + padding * 2;
       const bgHeight = height + textHeight * 2 + padding * 3;
 
@@ -1507,8 +1598,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', bgWidth)
         .attr('height', bgHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
       // Gradient rectangle
@@ -1519,8 +1610,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', width)
         .attr('height', height)
         .style('fill', 'url(#svg-legend-gradient)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 3);
 
       // Min label
@@ -1570,21 +1661,29 @@ export class HexagonPlotComponent implements OnInit {
 
       // Measure title text
       const titleText = this.colorByProperty.replace(/_/g, ' ');
-      const titleWidth = tempSvg.append('text')
-        .text(titleText)
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .node()?.getBBox().width || 0;
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
 
       // Measure category text widths
-      const textNodes = tempSvg.selectAll('text')
+      const textNodes = tempSvg
+        .selectAll('text')
         .data(categories)
         .enter()
         .append('text')
-        .text(d => d)
+        .text((d) => d)
         .style('font-size', `${fontSize}px`);
 
-      const maxTextWidth = Math.max(...textNodes.nodes().map(node => (node as SVGGraphicsElement).getBBox().width));
+      const maxTextWidth = Math.max(
+        ...textNodes
+          .nodes()
+          .map((node) => (node as SVGGraphicsElement).getBBox().width),
+      );
       tempSvg.remove();
 
       const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
@@ -1596,7 +1695,8 @@ export class HexagonPlotComponent implements OnInit {
 
       // Calculate title height and total background height
       const titleHeight = fontSize + titlePadding;
-      const backgroundHeight = categories.length * itemHeight + 20 + titleHeight;
+      const backgroundHeight =
+        categories.length * itemHeight + 20 + titleHeight;
       const backgroundWidth = itemWidth + 20;
 
       // Background - positioned to include title space
@@ -1607,8 +1707,8 @@ export class HexagonPlotComponent implements OnInit {
         .attr('width', backgroundWidth)
         .attr('height', backgroundHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
       // Add title
@@ -1637,8 +1737,8 @@ export class HexagonPlotComponent implements OnInit {
           .attr('width', rectWidth)
           .attr('height', rectHeight)
           .style('fill', this.colorScale(cat))
-          .style('stroke', '#333')
-          .style('stroke-width', 0.5)
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
           .attr('rx', 2);
 
         // Text - aligned with the center of the rectangle
@@ -1653,9 +1753,7 @@ export class HexagonPlotComponent implements OnInit {
           .text(cat);
 
         // Add tooltip for full text
-        legendItem
-          .append('title')
-          .text(cat);
+        legendItem.append('title').text(cat);
       });
     }
   }
@@ -1678,12 +1776,12 @@ interface CellProperties {
   leiden_centrality: { [key: string]: number };
   leiden_co_occurrence: number[][];
   [key: string]:
-  | string
-  | number
-  | number[]
-  | []
-  | undefined
-  | { [key: string]: any };
+    | string
+    | number
+    | number[]
+    | []
+    | undefined
+    | { [key: string]: any };
 }
 
 interface CellFeature {
