@@ -1,25 +1,9 @@
-// src/app/form-page/form-page.component.ts
-
-// import for an Angular component
 import { Component } from '@angular/core';
-// Imports the CommonModule (provides core Angular directives like *ngIf, *ngFor).
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
-/* Imports classes for Reactive Forms:
-   FormBuilder: helper to create form groups.
-   FormGroup: represents a collection of form controls.
-   ReactiveFormsModule: enables Reactive Forms in Angular. */
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-// Imports Angular's HTTP client for API requests
-import { HttpClient, HttpEventType, HttpClientModule } from '@angular/common/http';
-// Imports environment variables, e.g., the backend API URL.
-import { environment } from '../../environments/environment';
+import { ReactiveFormsModule } from '@angular/forms';
+import { HttpClientModule } from '@angular/common/http';
 
-/* Defines the Angular component:
-   selector: Tag name in HTML (<app-form-page>).
-   standalone: true — the component is standalone and does not need to be declared in a module.
-   imports: modules this component depends on.
-   templateUrl: path to the HTML template. */
 @Component({
   selector: 'app-form-page',
   standalone: true,
@@ -27,396 +11,368 @@ import { environment } from '../../environments/environment';
   templateUrl: './form-page.component.html',
   styleUrls: ['./form-page.component.scss'],
 })
-
-// Begins the component class definition
 export class FormPageComponent {
-  // Form object
   form: FormGroup;
 
-  // Files
-  spatialFile!: File;        // the spatial file is required
+  // files
+  spatialFile?: File;
   singleCellFile?: File;
-  precomputedFile?: File;
-  spongeNetworkFile?: File;
-  spongeAnalysisFile?: File;
-  spongeInteractionsFile?: File;
-  genieFile?: File;
+  // network scores uploads (shared)
+  genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
+  spongeNAFile?: File;           // SPONGE networkanalysis
+  spongeNIFile?: File;           // SPONGE networkinteractions
+  // LIANA+
+  // LIANA+
+  lianaGenie3File?: File;
+  lianaPathwayFile?: File;
 
-  // This is relevant for the HTML view — which scores should be displayed/available
-  availableScores = ['LIANA+', 'SPONGeffects', 'squidpy', 'VIPER'];
 
-  uploading = false;                  // Upload is running; set to true as soon as submit starts
-  uploadProgress: number | null = null; // used for a potential upload progress bar
-  errorMsg: string | null = null;       // used for error messages
+  // ui state
+  uploading = false;
+  uploadProgress = 0;
+  errorMsg = '';
 
-  constructor(
-    private fb: FormBuilder,   // to easily build reactive forms
-    private router: Router,    // important to navigate to another page later
-    private http: HttpClient   // to send API requests to the backend
-  ) {
-    // Build the reactive form
+  constructor(private fb: FormBuilder) {
     this.form = this.fb.group({
-      dataset: ['Visium', Validators.required],           // dataset name or identifier
-      method: ['Genie3', Validators.required],            // selected method (e.g., spatial)
       email: ['', [Validators.required, Validators.email]],
-      tangram: [false],                             // whether Tangram alignment is activated
+      dataset: ['Visium', Validators.required],
 
-      normalization: [false],
-      filteringSpatial: [false],
-      filteringSingleCell: [false],
+      spatialOptions: this.fb.group({
+        normalization: [false],
+        filtering: [false],
+      }),
 
-      // group of score checkboxes; the key is the score name, the value is a boolean
+      useTangram: [false],
+      tangram: this.fb.group({
+        filterSingleCell: [false],
+        normalizeSingleCell: [false],
+      }),
+
+      // score toggles
       scores: this.fb.group({
-        'LIANA+': [false],
-        'SPONGeffects': [false],
-        'squidpy': [false],
-        'VIPER': [false],
-      }),
-      spongeOptions: this.fb.group({
-        enrichmentMethod: ['GSVA', Validators.required],                 // 'GSVA' | 'ssGSEA' | 'AUCell'
-        mScoreThreshold: [0.1, [Validators.min(0), Validators.max(1)]],  // 0..1 (Default 0.1)
-        pAdj: [0.05, [Validators.min(0), Validators.max(1)]],            // 0..1 (Default 0.05)
-        ensemblIdKey: ['ensembl_id', Validators.required],
-        featureKey: ['feature_type', Validators.required],
-        rnaTypes: ['lncRNA,protein_coding', Validators.required],
-        maxModules: [null, [Validators.min(1)]],
-      }),
-      // Optionen für Squidpy
-      squidpyOptions: this.fb.group({
-      // Methoden: MoransI | gearyC | centrality_score | co_occurrence | neighborhood_enrichment
-      method: ['MoransI', Validators.required],
-
-      // nur relevant wenn MoransI oder gearyC
-      nPermutations: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]],
-      twoTailed: [false],
-      corrMethod: ['fdr_bh', Validators.required],
-
-      clusterKey: ['leiden'],
-
-      coOccurInterval: [50, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Default 50
-      coOccurNSplits: [null, [Validators.min(1), Validators.pattern(/^\d+$/)]], // Optional (None)
-
-      // nur neighborhood_enrichment
-      neighLibraryKey: [null],                                  // Optional (String)
-      neighNPerms: [1000, [Validators.min(1), Validators.max(100000), Validators.pattern(/^\d+$/)]], // Default 1000, max 100000
+        networkScores: [false],
+        squidpy: [false],
+        lianaPlus: [false],
       }),
 
-      // LIANA+ Optionen (optional)
-      lianaOptions: this.fb.group({
-      // Name der Spalte mit den celltype compositions
-      ctCompositionKey: ['tangram_ct_pred'],   // optional, Default: 'tangram_ct_pred'
+      // network scores options
+      network: this.fb.group({
+        algorithms: this.fb.group({
+          viper: [false],
+          aucell: [false],
+          gsva: [false],
+          ssgsea: [false],
+        }),
+        params: this.fb.group({
+          mScoreThreshold: ['0.1'],
+          pAdjust: ['0.05'],
+          ensemblId: ['ensembl_id'],
+          featureCol: ['feature_type'],
+          rnaTypes: ['lncRNA,protein_coding'],
+          maxModules: [''],
+        }),
       }),
 
-      // Tangram Optionen (optional)
-      tangramOptions: this.fb.group({
-      // Name der Spalte mit den cell types
-      cellTypeKey: [null],                     // optional, kein Default (leer lassen = None)
+      // squidpy options (fields are reused depending on method)
+      squidpy: this.fb.group({
+        methods: this.fb.group({
+          moranI: [false],
+          gearyC: [false],
+          centrality_score: [false],
+          co_occurrence: [false],
+          neighborhood_enrichment: [false],
+        }),
+        moranI: this.fb.group({
+          nPerms: [''],
+          twoTailed: [false],
+          corrMethod: ['fdr_bh'],
+        }),
+        gearyC: this.fb.group({
+          nPerms: [''],
+          twoTailed: [false],
+          corrMethod: ['fdr_bh'],
+        }),
+        centrality_score: this.fb.group({
+          clusterKey: ['leiden'],
+        }),
+        co_occurrence: this.fb.group({
+          clusterKey: ['leiden'],
+          interval: ['50'],
+          nSplits: [''],
+        }),
+        neighborhood_enrichment: this.fb.group({
+          clusterKey: ['leiden'],
+          libraryKey: [''],
+          nPerms: ['1000'],
+        }),
+      }),
+
+      // LIANA+
+      liana: this.fb.group({
+        compositionColumn: ['tangram_ct_pred'],
       }),
     });
-    // SPONGeffects-Options zunächst deaktivieren
-    this.spongeOptions.disable({ emitEvent: false });
 
-    this.squidpyOptions.disable({ emitEvent: false });
-    this.form.get('scores.squidpy')!.valueChanges.subscribe((isOn: boolean) => {
-      isOn ? this.squidpyOptions.enable() : this.squidpyOptions.disable();
-    // LIANA+ Optionen ein/aus je nach Checkbox
-    this.lianaOptions.disable({ emitEvent: false });
-    this.form.get('scores.LIANA+')!.valueChanges.subscribe((isOn: boolean) => {
-      isOn ? this.lianaOptions.enable() : this.lianaOptions.disable();
-    });
-
-    // Tangram-Optionen ein/aus je nach Toggle
-    this.tangramOptions.disable({ emitEvent: false });
-    this.form.get('tangram')!.valueChanges.subscribe((isOn: boolean) => {
-      isOn ? this.tangramOptions.enable() : this.tangramOptions.disable();
-    });
-});
-
-// Validatoren für Autokorrelations-Parameter nur bei MoransI/gearyC
-this.squidpyOptions.get('method')!.valueChanges.subscribe((m: string) => {
-  const needAuto = m === 'MoransI' || m === 'gearyC';
-  const nPerm = this.squidpyOptions.get('nPermutations')!;
-  const corr  = this.squidpyOptions.get('corrMethod')!;
-  if (needAuto) {
-    nPerm.setValidators([Validators.min(1), Validators.pattern(/^\d+$/)]);
-    corr.setValidators([Validators.required]);
-  } else {
-    nPerm.clearValidators();
-    corr.clearValidators();
-  }
-  nPerm.updateValueAndValidity({ emitEvent: false });
-  corr.updateValueAndValidity({ emitEvent: false });
-});
-
-
-  // Aktivieren/Deaktivieren abhängig von der Checkbox "SPONGeffects"
-  this.form.get('scores.SPONGeffects')!.valueChanges
-    .subscribe((isOn: boolean) => {
-      const grp = this.form.get('spongeOptions')!;
-      if (isOn) grp.enable(); else grp.disable();
-    });
-  }
-
-  // Convenience getter for the score checkbox group value
-  private get scoreValues(): Record<string, boolean> {
-    return (this.form.get('scores')?.value as Record<string, boolean>) || {};
-  }
-
-  // Returns the names of all selected scores
-  private get selectedScores(): string[] {
-    const s = this.scoreValues;
-    return Object.keys(s).filter((k) => !!s[k]);
-  }
-
-  // File selection handlers --------------------------------------------------
-
-  // Spatial dataset file (required)
-  onSpatialSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
-    if (file) this.spatialFile = file;
-  }
-
-  // Single-cell reference file (required if Tangram is enabled)
-  onSingleCellSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
-    this.singleCellFile = file ?? undefined;
-  }
-
-  // Precomputed file (if provided, network and genie files may not be required)
-  onPrecomputedSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
-    this.precomputedFile = file ?? undefined;
-  }
-
-  // SPONGE network file — required if SPONGeffects or AUCell are selected (and no precomputed file is provided)
-  onSpongeNetworkSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
-    this.spongeNetworkFile = file ?? undefined;
-  }
-
-  // GENIE/VIPER network file — required if VIPER or AUCell are selected (and no precomputed file is provided)
-  onGenieSelected(event: Event): void {
-    const file = (event.target as HTMLInputElement)?.files?.[0] || null;
-    this.genieFile = file ?? undefined;
-  }
-
-  onFileSelected(event: Event, type: string): void {
-    const input = event.target as HTMLInputElement;
-    if (input?.files && input.files.length > 0) {
-      const file = input.files[0];
-
-      switch (type) {
-        case 'spatial':
-          this.spatialFile = file;
-          break;
-        case 'singleCell':
-          this.singleCellFile = file;
-          break;
-        case 'spongeAnalysis':
-          this.spongeAnalysisFile = file;
-          break;
-        case 'spongeInteractions':
-          this.spongeInteractionsFile = file;
-          break;
-
-        case 'sponge':
-          this.spongeNetworkFile = file;
-          break;
-        case 'genie':
-          this.genieFile = file;
-          break;
+    // clear single-cell if Tangram toggled off
+    this.form.get('useTangram')!.valueChanges.subscribe(on => {
+      if (!on) {
+        this.singleCellFile = undefined;
+        this.form.get('tangram')!.reset({
+          filterSingleCell: false,
+          normalizeSingleCell: false,
+        });
       }
+    });
+
+    // if network scores toggled off → reset inner state
+    this.form.get('scores.networkScores')!.valueChanges.subscribe(on => {
+      if (!on) {
+        this.form.get('network.algorithms')!.reset({
+          viper: false, aucell: false, gsva: false, ssgsea: false
+        });
+        this.genie3NetFile = undefined;
+        this.spongeNAFile = undefined;
+        this.spongeNIFile = undefined;
+      }
+    });
+  }
+
+  // ---------- getters for template type-safety ----------
+  get tangramGroup() {
+    return this.form.get('tangram') as FormGroup;
+  }
+  get squidpyGroup() {
+    return this.form.get('squidpy') as FormGroup;
+  }
+  useTangramChecked(): boolean {
+    return !!this.form.get('useTangram')?.value;
+  }
+  squidpyMethodIs(m: string): boolean {
+    return this.form.get('squidpy.method')?.value === m;
+  }
+  hasTriadSelected(): boolean {
+    const a = this.form.get('network.algorithms.aucell')?.value;
+    const g = this.form.get('network.algorithms.gsva')?.value;
+    const s = this.form.get('network.algorithms.ssgsea')?.value;
+    return !!(a || g || s);
+  }
+
+  // ---------- file handling ----------
+  onFileSelected(evt: Event, type:
+      'spatial' | 'singleCell' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
+    const input = evt.target as HTMLInputElement;
+    const file = input.files && input.files[0] ? input.files[0] : undefined;
+    if (!file) return;
+
+    switch (type) {
+      case 'spatial': this.spatialFile = file; break;
+      case 'singleCell': this.singleCellFile = file; break;
+      case 'genie3Net': this.genie3NetFile = file; break;
+      case 'spongeNA': this.spongeNAFile = file; break;
+      case 'spongeNI': this.spongeNIFile = file; break;
+      case 'lianaGenie3': this.lianaGenie3File = file; break;
+      case 'lianaPathway': this.lianaPathwayFile = file; break;
     }
   }
 
+  // ---------- validation ----------
+  private networkUploadsOk(): boolean {
+    // VIPER needs Genie3
+    const viper = !!this.form.get('network.algorithms.viper')?.value;
+    if (viper && !this.genie3NetFile) return false;
 
-  // Toggle a score programmatically (e.g., from the template)
-  changeScore(scoreName: string, checked: boolean): void {
-    const ctrl = (this.form.get('scores') as FormGroup)?.get(scoreName);
-    if (ctrl) ctrl.setValue(checked);
+    // AUCell/GSVA/ssGSEA need Genie3 OR both SPONGE files
+    if (this.hasTriadSelected()) {
+      const hasGenie3 = !!this.genie3NetFile;
+      const hasSponge = !!this.spongeNAFile && !!this.spongeNIFile;
+      if (!hasGenie3 && !hasSponge) return false;
+    }
+    return true;
   }
 
-  // Whether Tangram is required
-  requiresTangram(): boolean {
-    return !!this.form.value.tangram && !this.singleCellFile; // if tangram is enabled, a single-cell file must be present
-  }
-
-  // Whether a SPONGE network file is required
-  requiresSponge(): boolean {
-    const s = this.scoreValues;
-    const byScore = s['SPONGeffects'] || s['AUCell'];
-    const byMethod = this.form.value.method === 'Sponge';
-    return (byScore || byMethod) && !this.precomputedFile;
-  }
-  // Same logic for the GENIE/VIPER file
-  requiresGenie(): boolean {
-    const s = this.scoreValues;
-    const needsGenie = s['VIPER'] || s['AUCell'] || s['SPONGeffects'];
-    return needsGenie && !this.precomputedFile;
-  }
-
-
-
-  // Final client-side validation before enabling submit
   canSubmit(): boolean {
-    if (!this.spatialFile) return false; // is there a spatial dataset?
-    if (this.form.value.tangram && !this.singleCellFile) return false; // if tangram is enabled, a single-cell file must be uploaded
-    if (this.requiresSponge() && (!this.spongeAnalysisFile || !this.spongeInteractionsFile)) return false; // same as for Tangram
-    if (this.requiresGenie() && !this.genieFile) return false;          // same logic
-    return this.form.valid;
+    const emailValid = this.form.get('email')!.valid;
+    const spatialOk = !!this.spatialFile;
+
+    const needsSingleCell = !!this.form.get('useTangram')!.value;
+    const singleCellOk = !needsSingleCell || !!this.singleCellFile;
+
+    const networkOn = !!this.form.get('scores.networkScores')?.value;
+    const networkOk = !networkOn || this.networkUploadsOk();
+
+    return emailValid && spatialOk && singleCellOk && networkOk && !this.uploading;
   }
 
-  get spongeOptions(): FormGroup {
-    return this.form.get('spongeOptions') as FormGroup;
-  }
-  get squidpyOptions(): FormGroup {
-    return this.form.get('squidpyOptions') as FormGroup;
-  }
-  get lianaOptions(): FormGroup {
-    return this.form.get('lianaOptions') as FormGroup;
-  }
-  get tangramOptions(): FormGroup {
-    return this.form.get('tangramOptions') as FormGroup;
-  }
+  // ---------- submit ----------
+  async onSubmit() {
+    if (!this.canSubmit()) return;
 
-  squidpyCorrMethods = [
-    'bonferroni','sidak','holm-sidak','holm','simes-hochberg',
-    'hommel','fdr_bh','fdr_by','fdr_tsbh','fdr_tsbky'
-  ];
+    try {
+      this.errorMsg = '';
+      this.uploading = true;
+      this.uploadProgress = 0;
 
-  shouldOfferGenieUpload(): boolean {
-    const s = this.scoreValues;
-    return !!s['LIANA+'];
-  }
+      const fd = new FormData();
 
-  onSubmit(): void {
-    // 1) Final client-side validation
-    if (!this.canSubmit()) {
-      return this.fail('Please complete all required fields/files before submitting.');
-    }
+      // core
+      fd.append('email', this.form.value.email);
+      fd.append('dataset', this.form.value.dataset);
 
-    // 2) Build FormData
-    const fd = new FormData();
-    fd.append('email', this.form.get('email')!.value);
+      // spatial
+      if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
+      fd.append('spatial_normalization', String(this.form.value.spatialOptions.normalization));
+      fd.append('spatial_filtering', String(this.form.value.spatialOptions.filtering));
 
-    fd.append('dataset', this.form.value.dataset);
-    fd.append('method', this.form.value.method);
-    fd.append('tangram', String(!!this.form.value.tangram));
+      // tangram
+      fd.append('use_tangram', String(this.form.value.useTangram));
+      if (this.form.value.useTangram && this.singleCellFile) {
+        fd.append('single_cell_h5ad', this.singleCellFile);
+        fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
+        fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+      }
 
-    fd.append('normalization', String(!!this.form.value.normalization));
-    fd.append('filteringSpatial', String(!!this.form.value.filteringSpatial));
-    fd.append('filteringSingleCell', String(!!this.form.value.filteringSingleCell));
+      // scores toggles
+      const scores = this.form.value.scores;
+      fd.append('score_network', String(scores.networkScores));
+      fd.append('score_squidpy', String(scores.squidpy));
+      fd.append('score_liana_plus', String(scores.lianaPlus));
 
-    // Scores als JSON-Array
-    fd.append('scores', JSON.stringify(this.selectedScores));
+      // network scores details
+      if (scores.networkScores) {
+        const alg = this.form.value.network.algorithms;
+        fd.append('alg_viper', String(alg.viper));
+        fd.append('alg_aucell', String(alg.aucell));
+        fd.append('alg_gsva', String(alg.gsva));
+        fd.append('alg_ssgsea', String(alg.ssgsea));
 
-    // Pflichtdatei
-    fd.append('spatialFile', this.spatialFile);
+        // common params for AUCell/GSVA/ssGSEA
+        const p = this.form.value.network.params;
+        fd.append('net_m_score_threshold', p.mScoreThreshold ?? '');
+        fd.append('net_p_adjust', p.pAdjust ?? '');
+        fd.append('net_ensembl_id_col', p.ensemblId ?? '');
+        fd.append('net_feature_col', p.featureCol ?? '');
+        fd.append('net_rna_types', p.rnaTypes ?? '');
+        fd.append('net_max_modules', p.maxModules ?? '');
 
-    // Optionale Dateien – konsistente Keys
-    if (this.singleCellFile)         fd.append('singleCellFile', this.singleCellFile);
-    if (this.precomputedFile)        fd.append('precomputedFile', this.precomputedFile);
-    if (this.spongeAnalysisFile)     fd.append('spongeNetworkAnalysis', this.spongeAnalysisFile);
-    if (this.spongeInteractionsFile) fd.append('spongeNetworkInteractions', this.spongeInteractionsFile);
-    if (this.genieFile)              fd.append('genieFile', this.genieFile);
+        if (this.genie3NetFile) fd.append('genie3_network', this.genie3NetFile);
+        if (this.spongeNAFile) fd.append('sponge_networkanalysis', this.spongeNAFile);
+        if (this.spongeNIFile) fd.append('sponge_networkinteractions', this.spongeNIFile);
+      }
 
-    // Scores-Map nur EIN mal lesen
-    const s = this.scoreValues;
+      // squidpy details
+      // --- Squidpy (checkboxes, multiple) ---
+      if (scores.squidpy) {
+        const sq = this.form.value.squidpy;
+        const m = sq.methods;
 
-    // Nur wenn LIANA+ aktiv ist, Default-Flag mitschicken
-    if (s['LIANA+']) {
-      fd.append('useDefaultLiana', this.genieFile ? 'false' : 'true');
-    }
-
-    // ---- Options-Gruppen anhängen ----
-    // getRawValue() greift auch bei (noch) disabled Controls; Fallback auf .value
-    const raw = (grp: any) =>
-      (grp && typeof grp.getRawValue === 'function') ? grp.getRawValue() : (grp?.value ?? {});
-
-    if (this.form.value.tangram) {
-      fd.append('tangramOptions', JSON.stringify(raw(this.tangramOptions)));
-    }
-    if (s['SPONGeffects']) {
-      fd.append('spongeOptions', JSON.stringify(raw(this.spongeOptions)));
-    }
-    if (s['squidpy']) {
-      fd.append('squidpyOptions', JSON.stringify(raw(this.squidpyOptions)));
-    }
-    if (s['LIANA+']) {
-      fd.append('lianaOptions', JSON.stringify(raw(this.lianaOptions)));
-    }
-    // ---- Ende Optionen ----
-
-    // 3) Send the request
-    this.uploading = true;
-    this.uploadProgress = 0;
-
-    this.http.post(`${environment.apiBaseUrl}/api/upload`, fd, {
-      reportProgress: true,
-      observe: 'events',
-    })
-    .subscribe({
-      next: (event) => {
-        if (event.type === HttpEventType.UploadProgress) {
-          const total = (event.total ?? 0) || 0;
-          this.uploadProgress = total ? Math.round((100 * (event.loaded ?? 0)) / total) : null;
+        if (m.moranI) {
+          fd.append('squidpy_moranI', 'true');
+          fd.append('squidpy_moranI_n_perms', sq.moranI.nPerms ?? '');
+          fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
+          fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
         }
-        if (event.type === HttpEventType.Response) {
-          this.uploading = false;
-          this.uploadProgress = null;
-          const jobId = (event.body as any)?.jobId;
-          if (!jobId) return this.fail('Upload succeeded, but no jobId was returned by the server.');
-          this.router.navigate(['/hexagon-plot'], { queryParams: { jobId } });
+        if (m.gearyC) {
+          fd.append('squidpy_gearyC', 'true');
+          fd.append('squidpy_gearyC_n_perms', sq.gearyC.nPerms ?? '');
+          fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
+          fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
         }
-      },
-      error: (err) => {
-        this.uploading = false;
-        this.uploadProgress = null;
-        this.fail(err?.error ?? err ?? 'Upload failed.');
-      },
-    });
-  }
+        if (m.centrality_score) {
+          fd.append('squidpy_centrality_score', 'true');
+          fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
+        }
+        if (m.co_occurrence) {
+          fd.append('squidpy_co_occurrence', 'true');
+          fd.append('squidpy_co_occurrence_cluster_key', sq.co_occurrence.clusterKey ?? '');
+          fd.append('squidpy_co_occurrence_interval', sq.co_occurrence.interval ?? '');
+          fd.append('squidpy_co_occurrence_n_splits', sq.co_occurrence.nSplits ?? '');
+        }
+        if (m.neighborhood_enrichment) {
+          fd.append('squidpy_neighborhood_enrichment', 'true');
+          fd.append('squidpy_neighborhood_enrichment_cluster_key', sq.neighborhood_enrichment.clusterKey ?? '');
+          fd.append('squidpy_neighborhood_enrichment_library_key', sq.neighborhood_enrichment.libraryKey ?? '');
+          fd.append('squidpy_neighborhood_enrichment_n_perms', sq.neighborhood_enrichment.nPerms ?? '');
+        }
+      }
 
-  private normalizeError(e: any): string {
-    if (!e) return 'Unknown error';
-    if (typeof e === 'string') return e;
-    if (Array.isArray(e)) {
-      // Mappe Arrays (z. B. [{msg:'a'},{msg:'b'}]) auf eine lesbare Liste
-      return e.map(item => this.normalizeError(item)).join('\n');
+
+      // LIANA+
+      if (scores.lianaPlus) {
+        const l = this.form.value.liana;
+        fd.append('liana_composition_column', l.compositionColumn ?? '');
+        if (this.lianaGenie3File)  fd.append('liana_genie3_network',  this.lianaGenie3File);
+        if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
+      }
+
+      // TODO: echten Endpoint hinterlegen:
+      // const resp = await fetch('/api/upload', { method: 'POST', body: fd });
+      // if (!resp.ok) throw new Error(await resp.text());
+
+      // Dummy-Progress für Demo
+      await new Promise<void>((resolve) => {
+        const timer = setInterval(() => {
+          this.uploadProgress = Math.min(this.uploadProgress + 10, 100);
+          if (this.uploadProgress >= 100) {
+            clearInterval(timer);
+            resolve();
+          }
+        }, 80);
+      });
+    } catch (e: any) {
+      this.errorMsg = e?.message ?? String(e);
+    } finally {
+      this.uploading = false;
     }
-    if (typeof e.message === 'string') return e.message;
-    if (typeof e.detail === 'string') return e.detail;
-    try { return JSON.stringify(e); } catch { return String(e); }
   }
 
-
-  // For showing error messages with auto-clear
-  private fail(msg: any): void {
-    this.errorMsg = this.normalizeError(msg);
-    setTimeout(() => (this.errorMsg = null), 10000);
-  }
-
-  onReset(): void {
+  onReset() {
     this.form.reset({
-      dataset: null,
-      method: null,
-      tangram: false,
-      filteringSingleCell: false,
-      normalization: false,
-      filteringSpatial: false,
-      scores: {}
+      email: '',
+      dataset: 'Visium',
+      spatialOptions: { normalization: false, filtering: false },
+      useTangram: false,
+      tangram: { filterSingleCell: false, normalizeSingleCell: false },
+      scores: { networkScores: false, squidpy: false, lianaPlus: false },
+      network: {
+        algorithms: { viper: false, aucell: false, gsva: false, ssgsea: false },
+        params: {
+          mScoreThreshold: '0.1',
+          pAdjust: '0.05',
+          ensemblId: 'ensembl_id',
+          featureCol: 'feature_type',
+          rnaTypes: 'lncRNA,protein_coding',
+          maxModules: '',
+        }
+      },
+      squidpy: {
+        methods: {
+          moranI: false,
+          gearyC: false,
+          centrality_score: false,
+          co_occurrence: false,
+          neighborhood_enrichment: false,
+        },
+        moranI: { nPerms: '', twoTailed: false, corrMethod: 'fdr_bh' },
+        gearyC: { nPerms: '', twoTailed: false, corrMethod: 'fdr_bh' },
+        centrality_score: { clusterKey: 'leiden' },
+        co_occurrence: { clusterKey: 'leiden', interval: '50', nSplits: '' },
+        neighborhood_enrichment: { clusterKey: 'leiden', libraryKey: '', nPerms: '1000' },
+      },
+
+      liana: { compositionColumn: 'tangram_ct_pred' },
     });
 
+    // clear files
+    this.spatialFile = undefined;
     this.singleCellFile = undefined;
-    this.precomputedFile = undefined;
-    this.genieFile = undefined;
-    this.spongeNetworkFile = undefined;
-    this.spongeAnalysisFile = undefined;
-    this.spongeInteractionsFile = undefined;
+    this.genie3NetFile = undefined;
+    this.spongeNAFile = undefined;
+    this.spongeNIFile = undefined;
+    this.lianaGenie3File = undefined;
+    this.lianaPathwayFile = undefined; 
 
-    this.uploading = false;
+
+    this.errorMsg = '';
     this.uploadProgress = 0;
-    this.errorMsg = null;
   }
-
 }

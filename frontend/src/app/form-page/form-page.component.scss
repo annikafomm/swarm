@@ -293,5 +293,111 @@ button[disabled] {
   appearance: textfield;
 }
 
+/* ===== inputs-only beauty pack ===== */
+.panel {
+  /* sanfte Defaults; falls oben schon definiert, werden die hier nur als Fallback genutzt */
+  --accent: #5b61ff;
+  --border: #e6e8ef;
+  --muted:  #6b7280;
+  --input-bg: #fff;
+  --input-bg-disabled: #f6f7fb;
+  --input-radius: 12px;
+}
 
+/* Label & Hilfstext minimal angleichen */
+.panel .field > label {
+  display: block;
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.panel small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
 
+/* ---------- Inputs (ohne file) + Select + Textarea ---------- */
+.panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.panel select,
+.panel textarea {
+  width: 100%;
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: inherit;
+
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--input-radius);
+  padding: 10px 12px;
+
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+}
+
+/* Platzhalter dezenter */
+.panel input::placeholder,
+.panel textarea::placeholder {
+  color: var(--muted);
+  opacity: .8;
+}
+
+/* Hover & Focus */
+.panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):hover,
+.panel select:hover,
+.panel textarea:hover {
+  border-color: #d6d9e4;
+}
+.panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus,
+.panel select:focus,
+.panel textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(91,97,255,.15);
+}
+
+/* Disabled/Readonly */
+.panel input:disabled,
+.panel select:disabled,
+.panel textarea:disabled {
+  background: var(--input-bg-disabled);
+  color: #9aa0a6;
+  cursor: not-allowed;
+}
+.panel input[readonly],
+.panel textarea[readonly] {
+  background: #fafafa;
+}
+
+/* Angular-Validierung (optional – sanft) */
+.panel input.ng-invalid.ng-touched,
+.panel select.ng-invalid.ng-touched,
+.panel textarea.ng-invalid.ng-touched {
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+.panel input.ng-valid.ng-touched,
+.panel select.ng-valid.ng-touched,
+.panel textarea.ng-valid.ng-touched {
+  border-color: #22c55e33;
+}
+
+/* Select im .select-Wrapper (falls genutzt) */
+.panel .select select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(to right, transparent, transparent);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px),
+    calc(100% - 2.2rem) 0;
+  background-size: 6px 6px, 6px 6px, 1px 100%;
+  background-repeat: no-repeat;
+  padding-right: 2.6rem; /* Platz für Chevron */
+}
+
+/* Number-Input: Spinners ausblenden (optisch ruhiger) */
+.panel input[type="number"]::-webkit-outer-spin-button,
+.panel input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.panel input[type="number"] { -moz-appearance: textfield; }

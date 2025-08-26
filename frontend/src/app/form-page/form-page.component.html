@@ -6,23 +6,25 @@
 
 <form [formGroup]="form" (ngSubmit)="onSubmit()" class="panel">
 
+  <!-- Email (required) -->
   <div class="section">
     <div class="field">
-      <label class="field-label" for="email">Kontakt-E-Mail <span class="required">*</span></label>
+      <label class="field-label" for="email">
+        Contact Email <span class="required">*</span>
+      </label>
       <input
         id="email"
         type="email"
         formControlName="email"
-        placeholder="z. B. name@domain.tld"
+        placeholder="e.g. name@domain.tld"
         autocomplete="email"
         inputmode="email" />
       <br>
     </div>
   </div>
 
-
-  <!-- Dataset & Method -->
-  <div class="grid two">
+  <!-- Dataset -->
+  <div class="section">
     <div class="field">
       <label class="field-label">Select Dataset</label>
       <div class="select">
@@ -32,19 +34,9 @@
         </select>
       </div>
     </div>
-
-    <div class="field">
-      <label class="field-label">Select Method</label>
-      <div class="select">
-        <select formControlName="method">
-          <option value="Genie3">Genie3</option>
-          <option value="Sponge">Sponge</option>
-        </select>
-      </div>
-    </div>
   </div>
 
-
+  <!-- Spatial dataset (required) + spatial options directly below -->
   <div class="section">
     <label>Upload spatial dataset (.h5ad)<span class="required">*</span>:</label>
     <div class="file">
@@ -57,9 +49,30 @@
       </label>
     </div>
 
+    <div class="section" style="margin-top:10px;" formGroupName="spatialOptions">
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="normalization">
+        Enable normalization
+      </label>
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="filtering">
+        Enable filtering (spatial)
+      </label>
+    </div>
+  </div>
 
-    <div style="margin-top:14px;">
-      <label>Upload single cell dataset (.h5ad):</label>
+  <!-- Tangram toggle -->
+  <div class="section">
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="useTangram" />
+      Use Tangram for Mapping
+    </label>
+
+    <!-- Only visible if Tangram is enabled -->
+    <div *ngIf="useTangramChecked()"
+    class="section"
+    [formGroup]="tangramGroup">
+      <label>Upload single-cell dataset (.h5ad):</label>
       <div class="file">
         <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
         <label for="singleCell" class="file-control">
@@ -69,283 +82,326 @@
           </span>
         </label>
       </div>
-    </div>
 
-    <!-- Tangram-Optionen erscheinen erst, wenn eine Single-Cell-Datei gewählt wurde -->
-    <div *ngIf="singleCellFile" class="section" style="margin-top: 8px;">
-      <label style="display:flex; gap:10px; align-items:center;">
-        <input type="checkbox" formControlName="tangram" />
-          Use Tangram for mapping
-      </label>
-    <!-- Tangram – optionale Angaben -->
-    <div class="section"
-      *ngIf="form.get('tangram')?.value"
-      [formGroup]="tangramOptions">
-
-      <div class="section-title">Tangram – Optionen</div>
-
-        <div class="field">
-          <label class="field-label">Spalte für cell types</label>
-          <input type="text" formControlName="cellTypeKey" placeholder="z. B. cell_type" />
-          <small>Optional · leer lassen = None</small>
-        </div>
+      <div class="section" style="margin-top:10px;">
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="filterSingleCell">
+          Enable filtering (single-cell)
+        </label>
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="normalizeSingleCell">
+          Enable normalization (single-cell)
+        </label>
       </div>
 
-    <div style="height:6px"></div>
-      <label style="display:flex; gap:10px; align-items:center;">
-        <input type="checkbox" formControlName="filteringSingleCell" />
-          Enable filtering (Single Cell)
-      </label>
+      <div class="hint" *ngIf="form.get('useTangram')?.value && !singleCellFile" style="margin-top:6px;">
+        Please upload a single-cell file (required when Tangram is enabled).
+      </div>
     </div>
-
   </div>
 
-  <div class="section">
-    <div class="section-title">Options</div>
-    <label><input type="checkbox" formControlName="normalization"> Enable normalization</label>
-    <label><input type="checkbox" formControlName="filteringSpatial"> Enable filtering (Spatial)</label>
-  </div>
-
+  <!-- Scores master switches -->
   <div class="section">
     <div class="section-title">Select Scores</div>
     <div class="checkbox-list" formGroupName="scores">
-      <label *ngFor="let score of availableScores" class="score-option" [ngClass]="{ 'force-sponge': score === 'SPONGeffects' }">
-        <input type="checkbox" [formControlName]="score" />
-        <span class="score-text">{{ score }}</span>
+      <label class="score-option">
+        <input type="checkbox" formControlName="networkScores" />
+        <span class="score-text">network scores</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="squidpy" />
+        <span class="score-text">squidpy</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="lianaPlus" />
+        <span class="score-text">LIANA+</span>
       </label>
     </div>
   </div>
 
-  <div class="section"
-     *ngIf="form.get('scores.SPONGeffects')?.value"
-     [formGroup]="spongeOptions">
+  <!-- Network scores — options -->
+  <div *ngIf="form.get('scores.networkScores')?.value" class="section" formGroupName="network">
+    <div class="section-title">Network scores — options</div>
 
-  <div class="section-title">SPONGeffects – Optionen</div>
-  <div class="field">
-    <label class="field-label">Methode</label>
-    <div class="select">
-      <select formControlName="enrichmentMethod">
-        <option value="GSVA">GSVA</option>
-        <option value="ssGSEA">ssGSEA</option>
-        <option value="AUCell">AUCell</option>
-      </select>
-    </div>
-  </div>
-  <br>
-
-  <!-- m score: threshold -->
-  <div class="field">
-    <label class="field-label">m score: threshold (0–1)</label>
-    <input
-      type="number"
-      class="no-spin"
-      formControlName="mScoreThreshold"
-      min="0" max="1" step="any" />
-    <small>Default: 0.1</small>
-  </div>
-  <br>
-
-  <!-- p value adjusted -->
-  <div class="field">
-    <label class="field-label">p value adjusted (0–1)</label>
-    <input
-      type="number"
-      class="no-spin"
-      formControlName="pAdj"
-      min="0" max="1" step="any" />
-    <small>Default: 0.05</small>
-  </div>
-  <br>
-
-  <!-- ensembl id -->
-  <div class="field">
-    <label class="field-label">ensembl id (Spaltenname)</label>
-    <input type="text" formControlName="ensemblIdKey" placeholder="ensembl_id" />
-    <small>Default: ensembl_id</small>
-  </div>
-  <br>
-
-  <!-- feature -->
-  <div class="field">
-    <label class="field-label">feature (Spaltenname)</label>
-    <input type="text" formControlName="featureKey" placeholder="feature_type" />
-    <small>Default: feature_type</small>
-  </div>
-  <br>
-
-  <!-- RNA types -->
-  <div class="field">
-    <label class="field-label">RNA types</label>
-    <input type="text" formControlName="rnaTypes" placeholder="lncRNA,protein_coding" />
-    <small>Default: lncRNA,protein_coding</small>
-  </div>
-  <br>
-
-  <!-- maximale Module -->
-  <div class="field">
-    <label class="field-label">maximale Module</label>
-    <input
-      type="number"
-      class="no-spin"
-      formControlName="maxModules"
-      min="1" step="1" />
-    <small>Grenzen tbd – aktuell ≥ 1</small>
-  </div>
-</div>
-<br>
-
-
-<!-- Squidpy – zusätzliche Optionen -->
-<div class="section"
-     *ngIf="form.get('scores.squidpy')?.value"
-     [formGroup]="squidpyOptions">
-
-  <div class="section-title">Squidpy – Optionen</div>
-
-  <!-- Methode -->
-  <div class="field">
-    <label class="field-label">Methode</label>
-    <div class="select">
-      <select formControlName="method">
-        <option value="MoransI">MoransI</option>
-        <option value="gearyC">gearyC</option>
-        <option value="centrality_score">centrality_score</option>
-        <option value="co_occurrence">co occurrence</option>
-        <option value="neighborhood_enrichment">neighborhood enrichment</option>
-      </select>
-    </div>
-  </div>
-  <br>
-
-  <!-- Autokorrelation: nur für MoransI / gearyC -->
-  <ng-container *ngIf="['MoransI','gearyC'].includes(squidpyOptions.get('method')?.value)">
-    <div class="field">
-      <label class="field-label">n permutations for autocorrelation</label>
-      <input type="number" class="no-spin" formControlName="nPermutations" min="1" step="1" placeholder="None" />
-      <small>Default: None (leer lassen)</small>
-    </div>
-    <br>
-
-    <div class="field" style="display:flex;gap:.5rem;">
-      <label style="display:flex; gap:10px; align-items:center;">
-        <input type="checkbox" formControlName="twoTailed" />
-          two tailed
+    <!-- Algorithms -->
+    <div class="checkbox-list" formGroupName="algorithms">
+      <label class="score-option">
+        <input type="checkbox" formControlName="viper" />
+        <span class="score-text">VIPER</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="aucell" />
+        <span class="score-text">AUCell</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="gsva" />
+        <span class="score-text">GSVA</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="ssgsea" />
+        <span class="score-text">ssGSEA</span>
       </label>
     </div>
-    <br>
 
+    <!-- VIPER needs Genie3 only -->
+    <div class="section" *ngIf="form.get('network.algorithms.viper')?.value">
+      <label>Upload Genie3 network (.csv/.tsv) — <span class="required">required</span>:</label>
+      <div class="file">
+        <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv,.txt">
+        <label for="genie3Net" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
+            {{ genie3NetFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+    </div>
+
+    <!-- AUCell / GSVA / ssGSEA share the same options & upload rules -->
+    <div class="section" *ngIf="hasTriadSelected()">
+      <div class="field-grid" formGroupName="params">
+        <div class="field">
+          <label>m score: threshold (0–1)</label>
+          <input formControlName="mScoreThreshold" placeholder="0.1">
+          <small>Default: 0.1</small>
+        </div>
+        <div class="field">
+          <label>p value adjusted (0–1)</label>
+          <input formControlName="pAdjust" placeholder="0.05">
+          <small>Default: 0.05</small>
+        </div>
+        <div class="field">
+          <label>ensembl id (column name)</label>
+          <input formControlName="ensemblId" placeholder="ensembl_id">
+          <small>Default: ensembl_id</small>
+        </div>
+        <div class="field">
+          <label>feature (column name)</label>
+          <input formControlName="featureCol" placeholder="feature_type">
+          <small>Default: feature_type</small>
+        </div>
+        <div class="field">
+          <label>RNA types</label>
+          <input formControlName="rnaTypes" placeholder="lncRNA,protein_coding">
+          <small>Default: lncRNA,protein_coding</small>
+        </div>
+        <div class="field">
+          <label>max modules</label>
+          <input formControlName="maxModules" placeholder="">
+          <small>Limits tbd – currently ≥ 1</small>
+        </div>
+      </div>
+
+      <!-- Upload rule: Genie3 OR both SPONGE files -->
+      <div class="section" style="margin-top:10px;">
+        <div class="subsection">
+          <label>Upload Genie3 network (.csv/.tsv) — optional (required if SPONGE not provided):</label>
+          <div class="file">
+            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv,.txt">
+            <label for="genie3NetTriad" class="file-control">
+              <span class="btn">Choose file</span>
+              <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
+                {{ genie3NetFile?.name || 'No file selected' }}
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="subsection" style="margin-top:12px;">
+          <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
+          <div class="file">
+            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv,.tsv,.txt">
+            <label for="spongeNA" class="file-control">
+              <span class="btn">Choose <br> networkanalysis</span>
+              <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
+                {{ spongeNAFile?.name || 'No file selected' }}
+              </span>
+            </label>
+          </div>
+          <div class="file" style="margin-top:8px;">
+            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv,.tsv,.txt">
+            <label for="spongeNI" class="file-control">
+              <span class="btn">Choose <br> networkinteractions</span>
+              <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
+                {{ spongeNIFile?.name || 'No file selected' }}
+              </span>
+            </label>
+          </div>
+          <small>Please upload either a Genie3 network or both SPONGE files.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Squidpy — options (checkboxes, multiple methods) -->
+<div *ngIf="form.get('scores.squidpy')?.value" class="section" formGroupName="squidpy">
+  <div class="section-title">Squidpy — options</div>
+
+  <!-- Method checkboxes -->
+  <div class="checkbox-list" formGroupName="methods">
+    <label class="score-option">
+      <input type="checkbox" formControlName="moranI" />
+      <span class="score-text">MoranI</span>
+    </label>
+    <label class="score-option">
+      <input type="checkbox" formControlName="gearyC" />
+      <span class="score-text">gearyC</span>
+    </label>
+    <label class="score-option">
+      <input type="checkbox" formControlName="centrality_score" />
+      <span class="score-text">centrality_score</span>
+    </label>
+    <label class="score-option">
+      <input type="checkbox" formControlName="co_occurrence" />
+      <span class="score-text">co occurrence</span>
+    </label>
+    <label class="score-option">
+      <input type="checkbox" formControlName="neighborhood_enrichment" />
+      <span class="score-text">neighborhood enrichment</span>
+    </label>
+  </div>
+
+  <!-- MoranI -->
+  <div class="section" *ngIf="form.get('squidpy.methods.moranI')?.value" formGroupName="moranI">
     <div class="field">
-      <label class="field-label">correlation methods</label>
+      <label>n permutations for autocorrelation</label>
+      <input formControlName="nPerms" placeholder="None">
+      <small>Default: None (leave empty)</small>
+    </div>
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="twoTailed"> two tailed
+    </label>
+    <div class="field">
+      <label>correlation methods</label>
       <div class="select">
         <select formControlName="corrMethod">
-          <option *ngFor="let m of squidpyCorrMethods" [value]="m">{{ m }}</option>
+          <option value="fdr_bh">fdr_bh</option>
         </select>
       </div>
       <small>Default: fdr_bh</small>
     </div>
-  </ng-container>
-  <!-- gemeinsames String-Feld für centrality, co_occurrence, neighborhood_enrichment -->
-  <ng-container *ngIf="['centrality_score','co_occurrence','neighborhood_enrichment'].includes(squidpyOptions.get('method')?.value)">
+  </div>
+
+  <!-- gearyC -->
+  <div class="section" *ngIf="form.get('squidpy.methods.gearyC')?.value" formGroupName="gearyC">
     <div class="field">
-      <label class="field-label">cluster key</label>
-      <input type="text" formControlName="clusterKey" placeholder="leiden" />
+      <label>n permutations for autocorrelation</label>
+      <input formControlName="nPerms" placeholder="None">
+      <small>Default: None (leave empty)</small>
+    </div>
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="twoTailed"> two tailed
+    </label>
+    <div class="field">
+      <label>correlation methods</label>
+      <div class="select">
+        <select formControlName="corrMethod">
+          <option value="fdr_bh">fdr_bh</option>
+        </select>
+      </div>
+      <small>Default: fdr_bh</small>
+    </div>
+  </div>
+
+  <!-- centrality_score -->
+  <div class="section" *ngIf="form.get('squidpy.methods.centrality_score')?.value" formGroupName="centrality_score">
+    <div class="field">
+      <label>cluster key</label>
+      <input formControlName="clusterKey" placeholder="leiden">
       <small>Default: leiden</small>
     </div>
-  </ng-container>
+  </div>
 
-  <!-- co_occurrence-spezifisch -->
-  <ng-container *ngIf="squidpyOptions.get('method')?.value === 'co_occurrence'">
+  <!-- co_occurrence -->
+  <div class="section" *ngIf="form.get('squidpy.methods.co_occurrence')?.value" formGroupName="co_occurrence">
     <div class="field">
-      <label class="field-label">interval</label>
-      <input type="number" class="no-spin" formControlName="coOccurInterval" min="1" step="1" />
+      <label>cluster key</label>
+      <input formControlName="clusterKey" placeholder="leiden">
+      <small>Default: leiden</small>
+    </div>
+    <div class="field">
+      <label>interval</label>
+      <input formControlName="interval" placeholder="50">
       <small>Default: 50</small>
     </div>
-
     <div class="field">
-      <label class="field-label">n_splits</label>
-      <input type="number" class="no-spin" formControlName="coOccurNSplits" min="1" step="1" placeholder="None" />
-      <small>Optional (leer lassen → None)</small>
+      <label>n_splits</label>
+      <input formControlName="nSplits" placeholder="None">
+      <small>Optional (leave empty → None)</small>
     </div>
-  </ng-container>
+  </div>
 
-  <!-- neighborhood_enrichment-spezifisch -->
-  <ng-container *ngIf="squidpyOptions.get('method')?.value === 'neighborhood_enrichment'">
+  <!-- neighborhood_enrichment -->
+  <div class="section" *ngIf="form.get('squidpy.methods.neighborhood_enrichment')?.value" formGroupName="neighborhood_enrichment">
     <div class="field">
-      <label class="field-label">library key</label>
-      <input type="text" formControlName="neighLibraryKey" placeholder="None" />
-      <small>Optional (leer lassen → None)</small>
+      <label>cluster key</label>
+      <input formControlName="clusterKey" placeholder="leiden">
+      <small>Default: leiden</small>
     </div>
     <div class="field">
-      <label class="field-label">n_perms</label>
-      <input type="number" class="no-spin" formControlName="neighNPerms" min="1" max="100000" step="1" />
+      <label>library key</label>
+      <input formControlName="libraryKey" placeholder="None">
+      <small>Optional (leave empty → None)</small>
+    </div>
+    <div class="field">
+      <label>n_perms</label>
+      <input formControlName="nPerms" placeholder="1000">
       <small>Default: 1000, Max: 100000</small>
     </div>
-  </ng-container>
-</div>
-
-<!-- LIANA+ – optionale Angaben -->
-<div class="section"
-     *ngIf="form.get('scores.LIANA+')?.value"
-     [formGroup]="lianaOptions">
-
-  <div class="section-title">LIANA+ – Optionen</div>
-
-  <div class="field">
-    <label class="field-label">Spalte für celltype compositions</label>
-    <input type="text" formControlName="ctCompositionKey" placeholder="tangram_ct_pred" />
-    <small>Optional · Default: tangram_ct_pred</small>
   </div>
 </div>
 
 
-
-  <!-- Conditional uploads -->
-  <div class="section" *ngIf="requiresSponge()">
-    <label>Sponge files <span class="required">*</span> (both required):</label>
-
-    <div class="file">
-      <input id="spongeAnalysis" type="file" (change)="onFileSelected($event, 'spongeAnalysis')" accept=".csv,.tsv">
-      <label for="spongeAnalysis" class="file-control">
-        <span class="btn">Choose <br> networkanalysis</span>
-        <span class="file-name">{{ spongeAnalysisFile?.name || 'No file selected' }}</span>
-      </label>
-    </div>
-
-    <div class="file" style="margin-top:8px;">
-      <input id="spongeInteractions" type="file" (change)="onFileSelected($event, 'spongeInteractions')" accept=".csv,.tsv">
-      <label for="spongeInteractions" class="file-control">
-        <span class="btn">Choose <br> networkinteractions</span>
-        <span class="file-name">{{ spongeInteractionsFile?.name || 'No file selected' }}</span>
-      </label>
-    </div>
-
-    <div class="hint" *ngIf="requiresSponge() && (!spongeAnalysisFile || !spongeInteractionsFile)" style="margin-top:6px;">
-      Please upload <em>both</em> SPONGE files (networkanalysis &amp; networkinteractions).
-    </div>
-  </div>
-
-  <div class="section" *ngIf="requiresGenie() || shouldOfferGenieUpload()">
-    <label>
-      Upload Genie3 network (.csv/.tsv)
-      <span *ngIf="requiresGenie()">— required:</span>
-      <span *ngIf="!requiresGenie()">— optional:</span>
-    </label>
-    <div class="file">
-      <input id="genie" type="file" (change)="onFileSelected($event, 'genie')" accept=".csv,.tsv">
-      <label for="genie" class="file-control">
-        <span class="btn">Choose file</span>
-        <span class="file-name">{{ genieFile?.name || 'No file selected' }}</span>
-      </label>
-    </div>
-  </div>
-
-  <!-- Upload-Fortschritt -->
+  <!-- Upload progress -->
   <div *ngIf="uploading" class="progress">
     <div class="bar" [style.width.%]="uploadProgress || 0"></div>
   </div>
 
+  <!-- Actions -->
   <div class="actions">
     <button type="submit" [disabled]="!canSubmit() || uploading">Submit</button>
     <button type="reset" (click)="onReset()">Reset</button>
   </div>
+
+  <!-- LIANA+ — options -->
+<div *ngIf="form.get('scores.lianaPlus')?.value" class="section" formGroupName="liana">
+  <div class="section-title">LIANA+ — options</div>
+
+  <div class="field">
+    <label>Column for celltype compositions</label>
+    <input formControlName="compositionColumn" placeholder="tangram_ct_pred">
+    <small>Optional · Default: tangram_ct_pred</small>
+  </div>
+
+  <!-- Upload Genie3 (optional) -->
+  <label>Upload Genie3 network (.csv/.tsv) — optional:</label>
+  <div class="file">
+    <input id="lianaGenie3" type="file"
+           (change)="onFileSelected($event, 'lianaGenie3')"
+           accept=".csv,.tsv,.txt">
+    <label for="lianaGenie3" class="file-control">
+      <span class="btn">Choose file</span>
+      <span class="file-name" [title]="lianaGenie3File?.name || 'No file selected'">
+        {{ lianaGenie3File?.name || 'No file selected' }}
+      </span>
+    </label>
+  </div>
+
+  <!-- NEW: Upload pathway network (optional) -->
+  <div class="section">
+    <label>Upload pathway network (.csv/.tsv) — optional:</label>
+    <div class="file">
+      <input id="lianaPathway" type="file"
+             (change)="onFileSelected($event, 'lianaPathway')"
+             accept=".csv,.tsv,.txt">
+      <label for="lianaPathway" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="lianaPathwayFile?.name || 'No file selected'">
+          {{ lianaPathwayFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+  </div>
+</div>
+
 </form>
