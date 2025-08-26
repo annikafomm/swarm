@@ -1,11 +1,11 @@
 import argparse
-import json
 import os
 
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import simplejson as json
 
 grn_score_names = (
     "aucell_scores",
@@ -368,6 +368,6 @@ if __name__ == "__main__":
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
 
     with open(args.outpath, "w+") as f:
-        json.dump(geojson_data, f, indent=4)
+        json.dump(geojson_data, f, indent=4, ignore_nan=True)
 
     print("GeoJSON file created successfully.")
