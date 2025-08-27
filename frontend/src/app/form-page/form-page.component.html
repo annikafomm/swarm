@@ -147,7 +147,7 @@
     <div class="section" *ngIf="form.get('network.algorithms.viper')?.value">
       <label>Upload Genie3 network (.csv/.tsv) — <span class="required">required</span>:</label>
       <div class="file">
-        <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv,.txt">
+        <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv">
         <label for="genie3Net" class="file-control">
           <span class="btn">Choose file</span>
           <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
@@ -159,45 +159,13 @@
 
     <!-- AUCell / GSVA / ssGSEA share the same options & upload rules -->
     <div class="section" *ngIf="hasTriadSelected()">
-      <div class="field-grid" formGroupName="params">
-        <div class="field">
-          <label>m score: threshold (0–1)</label>
-          <input formControlName="mScoreThreshold" placeholder="0.1">
-          <small>Default: 0.1</small>
-        </div>
-        <div class="field">
-          <label>p value adjusted (0–1)</label>
-          <input formControlName="pAdjust" placeholder="0.05">
-          <small>Default: 0.05</small>
-        </div>
-        <div class="field">
-          <label>ensembl id (column name)</label>
-          <input formControlName="ensemblId" placeholder="ensembl_id">
-          <small>Default: ensembl_id</small>
-        </div>
-        <div class="field">
-          <label>feature (column name)</label>
-          <input formControlName="featureCol" placeholder="feature_type">
-          <small>Default: feature_type</small>
-        </div>
-        <div class="field">
-          <label>RNA types</label>
-          <input formControlName="rnaTypes" placeholder="lncRNA,protein_coding">
-          <small>Default: lncRNA,protein_coding</small>
-        </div>
-        <div class="field">
-          <label>max modules</label>
-          <input formControlName="maxModules" placeholder="">
-          <small>Limits tbd – currently ≥ 1</small>
-        </div>
-      </div>
 
       <!-- Upload rule: Genie3 OR both SPONGE files -->
       <div class="section" style="margin-top:10px;">
         <div class="subsection">
           <label>Upload Genie3 network (.csv/.tsv) — optional (required if SPONGE not provided):</label>
           <div class="file">
-            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv,.txt">
+            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv">
             <label for="genie3NetTriad" class="file-control">
               <span class="btn">Choose file</span>
               <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
@@ -206,11 +174,36 @@
             </label>
           </div>
         </div>
+        <!-- Genie3 parameters — only when network scores ON + a Genie3 file selected -->
+        <div class="section"
+          *ngIf="form.get('scores.networkScores')?.value && genie3Selected"
+          formGroupName="genie3Params">
+          <div class="section-title">Genie3 — options</div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label>top n weights</label>
+              <input type="number" formControlName="topNWeights" placeholder="100000" />
+              <small>Default: 100000</small>
+            </div>
+            <div class="field">
+              <label>number of regulatory genes</label>
+              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+              <small>Default: 20</small>
+            </div>
+            <div class="field">
+              <label>number of regulons</label>
+              <input type="number" formControlName="nRegulons" placeholder="20" />
+              <small>Default: 20</small>
+            </div>
+          </div>
+        </div>
+
 
         <div class="subsection" style="margin-top:12px;">
           <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
           <div class="file">
-            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv,.tsv,.txt">
+            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv,.tsv">
             <label for="spongeNA" class="file-control">
               <span class="btn">Choose <br> networkanalysis</span>
               <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
@@ -219,7 +212,7 @@
             </label>
           </div>
           <div class="file" style="margin-top:8px;">
-            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv,.tsv,.txt">
+            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv,.tsv">
             <label for="spongeNI" class="file-control">
               <span class="btn">Choose <br> networkinteractions</span>
               <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
@@ -228,6 +221,43 @@
             </label>
           </div>
           <small>Please upload either a Genie3 network or both SPONGE files.</small>
+        </div>
+      </div>
+      <!-- SPONGE-Parameter NUR zeigen, wenn beide SPONGE-Dateien da sind -->
+      <div class="section" *ngIf="usingSponge" formGroupName="params">
+        <div class="section-title">SPONGEeffects — options</div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label>m score: threshold (0–1)</label>
+            <input formControlName="mScoreThreshold" placeholder="0.1">
+            <small>Default: 0.1</small>
+          </div>
+          <div class="field">
+            <label>p value adjusted (0–1)</label>
+            <input formControlName="pAdjust" placeholder="0.05">
+            <small>Default: 0.05</small>
+          </div>
+          <div class="field">
+            <label>ensembl id (column name)</label>
+            <input formControlName="ensemblId" placeholder="ensembl_id">
+            <small>Default: ensembl_id</small>
+          </div>
+          <div class="field">
+            <label>feature (column name)</label>
+            <input formControlName="featureCol" placeholder="feature_type">
+            <small>Default: feature_type</small>
+          </div>
+          <div class="field">
+            <label>RNA types</label>
+            <input formControlName="rnaTypes" placeholder="lncRNA,protein_coding">
+            <small>Default: lncRNA,protein_coding</small>
+          </div>
+          <div class="field">
+            <label>max modules</label>
+            <input formControlName="maxModules" placeholder="">
+            <small>Limits tbd – currently ≥ 1</small>
+          </div>
         </div>
       </div>
     </div>
@@ -378,7 +408,7 @@
   <div class="file">
     <input id="lianaGenie3" type="file"
            (change)="onFileSelected($event, 'lianaGenie3')"
-           accept=".csv,.tsv,.txt">
+           accept=".csv,.tsv">
     <label for="lianaGenie3" class="file-control">
       <span class="btn">Choose file</span>
       <span class="file-name" [title]="lianaGenie3File?.name || 'No file selected'">
@@ -393,7 +423,7 @@
     <div class="file">
       <input id="lianaPathway" type="file"
              (change)="onFileSelected($event, 'lianaPathway')"
-             accept=".csv,.tsv,.txt">
+             accept=".csv,.tsv">
       <label for="lianaPathway" class="file-control">
         <span class="btn">Choose file</span>
         <span class="file-name" [title]="lianaPathwayFile?.name || 'No file selected'">

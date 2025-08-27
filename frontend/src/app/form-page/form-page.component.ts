@@ -3,6 +3,7 @@ import { FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
+import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 
 @Component({
   selector: 'app-form-page',
@@ -32,8 +33,13 @@ export class FormPageComponent {
   uploadProgress = 0;
   errorMsg = '';
 
-  constructor(private fb: FormBuilder) {
+  resultJsonUrl: string | null = null;   // vom Server: Download-URL zur erzeugten JSON
+  serverPayload: any = null;             // vom Server zurückgegebenes Payload-Objekt
+
+
+  constructor(private fb: FormBuilder, private http: HttpClient) {
     this.form = this.fb.group({
+
       email: ['', [Validators.required, Validators.email]],
       dataset: ['Visium', Validators.required],
 
@@ -63,13 +69,18 @@ export class FormPageComponent {
           gsva: [false],
           ssgsea: [false],
         }),
-        params: this.fb.group({
-          mScoreThreshold: ['0.1'],
-          pAdjust: ['0.05'],
-          ensemblId: ['ensembl_id'],
-          featureCol: ['feature_type'],
-          rnaTypes: ['lncRNA,protein_coding'],
-          maxModules: [''],
+      params: this.fb.group({
+        mScoreThreshold: ['0.1'],
+        pAdjust: ['0.05'],
+        ensemblId: ['ensembl_id'],
+        featureCol: ['feature_type'],
+        rnaTypes: ['lncRNA,protein_coding'],
+        maxModules: [''],
+        }),
+      genie3Params: this.fb.group({
+        topNWeights: [100000],
+        nRegulatoryGenes: [20],
+        nRegulons: [20],
         }),
       }),
 
@@ -144,6 +155,12 @@ export class FormPageComponent {
   get squidpyGroup() {
     return this.form.get('squidpy') as FormGroup;
   }
+  get usingSponge(): boolean {
+    return !!(this.spongeNAFile && this.spongeNIFile);
+  }
+  get genie3Selected(): boolean {
+    return !!this.genie3NetFile;
+  }
   useTangramChecked(): boolean {
     return !!this.form.get('useTangram')?.value;
   }
@@ -207,45 +224,74 @@ export class FormPageComponent {
   async onSubmit() {
     if (!this.canSubmit()) return;
 
-    try {
-      this.errorMsg = '';
-      this.uploading = true;
-      this.uploadProgress = 0;
+    this.errorMsg = '';
+    this.resultJsonUrl = null;
+    this.serverPayload = null;
+    this.uploading = true;
+    this.uploadProgress = 0;
 
-      const fd = new FormData();
+    const fd = this.buildFormData();
 
-      // core
-      fd.append('email', this.form.value.email);
-      fd.append('dataset', this.form.value.dataset);
-
-      // spatial
-      if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
-      fd.append('spatial_normalization', String(this.form.value.spatialOptions.normalization));
-      fd.append('spatial_filtering', String(this.form.value.spatialOptions.filtering));
-
-      // tangram
-      fd.append('use_tangram', String(this.form.value.useTangram));
-      if (this.form.value.useTangram && this.singleCellFile) {
-        fd.append('single_cell_h5ad', this.singleCellFile);
-        fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
-        fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+    this.http.post<{ ok: boolean; json_url: string; json_filename: string; payload: any }>(
+      '/api/upload',
+      fd,
+      { observe: 'events', reportProgress: true }
+    ).subscribe({
+      next: (evt: HttpEvent<any>) => {
+        if (evt.type === HttpEventType.UploadProgress && evt.total) {
+          this.uploadProgress = Math.round(100 * (evt.loaded / evt.total));
+        }
+        if (evt.type === HttpEventType.Response) {
+          const body = evt.body || {};
+          this.resultJsonUrl = body.json_url || null;
+          this.serverPayload = body.payload || null;
+          this.uploadProgress = 100;
+          this.uploading = false;
+        }
+      },
+      error: (err) => {
+        this.errorMsg = err?.error?.detail || err.message || String(err);
+        this.uploading = false;
       }
+    });
+  }
 
-      // scores toggles
-      const scores = this.form.value.scores;
-      fd.append('score_network', String(scores.networkScores));
-      fd.append('score_squidpy', String(scores.squidpy));
-      fd.append('score_liana_plus', String(scores.lianaPlus));
+  private buildFormData(): FormData {
+    const fd = new FormData();
 
-      // network scores details
-      if (scores.networkScores) {
-        const alg = this.form.value.network.algorithms;
-        fd.append('alg_viper', String(alg.viper));
-        fd.append('alg_aucell', String(alg.aucell));
-        fd.append('alg_gsva', String(alg.gsva));
-        fd.append('alg_ssgsea', String(alg.ssgsea));
+    // --- core
+    fd.append('email', this.form.value.email);
+    fd.append('dataset', this.form.value.dataset);
 
-        // common params for AUCell/GSVA/ssGSEA
+    // --- spatial
+    if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
+    fd.append('spatial_normalization', String(this.form.value.spatialOptions.normalization));
+    fd.append('spatial_filtering', String(this.form.value.spatialOptions.filtering));
+
+    // --- tangram
+    fd.append('use_tangram', String(this.form.value.useTangram));
+    if (this.form.value.useTangram && this.singleCellFile) {
+      fd.append('single_cell_h5ad', this.singleCellFile);
+      fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
+      fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+    }
+
+    // --- scores toggles
+    const scores = this.form.value.scores;
+    fd.append('score_network', String(scores.networkScores));
+    fd.append('score_squidpy', String(scores.squidpy));
+    fd.append('score_liana_plus', String(scores.lianaPlus));
+
+    // --- network details
+    if (scores.networkScores) {
+      const alg = this.form.value.network.algorithms;
+      fd.append('alg_viper', String(alg.viper));
+      fd.append('alg_aucell', String(alg.aucell));
+      fd.append('alg_gsva', String(alg.gsva));
+      fd.append('alg_ssgsea', String(alg.ssgsea));
+
+      // SPONGEeffects-Parameter nur wenn du sie zeigst (usingSponge==true)
+      if (this.hasTriadSelected() && this.usingSponge) {
         const p = this.form.value.network.params;
         fd.append('net_m_score_threshold', p.mScoreThreshold ?? '');
         fd.append('net_p_adjust', p.pAdjust ?? '');
@@ -253,77 +299,68 @@ export class FormPageComponent {
         fd.append('net_feature_col', p.featureCol ?? '');
         fd.append('net_rna_types', p.rnaTypes ?? '');
         fd.append('net_max_modules', p.maxModules ?? '');
-
-        if (this.genie3NetFile) fd.append('genie3_network', this.genie3NetFile);
-        if (this.spongeNAFile) fd.append('sponge_networkanalysis', this.spongeNAFile);
-        if (this.spongeNIFile) fd.append('sponge_networkinteractions', this.spongeNIFile);
       }
 
-      // squidpy details
-      // --- Squidpy (checkboxes, multiple) ---
-      if (scores.squidpy) {
-        const sq = this.form.value.squidpy;
-        const m = sq.methods;
-
-        if (m.moranI) {
-          fd.append('squidpy_moranI', 'true');
-          fd.append('squidpy_moranI_n_perms', sq.moranI.nPerms ?? '');
-          fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
-          fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
-        }
-        if (m.gearyC) {
-          fd.append('squidpy_gearyC', 'true');
-          fd.append('squidpy_gearyC_n_perms', sq.gearyC.nPerms ?? '');
-          fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
-          fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
-        }
-        if (m.centrality_score) {
-          fd.append('squidpy_centrality_score', 'true');
-          fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
-        }
-        if (m.co_occurrence) {
-          fd.append('squidpy_co_occurrence', 'true');
-          fd.append('squidpy_co_occurrence_cluster_key', sq.co_occurrence.clusterKey ?? '');
-          fd.append('squidpy_co_occurrence_interval', sq.co_occurrence.interval ?? '');
-          fd.append('squidpy_co_occurrence_n_splits', sq.co_occurrence.nSplits ?? '');
-        }
-        if (m.neighborhood_enrichment) {
-          fd.append('squidpy_neighborhood_enrichment', 'true');
-          fd.append('squidpy_neighborhood_enrichment_cluster_key', sq.neighborhood_enrichment.clusterKey ?? '');
-          fd.append('squidpy_neighborhood_enrichment_library_key', sq.neighborhood_enrichment.libraryKey ?? '');
-          fd.append('squidpy_neighborhood_enrichment_n_perms', sq.neighborhood_enrichment.nPerms ?? '');
-        }
+      // Genie3 parameter nur wenn Datei da
+      if (this.genie3NetFile) {
+        const g = this.form.value.network.genie3Params ?? {};
+        fd.append('genie3_top_n_weights', String(g.topNWeights ?? 100000));
+        fd.append('genie3_n_regulatory_genes', String(g.nRegulatoryGenes ?? 20));
+        fd.append('genie3_n_regulons', String(g.nRegulons ?? 20));
+        fd.append('genie3_network', this.genie3NetFile); // Datei selbst
       }
 
-
-      // LIANA+
-      if (scores.lianaPlus) {
-        const l = this.form.value.liana;
-        fd.append('liana_composition_column', l.compositionColumn ?? '');
-        if (this.lianaGenie3File)  fd.append('liana_genie3_network',  this.lianaGenie3File);
-        if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
-      }
-
-      // TODO: echten Endpoint hinterlegen:
-      // const resp = await fetch('/api/upload', { method: 'POST', body: fd });
-      // if (!resp.ok) throw new Error(await resp.text());
-
-      // Dummy-Progress für Demo
-      await new Promise<void>((resolve) => {
-        const timer = setInterval(() => {
-          this.uploadProgress = Math.min(this.uploadProgress + 10, 100);
-          if (this.uploadProgress >= 100) {
-            clearInterval(timer);
-            resolve();
-          }
-        }, 80);
-      });
-    } catch (e: any) {
-      this.errorMsg = e?.message ?? String(e);
-    } finally {
-      this.uploading = false;
+      // SPONGE Dateien (falls hochgeladen)
+      if (this.spongeNAFile) fd.append('sponge_networkanalysis', this.spongeNAFile);
+      if (this.spongeNIFile) fd.append('sponge_networkinteractions', this.spongeNIFile);
     }
+
+    // --- squidpy (mehrere Methoden via Checkboxen)
+    if (scores.squidpy) {
+      const sq = this.form.value.squidpy;
+      const m = sq.methods;
+      if (m.moranI) {
+        fd.append('squidpy_moranI', 'true');
+        fd.append('squidpy_moranI_n_perms', sq.moranI.nPerms ?? '');
+        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
+        fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
+      }
+      if (m.gearyC) {
+        fd.append('squidpy_gearyC', 'true');
+        fd.append('squidpy_gearyC_n_perms', sq.gearyC.nPerms ?? '');
+        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
+        fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
+      }
+      if (m.centrality_score) {
+        fd.append('squidpy_centrality_score', 'true');
+        fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
+      }
+      if (m.co_occurrence) {
+        fd.append('squidpy_co_occurrence', 'true');
+        fd.append('squidpy_co_occurrence_cluster_key', sq.co_occurrence.clusterKey ?? '');
+        fd.append('squidpy_co_occurrence_interval', sq.co_occurrence.interval ?? '');
+        fd.append('squidpy_co_occurrence_n_splits', sq.co_occurrence.nSplits ?? '');
+      }
+      if (m.neighborhood_enrichment) {
+        fd.append('squidpy_neighborhood_enrichment', 'true');
+        fd.append('squidpy_neighborhood_enrichment_cluster_key', sq.neighborhood_enrichment.clusterKey ?? '');
+        fd.append('squidpy_neighborhood_enrichment_library_key', sq.neighborhood_enrichment.libraryKey ?? '');
+        fd.append('squidpy_neighborhood_enrichment_n_perms', sq.neighborhood_enrichment.nPerms ?? '');
+      }
+    }
+
+    // --- LIANA+
+    if (scores.lianaPlus) {
+      const l = this.form.value.liana;
+      fd.append('liana_composition_column', l.compositionColumn ?? '');
+      if (this.lianaGenie3File)  fd.append('liana_genie3_network', this.lianaGenie3File);
+      if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
+    }
+
+    return fd;
   }
+
+
 
   onReset() {
     this.form.reset({
@@ -342,7 +379,8 @@ export class FormPageComponent {
           featureCol: 'feature_type',
           rnaTypes: 'lncRNA,protein_coding',
           maxModules: '',
-        }
+        },
+        genie3Params: { topNWeights: 100000, nRegulatoryGenes: 20, nRegulons: 20 },
       },
       squidpy: {
         methods: {
@@ -369,7 +407,7 @@ export class FormPageComponent {
     this.spongeNAFile = undefined;
     this.spongeNIFile = undefined;
     this.lianaGenie3File = undefined;
-    this.lianaPathwayFile = undefined; 
+    this.lianaPathwayFile = undefined;
 
 
     this.errorMsg = '';
