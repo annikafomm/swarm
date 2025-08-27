@@ -722,3 +722,49 @@ select {
   border-radius: 10px;
 }
 .hx-btn-ghost:hover { background: var(--hx-bg); color: var(--hx-text); }
+
+.kv-table .row {
+  border-bottom: 1px dashed var(--border);
+}
+.kv-table .row:last-child { border-bottom: 0; }
+.kv-table dt { color: var(--text); }
+.kv-table dd { color: var(--text); }
+
+/* ---------- CHIPS (arrays) ---------- */
+
+.chip-grid {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.chip {
+  background: var(--chip-bg);
+  box-shadow: var(--chip-shadow);
+  transition: transform .06s ease, opacity .2s ease;
+}
+.chip:active { transform: scale(.98); }
+
+/* number badge shades */
+.num { background: var(--zero-bg); }
+.num.pos { background: var(--pos-bg); }
+.num.neg { background: var(--neg-bg); }
+
+/* optional: horizontally scrollable list on very narrow panes */
+@media (max-width: 420px) {
+  .chip-grid {
+    display: flex;
+    overflow-x: auto;
+    gap: .35rem;
+    padding-bottom: .25rem;
+  }
+  .chip-grid::-webkit-scrollbar { height: 6px; }
+}
+
+/* ---------- COMPACT MODE (optional) ----------
+   Add class 'compact' to .sidenav-content if you need tighter density.
+*/
+.sidenav-content.compact {
+  gap: .65rem;
+}
+.sidenav-content.compact .section { padding: .45rem .6rem; }
+.sidenav-content.compact .chip { padding: .22rem .45rem; font-size: .85rem; }
+.sidenav-content.compact .row { gap: .2rem .6rem; }

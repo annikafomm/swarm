@@ -361,17 +361,24 @@
     </div>
 
     <div class="sidenav-content">
-      <div *ngIf="selectedCell">
-        <p><strong>Barcode:</strong> {{ selectedCell.properties.barcode }}</p>
-        <p>
-          <strong>Cell Type:</strong> {{ selectedCell.properties.cell_type }}
+      <div *ngIf="selectedCell as cell">
+        <p *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
+          <strong>{{ label(kv.key) }}:</strong>
+          <ng-container *ngIf="isNumberLike(kv.value); else nonNum">
+            {{ toNumberLike(kv.value) }}
+          </ng-container>
+          <ng-template #nonNum>
+            <ng-container *ngIf="isPrimitive(kv.value); else complex">
+              {{ kv.value }}
+            </ng-container>
+            <ng-template #complex>
+              <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
+            </ng-template>
+          </ng-template>
         </p>
-        <p>
-          <strong>Leiden-Cluster:</strong> {{ +selectedCell.properties.leiden }}
-        </p>
-
       </div>
     </div>
+
   </div>
 
   <div class="cluster-sidenav" *ngIf="selectedCluster !== null">

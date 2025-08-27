@@ -7,6 +7,7 @@ import { FilterableTableComponent } from '../filterable-table/filterable-table.c
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
+import { KeyValue } from '@angular/common';
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -1504,6 +1505,34 @@ export class HexagonPlotComponent implements OnInit {
         this.selectedGeneSetSponge,
       );
     }
+  }
+
+
+  keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
+    return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
+  };
+
+  isNumberLike(v: unknown): v is number | string {
+    return (typeof v === 'number' && Number.isFinite(v)) ||
+          (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
+  }
+
+  toNumberLike(v: number | string): number {
+    return typeof v === 'number' ? v : Number(v);
+  }
+
+  isPrimitive(v: unknown): v is string | number | boolean | null {
+    return v === null || ['string','number','boolean'].includes(typeof v as string);
+  }
+
+  formatValue(v: unknown): string {
+    if (Array.isArray(v)) return v.join(', ');
+    if (v && typeof v === 'object') return JSON.stringify(v, null, 2);
+    return String(v);
+  }
+
+  label(key: string): string {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
   private renderLegend(): void {
