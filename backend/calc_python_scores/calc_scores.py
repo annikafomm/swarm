@@ -55,7 +55,6 @@ def main():
 
     # liana
     parser.add_argument("-liana", action='store_true', help='Compute Liana')
-
     parser.add_argument("-grn", type=str, default=None)
     parser.add_argument("-cell_comp_key", type=str, default="tangram_ct_pred")
     parser.add_argument("-pathway_net", type=str, default=None)
