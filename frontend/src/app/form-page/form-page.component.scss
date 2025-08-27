@@ -1,5 +1,5 @@
 :host {
-  --bg: #fff;
+  --bg: #F8F8FF;
   --text: #1f2937;
   --muted: #6b7280;
   --primary: #4f46e5;
@@ -9,289 +9,167 @@
   color: var(--text);
 }
 
-/* Karte / Panel */
+/* Panel / Karte */
 .panel {
-  max-width: 780px;
-  margin: 0 auto;
+  --accent: #5b61ff;
+  --border: #e6e8ef;
+  --muted:  #6b7280;
+  --input-bg: #fff;
+  --input-bg-disabled: #f6f7fb;
+  --input-radius: 12px;
+
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  padding: 20px 22px;
+
   background: var(--bg);
-  padding: 24px 28px;
-  border-radius: 18px;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.06);
 }
 
-h2 {
-  font-size: 2rem;
-  margin: 0 0 10px;
-}
-.section {
-  margin-top: 22px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-.section-title {
-  font-weight: 700;
-  font-size: 1.1rem;
-  margin-bottom: 10px;
-}
+/* Überschrift & Sections */
+h2 { font-size: 2rem; margin: 0 0 10px; }
+.section { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
+.section-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 10px; }
+.section label, .section .section-title { word-break: break-word; }
 
-/* Grid für Inputs */
-.grid {
+/* Feld-Layout */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label { font-weight: 700; color: #111827; letter-spacing: .2px; }
+.panel .field > label { margin: 0 0 6px; font-weight: 600; }
+.panel small { display: block; margin-top: 6px; color: var(--muted); font-size: 0.86rem; }
+
+/* Grid für optionale Parametergroups (z.B. Genie3) */
+.field-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 16px;
-}
-@media (max-width: 720px) {
-  .grid { grid-template-columns: 1fr; }
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 16px;
 }
 
-label {
-  display: block;
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-select, input[type="text"] {
-  width: 100%;
-  padding: 10px 12px;
+/* Inputs + Textareas + Select (Basis) */
+.panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.panel select,
+.panel textarea {
+  width: var(--input-w, 100%);          /* Standard 100%, pro Feld überschreibbar */
+  height: var(--input-h, auto);         /* fixe Höhe optional */
+  min-height: var(--input-min-h, 44px); /* Default-Höhe */
+  box-sizing: border-box;
+
+  font-size: 0.95rem;
+  line-height: 1.25;
+  color: inherit;
+
+  background: var(--input-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
+  border-radius: var(--input-radius);
+  padding: var(--input-py, 10px) var(--input-px, 12px); /* Padding je Feld steuerbar */
+
+  transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
 }
 
-/* ---------- File Upload Controls ---------- */
-/* --- File upload (stabil & responsive) --- */
+.panel input::placeholder,
+.panel textarea::placeholder { color: var(--muted); opacity: .8; }
+.panel input:hover, .panel select:hover, .panel textarea:hover { border-color: #d6d9e4; }
+.panel input:focus, .panel select:focus, .panel textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,97,255,.15);
+}
+
+
+/* Nur das Label des Spatial-Upload-Blocks fett setzen */
+.section:has(#spatial) > label {
+  font-weight: 700;   /* bold */
+  color: #0f172a;     /* optional: etwas dunkler */
+}
+
+
+/* Disabled/Readonly */
+.panel input:disabled, .panel select:disabled, .panel textarea:disabled {
+  background: var(--input-bg-disabled); color: #9aa0a6; cursor: not-allowed;
+}
+.panel input[readonly], .panel textarea[readonly] { background: #fafafa; }
+
+/* Angular-Validierung (sanft) */
+.panel input.ng-invalid.ng-touched,
+.panel select.ng-invalid.ng-touched,
+.panel textarea.ng-invalid.ng-touched {
+  border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+.panel input.ng-valid.ng-touched,
+.panel select.ng-valid.ng-touched,
+.panel textarea.ng-valid.ng-touched {
+  border-color: #22c55e33;
+}
+
+/* Number-Spinner entfernen */
+.panel input[type="number"]::-webkit-outer-spin-button,
+.panel input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.panel input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ----- Custom Select (Gradient-Chevron, kein Doppelpfeil) ----- */
+.panel .select { position: relative; box-shadow: none; }
+.panel .select select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(to right, transparent, transparent);
+  background-position:
+    calc(100% - 18px) calc(50% - 3px),
+    calc(100% - 12px) calc(50% - 3px),
+    calc(100% - 2.2rem) 0;
+  background-size: 6px 6px, 6px 6px, 1px 100%;
+  background-repeat: no-repeat;
+  padding-right: 2.6rem; /* Platz für Chevron */
+}
+
+/* ----- File Upload Controls ----- */
 .file { margin: 8px 0 18px; }
-
-/* Input komplett verstecken; Klick geht über <label for=…> */
-.file input[type="file"] {
-  display: none;
-}
-
-/* Sichtbarer Container */
+.file input[type="file"] { display: none; } /* Klick über Label */
 .file-control {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid rgba(15,23,42,.12);
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(2,6,23,.06);
-  transition: border-color .2s ease, box-shadow .2s ease;
-  cursor: pointer;                 /* wichtig, sonst wirkt’s „kaputt“ */
+  display: flex; align-items: center; gap: 10px; width: var(--file-w, 95%);
+  padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(15,23,42,.12);
+  background: #fff; box-shadow: 0 1px 2px rgba(2,6,23,.06);
+  transition: border-color .2s ease, box-shadow .2s ease; cursor: pointer;
 }
-
-.file-control:hover {
-  border-color: rgba(15,23,42,.22);
-  box-shadow: 0 4px 14px rgba(2,6,23,.08);
-}
-
-.file-control:focus-visible {
-  outline: 3px solid rgba(59,130,246,.3);
-  outline-offset: 2px;
-}
-
-/* Button (schlicht) */
+.file-control:hover { border-color: rgba(15,23,42,.22); box-shadow: 0 4px 14px rgba(2,6,23,.08); }
+.file-control:focus-visible { outline: 3px solid rgba(59,130,246,.3); outline-offset: 2px; }
 .file .btn {
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-weight: 600;
-  line-height: 1;
-  white-space: nowrap;
-  background: #f3f4f6;
-  border: 1px solid rgba(15,23,42,.08);
+  padding: 10px 16px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+  background: #f3f4f6; border: 1px solid rgba(15,23,42,.08);
   box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
 }
-
-/* Dateiname: ellipsis statt Überlauf */
-.file .file-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: 600;
-  color: #334155;
-}
-
-/* Labels dürfen umbrechen */
-.section label, .section .section-title {
-  word-break: break-word;
-}
-
-/* Mobile etwas enger */
+.file .file-name { flex: 1 1 auto; min-width: 0; font-weight: 600; color: #334155; }
 @media (max-width: 520px) {
   .file-control { padding: 10px 12px; border-radius: 14px; gap: 10px; }
   .file .btn { padding: 9px 14px; }
 }
 
-
+/* Checkbox-Gruppen (Scores) */
 .checkbox-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(160px, 1fr)); /* kleinere Mindestbreite */
-  column-gap: 16px;   /* engerer Abstand rechts */
+  grid-template-columns: 1fr;
+  column-gap: 16px;
   row-gap: 10px;
   grid-auto-flow: row;
 }
-
-/* Jede Checkbox + Text */
+@media (max-width: 640px) { .checkbox-list { grid-template-columns: 1fr; } }
 .score-option {
-  display: grid;
-  grid-template-columns: 20px 1fr;
-  align-items: start;
-  column-gap: 8px;
-  font-weight: 400;   /* nicht fett */
+  display: grid; grid-template-columns: 20px 1fr; align-items: start;
+  column-gap: 8px; font-weight: 400;
 }
+.score-text { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
 
-/* SPONGeffects nach ganz oben links */
-.score-option.force-sponge {
-  order: -1;   /* ganz nach vorne */
-}
-
-/* Text normal umbrechen */
-.score-text {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
-  overflow-wrap: anywhere;
-}
-
-
-/* mobil: einspaltig */
-@media (max-width: 640px) {
-  .checkbox-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-
-/* Error + Progress */
+/* Sonstiges */
+.required { color: red; margin-left: 2px; }
 .error {
-  margin: 12px 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #fef2f2;
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  margin: 12px 0; padding: 10px 12px; border-radius: 12px;
+  background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
 }
-.progress {
-  margin-top: 10px;
-  height: 8px;
-  background: #eef2f7;
-  border-radius: 999px;
-  overflow: hidden;
-}
-.progress .bar {
-  height: 100%;
-  width: 0%;
-  background: var(--primary);
-  transition: width .3s ease;
-}
-
-/* Actions */
-.actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 20px;
-}
-button[type="submit"],
-button[type="reset"] {
-  padding: 10px 16px;
-  border-radius: 12px;
-  border: none;
-  background: var(--primary);
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
+.progress { margin-top: 10px; height: 8px; background: #eef2f7; border-radius: 999px; overflow: hidden; }
+.progress .bar { height: 100%; width: 0%; background: var(--primary); transition: width .3s ease; }
+.actions { display: flex; gap: 12px; margin-top: 20px; }
+button[type="submit"], button[type="reset"] {
+  padding: 10px 16px; border-radius: 12px; border: none;
+  background: var(--primary); color: #fff; font-weight: 700; cursor: pointer;
   box-shadow: 0 6px 16px rgba(79,70,229,.25);
 }
-button[disabled] {
-  opacity: .55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-/* Layout */
-.grid.two {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 18px;
-}
-@media (max-width: 640px) { .grid.two { grid-template-columns: 1fr; } }
-
-.field { display: flex; flex-direction: column; gap: 6px; }
-.field textarea,
-.field-label {
-  font-weight: 700;
-  color: #111827;
-  letter-spacing: .2px;
-}
-.field input[type="text"],
-.field input[type="number"],
-.field input[type="email"],
-.select select {
-  height: 44px;            /* angenehme Klickfläche */
-}
-.field input:focus,
-.select select:focus,
-.field textarea:focus {
-  outline: none;
-  border-color: #aeb8fe;
-  box-shadow: 0 0 0 3px rgba(174,184,254,.25);
-}
-
-
-
-/* Custom select */
-.select {
-  position: relative;
-}
-.select select {
-  appearance: none;           /* hide native arrow */
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  width: 100%;
-  padding: 10px 40px 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #fff;
-  font-weight: 600;
-  color: #111827;
-  box-shadow: 0 2px 0 rgba(17,24,39,.06) inset, 0 1px 2px rgba(0,0,0,.04);
-  transition: border-color .2s ease, box-shadow .2s ease, transform .02s;
-}
-.select select:hover       { border-color: #d1d5db; }
-.select select:focus {
-  outline: none;
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 4px rgba(79,70,229,.15);
-}
-.select select:active { transform: translateY(1px); }
-
-/* Chevron icon */
-.select::after {
-  content: "";
-  position: absolute; inset: 0 12px 0 auto;
-  width: 14px; height: 14px; margin: auto 0;
-  pointer-events: none;
-  background: no-repeat center/14px
-    url("data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6 8l4 4 4-4' stroke='%2355637e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
-
-.required {
-  color: red;
-  margin-left: 2px;
-}
-
-/* Pfeile in Chrome/Edge/Safari ausblenden */
-.no-spin::-webkit-outer-spin-button,
-.no-spin::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-/* Pfeile in Firefox ausblenden */
-.no-spin[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
-}
-
-
-
+button[disabled] { opacity: .55; cursor: not-allowed; box-shadow: none; }

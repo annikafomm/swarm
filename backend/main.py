@@ -296,41 +296,81 @@ def api_root():
 # stores a config JSON for reproducibility, and returns a summary payload.
 @app.post("/api/upload", dependencies=[Depends(cookie)])
 async def upload(
-    # Required form fields (validated by Enum):
-    dataset: Dataset = Form(...),
-    method: Method = Form(...),
-    # Boolean options (checkboxes on the frontend):
-    normalization: bool = Form(...),
-    filteringSpatial: bool = Form(...),
-    filteringSingleCell: bool = Form(...),
-    tangram: bool = Form(...),
-    # JSON string with selected scores (parsed below):
-    scores: str = Form(...),
-    useDefaultLiana: Optional[bool] = Form(None),
-    tangramOptions: Optional[str] = Form(None),
-    spongeOptions: Optional[str] = Form(None),
-    squidpyOptions: Optional[str] = Form(None),
-    lianaOptions: Optional[str] = Form(None),
-    # Files (spatial is required; others are optional):
-    email: EmailStr = Form(...),
-    spatialFile: UploadFile = File(...),
-    singleCellFile: Optional[UploadFile] = File(None),
-    precomputedFile: Optional[UploadFile] = File(None),
-    spongeNetworkAnalysis: Optional[UploadFile] = File(None),
-    spongeNetworkInteractions: Optional[UploadFile] = File(None),
-    genieFile: Optional[UploadFile] = File(None),
+    # --- core ---
+    email: str = Form(...),
+    dataset: str = Form(...),
+
+    # Spatial
+    spatial_h5ad: UploadFile = File(...),
+    spatial_normalization: bool = Form(False),
+    spatial_filtering: bool = Form(False),
+
+    # Tangram
+    use_tangram: bool = Form(False),
+    single_cell_h5ad: Optional[UploadFile] = File(None),
+    singlecell_filtering: bool = Form(False),
+    singlecell_normalization: bool = Form(False),
+
+    # Scores
+    score_network: bool = Form(False),
+    score_squidpy: bool = Form(False),
+    score_liana_plus: bool = Form(False),
+
+    # Network Algos
+    alg_viper: bool = Form(False),
+    alg_aucell: bool = Form(False),
+    alg_gsva: bool = Form(False),
+    alg_ssgsea: bool = Form(False),
+
+    # SPONGE-Params
+    net_m_score_threshold: Optional[float] = Form(None),
+    net_p_adjust: Optional[str] = Form(None),
+    net_ensembl_id_col: Optional[str] = Form(None),
+    net_feature_col: Optional[str] = Form(None),
+    net_rna_types: Optional[str] = Form(None),
+    net_max_modules: Optional[int] = Form(None),
+
+    # GENIE3-Params
+    genie3_top_n_weights: Optional[int] = Form(None),
+    genie3_n_regulatory_genes: Optional[int] = Form(None),
+    genie3_n_regulons: Optional[int] = Form(None),
+
+    # Network-Dateien
+    genie3_network: Optional[UploadFile] = File(None),
+    sponge_networkanalysis: Optional[UploadFile] = File(None),
+    sponge_networkinteractions: Optional[UploadFile] = File(None),
+
+    # Squidpy Flags + Params
+    squidpy_moranI: bool = Form(False),
+    squidpy_moranI_n_perms: Optional[int] = Form(None),
+    squidpy_moranI_two_tailed: bool = Form(False),
+    squidpy_moranI_corr_method: Optional[str] = Form(None),
+
+    squidpy_gearyC: bool = Form(False),
+    squidpy_gearyC_n_perms: Optional[int] = Form(None),
+    squidpy_gearyC_two_tailed: bool = Form(False),
+    squidpy_gearyC_corr_method: Optional[str] = Form(None),
+
+    squidpy_centrality_score: bool = Form(False),
+    squidpy_centrality_score_cluster_key: Optional[str] = Form(None),
+
+    squidpy_co_occurrence: bool = Form(False),
+    squidpy_co_occurrence_cluster_key: Optional[str] = Form(None),
+    squidpy_co_occurrence_interval: Optional[int] = Form(None),
+    squidpy_co_occurrence_n_splits: Optional[int] = Form(None),
+
+    squidpy_neighborhood_enrichment: bool = Form(False),
+    squidpy_neighborhood_enrichment_cluster_key: Optional[str] = Form(None),
+    squidpy_neighborhood_enrichment_library_key: Optional[str] = Form(None),
+    squidpy_neighborhood_enrichment_n_perms: Optional[int] = Form(None),
+
+    # LIANA
+    liana_composition_column: Optional[str] = Form(None),
+    liana_genie3_network: Optional[UploadFile] = File(None),
+    liana_pathway_network: Optional[UploadFile] = File(None),
+
     session_data: "SessionData" = Depends(verifier),
 ):
-    if spatialFile is None:
-        raise HTTPException(status_code=400, detail="Spatial file is required")
-
-    # 1) Parse the scores JSON
-    try:
-        scores_obj: Dict[str, Any] = json.loads(scores) if scores else {}
-    except Exception:
-        raise HTTPException(
-            status_code=400, detail="Field 'scores' must be valid JSON."
-        )
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
@@ -343,73 +383,6 @@ async def upload(
                 status_code=400, detail=f"Field '{name}' must be valid JSON."
             )
 
-    options = {
-        "tangram": _parse_json_field("tangramOptions", tangramOptions),
-        "sponge": _parse_json_field("spongeOptions", spongeOptions),
-        "squidpy": _parse_json_field("squidpyOptions", squidpyOptions),
-        "liana": _parse_json_field("lianaOptions", lianaOptions),
-    }
-    # None-Einträge entfernen
-    options = {k: v for k, v in options.items() if v is not None}
-
-    # --- Validation rules ----------------------------------------------------
-    # Helper: normalize scores to a set of names (list/obj tolerant)
-    def _scores_to_set(obj):
-        try:
-            if isinstance(obj, dict):
-                # allow object like {"LIANA+": true, ...}
-                return {k for k, v in obj.items() if v}
-            if isinstance(obj, list):
-                return set(obj)
-            return set()
-        except Exception:
-            return set()
-
-    scores_set = _scores_to_set(scores_obj)
-
-    sponge_needed = (
-        ("SPONGeffects" in scores_set)
-        or ("AUCell" in scores_set)
-        or (method == Method.Sponge)
-    ) and (precomputedFile is None)
-    genie_needed = (
-        ("VIPER" in scores_set)
-        or ("AUCell" in scores_set)
-        or ("SPONGeffects" in scores_set)
-    ) and (precomputedFile is None)
-
-    # spatial always required (already enforced by FastAPI type); double-check for safety
-    if spatialFile is None:
-        raise HTTPException(
-            status_code=400, detail="Spatial file is required."
-        )
-
-    # If tangram true -> singleCell required
-    if tangram and (singleCellFile is None):
-        raise HTTPException(
-            status_code=400,
-            detail="Tangram is enabled: singleCell file is required.",
-        )
-
-    # SPONGE pair requirement
-    if sponge_needed:
-        missing = []
-        if spongeNetworkAnalysis is None:
-            missing.append("spongeNetworkAnalysis")
-        if spongeNetworkInteractions is None:
-            missing.append("spongeNetworkInteractions")
-        if missing:
-            raise HTTPException(
-                status_code=400,
-                detail=f"SPONGE requires both files: {', '.join(missing)} missing.",
-            )
-
-    # GENIE/VIPER requirement
-    if genie_needed and (genieFile is None):
-        raise HTTPException(
-            status_code=400,
-            detail="VIPER/AUCell/SPONGeffects selected: genieNetwork file is required (unless precomputed is provided).",
-        )
     raw_username = session_data.username
     user_safe = _sanitize_filename(raw_username) or "anon"
 
@@ -418,32 +391,91 @@ async def upload(
     job_dir.mkdir(parents=True, exist_ok=True)
 
     # 3) Save all files into that directory
+    # Dateien speichern (alles in ./uploads)
     saved_files = {
-        "spatialFile": save_file(spatialFile, job_dir),
-        "singleCellFile": save_file(singleCellFile, job_dir),
-        "precomputedFile": save_file(precomputedFile, job_dir),
-        "spongeNetworkAnalysis": save_file(spongeNetworkAnalysis, job_dir),
-        "spongeNetworkInteractions": save_file(
-            spongeNetworkInteractions, job_dir
-        ),
-        "genieFile": save_file(genieFile, job_dir),
+        "spatial_h5ad": save_file(spatial_h5ad, job_dir),
+        "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
+        "genie3_network": save_file(genie3_network, job_dir),
+        "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
+        "sponge_networkinteractions": save_file(sponge_networkinteractions, job_dir),
+        "liana_genie3_network": save_file(liana_genie3_network, job_dir),
+        "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
 
     # 4) Build response payload
     payload = {
-        "ok": True,
-        "jobId": job_id,
         "email": str(email),
-        "dataset": dataset.value,
-        "method": method.value,
-        "normalization": normalization,
-        "filteringSpatial": filteringSpatial,
-        "filteringSingleCell": filteringSingleCell,
-        "tangram": tangram,
-        "scores": scores_obj,
-        "useDefaultLiana": useDefaultLiana,
-        "options": options,
+        "dataset": dataset,
+        "spatial": {
+            "normalization": spatial_normalization,
+            "filtering": spatial_filtering,
+        },
         "files": saved_files,
+        "tangram": {
+            "use": use_tangram,
+            # Dateien/Parameter nur füllen, wenn Tangram aktiv:
+            "filtering": singlecell_filtering if use_tangram else None,
+            "normalization": singlecell_normalization if use_tangram else None,
+        },
+        "scores": {
+            "network": score_network,
+            "squidpy": score_squidpy,
+            "liana_plus": score_liana_plus,
+        },
+        "network": {
+            "algorithms": {
+                "viper": alg_viper,
+                "aucell": alg_aucell,
+                "gsva": alg_gsva,
+                "ssgsea": alg_ssgsea,
+            },
+            "sponge_params": {
+                "m_score_threshold": net_m_score_threshold,
+                "p_adjust": net_p_adjust,
+                "ensembl_id_col": net_ensembl_id_col,
+                "feature_col": net_feature_col,
+                "rna_types": net_rna_types,
+                "max_modules": net_max_modules,
+            },
+            "genie3_params": {
+                "top_n_weights": genie3_top_n_weights,
+                "n_regulatory_genes": genie3_n_regulatory_genes,
+                "n_regulons": genie3_n_regulons,
+            },
+        },
+        "squidpy": {
+            "moranI": squidpy_moranI,
+            "moranI_params": {
+                "n_perms": squidpy_moranI_n_perms,
+                "two_tailed": squidpy_moranI_two_tailed,
+                "corr_method": squidpy_moranI_corr_method,
+            },
+            "gearyC": squidpy_gearyC,
+            "gearyC_params": {
+                "n_perms": squidpy_gearyC_n_perms,
+                "two_tailed": squidpy_gearyC_two_tailed,
+                "corr_method": squidpy_gearyC_corr_method,
+            },
+            "centrality_score": squidpy_centrality_score,
+            "centrality_score_params": {
+                "cluster_key": squidpy_centrality_score_cluster_key
+            },
+            "co_occurrence": squidpy_co_occurrence,
+            "co_occurrence_params": {
+                "cluster_key": squidpy_co_occurrence_cluster_key,
+                "interval": squidpy_co_occurrence_interval,
+                "n_splits": squidpy_co_occurrence_n_splits,
+            },
+            "neighborhood_enrichment": squidpy_neighborhood_enrichment,
+            "neighborhood_enrichment_params": {
+                "cluster_key": squidpy_neighborhood_enrichment_cluster_key,
+                "library_key": squidpy_neighborhood_enrichment_library_key,
+                "n_perms": squidpy_neighborhood_enrichment_n_perms,
+            }
+        },
+        "liana": {
+            "composition_column": liana_composition_column,
+        }
     }
 
     # 5) Persist a copy of the payload next to the uploaded files
