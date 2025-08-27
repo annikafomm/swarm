@@ -10,6 +10,9 @@ curl -b cookies.txt \
     -X POST http://127.0.0.1:3000/read_adata \
     -d '{"path": "../backend/data/adata.h5ad"}' && echo ""
 
+curl -b cookies.txt \
+    http://127.0.0.1:3000/download_adata && echo ""
+
 curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type &> /dev/null && echo "obs check successful"
 
 curl -b cookies.txt http://127.0.0.1:3000/var/n_cells &> /dev/null && echo "var check successful"
