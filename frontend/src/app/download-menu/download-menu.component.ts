@@ -1,5 +1,8 @@
-import { Component, ViewChild, ElementRef } from '@angular/core';
+import { Component, ElementRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { GeoDataService } from '../geo-data.service';
+import { HttpClient } from '@angular/common/http';
+import { SessionService } from '../session.service';
 
 @Component({
   selector: 'app-download-menu',
@@ -8,16 +11,24 @@ import { CommonModule } from '@angular/common';
   styleUrl: './download-menu.component.scss',
 })
 export class DownloadMenuComponent {
-  //@ViewChild('#hexbin') hexbinRef!: ElementRef<SVGSVGElement>;
-  @ViewChild('hexbin', { static: false })
-  hexbinRef!: ElementRef<HTMLDivElement>;
-
-  //@ViewChild('legend') legendRef!: ElementRef<SVGGElement>;
-
   menuOpen = false;
+
+  constructor(
+    private eRef: ElementRef,
+    private geoDataService: GeoDataService,
+    private http: HttpClient,
+    private sessionService: SessionService,
+  ) {}
 
   toggleMenu() {
     this.menuOpen = !this.menuOpen;
+  }
+
+  @HostListener('document:click', ['$event'])
+  onClickOutside(event: Event) {
+    if (this.menuOpen && !this.eRef.nativeElement.contains(event.target)) {
+      this.menuOpen = false;
+    }
   }
 
   doAction(action: string) {
@@ -112,11 +123,46 @@ export class DownloadMenuComponent {
 
   downloadGeojson() {
     this.menuOpen = false;
-    alert('TODO');
+
+    const data = this.geoDataService.getData();
+    if (!data) {
+      console.warn('No GeoJSON data available for download');
+      return;
+    }
+
+    const jsonString = JSON.stringify(data, null, 4);
+    const jsonBlob = new Blob([jsonString], { type: 'application/json' });
+    const jsonUrl = URL.createObjectURL(jsonBlob);
+
+    const link = document.createElement('a');
+    link.href = jsonUrl;
+    link.download = 'map.geojson';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(jsonUrl);
   }
 
   downloadAnndata() {
     this.menuOpen = false;
-    alert('TODO');
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(`${this.sessionService.apiUrl}/download_adata`, {
+          withCredentials: true,
+          responseType: 'blob',
+        }),
+      )
+      .subscribe((blob) => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'adata.h5ad';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      });
   }
 }

@@ -6,6 +6,7 @@ import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from '../session.service';
+import { GeoDataService } from '../geo-data.service';
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -18,6 +19,7 @@ export class HexagonPlotComponent implements OnInit {
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
+    private geoDataService: GeoDataService,
   ) {}
 
   // Define to use Math functions in the html template
@@ -156,6 +158,8 @@ export class HexagonPlotComponent implements OnInit {
         if (!data) {
           throw new Error('Failed to load GeoJSON data');
         }
+
+        this.geoDataService.setData(data);
 
         // This is for showing all properties for coloring
         this.features = data.features;

@@ -32,6 +32,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
 from fastapi_sessions.frontends.implementations import (
     CookieParameters,
@@ -83,6 +84,7 @@ class BaseModel(PydanticBaseModel):
 
 class SessionData(BaseModel):
     username: str
+    adata_path: str = None
     adata: sc.AnnData | None = None
     genie_network_path: str | None = None
     sponge_network_path: str | None = None
@@ -126,11 +128,14 @@ class BasicVerifier(SessionVerifier[UUID, SessionData]):
 class AnnDataPath(BaseModel):
     path: str
 
+
 class SpongeNetworksPath(BaseModel):
     path: str
 
+
 class GenieNetworkPath(BaseModel):
     path: str
+
 
 # -----------------------------------------------------------------------------
 # Application
@@ -232,9 +237,13 @@ def filter_network_csv(file_path, gene_set, network_type):
     filtered_rows = []
     for chunk in pd.read_csv(file_path, chunksize=100000):
         if network_type == "genie":
-            mask = chunk['regulatoryGene'].isin(gene_set) | chunk['targetGene'].isin(gene_set)
+            mask = chunk["regulatoryGene"].isin(gene_set) | chunk[
+                "targetGene"
+            ].isin(gene_set)
         elif network_type == "sponge":
-            mask = chunk['geneA'].isin(gene_set) | chunk['geneB'].isin(gene_set)
+            mask = chunk["geneA"].isin(gene_set) | chunk["geneB"].isin(
+                gene_set
+            )
         else:
             continue
         filtered_chunk = chunk[mask]
@@ -511,15 +520,28 @@ async def read_adata(
                 index=adata.obs_names,
             )
 
+    session_data.adata_path = adata_path.path
     session_data.adata = adata
     await backend.update(session_id, session_data)
     return {"status": "ok"}
-  
+
+
+@app.get("/download_adata", dependencies=[Depends(cookie)])
+async def download_adata(session_data: SessionData = Depends(verifier)):
+    file_path = session_data.adata_path
+    if not os.path.exists(file_path):
+        return {"error": "File not found"}
+    return FileResponse(
+        file_path,
+        media_type="application/octet-stream",
+        filename="map.h5ad",
+    )
+
+
 @app.post("/read_network_genie")
 async def read_network_genie(
     genie_network_path: GenieNetworkPath, session_id: UUID = Depends(cookie)
 ):
-
     """
     Example:
     ```
@@ -532,11 +554,11 @@ async def read_network_genie(
 
     session_data = await backend.read(session_id)
 
-
     session_data.genie_network_path = genie_network_path.path
     await backend.update(session_id, session_data)
 
     return {"status": "ok"}
+
 
 @app.post("/read_network_sponge")
 async def read_network_sponge(
@@ -559,39 +581,53 @@ async def read_network_sponge(
 
     return {"status": "ok"}
 
+
 @app.get("/geneset_connections_genie", dependencies=[Depends(cookie)])
-async def get_geneset_connections(gene_set_name: str, session_data: SessionData = Depends(verifier)):
+async def get_geneset_connections(
+    gene_set_name: str, session_data: SessionData = Depends(verifier)
+):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
 
     # Get the geneset from the name
-    gene_set = session_data.adata.uns['genie_genesets'].get(gene_set_name, None)
+    gene_set = session_data.adata.uns["genie_genesets"].get(
+        gene_set_name, None
+    )
     gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from genie_network
-    connections = filter_network_csv(session_data.genie_network_path, gene_set, "genie")
+    connections = filter_network_csv(
+        session_data.genie_network_path, gene_set, "genie"
+    )
 
     # Write to dict
-    connections = connections.to_dict(orient='records')
-
+    connections = connections.to_dict(orient="records")
 
     return connections
 
+
 @app.get("/geneset_connections_sponge", dependencies=[Depends(cookie)])
-async def get_geneset_connections( gene_set_name: str, session_data: SessionData = Depends(verifier)):
+async def get_geneset_connections(
+    gene_set_name: str, session_data: SessionData = Depends(verifier)
+):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
     # Get the geneset from the name
-    gene_set = session_data.adata.uns['sponge_genesets'].get(gene_set_name, None)
+    gene_set = session_data.adata.uns["sponge_genesets"].get(
+        gene_set_name, None
+    )
     gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from sponge_network
-    connections = filter_network_csv(session_data.sponge_network_path, gene_set, "sponge")
-    connections = connections.to_dict(orient='records')
+    connections = filter_network_csv(
+        session_data.sponge_network_path, gene_set, "sponge"
+    )
+    connections = connections.to_dict(orient="records")
 
     return connections
+
 
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
 async def get_obs_column(
