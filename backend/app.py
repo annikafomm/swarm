@@ -5,7 +5,7 @@ import random
 import shutil
 from datetime import datetime
 
-from backend.calc_python_scores.translate_json import dict2params
+from calc_python_scores.translate_json import dict2params
 
 #          job_dir, payload
 def upload(job_dir, json_dict):
@@ -24,23 +24,25 @@ def upload(job_dir, json_dict):
         print(log_file)
 
         # get parameters from json_dict
-        python_params, R_params = dict2params(json_dict)
+        #python_params, R_params = dict2params(json_dict)
+        python_params = ["-input", "backend/datasets_prepro/GSM6592049_M2_prepro.h5ad", "-centrality_scores"]
+        R_params = []
         print(python_params)
         print(R_params)
 
         # Run scripts sequentially
-        subprocess.run(["python3", "backend/calc_python_scores/calc_scores.py", 
+        subprocess.run(["python3", "calc_python_scores/calc_scores.py", 
                         "-outdir", out_dir, 
                         "-log", log_file] + python_params,
                         check=True)
 
         if R_params:
-            subprocess.run(["Rscript", "backend/calc_R_scores/calc_scores.R", 
+            subprocess.run(["Rscript", "calc_R_scores/calc_scores.R", 
                             "--dir", out_dir,
                             "--log", log_file] + R_params, 
                             check=True)
         
-            subprocess.run(["python3", "backend/calc_python_scores/add_to_adata.py", 
+            subprocess.run(["python3", "calc_python_scores/add_to_adata.py", 
                             "-indir", out_dir,
                             "-log", log_file], 
                             check=True)
@@ -50,9 +52,7 @@ def upload(job_dir, json_dict):
             path = os.path.join(out_dir, folder)
             if os.path.exists(path):
                 shutil.rmtree(path)  # removes the whole folder tree
-                print(f"Deleted {path}")
-            else:
-                print(f"Skipped {path}, does not exist")
+    
 
         # finish the log file  
         message = f"Finished! Check out the log file and the AnnData object in {out_dir} for details."
@@ -60,8 +60,21 @@ def upload(job_dir, json_dict):
             f.write(message + "\n")
         print(message)
 
-        #return jsonify({"status": "success", "jobId": job_id})
+        return {"status": "success", "jobId": job_id}
         
+    except subprocess.CalledProcessError as e:
+        # error from one of the subprocesses
+        err_msg = f"Step failed: {' '.join(e.cmd)} with exit code {e.returncode}"
+        with open(log_file, "a") as f:
+            f.write(err_msg + "\n")
+        print(err_msg)
+        return {"status": "error", "message": err_msg}
+
     except Exception as e:
-        #return jsonify({"status": "error", "message": str(e)}), 500
-        print("Error")
+        # all other errors
+        err_msg = f"Unexpected error: {str(e)}"
+        print(err_msg)
+        return {"status": "error", "message": err_msg}
+
+if __name__ == "__main__":
+    upload("/workspaces/mopitas-mapra/backend/uploads/job_0001", {'jobId':'job_0001'})
