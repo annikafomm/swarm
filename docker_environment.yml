@@ -37,6 +37,7 @@ dependencies:
   - python-multipart
   - uvicorn
   - fastapi
+  - decoupler-py
   - pip:
       - spatialde
       - git+https://github.com/broadinstitute/Tangram.git

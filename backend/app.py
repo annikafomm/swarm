@@ -15,7 +15,7 @@ def upload(job_dir, json_dict):
         base_dir = random.choice(base_dir_choices)
 
         out_dir = os.path.join(job_dir, base_dir)
-        os.makedirs(out_dir, exist_ok=False)
+        os.makedirs(out_dir, exist_ok=True)
 
         # create log file
         job_id = json_dict.get('jobId')
@@ -31,37 +31,37 @@ def upload(job_dir, json_dict):
         print(R_params)
 
         # Run scripts sequentially
-        subprocess.run(["python3", "calc_python_scores/calc_scores.py", 
-                        "-outdir", out_dir, 
+        subprocess.run(["python3", "calc_python_scores/calc_scores.py",
+                        "-outdir", out_dir,
                         "-log", log_file] + python_params,
                         check=True)
 
         if R_params:
-            subprocess.run(["Rscript", "calc_R_scores/calc_scores.R", 
+            subprocess.run(["Rscript", "calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
-                            "--log", log_file] + R_params, 
+                            "--log", log_file] + R_params,
                             check=True)
-        
-            subprocess.run(["python3", "calc_python_scores/add_to_adata.py", 
+
+            subprocess.run(["python3", "calc_python_scores/add_to_adata.py",
                             "-indir", out_dir,
-                            "-log", log_file], 
+                            "-log", log_file],
                             check=True)
-        
+
         # delete temporary folders
         for folder in ["expr_info", "Rscores"]:
             path = os.path.join(out_dir, folder)
             if os.path.exists(path):
                 shutil.rmtree(path)  # removes the whole folder tree
-    
 
-        # finish the log file  
+
+        # finish the log file
         message = f"Finished! Check out the log file and the AnnData object in {out_dir} for details."
         with open(log_file, "a") as f:
             f.write(message + "\n")
         print(message)
 
         return {"status": "success", "jobId": job_id}
-        
+
     except subprocess.CalledProcessError as e:
         # error from one of the subprocesses
         err_msg = f"Step failed: {' '.join(e.cmd)} with exit code {e.returncode}"
