@@ -9,7 +9,7 @@ import pandas as pd
 import json
 import time
 
-from backend.calc_python_scores.calc_scores import log_message, format_runtime
+from calc_scores import log_message, format_runtime
 
 def main():
     # Parser

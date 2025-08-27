@@ -18,7 +18,9 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
     Select genes according to the requested strategy. Falls back to overlapping genes
     when no selection is provided.
     """
-    selection_mode = selection_mode.lower()
+    if not selection_mode is None:
+        selection_mode = selection_mode.lower()
+
     if selection_mode == "ctg":
         genes = gene_selection.ctg(ad_sc, cell_label)
         print("[gene_selection] ctg")
@@ -38,8 +40,11 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         genes = None
         print("none")
 
-    genes = list(genes)
-    print(f"[gene_selection] Selected n={len(genes)} genes")
+    if not genes is None:
+        genes = list(genes)
+        print(f"[gene_selection] Selected n={len(genes)} genes")
+    else:
+        print(f"[gene_selection] Selected n=0 genes")
     return genes
 
 
@@ -50,6 +55,8 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
 
     # Preprocessing
     tg.pp_adatas(ad_sc, ad_sp, genes=genes)
+
+    adata = ad_sp.copy()
 
     # Mapping logic based on user choice
     if device_choice == "gpu":
@@ -67,8 +74,10 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
 
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
+    
+    adata.obsm['tangram_ct_pred'] = ad_ge.obsm['tangram_ct_pred']
 
     print(f"[done] using label '{cell_label}'.")
 
-    return(ad_ge)
+    return(adata)
 

@@ -25,8 +25,11 @@ def upload(job_dir, json_dict):
 
         # get parameters from json_dict
         #python_params, R_params = dict2params(json_dict)
-        python_params = ["-input", "backend/datasets_prepro/GSM6592049_M2_prepro.h5ad", "-centrality_scores"]
-        R_params = []
+        #python_params = ["-input", "./datasets_prepro/GSM6592049_M2_prepro.h5ad", "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad", "-cell_label", "cell_type"]
+        #python_params = ["-input", "./uploads/job_0001/plasmidpoop-GSM6592049_M2_prepro_tangram.h5ad", "-liana"]
+        python_params = ["-input", "./uploads/job_0001/kackhaufen1/plasmidpoop-GSM6592049_M2_prepro_tangram_liana.h5ad", "-moranI", "-R_scores"]
+        #R_params = []
+        R_params = ["--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", "--aucell"]
         print(python_params)
         print(R_params)
 
@@ -77,4 +80,4 @@ def upload(job_dir, json_dict):
         return {"status": "error", "message": err_msg}
 
 if __name__ == "__main__":
-    upload("/workspaces/mopitas-mapra/backend/uploads/job_0001", {'jobId':'job_0001'})
+    upload("./uploads/job_0001", {'jobId':'job_0001'})

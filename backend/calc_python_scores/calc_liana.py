@@ -3,11 +3,11 @@
 import decoupler as dc
 import pandas as pd
 import scanpy as sc
-from liana.liana_bivariate import (
+from liana_folder.liana_bivariate import (
     cell_comp_tf_activity_similarity,
     ligand_receptor_relationships,
 )
-from liana.liana_unsupervised import pathway_activities
+from liana_folder.liana_unsupervised import pathway_activities
 
 def run_liana(adata, grn=None, pathway_net=None, cell_comp_key="tangram_ct_pred"):
     adata.uns["liana_columns"] = {}

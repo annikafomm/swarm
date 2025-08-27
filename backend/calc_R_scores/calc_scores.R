@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
   suppressWarnings(library(AUCell))
 })
 
-source("backend/calc_R_scores/utils.R")
+source("./calc_R_scores/utils.R")
 
 #  Rscript calc_scores.R   --dir ../datasets_scores/GSM6592049_M2_prepro   --dir ../datasets_scores/GSM6592049_M2_scores   --sponge_network ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv   --sponge_analysis ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv --genie_network ../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv --ensembl_col ensemble_id  --aucell --gsva --ssgsea --viper
 
@@ -102,7 +102,7 @@ main <- function() {
   expr <- t(as.matrix(expr))
 
   if (nrow(expr) != nrow(var_df)) {
-    log_message("The expression matrix and the var file don't belong together.")
+    log_message("The expression matrix and the var file don't belong together.", logfile)
   } else {
     log_message(sprintf("Expression matrix loaded in %s", format_runtime(t0)), logfile, 2)
 
@@ -120,11 +120,11 @@ main <- function() {
       right_order <- all(interaction_cols %in% colnames(ceRNA_interactions) & all(centrality_cols %in% colnames(ceRNA_centralities)))
       wrong_order <- all(centrality_cols %in% colnames(ceRNA_interactions) & all(interaction_cols %in% colnames(ceRNA_centralities)))
       if (!(right_order | wrong_order)) {
-        log_message("At least one of the sponge network files has an unsupported file format.")
+        log_message("At least one of the sponge network files has an unsupported file format.", logfile)
       } else if (! args$ensembl_col %in% colnames(var_df)){
-        log_message(paste0("'", args$ensembl_col, "' is not a column in adata.vars. Please provide a valid ensembl column."))
+        log_message(paste0("'", args$ensembl_col, "' is not a column in adata.vars. Please provide a valid ensembl column."), logfile)
       } else if (! args$feature_col %in% colnames(var_df)){
-        log_message(paste0("'", args$feature_col, "' is not a column in adata.vars. Please provide a valid feature column."))
+        log_message(paste0("'", args$feature_col, "' is not a column in adata.vars. Please provide a valid feature column."), logfile)
         # TODO: check RNAs
       } else {
         if (wrong_order) {

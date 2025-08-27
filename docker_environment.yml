@@ -1,4 +1,4 @@
-name: base
+name: app_env
 channels:
   - conda-forge
   - bioconda
@@ -39,6 +39,7 @@ dependencies:
   - fastapi
   - decoupler-py
   - mudata
+  - bioconda::liana
   - pip:
       - spatialde
       - git+https://github.com/broadinstitute/Tangram.git

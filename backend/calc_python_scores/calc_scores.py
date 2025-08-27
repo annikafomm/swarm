@@ -49,9 +49,9 @@ def main():
 
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
-    parser.add_argument('-sc_path', type=str, required=True, help="Path to the single-cell .h5ad file.")
+    parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
     parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
-    parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in ad_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
 
     # liana
     parser.add_argument("-liana", action='store_true', help='Compute Liana')
@@ -88,7 +88,7 @@ def main():
     parser.add_argument('-corr_method_gC', type=str, choices=['bonferroni', 'sidak', 'holm-sidak', 'holm', 'simes-hochberg', 'hommel', 'fdr_bh', 'fdr_by', 'fdr_tsbh', 'fdr_tsbky'], default='fdr_bh', help='Correction method for spatial autocorrelation scores (default: benjamini-hochberg)')
 
 
-    parser.add_argument('-R_scores', type=bool, default=True, help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
+    parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
     
     
     args = parser.parse_args()
@@ -198,8 +198,6 @@ def main():
 
                 # TODO: Grenze für n_perms
 
-                log_message("Calculating squidpy scores ...", logfile)
-
                 # check if the cluster key exists in adata.obs if needed
                 if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
                     if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" | args.cluster_co == "leiden" | args.cluster_nhood == "leiden"):
@@ -214,7 +212,7 @@ def main():
                         log_message(f"'{args.cluster_cs}' is not a column in adata.obs. Please provide a valid cluster column.")
                     else:
                         t0 = time.time()
-                        sq.gr.centrality_scores(adata, cluster_key=args.cluster, show_progress_bar=True)
+                        sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
                         log_message(f"Centrality scores calculated in {format_runtime(t0)}", logfile, 2)
                 
                 # Compute co-occurrence probability
@@ -223,7 +221,7 @@ def main():
                         log_message(f"'{args.cluster_co}' is not a column in adata.obs. Please provide a valid cluster column.")
                     else:
                         t0 = time.time()
-                        sq.gr.co_occurrence(adata, cluster_key=args.cluster, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
+                        sq.gr.co_occurrence(adata, cluster_key=args.cluster_co, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
                         log_message(f"Co-occurrence probabilities calculated in {format_runtime(t0)}", logfile, 2)
 
                 # Compute neighborhood enrichment
@@ -234,19 +232,19 @@ def main():
                         log_message(f"'{args.library_key}' is not a column in adata.obs. Please provide a valid library key.")
                     else:
                         t0 = time.time()
-                        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
+                        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster_nhood, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
                         log_message(f"Neighborhood enrichment calculated in {format_runtime(t0)}", logfile, 2)
 
                 # Compute Moran's I
                 if args.moranI:
                     t0 = time.time()
-                    sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+                    sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr_mI, transformation=args.n_perms_autocorr_mI is None, two_tailed = args.two_tailed_mI, corr_method = args.corr_method_mI, show_progress_bar=True)
                     log_message(f"Moran's I scores calculated in {format_runtime(t0)}", logfile, 2)
 
                 # Compute Geary's C
                 if args.gearyC:
                     t0 = time.time()
-                    sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr, transformation=args.n_perms_autocorr is None, two_tailed = args.two_tailed, corr_method = args.corr_method, show_progress_bar=True)
+                    sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr_gC, transformation=args.n_perms_autocorr_gC is None, two_tailed = args.two_tailed_gC, corr_method = args.corr_method_gC, show_progress_bar=True)
                     log_message(f"Geary's C scores calculated in {format_runtime(t0)}", logfile, 2)
                 
             # save AnnData object in file
@@ -257,6 +255,7 @@ def main():
         t0 = time.time()
         filename = os.path.basename(args.input).replace(".h5ad", "_scores.h5ad")
         adata.write(os.path.join(args.outdir, filename))
+        print(adata)
         log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 2)
 
         # R scores should be calculated
