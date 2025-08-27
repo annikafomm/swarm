@@ -1,29 +1,38 @@
 <div class="app-shell">
+  <nav class="top-bar">
+    <span class="app-title">HexBinMap</span>
 
-<nav class="top-bar">
-  <span class="app-title">HexBinMap</span>
+    <div class="nav-buttons">
+      <button type="button" (click)="openForm()">Upload data</button>
+      <app-download-menu></app-download-menu>
+      <span class="spacer"></span>
+      <button type="button" class="info-btn" routerLink="/info">ℹ️ Info</button>
+    </div>
+  </nav>
 
-  <div class="nav-buttons">
-    <button type="button" (click)="openForm()">Upload data</button>
-    <span class="spacer"></span>
-    <button type="button" class="info-btn" routerLink="/info">ℹ️ Info</button>
+  <!-- zentrierter Seiteninhalt -->
+  <main class="main">
+    <div class="content">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+
+  <!-- Upload-Sidepanel -->
+  <div class="sidenav" *ngIf="formsOpen">
+    <app-form-page (close)="closeSidenavForms()"></app-form-page>
+    <button
+      (click)="closeSidenavForms()"
+      style="
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        font-size: 2rem;
+        background: none;
+        border: none;
+        cursor: pointer;
+      "
+    >
+      ×
+    </button>
   </div>
-</nav>
-
-<!-- zentrierter Seiteninhalt -->
-<main class="main">
-  <div class="content">
-    <router-outlet></router-outlet>
-  </div>
-</main>
-
-<!-- Upload-Sidepanel -->
-<div class="sidenav" *ngIf="formsOpen">
-  <app-form-page (close)="closeSidenavForms()"></app-form-page>
-  <button
-    (click)="closeSidenavForms()"
-    style="position:absolute; top:10px; right:20px; font-size:2rem; background:none; border:none; cursor:pointer;">
-    ×
-  </button>
-</div>
 </div>

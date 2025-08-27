@@ -1,0 +1,9 @@
+<div class="dropdown">
+  <button class="main-btn" (click)="toggleMenu()">Download</button>
+  <div class="dropdown-content" *ngIf="menuOpen">
+    <button (click)="downloadSvg()">SVG</button>
+    <button (click)="downloadPng()">PNG</button>
+    <button (click)="downloadGeojson()">GeoJSON</button>
+    <button (click)="downloadAnndata()">AnnData</button>
+  </div>
+</div>

@@ -6,9 +6,10 @@
   min-height: calc(100vh - 70px);
 }
 
-.app-shell {               /* ein Wrapper um main + sidenav */
-  position: relative;      /* Bezug für absolute */
-  min-height: 100svh;      /* mindestens Viewport-Höhe */
+.app-shell {
+  /* ein Wrapper um main + sidenav */
+  position: relative; /* Bezug für absolute */
+  min-height: 100svh; /* mindestens Viewport-Höhe */
 }
 
 .main {
@@ -45,7 +46,7 @@
 
 .nav-buttons {
   display: flex;
-  flex: 1;              /* nimmt den restlichen Platz nach dem Titel */
+  flex: 1; /* nimmt den restlichen Platz nach dem Titel */
   align-items: center;
 }
 
@@ -105,4 +106,5 @@
   padding: 0.5rem 1rem;
   font-size: 1rem;
   transition: color 0.2s;
+  cursor: pointer;
 }
