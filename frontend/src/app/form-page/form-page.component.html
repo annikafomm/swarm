@@ -51,12 +51,13 @@
 
     <div class="section" style="margin-top:10px;" formGroupName="spatialOptions">
       <label style="display:flex; gap:10px; align-items:center;">
-        <input type="checkbox" formControlName="normalization">
-        Enable normalization
-      </label>
-      <label style="display:flex; gap:10px; align-items:center;">
         <input type="checkbox" formControlName="filtering">
         Enable filtering (spatial)
+      </label>
+      <br>
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="normalization">
+        Enable normalization (spatial)
       </label>
     </div>
   </div>
@@ -88,10 +89,12 @@
           <input type="checkbox" formControlName="filterSingleCell">
           Enable filtering (single-cell)
         </label>
+        <br>
         <label style="display:flex; gap:10px; align-items:center;">
           <input type="checkbox" formControlName="normalizeSingleCell">
           Enable normalization (single-cell)
         </label>
+        <br>
       </div>
 
       <div class="hint" *ngIf="form.get('useTangram')?.value && !singleCellFile" style="margin-top:6px;">
@@ -187,7 +190,7 @@
               <small>Default: 100000</small>
             </div>
             <div class="field">
-              <label>number of regulatory genes</label>
+              <label>Number of connections used to score regulons</label>
               <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
               <small>Default: 20</small>
             </div>
@@ -229,7 +232,7 @@
 
         <div class="field-grid">
           <div class="field">
-            <label>m score: threshold (0–1)</label>
+            <label>mscor: threshold (0–1)</label>
             <input formControlName="mScoreThreshold" placeholder="0.1">
             <small>Default: 0.1</small>
           </div>
@@ -402,6 +405,7 @@
     <input formControlName="compositionColumn" placeholder="tangram_ct_pred">
     <small>Optional · Default: tangram_ct_pred</small>
   </div>
+  <br>
 
   <!-- Upload Genie3 (optional) -->
   <label>Upload Genie3 network (.csv/.tsv) — optional:</label>
