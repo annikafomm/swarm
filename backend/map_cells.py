@@ -8,7 +8,6 @@ import pandas as pd
 import scanpy as sc
 import tangram as tg
 import gene_selection
-import mygene
 import torch
 
 
@@ -41,7 +40,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         print("[gene_selection] svg")
     else:
         print("No gene selection performed. All overlapping genes will be used.")
-        genes = None 
+        genes = None
         print("none")
 
     genes = list(genes)

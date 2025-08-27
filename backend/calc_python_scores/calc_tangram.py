@@ -10,7 +10,6 @@ import pandas as pd
 import scanpy as sc
 import tangram as tg
 import gene_selection
-import mygene
 import torch
 
 
@@ -36,7 +35,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         print("[gene_selection] svg")
     else:
         print("No gene selection performed. All overlapping genes will be used.")
-        genes = None 
+        genes = None
         print("none")
 
     genes = list(genes)
@@ -45,7 +44,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
 
 
 def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', device_choice: str = 'cpu'):
-    
+
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
 
@@ -72,4 +71,4 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     print(f"[done] using label '{cell_label}'.")
 
     return(ad_ge)
-    
+
