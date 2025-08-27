@@ -362,16 +362,6 @@ async def upload(
 
     session_data: "SessionData" = Depends(verifier),
 ):
-    #if spatialFile is None:
-    #    raise HTTPException(status_code=400, detail="Spatial file is required")
-
-    # 1) Parse the scores JSON
-    #try:
-    #    scores_obj: Dict[str, Any] = json.loads(scores) if scores else {}
-    #except Exception:
-    #    raise HTTPException(
-    #        status_code=400, detail="Field 'scores' must be valid JSON."
-    #    )
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
