@@ -26,7 +26,8 @@ def run_liana(adata, grn=None, pathway_net=None, cell_comp_key="tangram_ct_pred"
     adata.var.index = adata.var.index.str.upper()
 
     ligand_receptor_relationships(adata)
-    cell_comp_tf_activity_similarity(adata, grn, cell_comp_obsm_key=cell_comp_key)
+    if cell_comp_key in adata.obsm.keys():
+        cell_comp_tf_activity_similarity(adata, grn, cell_comp_obsm_key=cell_comp_key)
     pathway_activities(adata, pathway_net)
 
     return adata

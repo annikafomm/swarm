@@ -176,76 +176,79 @@ def main():
         if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
             log_message("Prepping score calculation ...", logfile)
 
+            t0 = time.time()
+            sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
+            log_message(f"Spatial neighbors calculated in {format_runtime(t0)}", logfile, 2)
+
             # liana
             if args.liana:
+                # TODO: fix dirty fix
+
                 if not (args.grn is None or os.path.exists(args.grn)):
                     log_message(f"The GRN file {args.grn} does not exist.")
                 elif not (args.pathway_net is None or os.path.exists(args.pathway_net)):
                     log_message(f"The pathway net file {args.pathway_net} does not exist.")
-                elif args.cell_comp_key not in adata.obsm.keys():
-                    log_message(f"'{args.cell_comp_key}' is not a column in adata.obsm. Please provide a valid cell composition key.")
                 else:
+                    if args.cell_comp_key not in adata.obsm.keys():
+                        log_message(f"'{args.cell_comp_key}' is not a column in adata.obsm. Please provide a valid cell composition key.")
+                
                     t0 = time.time()
                     run_liana(adata, args.grn, args.pathway_net, args.cell_comp_key)
                     log_message(f"LIANA+ scores calculated in {format_runtime(t0)}", logfile, 2)
 
             # squidpy
-            if args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
+            
+            # TODO: Grenze für n_perms
+
+            # check if the cluster key exists in adata.obs if needed
+            if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
+                if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" | args.cluster_co == "leiden" | args.cluster_nhood == "leiden"):
+                    t0 = time.time()
+                    # neighbors, umap, leiden
+                    clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
+                    log_message(f"Clusters calculated in {format_runtime(t0)}", logfile, 2)
+            
+            # Compute centrality scores
+            if args.centrality_scores:
+                if args.cluster_cs not in adata.obs.keys():
+                    log_message(f"'{args.cluster_cs}' is not a column in adata.obs. Please provide a valid cluster column.")
+                else:
+                    t0 = time.time()
+                    sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
+                    log_message(f"Centrality scores calculated in {format_runtime(t0)}", logfile, 2)
+            
+            # Compute co-occurrence probability
+            if args.co_occurrence:
+                if args.cluster_co not in adata.obs.keys():
+                    log_message(f"'{args.cluster_co}' is not a column in adata.obs. Please provide a valid cluster column.")
+                else:
+                    t0 = time.time()
+                    sq.gr.co_occurrence(adata, cluster_key=args.cluster_co, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
+                    log_message(f"Co-occurrence probabilities calculated in {format_runtime(t0)}", logfile, 2)
+
+            # Compute neighborhood enrichment
+            if args.nhood_enrichment:
+                if args.cluster_nhood not in adata.obs.keys():
+                    log_message(f"'{args.cluster_nhood}' is not a column in adata.obs. Please provide a valid cluster column.")
+                elif args.library_key != None and args.library_key not in adata.obs.keys():
+                    log_message(f"'{args.library_key}' is not a column in adata.obs. Please provide a valid library key.")
+                else:
+                    t0 = time.time()
+                    sq.gr.nhood_enrichment(adata, cluster_key=args.cluster_nhood, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
+                    log_message(f"Neighborhood enrichment calculated in {format_runtime(t0)}", logfile, 2)
+
+            # Compute Moran's I
+            if args.moranI:
                 t0 = time.time()
-                sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
-                log_message(f"Spatial neighbors calculated in {format_runtime(t0)}", logfile, 2)
+                sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr_mI, transformation=args.n_perms_autocorr_mI is None, two_tailed = args.two_tailed_mI, corr_method = args.corr_method_mI, show_progress_bar=True)
+                log_message(f"Moran's I scores calculated in {format_runtime(t0)}", logfile, 2)
 
-                # TODO: Grenze für n_perms
-
-                # check if the cluster key exists in adata.obs if needed
-                if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
-                    if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" | args.cluster_co == "leiden" | args.cluster_nhood == "leiden"):
-                        t0 = time.time()
-                        # neighbors, umap, leiden
-                        clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
-                        log_message(f"Clusters calculated in {format_runtime(t0)}", logfile, 2)
-                
-                # Compute centrality scores
-                if args.centrality_scores:
-                    if args.cluster_cs not in adata.obs.keys():
-                        log_message(f"'{args.cluster_cs}' is not a column in adata.obs. Please provide a valid cluster column.")
-                    else:
-                        t0 = time.time()
-                        sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
-                        log_message(f"Centrality scores calculated in {format_runtime(t0)}", logfile, 2)
-                
-                # Compute co-occurrence probability
-                if args.co_occurrence:
-                    if args.cluster_co not in adata.obs.keys():
-                        log_message(f"'{args.cluster_co}' is not a column in adata.obs. Please provide a valid cluster column.")
-                    else:
-                        t0 = time.time()
-                        sq.gr.co_occurrence(adata, cluster_key=args.cluster_co, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
-                        log_message(f"Co-occurrence probabilities calculated in {format_runtime(t0)}", logfile, 2)
-
-                # Compute neighborhood enrichment
-                if args.nhood_enrichment:
-                    if args.cluster_nhood not in adata.obs.keys():
-                        log_message(f"'{args.cluster_nhood}' is not a column in adata.obs. Please provide a valid cluster column.")
-                    elif args.library_key != None and args.library_key not in adata.obs.keys():
-                        log_message(f"'{args.library_key}' is not a column in adata.obs. Please provide a valid library key.")
-                    else:
-                        t0 = time.time()
-                        sq.gr.nhood_enrichment(adata, cluster_key=args.cluster_nhood, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
-                        log_message(f"Neighborhood enrichment calculated in {format_runtime(t0)}", logfile, 2)
-
-                # Compute Moran's I
-                if args.moranI:
-                    t0 = time.time()
-                    sq.gr.spatial_autocorr(adata, mode="moran", seed=42, n_perms=args.n_perms_autocorr_mI, transformation=args.n_perms_autocorr_mI is None, two_tailed = args.two_tailed_mI, corr_method = args.corr_method_mI, show_progress_bar=True)
-                    log_message(f"Moran's I scores calculated in {format_runtime(t0)}", logfile, 2)
-
-                # Compute Geary's C
-                if args.gearyC:
-                    t0 = time.time()
-                    sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr_gC, transformation=args.n_perms_autocorr_gC is None, two_tailed = args.two_tailed_gC, corr_method = args.corr_method_gC, show_progress_bar=True)
-                    log_message(f"Geary's C scores calculated in {format_runtime(t0)}", logfile, 2)
-                
+            # Compute Geary's C
+            if args.gearyC:
+                t0 = time.time()
+                sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr_gC, transformation=args.n_perms_autocorr_gC is None, two_tailed = args.two_tailed_gC, corr_method = args.corr_method_gC, show_progress_bar=True)
+                log_message(f"Geary's C scores calculated in {format_runtime(t0)}", logfile, 2)
+            
             # save AnnData object in file
             log_message("Saving calculations ...", logfile)
 
