@@ -12,7 +12,7 @@
         (change)="onColorbyPropertyChange()"
       >
         <option *ngFor="let prop of colorableProperties" [value]="prop">
-          {{ prop }}
+          {{ prop | translate | async }}
         </option>
       </select>
 
@@ -40,52 +40,93 @@
           (click)="showMoranI = !showMoranI"
         >
           Show
-          {{ showMoranI ? "Geary's C" : "Moran's I" }}
+          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
         </button>
       </div>
     </div>
 
-     <div *ngIf="colorByProperty === 'regulatory_scores'" class="gene-set-section">
+    <div
+      *ngIf="colorByProperty === 'regulatory_scores'"
+      class="gene-set-section"
+    >
       <h2>Gene Set Analysis for Selected Cell</h2>
-      <div *ngIf="(geneSetsGenie3 | keyvalue).length > 0" class="gene-set-selector"
-        style="margin-bottom: 1rem;">
+      <div
+        *ngIf="(geneSetsGenie3 | keyvalue).length > 0"
+        class="gene-set-selector"
+        style="margin-bottom: 1rem"
+      >
         <label for="genie3-select">Select Genie3 Gene Set:</label>
-        <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
+        <select
+          id="genie3-select"
+          [(ngModel)]="selectedGeneSetGenie3"
+          (change)="onGeneSetChange()"
+        >
           <option value="">-- Select a Genie3 gene set --</option>
-          <option *ngFor="let geneSet of meta['genie_genesets'] | keyvalue" [value]="geneSet.key">
+          <option
+            *ngFor="let geneSet of meta['genie_genesets'] | keyvalue"
+            [value]="geneSet.key"
+          >
             {{ geneSet.key }}
           </option>
         </select>
-        <br><br>
+        <br /><br />
 
         <label for="sponge-select">Select Sponge Gene Set:</label>
-        <select id="sponge-select" [(ngModel)]="selectedGeneSetSponge" (change)="onGeneSetChange()">
+        <select
+          id="sponge-select"
+          [(ngModel)]="selectedGeneSetSponge"
+          (change)="onGeneSetChange()"
+        >
           <option value="">-- Select a Sponge gene set --</option>
-          <option *ngFor="let geneSet of meta['sponge_genesets'] | keyvalue" [value]="geneSet.key">
+          <option
+            *ngFor="let geneSet of meta['sponge_genesets'] | keyvalue"
+            [value]="geneSet.key"
+          >
             {{ geneSet.key }}
           </option>
         </select>
 
-        <br><br>
+        <br /><br />
 
         <label for="regscore-select">Select Regulatory Score:</label>
-        <select id="regscore-select" [(ngModel)]="selectedRegulatoryScore" (change)="onRegulatoryScoreChange()">
+        <select
+          id="regscore-select"
+          [(ngModel)]="selectedRegulatoryScore"
+          (change)="onRegulatoryScoreChange()"
+        >
           <option value="">-- Select a Regulatory Score --</option>
-          <option *ngFor="let score of this.meta['grn_score_names']" [value]="score">
-            {{ score }}
+          <option
+            *ngFor="let score of this.meta['grn_score_names']"
+            [value]="score"
+          >
+            {{ score | translate | async }}
           </option>
         </select>
 
         <div>
           <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
 
-          <div class="genie3-controls" style="margin-bottom: 15px; text-align: center;">
-            <label for="max-edges-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
+          <div
+            class="genie3-controls"
+            style="margin-bottom: 15px; text-align: center"
+          >
+            <label
+              for="max-edges-slider"
+              style="display: block; margin-bottom: 5px; font-weight: bold"
+            >
               Min Best Edges: {{ minGenie3Edges }}
             </label>
-            <input type="range" id="max-edges-slider" min="10" max="75" step="5" [(ngModel)]="minGenie3Edges"
-              (input)="onMinEdgesChangeGenie3()" style="width: 300px; cursor: pointer;" />
-            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            <input
+              type="range"
+              id="max-edges-slider"
+              min="10"
+              max="75"
+              step="5"
+              [(ngModel)]="minGenie3Edges"
+              (input)="onMinEdgesChangeGenie3()"
+              style="width: 300px; cursor: pointer"
+            />
+            <div style="font-size: 12px; color: #666; margin-top: 5px">
               10 ← → 75 edges
             </div>
           </div>
@@ -95,20 +136,37 @@
             <div class="loading-text">Loading Genie3 network...</div>
           </div>
 
-          <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
+          <div
+            id="aucell_graph_genie3"
+            [style.display]="isLoadingGenie3 ? 'none' : 'block'"
+          ></div>
 
-          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
-            *ngIf="!isLoadingGenie3">
-            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetGenie3"
+          <div
+            class="gprofiler-button-container"
+            style="text-align: center; margin-top: 10px"
+            *ngIf="!isLoadingGenie3"
+          >
+            <button
+              class="gprofiler-btn"
+              (click)="analyzeGeneSetInGProfiler()"
+              [disabled]="!selectedGeneSetGenie3"
               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
-              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
+              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'"
+            >
               🧬 Analyze All Genie3 Genes in gProfiler
             </button>
           </div>
 
-          <div *ngIf="!isLoadingGenie3&& genie3WeightCutoff !== null"
-              style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
-              Genie3 Weight Cutoff: {{ genie3WeightCutoff | number:'1.2-5' }}
+          <div
+            *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null"
+            style="
+              text-align: center;
+              margin-top: 5px;
+              font-size: 12px;
+              color: #666;
+            "
+          >
+            Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: "1.2-5" }}
           </div>
         </div>
 
@@ -116,13 +174,27 @@
           <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
 
           <!-- Add slider control for max nodes -->
-          <div class="sponge-controls" style="margin-bottom: 15px; text-align: center;">
-            <label for="max-nodes-slider" style="display: block; margin-bottom: 5px; font-weight: bold;">
+          <div
+            class="sponge-controls"
+            style="margin-bottom: 15px; text-align: center"
+          >
+            <label
+              for="max-nodes-slider"
+              style="display: block; margin-bottom: 5px; font-weight: bold"
+            >
               Min Best Edges: {{ minSpongeEdges }}
             </label>
-            <input type="range" id="max-nodes-slider" min="10" max="75" step="5" [(ngModel)]="minSpongeEdges"
-              (input)="onMinEdgesChangeSponge()" style="width: 300px; cursor: pointer;" />
-            <div style="font-size: 12px; color: #666; margin-top: 5px;">
+            <input
+              type="range"
+              id="max-nodes-slider"
+              min="10"
+              max="75"
+              step="5"
+              [(ngModel)]="minSpongeEdges"
+              (input)="onMinEdgesChangeSponge()"
+              style="width: 300px; cursor: pointer"
+            />
+            <div style="font-size: 12px; color: #666; margin-top: 5px">
               10 ← → 75 nodes
             </div>
           </div>
@@ -132,26 +204,42 @@
             <div class="loading-text">Loading Sponge network...</div>
           </div>
 
-          <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+          <div
+            id="aucell_graph_sponge"
+            [style.display]="isLoadingSponge ? 'none' : 'block'"
+          ></div>
 
           <!-- gProfiler button below the Sponge graph -->
-          <div class="gprofiler-button-container" style="text-align: center; margin-top: 10px;"
-            *ngIf="!isLoadingSponge">
-            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetSponge"
+          <div
+            class="gprofiler-button-container"
+            style="text-align: center; margin-top: 10px"
+            *ngIf="!isLoadingSponge"
+          >
+            <button
+              class="gprofiler-btn"
+              (click)="analyzeGeneSetInGProfiler()"
+              [disabled]="!selectedGeneSetSponge"
               onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
-              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'">
+              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'"
+            >
               🧬 Analyze All Sponge Genes in gProfiler
             </button>
           </div>
 
-          <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null"
-              style="text-align: center; margin-top: 5px; font-size: 12px; color: #666;">
-              P-value cutoff: {{ spongePValueCutoff | number:'1.2-4' }}
+          <div
+            *ngIf="!isLoadingSponge && spongePValueCutoff !== null"
+            style="
+              text-align: center;
+              margin-top: 5px;
+              font-size: 12px;
+              color: #666;
+            "
+          >
+            P-value cutoff: {{ spongePValueCutoff | number: "1.2-4" }}
           </div>
         </div>
       </div>
     </div>
-
 
     <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
       <div class="co-occurrence-controls">
@@ -267,7 +355,7 @@
         <app-table
           [data]="this.meta['ligand_receptor_global_scores']"
           [actionColumns]="[
-            'ligand_receptor_cosine_similarity]',
+            'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]"
@@ -369,7 +457,6 @@
         <p>
           <strong>Leiden-Cluster:</strong> {{ +selectedCell.properties.leiden }}
         </p>
-
       </div>
     </div>
   </div>

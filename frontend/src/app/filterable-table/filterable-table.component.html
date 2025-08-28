@@ -34,7 +34,7 @@
 
           <th *ngFor="let col of columns" class="other-col">
             <div class="th-top">
-              {{ displayColumnName(col) }}
+              {{ col | translate | async }}
               <span class="sort-icons">
                 <button class="btn-ghost icon" (click)="setSort(col, true)">
                   ▲
@@ -57,7 +57,7 @@
             </div>
           </th>
           <th *ngFor="let action of actionColumns" class="action-col">
-            {{ displayColumnName(action) }}
+            {{ action | translate | async }}
           </th>
         </tr>
       </thead>

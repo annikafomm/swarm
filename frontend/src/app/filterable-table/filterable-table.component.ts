@@ -3,13 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { SessionService } from '../session.service';
 import { HttpClient } from '@angular/common/http';
+import { TranslatePipe } from '../translate.pipe';
 
 @Component({
   selector: 'app-table',
   templateUrl: './filterable-table.component.html',
   styleUrls: ['./filterable-table.component.scss'],
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, TranslatePipe],
 })
 export class FilterableTableComponent implements OnInit {
   /**
@@ -73,42 +74,42 @@ export class FilterableTableComponent implements OnInit {
 
   truncateMiddle(text: string, front = 4, back = 7): string {
     // Render long ensembl IDs as ENSG...78531.1
-    if (!text.startsWith("ENS")) return text;
-    return text.slice(0, front) + "…" + text.slice(text.length - back);
+    if (!text.startsWith('ENS')) return text;
+    return text.slice(0, front) + '…' + text.slice(text.length - back);
   }
 
   displayNumeric(value: any): string {
     if (typeof value === 'number') {
       if (value === 0) {
-        return "0.0";
+        return '0.0';
       }
 
       // Use scientific notation for very small or very large numbers
       if (Math.abs(value) < 0.001 || Math.abs(value) >= 1e5) {
         const exp = value.toExponential(2); // e.g., "2.34e-5"
-        const [mantissa, exponent] = exp.split("e");
+        const [mantissa, exponent] = exp.split('e');
         const expNum = parseInt(exponent, 10);
 
         // Map digits and minus sign to Unicode superscripts
         const superscripts: Record<string, string> = {
-          "-": "⁻",
-          "0": "⁰",
-          "1": "¹",
-          "2": "²",
-          "3": "³",
-          "4": "⁴",
-          "5": "⁵",
-          "6": "⁶",
-          "7": "⁷",
-          "8": "⁸",
-          "9": "⁹",
+          '-': '⁻',
+          '0': '⁰',
+          '1': '¹',
+          '2': '²',
+          '3': '³',
+          '4': '⁴',
+          '5': '⁵',
+          '6': '⁶',
+          '7': '⁷',
+          '8': '⁸',
+          '9': '⁹',
         };
 
         const expStr = expNum
           .toString()
-          .split("")
-          .map(ch => superscripts[ch] ?? ch)
-          .join("");
+          .split('')
+          .map((ch) => superscripts[ch] ?? ch)
+          .join('');
 
         return `${mantissa} × 10${expStr}`;
       }
