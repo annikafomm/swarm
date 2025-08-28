@@ -8,10 +8,12 @@ import { HttpClient } from '@angular/common/http';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
 import { KeyValue } from '@angular/common';
+import { TranslationService } from '../translation.service';
+import { TranslatePipe } from '../translate.pipe';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
@@ -21,6 +23,7 @@ export class HexagonPlotComponent implements OnInit {
     private http: HttpClient,
     private sessionService: SessionService,
     private geoDataService: GeoDataService,
+    private translationService: TranslationService,
   ) {}
 
   // Define to use Math functions in the html template
@@ -1673,7 +1676,10 @@ export class HexagonPlotComponent implements OnInit {
         .attr('transform', `translate(${legendX},${legendY})`);
 
       // Measure title text width for dynamic background
-      const titleText = this.colorByProperty.replace(/_/g, ' ');
+      const titleText = this.translationService.translateSync(
+        this.colorByProperty,
+      );
+      //const titleText = this.colorByProperty;
       const tempSvg = this.svg.append('g').style('opacity', 0);
       const titleWidth =
         tempSvg
@@ -1786,7 +1792,10 @@ export class HexagonPlotComponent implements OnInit {
       const tempSvg = this.svg.append('g').style('opacity', 0);
 
       // Measure title text
-      const titleText = this.colorByProperty.replace(/_/g, ' ');
+      //const titleText = this.colorByProperty;
+      const titleText = this.translationService.translateSync(
+        this.colorByProperty,
+      );
       const titleWidth =
         tempSvg
           .append('text')
