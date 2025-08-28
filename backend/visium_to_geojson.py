@@ -171,7 +171,7 @@ class Hexagons:
             for score in genie3_score_names + sponge_score_names:
                 if score in self.anndata.obsm:
                     first_col = self.anndata.obsm[score].columns[0]
-                    property_dict["network_scores"] = self.anndata.obsm[
+                    property_dict["regulatory_scores"] = self.anndata.obsm[
                         score
                     ].loc[barcode, first_col]
                     break
