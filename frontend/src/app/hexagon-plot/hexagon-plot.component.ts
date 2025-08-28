@@ -1594,30 +1594,38 @@ export class HexagonPlotComponent implements OnInit {
     }
   }
 
+  private hiddenPropKeys = new Set<string>([
+    'leiden_co_occurrence',
+    'leiden_nhood_enrichment',
+  ]);
+
+  shouldShowProperty(key: string): boolean {
+    if (key == null) return true;
+    const k = String(key).toLowerCase();
+    return !this.hiddenPropKeys.has(k);
+  }
+
   // ----- Dict/Object helpers -----
-isPlainObject(v: any): v is Record<string, any> {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
+  isPlainObject(v: any): v is Record<string, any> {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
 
-objectKeyCount(obj: Record<string, any>): number {
-  return Object.keys(obj).length;
-}
+  objectKeyCount(obj: Record<string, any>): number {
+    return Object.keys(obj).length;
+  }
 
-objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
-  // sort keys A→Z for stability
-  return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
-}
+  objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
+    return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
+  }
 
-prettyKey(k: string): string {
-  // "average_clustering" → "Average Clustering"
-  return k.replace(/[_-]+/g, ' ')
+  prettyKey(k: string): string {
+    return k.replace(/[_-]+/g, ' ')
           .replace(/\b\w/g, c => c.toUpperCase());
-}
+  }
 
-// give each dict its own expand id (reuses the same Set you already have)
-dictId(propLabel: string): string {
-  return `DICT::${propLabel}`;
-}
+  dictId(propLabel: string): string {
+    return `DICT::${propLabel}`;
+  }
 
 
   private renderLegend(): void {

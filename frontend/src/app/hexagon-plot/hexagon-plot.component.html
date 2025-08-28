@@ -362,128 +362,127 @@
 
     <div class="sidenav-content">
       <div *ngIf="selectedCell as cell">
-        <p *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
-          <strong>{{ label(kv.key) }}:</strong>
+        <ng-container *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
+          <p *ngIf="shouldShowProperty(kv.key)">
+            <strong>{{ label(kv.key) }}:</strong>
 
-          <!-- Arrays -->
-          <ng-container *ngIf="isArray(kv.value); else notArray">
+            <!-- Arrays -->
+            <ng-container *ngIf="isArray(kv.value); else notArray">
 
-            <!-- Nested arrays (array of arrays) -->
-            <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
-              <div class="array-header">
-                <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's' }}</span>
-                <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                  {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                </button>
-              </div>
-
-              <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
-                  <span class="row-badge">Row {{ r + 1 }}</span>
-                  <ul class="chip-list inner">
-                    <li class="chip"
-                        *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
-                      <ng-container *ngIf="isPrimitive(x); else nestedObj">
-                        {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                      </ng-container>
-                      <ng-template #nestedObj>
-                        <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                      </ng-template>
-                    </li>
-                  </ul>
-                </li>
-              </ul>
-            </ng-container>
-
-            <!-- One-dimensional arrays -->
-            <ng-template #oneDim>
-              <div class="array-header">
-                <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's' }}</span>
-                <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                  {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                </button>
-              </div>
-
-              <div class="array-stats" *ngIf="isNumericArray(kv.value)">
-                Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
-                Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
-                Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
-              </div>
-
-              <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
-                  <ng-container *ngIf="isPrimitive(item); else objectItem">
-                    {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
-                  </ng-container>
-                  <ng-template #objectItem>
-                    <code class="chip-json">{{ toJsonCompact(item) }}</code>
-                  </ng-template>
-                </li>
-              </ul>
-            </ng-template>
-
-          </ng-container>
-
-          <!-- Non-arrays -->
-          <ng-template #notArray>
-            <ng-container *ngIf="isPrimitive(kv.value); else complex">
-              {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
-            </ng-container>
-
-          <!-- Pretty dict/object rendering -->
-            <ng-template #complex>
-              <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
-
+              <!-- Nested arrays (array of arrays) -->
+              <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
                 <div class="array-header">
-                  <span class="count-badge">{{ objectKeyCount(kv.value) }}
-                    key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
-                  <button type="button" class="toggle"
-                    (click)="toggleExpand(dictId(label(kv.key)))">
-                      {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
+                  <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's' }}</span>
+                  <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
+                    {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
                   </button>
                 </div>
 
-                <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
-                  <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
-                    <div class="kv-key">{{ prettyKey(e.key) }}</div>
-                    <div class="kv-val">
-                      <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
-                        {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
-                      </ng-container>
-                      <ng-template #nonPrimitiveVal>
-                      <!-- arrays inside the dict → chips -->
-                        <ng-container *ngIf="isArray(e.value); else fallbackJson">
-                          <ul class="chip-list small">
-                            <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
-                              <ng-container *ngIf="isPrimitive(x); else objInArray">
-                                {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                              </ng-container>
-                              <ng-template #objInArray>
-                                <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                              </ng-template>
-                            </li>
-                          </ul>
+                <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
+                  <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
+                    <span class="row-badge">Row {{ r + 1 }}</span>
+                    <ul class="chip-list inner">
+                      <li class="chip" *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
+                        <ng-container *ngIf="isPrimitive(x); else nestedObj">
+                          {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
                         </ng-container>
-                        <ng-template #fallbackJson>
-                          <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                        <ng-template #nestedObj>
+                          <code class="chip-json">{{ toJsonCompact(x) }}</code>
                         </ng-template>
-                      </ng-template>
-                    </div>
-                  </div>
-                </div>
-
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
               </ng-container>
 
-              <!-- fallback: anything not a plain object -->
-              <ng-template #complexPre>
-                <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
+              <!-- One-dimensional arrays -->
+              <ng-template #oneDim>
+                <div class="array-header">
+                  <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's' }}</span>
+                  <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
+                    {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
+                  </button>
+                </div>
+
+                <div class="array-stats" *ngIf="isNumericArray(kv.value)">
+                  Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
+                  Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
+                  Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
+                </div>
+
+                <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
+                  <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
+                    <ng-container *ngIf="isPrimitive(item); else objectItem">
+                      {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
+                    </ng-container>
+                    <ng-template #objectItem>
+                      <code class="chip-json">{{ toJsonCompact(item) }}</code>
+                    </ng-template>
+                  </li>
+                </ul>
+              </ng-template>
+
+            </ng-container>
+
+            <!-- Non-arrays -->
+            <ng-template #notArray>
+              <ng-container *ngIf="isPrimitive(kv.value); else complex">
+                {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
+              </ng-container>
+
+              <!-- Pretty dict/object rendering -->
+              <ng-template #complex>
+                <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
+
+                  <div class="array-header">
+                    <span class="count-badge">{{ objectKeyCount(kv.value) }}
+                      key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
+                    <button type="button" class="toggle" (click)="toggleExpand(dictId(label(kv.key)))">
+                      {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
+                    </button>
+                  </div>
+
+                  <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
+                    <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
+                      <div class="kv-key">{{ prettyKey(e.key) }}</div>
+                      <div class="kv-val">
+                        <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
+                          {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
+                        </ng-container>
+                        <ng-template #nonPrimitiveVal>
+                          <!-- arrays inside the dict → chips -->
+                          <ng-container *ngIf="isArray(e.value); else fallbackJson">
+                            <ul class="chip-list small">
+                              <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
+                                <ng-container *ngIf="isPrimitive(x); else objInArray">
+                                  {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                                </ng-container>
+                                <ng-template #objInArray>
+                                  <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                                </ng-template>
+                              </li>
+                            </ul>
+                          </ng-container>
+                          <ng-template #fallbackJson>
+                            <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                          </ng-template>
+                        </ng-template>
+                      </div>
+                    </div>
+                  </div>
+
+                </ng-container>
+
+                <!-- fallback: anything not a plain object -->
+                <ng-template #complexPre>
+                  <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
+                </ng-template>
               </ng-template>
             </ng-template>
-          </ng-template>
-        </p>
+          </p>
+        </ng-container>
       </div>
     </div>
-
   </div>
 
   <div class="cluster-sidenav" *ngIf="selectedCluster !== null">
