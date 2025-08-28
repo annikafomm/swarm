@@ -22,29 +22,27 @@ def upload(job_dir, json_dict):
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         log_file = os.path.join(out_dir, f"{job_id}_{timestamp}.log")
         print(log_file)
-
+        
         # get parameters from json_dict
         #python_params, R_params = dict2params(json_dict)
-        #python_params = ["-input", "./datasets_prepro/GSM6592049_M2_prepro.h5ad", "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad", "-cell_label", "cell_type"]
-        #python_params = ["-input", "./uploads/job_0001/plasmidpoop-GSM6592049_M2_prepro_tangram.h5ad", "-liana"]
-        #python_params = ["-input", "./uploads/job_0001/kackhaufen1/plasmidpoop-GSM6592049_M2_prepro_tangram_liana.h5ad", "-moranI", "-R_scores"]
-        python_params = ["-input", "./datasets_prepro/GSM6592049_M2_prepro.h5ad", 
+        python_params = ["-input", "./datasets_prepro_new/GSM6592049_M2_prepro.h5ad", 
                          "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad",
-                         "-liana", "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment"]
-        #R_params = []
-        #R_params = ["--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", "--aucell"]
-        R_params = ["--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
+                         "-liana", "-cell_comp_key", "celltype_scores",
+                         "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment",
+                         "-R_scores"]
+        R_params = ["--tangram", 
+                    "--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
                     "--genie_network", "./networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
                     "--aucell", "--gsva", "--ssgsea", "--viper"]
         print(python_params)
         print(R_params)
-
+        
         # Run scripts sequentially
         subprocess.run(["python3", "calc_python_scores/calc_scores.py",
                         "-outdir", out_dir,
                         "-log", log_file] + python_params,
                         check=True)
-
+        
         if R_params:
             subprocess.run(["Rscript", "calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
@@ -57,14 +55,14 @@ def upload(job_dir, json_dict):
                             check=True)
 
         # delete temporary folders
-        for folder in ["expr_info", "Rscores"]:
+        for folder in ["expr_info_st", "Rscores_st", "expr_info_tg", "Rscores_tg"]:
             path = os.path.join(out_dir, folder)
             if os.path.exists(path):
                 shutil.rmtree(path)  # removes the whole folder tree
 
 
         # finish the log file
-        message = f"Finished! Check out the log file and the AnnData object in {out_dir} for details."
+        message = f"Finished! Check out the log file and the AnnData object(s) in {out_dir} for details."
         with open(log_file, "a") as f:
             f.write(message + "\n")
         print(message)
