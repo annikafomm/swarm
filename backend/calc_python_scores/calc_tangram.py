@@ -49,14 +49,13 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
 
 
 def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', device_choice: str = 'cpu'):
+    adata = ad_sp.copy()
 
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
 
     # Preprocessing
     tg.pp_adatas(ad_sc, ad_sp, genes=genes)
-
-    adata = ad_sp.copy()
 
     # Mapping logic based on user choice
     if device_choice == "gpu":
@@ -75,9 +74,9 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
     
-    adata.obsm['tangram_ct_pred'] = ad_ge.obsm['tangram_ct_pred']
+    ad_ge.obsm['spatial'] = adata.obsm['spatial']
 
     print(f"[done] using label '{cell_label}'.")
 
-    return(adata)
+    return(ad_ge)
 
