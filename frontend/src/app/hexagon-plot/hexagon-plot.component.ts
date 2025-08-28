@@ -118,7 +118,6 @@ export class HexagonPlotComponent implements OnInit {
   ngOnInit(): void {
     this.createHexagonPlot();
     this.loadAndRenderData(this.dataPath);
-    this.updateHexColors();
   }
 
   private createHexagonPlot(): void {
@@ -179,11 +178,19 @@ export class HexagonPlotComponent implements OnInit {
           return typeof val === 'string' || typeof val === 'number';
         });
 
-        this.colorableProperties.push('regulatory_scores');
-
         // sort in alphabetical order
-
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
+
+        //this.colorableProperties.push('regulatory_scores');  // Exists in geojson
+        if (this.colorableProperties.includes('regulatory_scores')) {
+          this.colorByProperty = 'regulatory_scores';
+        } else if (this.colorableProperties.includes('cell_type')) {
+          this.colorByProperty = 'cell_type';
+        } else {
+          this.colorByProperty = this.colorableProperties[0];
+        }
+
+        this.currentLegendType = this.isContinuousScale() ? 'continuous' : 'categorical';
 
         const width = 1200;
         const height = 1000;
@@ -194,20 +201,6 @@ export class HexagonPlotComponent implements OnInit {
         });
 
         this.features = data.features;
-
-        //this.colorScale.domain([
-        //  ...new Set(
-        //    this.features.map((f) =>
-        //      String(f.properties[this.colorByProperty]),
-        //    ),
-        //  ),
-        //]);
-        this.colorScale.domain([
-          ...new Set(
-            this.features.map((f: CellFeature) => f.properties.cell_type),
-          ),
-        ]);
-        this.currentLegendDomain = this.colorScale.domain();
 
         // Create a geoPath generator with the projection
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
@@ -221,20 +214,24 @@ export class HexagonPlotComponent implements OnInit {
           .join('path')
           .attr('d', (d) => pathGenerator(d))
           .attr('fill', (d) => {
-            const total = d.properties.cell_type || 0;
-            return this.colorScale(total.toString());
+            const value = d.properties?.[this.colorByProperty];
+            if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+            } else {
+              const num = this.toNumber(value);
+              if (!isNaN(num)) {
+                return this.continuousColorScale(num);
+              } else {
+                return '#ccc';
+              }
+            }
           })
           .style('opacity', 0.8)
           .on('mouseover', (event, d) => this.mouseOver(event, d))
           .on('mouseleave', (event, d) => this.mouseLeave(event, d))
           .on('click', (event, d) => this.openSidenav(event, d));
 
-        this.colorScale.domain([
-          ...new Set(
-            data.features.map((f: CellFeature) => f.properties.cell_type),
-          ),
-        ]);
-        this.renderLegend();
+        this.onColorbyPropertyChange();
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
@@ -367,22 +364,7 @@ export class HexagonPlotComponent implements OnInit {
     this.updateHexColors();
   }
 
-  public updateHexColors(): void {
-    this.resetClusterExtension();
-
-    if (this.selectedCell && this.selectedCluster) {
-      this.selectedCluster = null;
-      this.clusterCells = [];
-      this.clusterCellTypes = [];
-      this.clusterCentralityAvg = {
-        degree_centrality: 0,
-        average_clustering: 0,
-        closeness_centrality: 0,
-      };
-    }
-    if (this.selectedCell) this.selectedCell = null;
-
-    // 1) collect values (supports nested props like ligand_receptor_relationships)
+  isContinuousScale() {
     const valuesRaw = this.features.map((f) => {
       if (this.leidenCentralityProps.includes(this.colorByProperty)) {
         return f.properties.leiden_centrality[this.colorByProperty];
@@ -401,11 +383,38 @@ export class HexagonPlotComponent implements OnInit {
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
     const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
 
+    return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
+  }
+
+  public updateHexColors(): void {
+    this.resetClusterExtension();
+
+    if (this.selectedCell && this.selectedCluster) {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.clusterCentralityAvg = {
+        degree_centrality: 0,
+        average_clustering: 0,
+        closeness_centrality: 0,
+      };
+    }
+    if (this.selectedCell) this.selectedCell = null;
+
     const sel = this.g
       .selectAll<SVGPathElement, CellFeature>('path')
       .data(this.features);
 
-    if (allNumbers && !shouldTreatAsCategorical && numericValues.length > 0) {
+    const valuesRaw = this.features.map((f) => {
+      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
+        return f.properties.leiden_centrality[this.colorByProperty];
+      }
+      return f.properties[this.colorByProperty];
+    });
+
+    const numericValues = valuesRaw.map((v) => this.toNumber(v));
+
+    if (this.isContinuousScale()) {
       // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
