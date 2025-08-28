@@ -1512,6 +1512,16 @@ export class HexagonPlotComponent implements OnInit {
     return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
   };
 
+  private expandedProps = new Set<string>();
+
+  isArray(v: any): v is any[] {
+    return Array.isArray(v);
+  }
+
+  isNestedArray(v: any): v is any[][] {
+    return Array.isArray(v) && v.length > 0 && v.every(row => Array.isArray(row) || this.looksLikeArrayString(row));
+  }
+
   isNumberLike(v: unknown): v is number | string {
     return (typeof v === 'number' && Number.isFinite(v)) ||
           (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
@@ -1521,8 +1531,20 @@ export class HexagonPlotComponent implements OnInit {
     return typeof v === 'number' ? v : Number(v);
   }
 
+  isNumericArray(arr: any): arr is (number | string)[] {
+    return Array.isArray(arr) && arr.length > 0 && arr.every(x => this.isNumberLike(x));
+  }
+
   isPrimitive(v: unknown): v is string | number | boolean | null {
     return v === null || ['string','number','boolean'].includes(typeof v as string);
+  }
+
+  getArrayStats(arr: (number | string)[]) {
+    const nums = arr.map(x => Number(this.toNumberLike(x)));
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    return { min, max, avg };
   }
 
   formatValue(v: unknown): string {
@@ -1534,6 +1556,69 @@ export class HexagonPlotComponent implements OnInit {
   label(key: string): string {
     return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
+
+  toggleExpand(key: string) {
+    if (this.expandedProps.has(key)) this.expandedProps.delete(key);
+    else this.expandedProps.add(key);
+  }
+
+  isExpanded(key: string) {
+    return this.expandedProps.has(key);
+  }
+
+  trackByIndex(index: number) { return index; }
+
+  asArrayRow(row: any): any[] {
+    if (Array.isArray(row)) return row;
+    if (this.looksLikeArrayString(row)) {
+      try {
+        const parsed = JSON.parse(row as string);
+        return Array.isArray(parsed) ? parsed : [row];
+      } catch {
+        return [row];
+      }
+    }
+    return [row];
+  }
+
+  looksLikeArrayString(v: any): v is string {
+    return typeof v === 'string' && /^\s*\[.*\]\s*$/.test(v);
+  }
+
+  toJsonCompact(obj: unknown, max = 120): string {
+    try {
+      const s = JSON.stringify(obj);
+      return s.length > max ? s.slice(0, max) + '…' : s;
+    } catch {
+      return String(obj);
+    }
+  }
+
+  // ----- Dict/Object helpers -----
+isPlainObject(v: any): v is Record<string, any> {
+  return v !== null && typeof v === 'object' && !Array.isArray(v);
+}
+
+objectKeyCount(obj: Record<string, any>): number {
+  return Object.keys(obj).length;
+}
+
+objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
+  // sort keys A→Z for stability
+  return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
+}
+
+prettyKey(k: string): string {
+  // "average_clustering" → "Average Clustering"
+  return k.replace(/[_-]+/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// give each dict its own expand id (reuses the same Set you already have)
+dictId(propLabel: string): string {
+  return `DICT::${propLabel}`;
+}
+
 
   private renderLegend(): void {
     // Remove any existing legend

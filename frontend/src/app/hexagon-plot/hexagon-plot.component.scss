@@ -730,41 +730,107 @@ select {
 .kv-table dt { color: var(--text); }
 .kv-table dd { color: var(--text); }
 
-/* ---------- CHIPS (arrays) ---------- */
-
-.chip-grid {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-}
-
-.chip {
-  background: var(--chip-bg);
-  box-shadow: var(--chip-shadow);
-  transition: transform .06s ease, opacity .2s ease;
-}
-.chip:active { transform: scale(.98); }
-
-/* number badge shades */
-.num { background: var(--zero-bg); }
-.num.pos { background: var(--pos-bg); }
-.num.neg { background: var(--neg-bg); }
-
-/* optional: horizontally scrollable list on very narrow panes */
-@media (max-width: 420px) {
-  .chip-grid {
-    display: flex;
-    overflow-x: auto;
-    gap: .35rem;
-    padding-bottom: .25rem;
-  }
-  .chip-grid::-webkit-scrollbar { height: 6px; }
-}
-
-/* ---------- COMPACT MODE (optional) ----------
-   Add class 'compact' to .sidenav-content if you need tighter density.
-*/
 .sidenav-content.compact {
   gap: .65rem;
 }
 .sidenav-content.compact .section { padding: .45rem .6rem; }
 .sidenav-content.compact .chip { padding: .22rem .45rem; font-size: .85rem; }
 .sidenav-content.compact .row { gap: .2rem .6rem; }
+
+/* Array chips */
+.array-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin: .25rem 0 .2rem;
+}
+
+.array-header .badge {
+  background: var(--hx-muted, #eef2f7);
+  border: 1px solid rgba(0,0,0,.06);
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+}
+
+.array-header .toggle {
+  border: none;
+  background: transparent;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  font-size: .85rem;
+}
+
+.array-stats {
+  font-size: .8rem;
+  color: #666;
+  margin-bottom: .25rem;
+}
+
+.chip-list {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin: .2rem 0 .6rem;
+  padding: 0;
+}
+
+.chip-list.collapsed .chip:nth-child(n + 11) { display: none; }
+
+.chip {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: .85rem;
+  padding: .15rem .5rem;
+  background: var(--hx-chip-bg, #f6f7fb);
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.chip-json { white-space: nowrap; }
+
+.row-list {
+  list-style: none;
+  margin: .25rem 0 .6rem;
+  padding: 0;
+  display: grid;
+  gap: .35rem;
+}
+
+.row-list.collapsed .row:nth-child(n + 4) { display: none; }
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+.row-badge {
+  background: #d7d7d7;
+  border: 1px solid rgba(0,0,0,.06);
+  border-radius: .5rem;
+  padding: .1rem .4rem;
+  font-size: .75rem;
+  line-height: 1.4;
+}
+
+.chip-list.inner {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin: 0;
+  padding: 0;
+}
+
+.count-badge {
+  background: #d7d7d7;
+  border: 1px solid var(--hx-count-border);
+  padding: .1rem .5rem;
+  border-radius: 999px;
+  font-size: .75rem;
+  line-height: 1.4;
+}
