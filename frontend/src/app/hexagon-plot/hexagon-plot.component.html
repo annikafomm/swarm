@@ -6,15 +6,17 @@
 
     <div>
       <label for="colorBy">Color hexagons by:</label>
-      <select
-        id="colorBy"
-        [(ngModel)]="colorByProperty"
-        (change)="onColorbyPropertyChange()"
-      >
-        <option *ngFor="let prop of colorableProperties" [value]="prop">
-          {{ prop | translate | async }}
-        </option>
-      </select>
+        <select
+          id="colorBy"
+          [(ngModel)]="colorByProperty"
+          (change)="onColorbyPropertyChange()"
+        >
+        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+          <option *ngFor="let prop of group.value" [value]="prop">
+            {{ prop | translate | async }}
+          </option>
+        </optgroup>
+        </select>
 
       <div
         *ngIf="colorByProperty === 'ligand_receptor_relationships'"
