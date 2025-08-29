@@ -1,9 +1,58 @@
 <div class="info-page">
-  <h2>Informationen</h2>
-  <p>
-    Hier erklärst du, was die Visualisierung macht, Steuerung, Datenquellen etc.
-  </p>
 
-  <button (click)="goBack()" class="back-btn">← Zurück</button>
+  <header>
+    <img src="assets/info/logo.png" alt="MOPITAS Logo" />
+    <h2>Overview</h2>
+  </header>
 
+  <img src="assets/info/overview.png" alt="Overview illustration" class="overview-img" />
+
+  <section class="card">
+    <h2>Format Requirements</h2>
+    <p>
+      The web-tool works with the <code>AnnData</code> format. Here’s how counts and scores should be saved:
+    </p>
+
+    <h3>Counts & Observations</h3>
+    <ul>
+      <li><strong>Counts</strong>: stored in <code>anndata.X</code></li>
+      <li><strong>Observations (per spot)</strong>: stored in <code>anndata.obs</code></li>
+      <li><strong>Clustering</strong>: Leiden clustering in <code>anndata.obs["leiden"]</code></li>
+    </ul>
+
+    <h3>Gene-wise scores</h3>
+    <ul>
+      <li><strong>Moran’s I</strong>: <code>anndata.uns["moranI"]</code> (DataFrame with columns: I, pval_norm, var_norm, pval_norm_fdr_bh)</li>
+      <li><strong>Geary’s C</strong>: <code>anndata.uns["gearyC"]</code> (DataFrame with columns: C, pval_norm, var_norm, pval_norm_fdr_bh)</li>
+    </ul>
+
+    <h3>Leiden cluster scores</h3>
+    <ul>
+      <li><strong>Centrality</strong>: <code>anndata.uns["leiden_centrality_scores"]</code></li>
+      <li><strong>Co-occurrence</strong>: <code>anndata.uns["leiden_co_occurrence"]</code></li>
+      <li><strong>Neighborhood enrichment</strong>: <code>anndata.uns["leiden_nhood_enrichment"]</code></li>
+    </ul>
+
+    <h3>Regulon scores</h3>
+    <ul>
+      <li><strong>Gene sets</strong>: <code>genie_genesets</code> / <code>sponge_genesets</code></li>
+      <li><strong>AUCell, GSVA, ssGSEA, Viper</strong>: stored in <code>anndata.obsm</code></li>
+    </ul>
+
+    <h3>Tangram</h3>
+    <p>Cell type compositions: <code>anndata.obsm["tangram_ct_pred"]</code></p>
+
+    <h3>LIANA+ scores</h3>
+    <p>Ligand–receptor, TF activity, and pathway activity are stored in <code>anndata.obsm</code> and <code>anndata.uns</code> with the specified columns.</p>
+
+    <h3>GRNs (CSV examples)</h3>
+    <h4>Genie</h4>
+    <pre class="codeblock"><code>regulatoryGene,targetGene,weight
+FOXM1,KIF20A,0.06364686682258</code></pre>
+
+    <h4>Sponge</h4>
+    <pre class="codeblock"><code>geneA,geneB,df,cor,pcor,mscor,p.val,p.adj
+ENSG00000182141,ENSG00000258630,1,0.1216,0.0764,0.0452,0.0294,0.5198</code></pre>
+  </section>
+  <button (click)="goBack()" class="back-btn">← Back</button>
 </div>
