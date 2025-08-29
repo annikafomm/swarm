@@ -98,6 +98,7 @@ export class HexagonPlotComponent implements OnInit {
     'average_clustering',
     'closeness_centrality',
   ];
+  public groupedProperties: { key: string; value: string[] }[] | null = null;
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
   } | null = null;
@@ -184,6 +185,16 @@ export class HexagonPlotComponent implements OnInit {
 
         // sort in alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
+
+        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+        const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
+        this.groupedProperties = [
+          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'Other', value: this.colorableProperties.filter(
+            (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+          ) },
+        ];
 
         //this.colorableProperties.push('regulatory_scores');  // Exists in geojson
         if (this.colorableProperties.includes('regulatory_scores')) {
