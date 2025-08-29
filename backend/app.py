@@ -24,7 +24,9 @@ def upload(job_dir, json_dict):
         print(log_file)
         
         # get parameters from json_dict
-        #python_params, R_params = dict2params(json_dict)
+        python_params, R_params = dict2params(json_dict)
+
+        """
         python_params = ["-input", "./datasets_prepro_new/GSM6592049_M2_prepro.h5ad", 
                          "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad",
                          "-liana", "-cell_comp_key", "celltype_scores",
@@ -34,6 +36,8 @@ def upload(job_dir, json_dict):
                     "--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
                     "--genie_network", "./networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
                     "--aucell", "--gsva", "--ssgsea", "--viper"]
+        """
+        
         print(python_params)
         print(R_params)
         
