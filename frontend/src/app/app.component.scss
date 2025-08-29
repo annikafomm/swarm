@@ -32,11 +32,12 @@
 
 .top-bar {
   width: 100%;
+  height: var(--topbar-h);
   background: linear-gradient(90deg, #e0e7ef 0%, #c9d6ff 100%);
   color: #23272f;
   display: flex;
   align-items: center;
-  padding: 1rem 1rem 1rem 2rem;
+  padding: 0 1rem;
   box-shadow: 0 2px 12px rgba(60, 72, 88, 0.08);
   position: sticky;
   z-index: 2000;
@@ -106,5 +107,12 @@
   padding: 0.5rem 1rem;
   font-size: 1rem;
   transition: color 0.2s;
+  cursor: pointer;
+}
+
+.app-logo {
+  height: 85%;
+  width: auto;
+  object-fit: contain;
   cursor: pointer;
 }
