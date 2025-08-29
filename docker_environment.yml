@@ -40,6 +40,7 @@ dependencies:
   - decoupler-py
   - mudata
   - bioconda::liana
+  - simplejson
   - pip:
       - spatialde
       - git+https://github.com/broadinstitute/Tangram.git

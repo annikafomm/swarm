@@ -1,27 +1,36 @@
-import {
-  Component,
-  OnInit,
-  ɵisComponentDefPendingResolution,
-} from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
+import { HttpClient } from '@angular/common/http';
+import { SessionService } from '../session.service';
+import { GeoDataService } from '../geo-data.service';
+import { KeyValue } from '@angular/common';
+import { TranslationService } from '../translation.service';
+import { TranslatePipe } from '../translate.pipe';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
 })
 export class HexagonPlotComponent implements OnInit {
+  constructor(
+    private http: HttpClient,
+    private sessionService: SessionService,
+    private geoDataService: GeoDataService,
+    private translationService: TranslationService,
+  ) {}
+
   // Define to use Math functions in the html template
   public Math = Math;
+
   // GeoJson
-  public dataPath = 'assets/hexagons_GSM6592049_M2.geojson';
+  public dataPath = 'assets/hexagons.geojson';
   public dataSetTitle =
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
@@ -34,8 +43,11 @@ export class HexagonPlotComponent implements OnInit {
   public colorByProperty = 'cell_type';
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
-  public selectedCellAssociatedGeneSetsGenie3: string[] = [];
-  public selectedCellAssociatedGeneSetsSponge: string[] = [];
+  public selectedRegulatoryScore: string | null = null;
+  public selectedCellRegulatoryScores: { [key: string]: number } | null = null;
+  private previousGeneSetGenie3: string | null = null;
+  private previousGeneSetSponge: string | null = null;
+
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
   public meta: { [key: string]: any } = {};
@@ -56,10 +68,17 @@ export class HexagonPlotComponent implements OnInit {
     closeness_centrality: 0,
   };
 
-  public genie3Network: regGraphConnection[] = [];
-  public spongeNetwork: regGraphConnection[] = [];
+  public genie3Network: genie3RegGraphConnection[] = [];
+  public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
+
+  public minGenie3Edges: number = 25;
+  public minSpongeEdges: number = 25;
+  public genie3WeightCutoff: number | null = null;
+  public spongePValueCutoff: number | null = null;
+  public isLoadingSponge: boolean = false;
+  public isLoadingGenie3: boolean = false;
 
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
@@ -83,7 +102,7 @@ export class HexagonPlotComponent implements OnInit {
     [col: string]: { [index: string]: string | number };
   } | null = null;
   public showGlobalLigandReceptorScores: boolean = true;
-
+  public showMoranI: boolean = true;
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([
@@ -100,11 +119,9 @@ export class HexagonPlotComponent implements OnInit {
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
-  constructor() {}
   ngOnInit(): void {
     this.createHexagonPlot();
     this.loadAndRenderData(this.dataPath);
-    this.updateHexColors();
   }
 
   private createHexagonPlot(): void {
@@ -145,14 +162,39 @@ export class HexagonPlotComponent implements OnInit {
           throw new Error('Failed to load GeoJSON data');
         }
 
+        this.geoDataService.setData(data);
+
         // This is for showing all properties for coloring
         this.features = data.features;
         this.meta = data.meta;
+        this.selectedRegulatoryScore =
+          this.meta['grn_score_names']?.[0] || null;
+        this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+        this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+        this.selectedGeneSetGenie3 =
+          Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+        this.selectedGeneSetSponge =
+          Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
           return typeof val === 'string' || typeof val === 'number';
         });
+
+        // sort in alphabetical order
+        this.colorableProperties.sort((a, b) => a.localeCompare(b));
+
+        //this.colorableProperties.push('regulatory_scores');  // Exists in geojson
+        if (this.colorableProperties.includes('regulatory_scores')) {
+          this.colorByProperty = 'regulatory_scores';
+        } else if (this.colorableProperties.includes('cell_type')) {
+          this.colorByProperty = 'cell_type';
+        } else {
+          this.colorByProperty = this.colorableProperties[0];
+        }
+
+        this.currentLegendType = this.isContinuousScale() ? 'continuous' : 'categorical';
 
         const width = 1200;
         const height = 1000;
@@ -163,20 +205,6 @@ export class HexagonPlotComponent implements OnInit {
         });
 
         this.features = data.features;
-
-        //this.colorScale.domain([
-        //  ...new Set(
-        //    this.features.map((f) =>
-        //      String(f.properties[this.colorByProperty]),
-        //    ),
-        //  ),
-        //]);
-        this.colorScale.domain([
-          ...new Set(
-            this.features.map((f: CellFeature) => f.properties.cell_type),
-          ),
-        ]);
-        this.currentLegendDomain = this.colorScale.domain();
 
         // Create a geoPath generator with the projection
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
@@ -190,27 +218,45 @@ export class HexagonPlotComponent implements OnInit {
           .join('path')
           .attr('d', (d) => pathGenerator(d))
           .attr('fill', (d) => {
-            const total = d.properties.cell_type || 0;
-            return this.colorScale(total.toString());
+            const value = d.properties?.[this.colorByProperty];
+            if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+            } else {
+              const num = this.toNumber(value);
+              if (!isNaN(num)) {
+                return this.continuousColorScale(num);
+              } else {
+                return '#ccc';
+              }
+            }
           })
           .style('opacity', 0.8)
           .on('mouseover', (event, d) => this.mouseOver(event, d))
           .on('mouseleave', (event, d) => this.mouseLeave(event, d))
           .on('click', (event, d) => this.openSidenav(event, d));
 
-        this.colorScale.domain([
-          ...new Set(
-            data.features.map((f: CellFeature) => f.properties.cell_type),
-          ),
-        ]);
-        this.renderLegend();
+        this.onColorbyPropertyChange();
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
       });
 
+    /* d3.csv('assets/sponge_network_smaller.csv', d3.autoType)
+      .then((rows) => {
+        console.log('WEird')
+        this.spongeNetwork = rows.map((row) => ({
+          source: String((row as any)['geneA'] ?? ''),
+          target: String((row as any)['geneB'] ?? ''),
+          p_adjusted: Number((row as any)['p.adj'] ?? 0),
+        }));
+        console.log('Sponge network loaded:', this.spongeNetwork);
+      })
+      .catch((error) => {
+        console.error('Error loading sponge network:', error);
+      });
+
     // Read genie3 csv
-    d3.csv('assets/genie3_BRCA_mrn.top_100k.csv', d3.autoType)
+    d3.csv('assets/genie_network_filt.csv', d3.autoType)
       .then((rows) => {
         // Each row should have source, target, weight columns
         this.genie3Network = rows.map((row) => ({
@@ -223,52 +269,7 @@ export class HexagonPlotComponent implements OnInit {
       .catch((error) => {
         console.error('Error loading genie3 network:', error);
       });
-
-    // Read sponge network
-    d3.csv('assets/sponge_gene_sets_GSM6592049_M2.json', d3.autoType)
-      .then((rows) => {
-        this.spongeNetwork = rows.map((row) => ({
-          source: String((row as any)['source'] ?? ''),
-          target: String((row as any)['target'] ?? ''),
-          weight: Number((row as any)['weight'] ?? 0),
-        }));
-        console.log('Sponge network loaded:', this.spongeNetwork);
-      })
-      .catch((error) => {
-        console.error('Error loading sponge network:', error);
-      });
-
-    // Read genie3 gene sets
-    d3.json<{ [regulator: string]: string[] }>(
-      'assets/genie3_gene_sets_GSM6592049_M2.json',
-    )
-      .then((data) => {
-        this.geneSetsGenie3 = data || {};
-        console.log(
-          'Genie3 gene sets loaded:',
-          Object.keys(this.geneSetsGenie3).length,
-          'regulators',
-        );
-      })
-      .catch((error) => {
-        console.error('Error loading genie3 gene sets:', error);
-      });
-
-    // Read sponge gene sets
-    d3.json<{ [regulator: string]: string[] }>(
-      'assets/sponge_gene_sets_GSM6592049_M2.json',
-    )
-      .then((data) => {
-        this.geneSetsSponge = data || {};
-        console.log(
-          'Sponge gene sets loaded:',
-          Object.keys(this.geneSetsSponge).length,
-          'regulators',
-        );
-      })
-      .catch((error) => {
-        console.error('Error loading sponge gene sets:', error);
-      });
+ */
   }
 
   //public updateHexColors(): void {
@@ -339,6 +340,56 @@ export class HexagonPlotComponent implements OnInit {
     return NaN;
   }
 
+  public onColorbyPropertyChange(): void {
+    if (this.colorByProperty === 'regulatory_scores') {
+      if (
+        this.selectedRegulatoryScore?.endsWith('genie3') &&
+        this.selectedGeneSetGenie3
+      ) {
+        console.log(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
+        this.fetchAndUpdate(
+          this.selectedRegulatoryScore,
+          this.selectedGeneSetGenie3,
+        );
+        this.updateAucellGraphGenie3();
+        this.updateAucellGraphSponge();
+      } else if (
+        this.selectedRegulatoryScore?.endsWith('sponge') &&
+        this.selectedGeneSetSponge
+      ) {
+        this.fetchAndUpdate(
+          this.selectedRegulatoryScore,
+          this.selectedGeneSetSponge,
+        );
+        this.updateAucellGraphGenie3();
+        this.updateAucellGraphSponge();
+      }
+    }
+    this.updateHexColors();
+  }
+
+  isContinuousScale() {
+    const valuesRaw = this.features.map((f) => {
+      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
+        return f.properties.leiden_centrality[this.colorByProperty];
+      }
+      return f.properties[this.colorByProperty];
+    });
+
+    const numericValues = valuesRaw.map((v) => this.toNumber(v));
+    const allNumbers = numericValues.every((n) => Number.isFinite(n));
+
+    // Check if all values are integers (for categorical treatment)
+    const allIntegers =
+      allNumbers && numericValues.every((n) => Number.isInteger(n));
+
+    // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
+    const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
+    const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
+
+    return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
+  }
+
   public updateHexColors(): void {
     this.resetClusterExtension();
 
@@ -354,7 +405,10 @@ export class HexagonPlotComponent implements OnInit {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    // 1) collect values (supports nested props like ligand_receptor_relationships)
+    const sel = this.g
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .data(this.features);
+
     const valuesRaw = this.features.map((f) => {
       if (this.leidenCentralityProps.includes(this.colorByProperty)) {
         return f.properties.leiden_centrality[this.colorByProperty];
@@ -363,14 +417,9 @@ export class HexagonPlotComponent implements OnInit {
     });
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
-    const allNumbers = numericValues.every((n) => Number.isFinite(n));
 
-    const sel = this.g
-      .selectAll<SVGPathElement, CellFeature>('path')
-      .data(this.features);
-
-    if (allNumbers && numericValues.length > 0) {
-      // continuous scale
+    if (this.isContinuousScale()) {
+      // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
       if (min === max) {
@@ -385,6 +434,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -393,8 +444,8 @@ export class HexagonPlotComponent implements OnInit {
           return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
         });
     } else {
-      // categorical scale
-      const domain = [...new Set(valuesRaw.map((v) => String(v)))];
+      // categorical scale - for non-numeric, integers with few unique values, or mixed data
+      const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
       this.colorScale.domain(domain);
       this.currentLegendDomain = domain;
       this.currentLegendType = 'categorical';
@@ -402,7 +453,8 @@ export class HexagonPlotComponent implements OnInit {
       sel
         .transition()
         .duration(300)
-        .style('stroke', 'transparent')
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
         .attr('fill', (d) => {
           const raw = this.leidenCentralityProps.includes(this.colorByProperty)
             ? d.properties.leiden_centrality[this.colorByProperty]
@@ -414,293 +466,597 @@ export class HexagonPlotComponent implements OnInit {
     this.renderLegend();
   }
 
-  public updateAucellGraph(): void {
-    // Clear previous graph
+  public updateAucellGraphGenie3(): void {
+    console.log('Updating AUCELL graph for Genie3...');
+    this.isLoadingGenie3 = true;
     d3.select('#aucell_graph_genie3').selectAll('*').remove();
 
-    if (!this.selectedGeneSetGenie3 || !this.genie3Network) return;
+    if (!this.selectedGeneSetGenie3 || !this.genie3Network) {
+      this.isLoadingGenie3 = false;
+      return;
+    }
 
     const regulator = this.selectedGeneSetGenie3;
     const targets = this.geneSetsGenie3[regulator] || [];
-    // Filter Targets > weight threshold
-    const filteredTargets = targets.filter((target) => {
-      return this.genie3Network.some(
-        (connection) =>
-          connection.source === regulator &&
-          connection.target === target &&
-          connection.weight > 0.03, // Adjust threshold as needed
-      );
-    });
-
-    const weightThreshold = 0.03;
-
-    console.log('Regulator:', regulator);
-    console.log('Targets:', targets);
 
     const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     const edges: { source: string; target: string; weight: number }[] = [];
 
-    // Add regulator node
-    nodes.push({ id: regulator, group: 0 });
+    let candidateEdges: { source: string; target: string; weight: number }[] =
+      [];
 
-    // Add target nodes
-    filteredTargets.forEach((target: string) => {
-      nodes.push({ id: target, group: 1 });
-    });
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(this.selectedGeneSetGenie3 ? this.selectedGeneSetGenie3 : '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res as {
+            regulatoryGene: string;
+            targetGene: string;
+            weight: number;
+          }[];
+          console.log('Data', data);
+          this.genie3Network = data.map((d) => ({
+            source: d.regulatoryGene,
+            target: d.targetGene,
+            weight: d.weight,
+          }));
 
-    // Get edges from regulator to targets
-    this.genie3Network.forEach((connection) => {
-      if (
-        connection.source === regulator &&
-        filteredTargets.includes(connection.target)
-      ) {
-        edges.push({
-          source: connection.source,
-          target: connection.target,
-          weight: connection.weight,
-        });
-      }
-    });
+          this.genie3Network.forEach((connection) => {
+            if (
+              connection.source === regulator ||
+              connection.target === regulator ||
+              targets.includes(connection.source) ||
+              targets.includes(connection.target)
+            ) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                weight: connection.weight,
+              });
+            }
+          });
 
-    // Get neighbors of targets AND regulator with weight > threshold
-    const neighborSet = new Set<string>();
-    const allMainNodes = [regulator, ...filteredTargets]; // Include regulator in neighbor search
+          console.log('Candidate edges before filtering:', candidateEdges);
 
-    // Find neighbors for all main nodes (regulator + targets)
-    allMainNodes.forEach((mainNode: string) => {
-      this.genie3Network.forEach((connection) => {
-        if (connection.weight > weightThreshold) {
-          // If mainNode is the source, add target as neighbor
-          if (
-            connection.source === mainNode &&
-            !allMainNodes.includes(connection.target)
-          ) {
-            neighborSet.add(connection.target);
-          }
-          // If mainNode is the target, add source as neighbor
-          else if (
-            connection.target === mainNode &&
-            !allMainNodes.includes(connection.source)
-          ) {
-            neighborSet.add(connection.source);
-          }
-        }
-      });
-    });
+          candidateEdges.sort((a, b) => b.weight - a.weight);
+          candidateEdges = candidateEdges.slice(0, this.minGenie3Edges);
 
-    console.log('Found neighbors:', Array.from(neighborSet));
-    console.log('Neighbor count:', neighborSet.size);
+          this.genie3WeightCutoff =
+            candidateEdges.length > 0
+              ? Math.min(...candidateEdges.map((edge) => edge.weight))
+              : null;
 
-    // Add neighbor nodes
-    if (nodes.length < 30) {
-      Array.from(neighborSet).forEach((neighbor) => {
-        nodes.push({ id: neighbor, group: 2 });
-      });
-    }
+          // Create nodes from all edges (source and target)
+          const nodeSet = new Set<string>();
+          candidateEdges.forEach((edge) => {
+            nodeSet.add(edge.source);
+            nodeSet.add(edge.target);
+          });
+          // Add regulator to nodeset
+          nodeSet.add(regulator);
 
-    // Add ALL connections between any nodes in our network with sufficient weight
-    const allNodeIds = new Set(nodes.map((n) => n.id));
+          // For the nodes with top edges we reinset their original edges
 
-    this.genie3Network.forEach((connection) => {
-      if (connection.weight > weightThreshold) {
-        const sourceInNetwork = allNodeIds.has(connection.source);
-        const targetInNetwork = allNodeIds.has(connection.target);
+          this.genie3Network.forEach((connection) => {
+            if (
+              nodeSet.has(connection.source) &&
+              nodeSet.has(connection.target)
+            ) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                weight: connection.weight,
+              });
+            }
+          });
 
-        // Add edge if both nodes are in our network
-        if (sourceInNetwork && targetInNetwork) {
-          // Avoid duplicate edges
-          const edgeExists = edges.some(
-            (e) =>
-              (e.source === connection.source &&
-                e.target === connection.target) ||
-              (e.source === connection.target &&
-                e.target === connection.source),
-          );
+          // Create nodes array with proper groups
+          Array.from(nodeSet).forEach((nodeId) => {
+            if (nodeId === regulator) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 0 }); // regulator
+              }
+            } else if (targets.includes(nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 1 }); // targets
+              }
+            } else {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 2 }); // neighbors
+              }
+            }
+          });
 
-          if (!edgeExists) {
-            edges.push({
-              source: connection.source,
-              target: connection.target,
-              weight: connection.weight,
+          edges.push(...candidateEdges);
+
+          // Create the graph
+          const graph = {
+            nodes: nodes.filter((node) => node.id && node.id.length > 0),
+            edges: edges.filter(
+              (edge) =>
+                nodes.some((node) => node.id === edge.source) &&
+                nodes.some((node) => node.id === edge.target),
+            ),
+          };
+
+          // Create the graph visualization
+          const width = 500;
+          const height = 300;
+
+          const svg = d3
+            .select('#aucell_graph_genie3')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background-color', '#f8f9fa');
+
+          // Draw links (edges)
+          const link = svg
+            .append('g')
+            .attr('stroke', '#999')
+            .attr('stroke-opacity', 0.6)
+            .selectAll('line')
+            .data(graph.edges)
+            .enter()
+            .append('line')
+            .attr('stroke-width', (d: any) =>
+              Math.max(1, Math.sqrt(d.weight) * 10),
+            )
+            .attr('stroke', (d: any) => {
+              // Color edges based on weight
+              const intensity = Math.min(d.weight * 10, 1);
+              return d3.interpolateReds(0.3 + intensity * 0.7);
             });
-          }
-        }
-      }
-    });
 
-    console.log('Final nodes:', nodes.length);
-    console.log('Final edges:', edges.length);
-    console.log('Edges:', edges);
+          // Draw nodes
+          const node = svg
+            .append('g')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .selectAll('circle')
+            .data(graph.nodes)
+            .enter()
+            .append('circle')
+            .attr('r', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return 15; // regulator
+                case 1:
+                  return 12; // targets
+                case 2:
+                  return 8; // neighbors
+                case 3:
+                  return 6;
+                default:
+                  return 10;
+              }
+            })
+            .attr('fill', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return '#e41a1c'; // regulator - red
+                case 1:
+                  return '#377eb8'; // targets - blue
+                case 2:
+                  return '#4daf4a'; // neighbors - green
+                case 3:
+                  return '#ff7f00'; // high-weight - orange
+                default:
+                  return '#999';
+              }
+            });
 
-    console.log(
-      'After enhancement - Nodes:',
-      nodes.length,
-      'Edges:',
-      edges.length,
-    );
+          // Add labels
+          const labels = svg
+            .append('g')
+            .selectAll('text')
+            .data(graph.nodes)
+            .enter()
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '.35em')
+            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+            .style('font-weight', (d: any) =>
+              d.group === 0 ? 'bold' : 'normal',
+            )
+            .style('fill', '#333')
+            .text((d: any) =>
+              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+            );
 
-    if (nodes.length === 0) {
-      console.warn('No nodes to display');
+          // Initialize simulation with stronger forces
+          const simulation = d3
+            .forceSimulation(graph.nodes)
+            .force(
+              'link',
+              d3
+                .forceLink(graph.edges)
+                .id((d: any) => d.id)
+                .distance(30)
+                .strength(0.5),
+            )
+            .force('charge', d3.forceManyBody().strength(-500))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(30))
+            .force('boundary', () => {
+              graph.nodes.forEach((node: any) => {
+                const radius =
+                  node.group === 0
+                    ? 15
+                    : node.group === 1
+                      ? 12
+                      : node.group === 2
+                        ? 8
+                        : 6;
+
+                node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+                node.y = Math.max(radius, Math.min(height - radius, node.y));
+              });
+            });
+
+          simulation.on('tick', () => {
+            link
+              .attr('x1', (d: any) => d.source.x)
+              .attr('y1', (d: any) => d.source.y)
+              .attr('x2', (d: any) => d.target.x)
+              .attr('y2', (d: any) => d.target.y);
+
+            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+          });
+
+          this.isLoadingGenie3 = false;
+
+          console.log('Network visualization complete');
+          console.log('Genie3 Network:', this.genie3Network);
+          console.log(
+            `[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`,
+          );
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load Genie Connections for["${this.selectedGeneSetGenie3}]`,
+            err,
+          ),
+      });
+
+    console.log('Genie3 Network 2:', this.genie3Network);
+  }
+
+  public updateAucellGraphSponge(): void {
+    console.log('Updating AUCELL graph for Sponge...');
+    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+
+    if (!this.selectedGeneSetSponge || !this.spongeNetwork) {
       return;
     }
 
-    // Create the graph
-    const graph = {
-      nodes: nodes.filter((node) => node.id && node.id.length > 0),
-      edges: edges.filter(
-        (edge) =>
-          nodes.some((node) => node.id === edge.source) &&
-          nodes.some((node) => node.id === edge.target),
-      ),
-    };
+    this.isLoadingSponge = true;
+    const regulator = this.selectedGeneSetSponge;
+    const targets = this.geneSetsSponge[regulator] || [];
 
-    // Create the graph visualization
-    const width = 500;
-    const height = 300;
-    const margin = 20;
+    const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    const edges: { source: string; target: string; p_adjusted: number }[] = [];
 
-    const svg = d3
-      .select('#aucell_graph_genie3')
-      .append('svg')
-      .attr('width', width)
-      .attr('height', height)
-      .style('background-color', '#f8f9fa');
-
-    // Draw links (edges)
-    const link = svg
-      .append('g')
-      .attr('stroke', '#999')
-      .attr('stroke-opacity', 0.6)
-      .selectAll('line')
-      .data(graph.edges)
-      .enter()
-      .append('line')
-      .attr('stroke-width', (d: any) => Math.max(1, Math.sqrt(d.weight) * 10))
-      .attr('stroke', (d: any) => {
-        // Color edges based on weight
-        const intensity = Math.min(d.weight * 10, 1);
-        return d3.interpolateReds(0.3 + intensity * 0.7);
-      });
-
-    // Draw nodes
-    const node = svg
-      .append('g')
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 1.5)
-      .selectAll('circle')
-      .data(graph.nodes)
-      .enter()
-      .append('circle')
-      .attr('r', (d: any) => {
-        switch (d.group) {
-          case 0:
-            return 15; // regulator
-          case 1:
-            return 12; // targets
-          case 2:
-            return 8; // neighbors
-          case 3:
-            return 6;
-          default:
-            return 10;
-        }
-      })
-      .attr('fill', (d: any) => {
-        switch (d.group) {
-          case 0:
-            return '#e41a1c'; // regulator - red
-          case 1:
-            return '#377eb8'; // targets - blue
-          case 2:
-            return '#4daf4a'; // neighbors - green
-          case 3:
-            return '#ff7f00'; // high-weight - orange
-          default:
-            return '#999';
-        }
-      });
-
-    // Add labels
-    const labels = svg
-      .append('g')
-      .selectAll('text')
-      .data(graph.nodes)
-      .enter()
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.35em')
-      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-      .style('font-weight', (d: any) => (d.group === 0 ? 'bold' : 'normal'))
-      .style('fill', '#333')
-      .text((d: any) =>
-        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-      );
-
-    // Add weight labels on edges
-    const edgeLabels = svg
-      .append('g')
-      .selectAll('text')
-      .data(graph.edges)
-      .enter()
-      .append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '0.35em')
-      .style('font-size', '8px')
-      .style('fill', '#666')
-      .style('font-weight', 'bold')
-      .style('background-color', 'white')
-      .style('padding', '1px')
-      .text((d: any) => d.weight.toFixed(2));
-
-    // Initialize simulation with stronger forces
-    const simulation = d3
-      .forceSimulation(graph.nodes)
-      .force(
-        'link',
-        d3
-          .forceLink(graph.edges)
-          .id((d: any) => d.id)
-          .distance(10)
-          .strength(0.5),
+    let candidateEdges: {
+      source: string;
+      target: string;
+      p_adjusted: number;
+    }[] = [];
+    /*
+    this.spongeNetwork.forEach(connection => {
+     if ((connection.source === regulator || connection.target === regulator) ||
+         targets.includes(connection.source) || targets.includes(connection.target)) {
+       candidateEdges.push({
+         source: connection.source,
+         target: connection.target,
+         p_adjusted: connection.p_adjusted
+       });
+     }
+   }) */ this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
+          { withCredentials: true },
+        ),
       )
-      .force('charge', d3.forceManyBody().strength(-500))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(15))
-      .force('boundary', () => {
-        graph.nodes.forEach((node: any) => {
-          const radius =
-            node.group === 0
-              ? 15
-              : node.group === 1
-                ? 12
-                : node.group === 2
-                  ? 8
-                  : 6;
+      .subscribe({
+        next: (res) => {
+          const data = res as {
+            geneA: string;
+            geneB: string;
+            'p.adj': number;
+            mscor: number;
+          }[];
 
-          node.x = Math.max(radius, Math.min(width - radius, node.x));
+          this.isLoadingSponge = true;
 
-          node.y = Math.max(radius, Math.min(height - radius, node.y));
-        });
+          console.log('Sponge Network:', data);
+
+          this.spongeNetwork = data.map((d) => ({
+            source: d.geneA,
+            target: d.geneB,
+            p_adjusted: d['p.adj'],
+            mscore: d['mscor'],
+          }));
+
+          // Push all edges of filtered Network (filtered to geneset edges)
+          candidateEdges.push(
+            ...this.spongeNetwork.filter((connection) => {
+              return (
+                connection.source === regulator ||
+                connection.target === regulator ||
+                targets.includes(connection.source) ||
+                targets.includes(connection.target)
+              );
+            }),
+          );
+          // Sort such that smallest p_values are kept
+          candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+          candidateEdges = candidateEdges.slice(0, this.minSpongeEdges);
+
+          this.spongePValueCutoff =
+            candidateEdges.length > 0
+              ? Math.max(...candidateEdges.map((edge) => edge.p_adjusted))
+              : null;
+
+          // Create nodes from all edges (source and target)
+          const nodeSet = new Set<string>();
+          candidateEdges.forEach((edge) => {
+            nodeSet.add(edge.source);
+            nodeSet.add(edge.target);
+          });
+          // Add regulator to nodeset
+          nodeSet.add(regulator);
+
+          this.spongeNetwork.forEach((connection) => {
+            if (
+              nodeSet.has(connection.source) &&
+              nodeSet.has(connection.target)
+            ) {
+              candidateEdges.push({
+                source: connection.source,
+                target: connection.target,
+                p_adjusted: connection.p_adjusted,
+              });
+            }
+          });
+
+          edges.push(...candidateEdges);
+
+          // Create nodes array with proper groups
+          Array.from(nodeSet).forEach((nodeId) => {
+            if (nodeId === regulator) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 0 }); // regulator
+              }
+            } else if (targets.includes(nodeId)) {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 1 }); // targets
+              }
+            } else {
+              if (!nodes.some((n) => n.id === nodeId)) {
+                nodes.push({ id: nodeId, group: 2 }); // neighbors
+              }
+            }
+          });
+
+          // Create the graph
+          const graph = {
+            nodes: nodes.filter((node) => node.id && node.id.length > 0),
+            edges: edges.filter(
+              (edge) =>
+                nodes.some((node) => node.id === edge.source) &&
+                nodes.some((node) => node.id === edge.target),
+            ),
+          };
+
+          // Create the graph visualization
+          const width = 500;
+          const height = 300;
+
+          const svg = d3
+            .select('#aucell_graph_sponge')
+            .append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .style('background-color', '#f8f9fa');
+
+          // Draw links (edges)
+          const link = svg
+            .append('g')
+            .attr('stroke', '#999')
+            .attr('stroke-opacity', 0.6)
+            .selectAll('line')
+            .data(graph.edges)
+            .enter()
+            .append('line')
+            .attr('stroke-width', (d: any) =>
+              Math.max(1, Math.sqrt(d.p_adjusted) * 10),
+            )
+            .attr('stroke', (d: any) => {
+              // Color edges based on p_adjusted
+              const intensity = Math.min(d.p_adjusted * 10, 1);
+              return d3.interpolateReds(0.3 + intensity * 0.7);
+            });
+
+          // Draw nodes
+          const node = svg
+            .append('g')
+            .attr('stroke', '#fff')
+            .attr('stroke-width', 1.5)
+            .selectAll('circle')
+            .data(graph.nodes)
+            .enter()
+            .append('circle')
+            .attr('r', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return 15; // regulator
+                case 1:
+                  return 12; // targets
+                case 2:
+                  return 8; // neighbors
+                case 3:
+                  return 6;
+                default:
+                  return 10;
+              }
+            })
+            .attr('fill', (d: any) => {
+              switch (d.group) {
+                case 0:
+                  return '#e41a1c'; // regulator - red
+                case 1:
+                  return '#377eb8'; // targets - blue
+                case 2:
+                  return '#4daf4a'; // neighbors - green
+                case 3:
+                  return '#ff7f00'; // high-weight - orange
+                default:
+                  return '#999';
+              }
+            });
+
+          // Add labels
+          const labels = svg
+            .append('g')
+            .selectAll('text')
+            .data(graph.nodes)
+            .enter()
+            .append('text')
+            .attr('text-anchor', 'middle')
+            .attr('dy', '.35em')
+            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+            .style('font-weight', (d: any) =>
+              d.group === 0 ? 'bold' : 'normal',
+            )
+            .style('fill', '#333')
+            .text((d: any) =>
+              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+            );
+
+          // Initialize simulation with stronger forces
+          const simulation = d3
+            .forceSimulation(graph.nodes)
+            .force(
+              'link',
+              d3
+                .forceLink(graph.edges)
+                .id((d: any) => d.id)
+                .distance(20)
+                .strength(0.5),
+            )
+            .force('charge', d3.forceManyBody().strength(-500))
+            .force('center', d3.forceCenter(width / 2, height / 2))
+            .force('collision', d3.forceCollide().radius(30))
+            .force('boundary', () => {
+              graph.nodes.forEach((node: any) => {
+                const radius =
+                  node.group === 0
+                    ? 15
+                    : node.group === 1
+                      ? 12
+                      : node.group === 2
+                        ? 8
+                        : 6;
+
+                node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+                node.y = Math.max(radius, Math.min(height - radius, node.y));
+              });
+            });
+
+          simulation.on('tick', () => {
+            link
+              .attr('x1', (d: any) => d.source.x)
+              .attr('y1', (d: any) => d.source.y)
+              .attr('x2', (d: any) => d.target.x)
+              .attr('y2', (d: any) => d.target.y);
+
+            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+          });
+
+          this.isLoadingSponge = false;
+
+          console.log('Network visualization complete');
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+            err,
+          ),
       });
+  }
 
-    simulation.on('tick', () => {
-      link
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+  public onMinEdgesChangeSponge(): void {
+    if (this.selectedGeneSetSponge) {
+      this.isLoadingSponge = true;
+      setTimeout(() => this.updateAucellGraphSponge(), 50);
+    }
+  }
 
-      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+  public onMinEdgesChangeGenie3(): void {
+    if (this.selectedGeneSetGenie3) {
+      this.isLoadingGenie3 = true;
+      setTimeout(() => this.updateAucellGraphGenie3(), 50);
+    }
+  }
 
-      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+  public analyzeGeneSetInGProfiler(): void {
+    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
+      console.warn('No Genie3 gene set selected');
+      return;
+    }
 
-      // Position edge labels at the midpoint of each edge
-      edgeLabels
-        .attr('x', (d: any) => (d.source.x + d.target.x) / 2)
-        .attr('y', (d: any) => (d.source.y + d.target.y) / 2);
-    });
+    const regulator = this.selectedGeneSetGenie3;
+    const targets = this.geneSetsGenie3[regulator] || [];
 
-    console.log('Network visualization complete');
+    const allGenes = [regulator, ...targets];
+
+    console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
+
+    const gProfilerUrl = this.generateGProfilerUrl(allGenes);
+
+    if (gProfilerUrl) {
+      // Open in new tab/window
+      window.open(gProfilerUrl, '_blank');
+    } else {
+      console.warn(
+        'Could not generate gProfiler URL for Genie3 gene set:',
+        this.selectedGeneSetGenie3,
+      );
+    }
+  }
+
+  // Make sure you also have the generateGProfilerUrl method
+  private generateGProfilerUrl(geneIds: string[]): string | null {
+    if (!geneIds || geneIds.length === 0) {
+      return null;
+    }
+
+    // Join gene IDs with newlines (gProfiler expects one gene per line)
+    const geneList = geneIds.join('\n');
+
+    // Base gProfiler URL for functional enrichment analysis
+    const baseUrl = 'https://biit.cs.ut.ee/gprofiler/gost';
+
+    // URL encode the gene list
+    const encodedGenes = encodeURIComponent(geneList);
+
+    // Construct the full URL with parameters including auto-run
+    const gProfilerUrl = `${baseUrl}?organism=hsapiens&query=${encodedGenes}&sources=GO:MF,GO:BP,GO:CC,KEGG,REAC&user_threshold=0.05&significance_threshold_method=fdr&ordered=false&exclude_iea=false&measure_underrepresentation=false&evcodes=false&domain_scope=annotated&numeric_ns=ENTREZGENE_ACC&background=&run_query=1`;
+
+    return gProfilerUrl;
   }
 
   private mouseOver(event: MouseEvent, d: CellFeature): void {
@@ -708,58 +1064,38 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(200)
       .style('opacity', 0.5)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'black');
-  }
-
-  private getAssociatedGeneSets(cell: CellFeature): string[][] {
-    const genie3GeneSets = Object.keys(
-      cell.properties.aucell_genie3 || {},
-    ).filter((key) => cell.properties.aucell_genie3[key] > 0.6);
-    const spongeGeneSets = Object.keys(cell.properties.aucell_sponge || {});
-    console.log('Associated Genie3 gene sets:', genie3GeneSets);
-    console.log('Associated Sponge gene sets:', spongeGeneSets);
-
-    return [genie3GeneSets, spongeGeneSets];
+      .attr('stroke', 'black');
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
     if (
       this.selectedCell &&
-      d.properties.barcode === this.selectedCell.properties.barcode
+      (d.properties.barcode === this.selectedCell.properties.barcode ||
+        (this.colorByProperty === 'leiden' &&
+          d.properties.leiden === this.selectedCell.properties.leiden))
     )
       return;
     d3.selectAll('.Country')
       .transition()
       .duration(200)
       .style('opacity', 0.8)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
 
     d3.select(event.target as SVGElement)
       .transition()
       .duration(200)
-      .style('stroke', 'transparent');
+      .attr('stroke', 'transparent');
   }
 
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
+    this.resetClusterExtension();
     this.selectedCell = cell;
-    // First get the associated gene sets
-    [
-      this.selectedCellAssociatedGeneSetsGenie3,
-      this.selectedCellAssociatedGeneSetsSponge,
-    ] = this.getAssociatedGeneSets(cell);
-
-    // Then set the selected gene set if we have any
-    if (this.selectedCellAssociatedGeneSetsGenie3.length > 0) {
-      this.selectedGeneSetGenie3 = this.selectedCellAssociatedGeneSetsGenie3[0]; // Select the first one
-    } else {
-      this.selectedGeneSetGenie3 = null; // Clear if no gene sets found
-    }
 
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
@@ -767,12 +1103,12 @@ export class HexagonPlotComponent implements OnInit {
     } else {
       d3.select(event.target as SVGElement)
         .transition()
-        .style('stroke', 'black');
+        .attr('stroke', 'black');
     }
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
 
-    setTimeout(() => this.updateAucellGraph(), 0);
+    setTimeout(() => this.updateAucellGraphGenie3(), 0);
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -788,23 +1124,72 @@ export class HexagonPlotComponent implements OnInit {
     if (this.clusterCells.length > 0) {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
-      setTimeout(() => this.updateAucellGraph(), 100);
+      setTimeout(() => this.updateAucellGraphGenie3(), 100);
     }
   }
 
   public onGeneSetChange(): void {
-    console.log('Gene set changed to:', this.selectedGeneSetGenie3);
+    // Check if Genie3 gene set has actually changed
+    if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
+      this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
 
-    // Clear previous graph and regenerate
-    if (this.selectedGeneSetGenie3) {
-      setTimeout(() => this.updateAucellGraph(), 0);
+      if (this.selectedGeneSetGenie3) {
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = true;
+        setTimeout(() => {
+          this.updateAucellGraphGenie3();
+          if (
+            this.selectedRegulatoryScore?.endsWith('genie3') &&
+            this.selectedGeneSetGenie3
+          ) {
+            this.fetchAndUpdate(
+              this.selectedRegulatoryScore,
+              this.selectedGeneSetGenie3,
+            );
+          }
+        }, 100);
+      } else {
+        // Clear Genie3 graph if no gene set is selected
+        d3.select('#aucell_graph_genie3').selectAll('*').remove();
+        this.isLoadingGenie3 = false;
+      }
+    }
+
+    if (this.selectedGeneSetSponge !== this.previousGeneSetSponge) {
+      this.previousGeneSetSponge = this.selectedGeneSetSponge;
+
+      if (this.selectedGeneSetSponge) {
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
+        console.log(
+          'Sponge targets available:',
+          this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0,
+        );
+        this.isLoadingSponge = true;
+        setTimeout(() => {
+          this.updateAucellGraphSponge();
+          if (
+            this.selectedRegulatoryScore?.endsWith('sponge') &&
+            this.selectedGeneSetSponge
+          ) {
+            this.fetchAndUpdate(
+              this.selectedRegulatoryScore,
+              this.selectedGeneSetSponge,
+            );
+          }
+        }, 100);
+      } else {
+        // Clear Sponge graph if no gene set is selected
+        d3.select('#aucell_graph_sponge').selectAll('*').remove();
+        this.isLoadingSponge = false;
+      }
     }
   }
 
   public selectCellFromCluster(cell: CellFeature): void {
     this.selectedCell = cell;
     setTimeout(() => this.renderNhoodHeatmap(), 0);
-    setTimeout(() => this.updateAucellGraph(), 0);
+    setTimeout(() => this.updateAucellGraphGenie3(), 0);
   }
 
   public closeClusterSidenav(): void {
@@ -853,10 +1238,13 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => {
-        if (d.properties.leiden === selectedCluster) {
-          // Scale the hexagon coordinates outward
-          return this.getScaledPath(d, 1.1); // 10% larger
-        }
+        // Extending the hexagon size by 1.1 is barely noticeable,
+        // plus it's infinitely annoying resetting size when switching
+        // away from leiden clustering.
+        //if (d.properties.leiden === selectedCluster) {
+        //  // Scale the hexagon coordinates outward
+        //  return this.getScaledPath(d, 1.1); // 10% larger
+        //}
         // Return original path for non-selected hexagons
         const projection = d3.geoIdentity().fitSize([1200, 1000], {
           type: 'FeatureCollection',
@@ -865,10 +1253,10 @@ export class HexagonPlotComponent implements OnInit {
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
         return pathGenerator(d) || '';
       })
-      .style('stroke-width', (d: CellFeature) => {
+      .attr('stroke-width', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '3px' : '1px';
       })
-      .style('stroke', (d: CellFeature) => {
+      .attr('stroke', (d: CellFeature) => {
         return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
       })
       // Remove mouseleave event to prevent resetting outline
@@ -926,8 +1314,8 @@ export class HexagonPlotComponent implements OnInit {
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-      .style('stroke-width', '1px')
-      .style('stroke', 'transparent')
+      .attr('stroke-width', '1px')
+      .attr('stroke', 'transparent')
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
@@ -1079,155 +1467,178 @@ export class HexagonPlotComponent implements OnInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  //private renderLegend(): void {
-  //  // Remove any existing legend
-  //  this.svg.selectAll('.svg-legend').remove();
-  //
-  //  if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-  //    // Continuous legend for centrality properties
-  //    const legendX = 20;
-  //    const legendY = 20;
-  //    const width = 250;
-  //    const height = 30;
-  //
-  //    const values = this.features.map(
-  //      (f) => f.properties.leiden_centrality[this.colorByProperty],
-  //    );
-  //    const min = Math.min(...values);
-  //    const max = Math.max(...values);
-  //
-  //    // Create gradient for continuous legend
-  //    const defs = this.svg.select('defs').empty()
-  //      ? this.svg.append('defs')
-  //      : this.svg.select('defs');
-  //
-  //    // Remove existing gradient
-  //    defs.select('#svg-legend-gradient').remove();
-  //
-  //    const gradient = defs
-  //      .append('linearGradient')
-  //      .attr('id', 'svg-legend-gradient')
-  //      .attr('x1', '0%')
-  //      .attr('x2', '100%')
-  //      .attr('y1', '0%')
-  //      .attr('y2', '0%');
-  //
-  //    // Create gradient stops based on the color scale
-  //    const numStops = 10;
-  //    for (let i = 0; i <= numStops; i++) {
-  //      const t = i / numStops;
-  //      const value = min + t * (max - min);
-  //      gradient
-  //        .append('stop')
-  //        .attr('offset', `${t * 100}%`)
-  //        .attr('stop-color', this.continuousColorScale(value));
-  //    }
-  //
-  //    const legendG = this.svg
-  //      .append('g')
-  //      .attr('class', 'svg-legend')
-  //      .attr('transform', `translate(${legendX},${legendY})`);
-  //
-  //    // Add background for better visibility
-  //    legendG
-  //      .append('rect')
-  //      .attr('x', -10)
-  //      .attr('y', -25)
-  //      .attr('width', width + 30)
-  //      .attr('height', height + 60)
-  //      .style('fill', 'rgba(255, 255, 255, 0.9)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 5);
-  //
-  //    // Add the gradient rectangle
-  //    legendG
-  //      .append('rect')
-  //      .attr('width', width)
-  //      .attr('height', height)
-  //      .style('fill', 'url(#svg-legend-gradient)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 3);
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', 0)
-  //      .attr('y', height + 16)
-  //      .attr('text-anchor', 'start')
-  //      .style('font-size', '20px')
-  //      .style('fill', '#333')
-  //      .text(min !== undefined ? min.toFixed(2) : '');
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', width)
-  //      .attr('y', height + 16)
-  //      .attr('text-anchor', 'end')
-  //      .style('font-size', '20px')
-  //      .style('fill', '#333')
-  //      .text(max !== undefined ? max.toFixed(2) : '');
-  //
-  //    legendG
-  //      .append('text')
-  //      .attr('x', width / 2)
-  //      .attr('y', -10)
-  //      .attr('text-anchor', 'middle')
-  //      .style('font-size', '20px')
-  //      .style('font-weight', 'bold')
-  //      .style('fill', '#333')
-  //      .text(this.colorByProperty.replace(/_/g, ' '));
-  //  } else {
-  //    const cellTypes = this.colorScale.domain().sort();
-  //    const legendX = 20;
-  //    const legendY = 6;
-  //    const itemHeight = 30;
-  //    const itemWidth = 200;
-  //
-  //    const legendG = this.svg
-  //      .append('g')
-  //      .attr('class', 'svg-legend')
-  //      .attr('transform', `translate(${legendX},${legendY})`);
-  //
-  //    // Add background for categorical legend
-  //    const backgroundHeight = cellTypes.length * itemHeight + 20;
-  //    legendG
-  //      .append('rect')
-  //      .attr('x', -10)
-  //      .attr('y', -10)
-  //      .attr('width', itemWidth + 20)
-  //      .attr('height', backgroundHeight)
-  //      .style('fill', 'rgba(255, 255, 255, 0.9)')
-  //      .style('stroke', '#ccc')
-  //      .style('stroke-width', 1)
-  //      .attr('rx', 5);
-  //
-  //    cellTypes.forEach((cellType, i) => {
-  //      const legendItem = legendG
-  //        .append('g')
-  //        .attr('transform', `translate(0, ${i * itemHeight})`);
-  //
-  //      // Color rectangle
-  //      legendItem
-  //        .append('rect')
-  //        .attr('width', 30)
-  //        .attr('height', 20)
-  //        .style('fill', this.colorScale(cellType))
-  //        .style('stroke', '#333')
-  //        .style('stroke-width', 0.5)
-  //        .attr('rx', 2);
-  //
-  //      // Label
-  //      legendItem
-  //        .append('text')
-  //        .attr('x', 40)
-  //        .attr('y', 12)
-  //        .style('font-size', '16px')
-  //        .style('fill', '#333')
-  //        .text(cellType);
-  //    });
-  //  }
-  //}
+  async fetchAndUpdate(columnName: string, index: string) {
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          const data = res as { [barcode: string]: any };
+
+          if (this.features) {
+            for (const feature of this.features) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[this.colorByProperty] = data[barcode];
+              }
+            }
+          }
+          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+          this.updateHexColors();
+        },
+        error: (err) =>
+          console.error(
+            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
+            err,
+          ),
+      });
+  }
+
+  public onRegulatoryScoreChange(): void {
+    if (
+      this.selectedRegulatoryScore?.endsWith('genie3') &&
+      this.selectedGeneSetGenie3 &&
+      this.selectedGeneSetSponge
+    ) {
+      this.fetchAndUpdate(
+        this.selectedRegulatoryScore,
+        this.selectedGeneSetGenie3,
+      );
+    } else if (
+      this.selectedRegulatoryScore?.endsWith('sponge') &&
+      this.selectedGeneSetSponge
+    ) {
+      this.fetchAndUpdate(
+        this.selectedRegulatoryScore,
+        this.selectedGeneSetSponge,
+      );
+    }
+  }
+
+
+  keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
+    return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
+  };
+
+  private expandedProps = new Set<string>();
+
+  isArray(v: any): v is any[] {
+    return Array.isArray(v);
+  }
+
+  isNestedArray(v: any): v is any[][] {
+    return Array.isArray(v) && v.length > 0 && v.every(row => Array.isArray(row) || this.looksLikeArrayString(row));
+  }
+
+  isNumberLike(v: unknown): v is number | string {
+    return (typeof v === 'number' && Number.isFinite(v)) ||
+          (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
+  }
+
+  toNumberLike(v: number | string): number {
+    return typeof v === 'number' ? v : Number(v);
+  }
+
+  isNumericArray(arr: any): arr is (number | string)[] {
+    return Array.isArray(arr) && arr.length > 0 && arr.every(x => this.isNumberLike(x));
+  }
+
+  isPrimitive(v: unknown): v is string | number | boolean | null {
+    return v === null || ['string','number','boolean'].includes(typeof v as string);
+  }
+
+  getArrayStats(arr: (number | string)[]) {
+    const nums = arr.map(x => Number(this.toNumberLike(x)));
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    return { min, max, avg };
+  }
+
+  formatValue(v: unknown): string {
+    if (Array.isArray(v)) return v.join(', ');
+    if (v && typeof v === 'object') return JSON.stringify(v, null, 2);
+    return String(v);
+  }
+
+  label(key: string): string {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  toggleExpand(key: string) {
+    if (this.expandedProps.has(key)) this.expandedProps.delete(key);
+    else this.expandedProps.add(key);
+  }
+
+  isExpanded(key: string) {
+    return this.expandedProps.has(key);
+  }
+
+  trackByIndex(index: number) { return index; }
+
+  asArrayRow(row: any): any[] {
+    if (Array.isArray(row)) return row;
+    if (this.looksLikeArrayString(row)) {
+      try {
+        const parsed = JSON.parse(row as string);
+        return Array.isArray(parsed) ? parsed : [row];
+      } catch {
+        return [row];
+      }
+    }
+    return [row];
+  }
+
+  looksLikeArrayString(v: any): v is string {
+    return typeof v === 'string' && /^\s*\[.*\]\s*$/.test(v);
+  }
+
+  toJsonCompact(obj: unknown, max = 120): string {
+    try {
+      const s = JSON.stringify(obj);
+      return s.length > max ? s.slice(0, max) + '…' : s;
+    } catch {
+      return String(obj);
+    }
+  }
+
+  private hiddenPropKeys = new Set<string>([
+    'leiden_co_occurrence',
+    'leiden_nhood_enrichment',
+  ]);
+
+  shouldShowProperty(key: string): boolean {
+    if (key == null) return true;
+    const k = String(key).toLowerCase();
+    return !this.hiddenPropKeys.has(k);
+  }
+
+  // ----- Dict/Object helpers -----
+  isPlainObject(v: any): v is Record<string, any> {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  objectKeyCount(obj: Record<string, any>): number {
+    return Object.keys(obj).length;
+  }
+
+  objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
+    return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
+  }
+
+  prettyKey(k: string): string {
+    return k.replace(/[_-]+/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  dictId(propLabel: string): string {
+    return `DICT::${propLabel}`;
+  }
+
 
   private renderLegend(): void {
     // Remove any existing legend
@@ -1236,10 +1647,12 @@ export class HexagonPlotComponent implements OnInit {
     if (this.currentLegendType === 'continuous') {
       // Continuous legend
       const [min, max] = this.currentLegendDomain as number[];
-      const legendX = 20;
-      const legendY = 20;
+      const legendX = -100;
+      const legendY = 50;
       const width = 250;
       const height = 30;
+      const fontSize = 24;
+      const padding = 15;
 
       // Create gradient for continuous legend
       const defs = this.svg.select('defs').empty()
@@ -1271,102 +1684,220 @@ export class HexagonPlotComponent implements OnInit {
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
+      // Measure title text width for dynamic background
+      const titleText = this.translationService.translateSync(
+        this.colorByProperty,
+      );
+      //const titleText = this.colorByProperty;
+      const tempSvg = this.svg.append('g').style('opacity', 0);
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
+
+      // Measure min value
+      const minText = min.toFixed(2);
+      const minWidth =
+        tempSvg
+          .append('text')
+          .text(minText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
+
+      // Measure max value
+      const maxText = max.toFixed(2);
+      const maxWidth =
+        tempSvg
+          .append('text')
+          .text(maxText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
+
+      tempSvg.remove();
+
+      // Calculate required dimensions
+      const textHeight = fontSize * 1.2; // Approximate text height
+      const requiredWidth = Math.max(
+        width,
+        titleWidth,
+        minWidth + maxWidth + 20,
+      );
+      const bgWidth = requiredWidth + padding * 2;
+      const bgHeight = height + textHeight * 2 + padding * 3;
+
       // Background
       legendG
         .append('rect')
-        .attr('x', -10)
-        .attr('y', -25)
-        .attr('width', width + 30)
-        .attr('height', height + 60)
+        .attr('x', -padding)
+        .attr('y', -padding - textHeight)
+        .attr('width', bgWidth)
+        .attr('height', bgHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
       // Gradient rectangle
       legendG
         .append('rect')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', 0)
         .attr('width', width)
         .attr('height', height)
         .style('fill', 'url(#svg-legend-gradient)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 3);
 
-      // Min / Max labels
+      // Min label
       legendG
         .append('text')
-        .attr('x', 0)
-        .attr('y', height + 16)
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', height + textHeight)
         .attr('text-anchor', 'start')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('fill', '#333')
-        .text(min.toFixed(2));
+        .text(minText);
 
+      // Max label
       legendG
         .append('text')
-        .attr('x', width)
-        .attr('y', height + 16)
+        .attr('x', (bgWidth - width) / 2 - padding + width)
+        .attr('y', height + textHeight)
         .attr('text-anchor', 'end')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('fill', '#333')
-        .text(max.toFixed(2));
+        .text(maxText);
 
+      // Title
       legendG
         .append('text')
-        .attr('x', width / 2)
-        .attr('y', -10)
+        .attr('x', bgWidth / 2 - padding)
+        .attr('y', -5)
         .attr('text-anchor', 'middle')
-        .style('font-size', '20px')
+        .style('font-size', `${fontSize}px`)
         .style('font-weight', 'bold')
         .style('fill', '#333')
-        .text(this.colorByProperty.replace(/_/g, ' '));
+        .text(titleText);
     } else {
       // Categorical legend
       const categories = this.currentLegendDomain as string[];
-      const legendX = 20;
-      const legendY = 6;
-      const itemHeight = 30;
-      const itemWidth = 200;
+      categories.sort();
+      const legendX = -100;
+      const legendY = 10;
+      const itemHeight = 40;
+      const rectHeight = 20;
+      const rectWidth = 30;
+      const fontSize = 24;
+      const titlePadding = 15;
+
+      // Create temporary text elements to measure actual width
+      const tempSvg = this.svg.append('g').style('opacity', 0);
+
+      // Measure title text
+      //const titleText = this.colorByProperty;
+      const titleText = this.translationService.translateSync(
+        this.colorByProperty,
+      );
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
+
+      // Measure category text widths
+      const textNodes = tempSvg
+        .selectAll('text')
+        .data(categories)
+        .enter()
+        .append('text')
+        .text((d) => d)
+        .style('font-size', `${fontSize}px`);
+
+      const maxTextWidth = Math.max(
+        ...textNodes
+          .nodes()
+          .map((node) => (node as SVGGraphicsElement).getBBox().width),
+      );
+      tempSvg.remove();
+
+      const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
 
       const legendG = this.svg
         .append('g')
         .attr('class', 'svg-legend')
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      const backgroundHeight = categories.length * itemHeight + 20;
+      // Calculate title height and total background height
+      const titleHeight = fontSize + titlePadding;
+      const backgroundHeight =
+        categories.length * itemHeight + 20 + titleHeight;
+      const backgroundWidth = itemWidth + 20;
+
+      // Background - positioned to include title space
       legendG
         .append('rect')
         .attr('x', -10)
         .attr('y', -10)
-        .attr('width', itemWidth + 20)
+        .attr('width', backgroundWidth)
         .attr('height', backgroundHeight)
         .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .style('stroke', '#ccc')
-        .style('stroke-width', 1)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
         .attr('rx', 5);
 
+      // Add title
+      legendG
+        .append('text')
+        .attr('x', backgroundWidth / 2 - 10)
+        .attr('y', titlePadding + fontSize / 2)
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(titleText);
+
       categories.forEach((cat, i) => {
+        const yPosition = i * itemHeight + titleHeight;
         const legendItem = legendG
           .append('g')
-          .attr('transform', `translate(0, ${i * itemHeight})`);
+          .attr('transform', `translate(0, ${yPosition})`);
 
+        // Color rectangle - centered vertically within the item height
+        const rectY = (itemHeight - rectHeight) / 2;
         legendItem
           .append('rect')
-          .attr('width', 30)
-          .attr('height', 20)
+          .attr('y', rectY)
+          .attr('width', rectWidth)
+          .attr('height', rectHeight)
           .style('fill', this.colorScale(cat))
-          .style('stroke', '#333')
-          .style('stroke-width', 0.5)
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
           .attr('rx', 2);
 
+        // Text - aligned with the center of the rectangle
+        const textY = rectY + rectHeight / 2;
         legendItem
           .append('text')
-          .attr('x', 40)
-          .attr('y', 12)
-          .style('font-size', '16px')
+          .attr('x', rectWidth + 10)
+          .attr('y', textY)
+          .attr('dy', '0.35em')
+          .style('font-size', `${fontSize}px`)
           .style('fill', '#333')
           .text(cat);
+
+        // Add tooltip for full text
+        legendItem.append('title').text(cat);
       });
     }
   }
@@ -1409,8 +1940,14 @@ interface GeoJsonData {
   meta: { [key: string]: any };
 }
 
-interface regGraphConnection {
+interface genie3RegGraphConnection {
   source: string;
   target: string;
   weight: number;
+}
+
+interface spongeRegGraphConnection {
+  source: string;
+  target: string;
+  p_adjusted: number;
 }

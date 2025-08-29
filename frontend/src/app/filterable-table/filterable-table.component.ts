@@ -3,13 +3,14 @@ import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { SessionService } from '../session.service';
 import { HttpClient } from '@angular/common/http';
+import { TranslatePipe } from '../translate.pipe';
 
 @Component({
   selector: 'app-table',
   templateUrl: './filterable-table.component.html',
   styleUrls: ['./filterable-table.component.scss'],
   standalone: true,
-  imports: [FormsModule, CommonModule],
+  imports: [FormsModule, CommonModule, TranslatePipe],
 })
 export class FilterableTableComponent implements OnInit {
   /**
@@ -34,6 +35,10 @@ export class FilterableTableComponent implements OnInit {
   filters: { [col: string]: string } = {};
   sortColumn: string | null = null;
   sortAsc: boolean = true;
+
+  // Pagination
+  pageSize = 50; // number of rows per page
+  currentPage = 1;
 
   ngOnInit() {
     this.prepareTable();
@@ -67,9 +72,50 @@ export class FilterableTableComponent implements OnInit {
     return col.replace(/_/g, ' ');
   }
 
+  truncateMiddle(text: string, front = 4, back = 7): string {
+    // Render long ensembl IDs as ENSG...78531.1
+    if (!text.startsWith('ENS')) return text;
+    return text.slice(0, front) + '…' + text.slice(text.length - back);
+  }
+
   displayNumeric(value: any): string {
     if (typeof value === 'number') {
-      return value.toFixed(3); // display 3 decimal places, could change
+      if (value === 0) {
+        return '0.0';
+      }
+
+      // Use scientific notation for very small or very large numbers
+      if (Math.abs(value) < 0.001 || Math.abs(value) >= 1e5) {
+        const exp = value.toExponential(2); // e.g., "2.34e-5"
+        const [mantissa, exponent] = exp.split('e');
+        const expNum = parseInt(exponent, 10);
+
+        // Map digits and minus sign to Unicode superscripts
+        const superscripts: Record<string, string> = {
+          '-': '⁻',
+          '0': '⁰',
+          '1': '¹',
+          '2': '²',
+          '3': '³',
+          '4': '⁴',
+          '5': '⁵',
+          '6': '⁶',
+          '7': '⁷',
+          '8': '⁸',
+          '9': '⁹',
+        };
+
+        const expStr = expNum
+          .toString()
+          .split('')
+          .map((ch) => superscripts[ch] ?? ch)
+          .join('');
+
+        return `${mantissa} × 10${expStr}`;
+      }
+
+      // Otherwise, fixed 3 decimals
+      return value.toFixed(3);
     }
     return value;
   }
@@ -107,6 +153,22 @@ export class FilterableTableComponent implements OnInit {
     return result;
   }
 
+  // Return only rows for current page
+  get pagedRows() {
+    const start = (this.currentPage - 1) * this.pageSize;
+    return this.filteredRows.slice(start, start + this.pageSize);
+  }
+
+  get totalPages() {
+    return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
+  }
+
+  setPage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
   toggleSort(col: string) {
     if (this.sortColumn === col) {
       this.sortAsc = !this.sortAsc;
@@ -122,13 +184,12 @@ export class FilterableTableComponent implements OnInit {
   }
 
   async fetchAndUpdate(columnName: string, index: string) {
+    let isGeneExpression = columnName === 'gene_expression';
+    let request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${index}`
+      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
     this.sessionService
-      .callWithSession(() =>
-        this.http.get(
-          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`,
-          { withCredentials: true },
-        ),
-      )
+      .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
         next: (res) => {
           const data = res as { [barcode: string]: any };
@@ -141,14 +202,24 @@ export class FilterableTableComponent implements OnInit {
               }
             }
           }
-          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+          if (isGeneExpression) {
+            console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else {
+            console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+          }
+
           this.featuresUpdated.emit();
         },
-        error: (err) =>
-          console.error(
-            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
-            err,
-          ),
+        error: (err) => {
+          if (isGeneExpression) {
+            console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else {
+            console.error(
+              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+              err,
+            );
+          }
+        },
       });
   }
 }

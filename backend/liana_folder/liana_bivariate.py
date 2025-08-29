@@ -6,6 +6,8 @@ import pandas as pd
 import scanpy as sc
 from mudata import MuData
 
+CAT_REMAP = {-1: "high-low / low-high", 0: "low-low", 1: "high-high"}
+
 
 def ligand_receptor_relationships(
     adata: sc.AnnData, return_scores: bool = False
@@ -44,6 +46,7 @@ def ligand_receptor_relationships(
         columns=lr_relationships,
         index=adata.obs.index,
     )
+    cat_df = cat_df.replace(CAT_REMAP)
 
     global_score_columns = ["mean", "std", "morans"]
     global_scores = lrdata.var[global_score_columns]
@@ -180,6 +183,7 @@ def cell_comp_tf_activity_similarity(
         columns=comp_tf_interactions,
         index=adata.obs.index,
     )
+    cat_df = cat_df.replace(CAT_REMAP)
 
     global_score_columns = ["mean", "std"]
     global_scores = bdata.var[global_score_columns]
