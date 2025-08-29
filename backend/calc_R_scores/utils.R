@@ -1,12 +1,10 @@
 calc_aucell_score <- function(expr, modules, n_cores=1) {
   
-  modules <- modules[sapply(modules, length) > 1]
-  
   # Create AUCell object
-  rankings <- AUCell_buildRankings(expr)
+  rankings <- AUCell_buildRankings(expr, plotStats=FALSE, verbose=FALSE)
   
   # Calculate AUCell scores for the SPONGE network
-  aucell_scores <- AUCell_calcAUC(modules, rankings, aucMaxRank = nrow(expr), nCores = n_cores)
+  aucell_scores <- AUCell_calcAUC(modules, rankings, aucMaxRank = nrow(expr), nCores = n_cores, verbose=FALSE)
   aucell_scores <- getAUC(aucell_scores)
   aucell_scores <- as.data.frame(aucell_scores)
   
@@ -70,19 +68,18 @@ create_Sponge_modules <- function(var, ceRNA_interactions, ceRNA_centralities, m
 # for AUCell and SPONGeffects
 create_Genie_modules <- function(regulon_df, expr, top=100000, dir, k, n_regulons) {
   # filter Top n percent of edges
-  print(nrow(regulon_df))
   
   regulon_df %>%
     arrange(weight) %>%
     head(top)
   
-  print(nrow(regulon_df))
-  
   # calculate regulons
   setnames(regulon_df, c("regulatoryGene", "targetGene", "weight"), c("tf", "target", "mi"))
   
-  file <- file.path(dir, "Rscores", "genie3_aracne_format.txt")
+  file <- file.path(dir, "genie3_aracne_format.txt")
   fwrite(regulon_df, file, sep = "\t", col.names = FALSE)
+  
+  setnames(regulon_df, c("tf", "target", "mi"), c("regulatoryGene", "targetGene", "weight"))
   
   expr_filt <- expr[apply(expr, 1, sd) > 0, ]
   regulons <- aracne2regulon(afile = file, eset = expr_filt, format = "3col", verbose = FALSE)

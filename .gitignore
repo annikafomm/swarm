@@ -79,3 +79,10 @@ typings
 # System files
 .DS_Store
 Thumbs.db
+
+
+# apptainer files
+my-container.sif
+my-custom-image.tar
+apptainer_prompt.txt
+overlay.img

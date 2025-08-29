@@ -37,6 +37,9 @@ dependencies:
   - python-multipart
   - uvicorn
   - fastapi
+  - decoupler-py
+  - mudata
+  - bioconda::liana
   - simplejson
   - pip:
       - spatialde

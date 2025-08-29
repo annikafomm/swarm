@@ -5,15 +5,27 @@ from scipy.stats import median_abs_deviation
 
 # filtering functions 
 
-def st_small_filtering(adata):
+def small_filtering(adata, data_type):
+    if data_type == "st":
+        adata = adata[adata.obs["in_tissue"] == True, :]
+        mt_threshold = 20
+        counts_threshold = 10 # AI: For spatial transcriptomics (like Xenium) typical values are 10–100.
+    elif data_type == "sc":
+        mt_threshold = 15
+        counts_threshold = 200 # AI: For single cell data typical values are 500–1000.
+        # Wu et al. threshold?
+    else:
+        raise ValueError("Small filtering: You can either chose 'st' or 'sc' as type of data.")
+
     # mitochondrial genes
     adata.var["mt"] = adata.var_names.str.startswith("MT-")
-    adata.obs["mt_outlier"] = adata.obs["pct_counts_mt"] > 20 
+    sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], inplace=True, percent_top=[20], log1p=True)
+    adata.obs["mt_outlier"] = adata.obs["pct_counts_mt"] > mt_threshold
     adata = adata[~adata.obs.mt_outlier].copy()
 
-    sc.pp.filter_cells(adata, min_counts=10) # GitHub CoPilot: For spatial transcriptomics (like Xenium) typical values are 10–100.
-    
+    sc.pp.filter_cells(adata, min_counts=counts_threshold) 
 
+    
 def normalize(adata):
     sc.pp.normalize_total(adata, target_sum=1e4, inplace=True) # Normalize counts per cell
     sc.pp.log1p(adata) # Logarithmize

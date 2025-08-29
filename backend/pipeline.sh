@@ -11,8 +11,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UPLOAD_DIR="results"
 INPUT="$SCRIPT_DIR/datasets_prepro/GSM6592049_M2_prepro.h5ad"
 
-SPONGE_NETWORK="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv"
-SPONGE_ANALYSIS="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv"
+SPONGE_NET_PATH="$SCRIPT_DIR/networks/SPONGE/breast_invasive_carcinoma"
+GENIE_NET_PATH="$SCRIPT_DIR/networks/GENIE3/BRCA"
 
 # Extract base name of input file
 BASE_NAME=$(basename "$INPUT" .h5ad)
@@ -34,25 +34,33 @@ python "$SCRIPT_DIR/calc_python_scores/calc_scores.py" \
     -input "$INPUT" \
     -outdir "$OUT_DIR" \
     -log "$LOGFILE" \
-    -moranI
+    -moranI \
+    -gearyC \
+    -centrality_scores \
+    -co_occurrence \
+    -nhood_enrichment
 
 # Run R score calculation
 Rscript "$SCRIPT_DIR/calc_R_scores/calc_scores.R" \
     --dir "$OUT_DIR" \
     --log "$LOGFILE" \
-    --sponge_network "$SPONGE_NETWORK" \
-    --sponge_analysis "$SPONGE_ANALYSIS" \
+    --sponge_network "$SPONGE_NET_PATH/breast_invasive_carcinoma_interactionNetwork.csv" \
+    --sponge_analysis "$SPONGE_NET_PATH/breast_invasive_carcinoma_networkAnalysis.csv" \
+    --genie_network "$GENIE_NET_PATH/genie3_BRCA_tpm.top_100k.csv" \
     --ensembl_col ensemble_id \
-    --aucell
+    --aucell \
+    --gsva \
+    --ssgsea \
+    --viper
 
 # Add R scores to AnnData
-python "$SCRIPT_DIR/calc_scores/add_to_adata.py" \
+python "$SCRIPT_DIR/calc_python_scores/add_to_adata.py" \
     -indir "$OUT_DIR" \
     -log "$LOGFILE"
 
 # Optional cleanup
-# rm -rf "$OUT_DIR/expr_info"
-# rm -rf "$OUT_DIR/Rscores"
+rm -rf "$OUT_DIR/expr_info"
+rm -rf "$OUT_DIR/Rscores"
 
 echo "Finished! Check out the log file and the AnnData object in $OUT_DIR for details." | tee -a "$LOGFILE"
 

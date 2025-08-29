@@ -1,3 +1,5 @@
+# like Diana's map_cells.py file, but slight structure changes
+
 #!/usr/bin/env python3
 # coding: utf-8
 
@@ -11,19 +13,14 @@ import gene_selection
 import torch
 
 
-def load_data(sc_path: str, sp_path: str):
-    """Load single-cell and spatial AnnData objects."""
-    ad_sp = sc.read_h5ad(sp_path)
-    ad_sc = sc.read_h5ad(sc_path)
-    return ad_sc, ad_sp
-
-
 def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
     """
     Select genes according to the requested strategy. Falls back to overlapping genes
     when no selection is provided.
     """
-    selection_mode = selection_mode.lower()
+    if not selection_mode is None:
+        selection_mode = selection_mode.lower()
+
     if selection_mode == "ctg":
         genes = gene_selection.ctg(ad_sc, cell_label)
         print("[gene_selection] ctg")
@@ -43,18 +40,16 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         genes = None
         print("none")
 
-    genes = list(genes)
-    print(f"[gene_selection] Selected n={len(genes)} genes")
+    if not genes is None:
+        genes = list(genes)
+        print(f"[gene_selection] Selected n={len(genes)} genes")
+    else:
+        print(f"[gene_selection] Selected n=0 genes")
     return genes
 
 
-def ensure_outdir(path: str):
-    os.makedirs(path, exist_ok=True)
-
-
-def run_pipeline(sc_path: str, sp_path: str, output_dir: str, gene_selection_mode: str, cell_label: str, device_choice: str):
-    # Load
-    ad_sc, ad_sp = load_data(sc_path, sp_path)
+def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', device_choice: str = 'cpu'):
+    adata = ad_sp.copy()
 
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
@@ -78,34 +73,10 @@ def run_pipeline(sc_path: str, sp_path: str, output_dir: str, gene_selection_mod
 
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
+    
+    ad_ge.obsm['spatial'] = adata.obsm['spatial']
 
-    # Write outputs
-    ensure_outdir(output_dir)
-    ad_map.write(os.path.join(output_dir, f"ad_map_{cell_label}.h5ad"))
-    ad_ge.write(os.path.join(output_dir, f"ad_ge_{cell_label}.h5ad"))
-    print(f"[done] Wrote ad_map and ad_ge to '{output_dir}' using label '{cell_label}'.")
+    print(f"[done] using label '{cell_label}'.")
 
+    return(ad_ge)
 
-def build_argparser():
-    p = argparse.ArgumentParser(description="Merged Tangram cell mapping pipeline (manual CPU/GPU selection).")
-    p.add_argument('--sc_path', type=str, required=True, help="Path to the single-cell .h5ad file.")
-    p.add_argument('--sp_path', type=str, required=True, help="Path to the spatial .h5ad file.")
-    p.add_argument('--output_dir', type=str, required=True, help="Directory for outputs.")
-    p.add_argument('--gene_selection', type=str,
-                   choices=['ctg', 'hvg', 'spapros', 'svg'],
-                   default=None,
-                   help="Gene selection strategy. Default: use all overlapping genes.")
-    p.add_argument('--cell_label', type=str, default='cell_type',
-                   help="Column in ad_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
-    p.add_argument('--device', type=str, choices=['cpu', 'gpu'], required=True,
-                   help="Select whether to run on CPU or GPU.")
-    return p
-
-
-def main():
-    args = build_argparser().parse_args()
-    run_pipeline(args.sc_path, args.sp_path, args.output_dir, args.gene_selection, args.cell_label, args.device)
-
-
-if __name__ == "__main__":
-    main()
