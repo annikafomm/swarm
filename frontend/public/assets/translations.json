@@ -39,7 +39,7 @@
   "ligand_receptor_NMF_factors": "NMF Factors",
   "cell_comp_tf_activity_global_scores": "TF Activity Global Scores",
   "cell_comp_tf_activity_cosine_similarity": "Cosine Similarity",
-  "cell_comp_tf_activity_category": "P-Value",
+  "cell_comp_tf_activity_category": "Category",
   "tf_activity_score_ulm": "ULM Score",
   "tf_activity_padj_ulm": "Adjusted P-Value (BH)",
   "pathway_activity_score_mlm": "MLM Score",
