@@ -52,12 +52,12 @@ def compute_spatial_scores(adata, description, args, logfile):
                 cell_prop_key = args.cell_comp_key
 
             if not (args.grn is None or os.path.exists(args.grn)):
-                log_message(f"The GRN file {args.grn} does not exist.")
+                log_message(f"The GRN file {args.grn} does not exist.", logfile)
             elif not (args.pathway_net is None or os.path.exists(args.pathway_net)):
-                log_message(f"The pathway net file {args.pathway_net} does not exist.")
+                log_message(f"The pathway net file {args.pathway_net} does not exist.", logfile)
             else:
                 if cell_prop_key not in adata.obsm.keys():
-                    log_message(f"'{cell_prop_key}' is not a column in adata.obsm. Please provide a valid cell composition key.")
+                    log_message(f"'{cell_prop_key}' is not a column in adata.obsm. Please provide a valid cell composition key.", logfile)
             
                 t0 = time.time()
                 run_liana(adata, args.grn, args.pathway_net, cell_prop_key)
@@ -78,7 +78,7 @@ def compute_spatial_scores(adata, description, args, logfile):
         # Compute centrality scores
         if args.centrality_scores:
             if args.cluster_cs not in adata.obs.keys():
-                log_message(f"'{args.cluster_cs}' is not a column in adata.obs. Please provide a valid cluster column.")
+                log_message(f"'{args.cluster_cs}' is not a column in adata.obs. Please provide a valid cluster column.", logfile)
             else:
                 t0 = time.time()
                 sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
@@ -87,7 +87,7 @@ def compute_spatial_scores(adata, description, args, logfile):
         # Compute co-occurrence probability
         if args.co_occurrence:
             if args.cluster_co not in adata.obs.keys():
-                log_message(f"'{args.cluster_co}' is not a column in adata.obs. Please provide a valid cluster column.")
+                log_message(f"'{args.cluster_co}' is not a column in adata.obs. Please provide a valid cluster column.", logfile)
             else:
                 t0 = time.time()
                 sq.gr.co_occurrence(adata, cluster_key=args.cluster_co, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
@@ -96,9 +96,9 @@ def compute_spatial_scores(adata, description, args, logfile):
         # Compute neighborhood enrichment
         if args.nhood_enrichment:
             if args.cluster_nhood not in adata.obs.keys():
-                log_message(f"'{args.cluster_nhood}' is not a column in adata.obs. Please provide a valid cluster column.")
+                log_message(f"'{args.cluster_nhood}' is not a column in adata.obs. Please provide a valid cluster column.", logfile)
             elif args.library_key != None and args.library_key not in adata.obs.keys():
-                log_message(f"'{args.library_key}' is not a column in adata.obs. Please provide a valid library key.")
+                log_message(f"'{args.library_key}' is not a column in adata.obs. Please provide a valid library key.", logfile)
             else:
                 t0 = time.time()
                 sq.gr.nhood_enrichment(adata, cluster_key=args.cluster_nhood, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
@@ -212,9 +212,9 @@ def main():
 
     # Spatial Transcriptomics
     if not os.path.exists(args.input):
-        log_message(f"The spatial data file {args.input} does not exist.")
+        log_message(f"The spatial data file {args.input} does not exist.", logfile)
     elif not args.input.endswith('.h5ad'):
-        log_message(f"The spatial data file {args.input} has an unsupported file format. Please provide a .h5ad file.")
+        log_message(f"The spatial data file {args.input} has an unsupported file format. Please provide a .h5ad file.", logfile)
     else:
         log_message("Loading ST AnnData object ...", logfile)
 
@@ -245,9 +245,9 @@ def main():
             log_message("Prepping Tangram calculations ...", logfile)
             # Single Cell
             if not os.path.exists(args.sc_path):
-                log_message(f"The single cell data file {args.sc_path} does not exist.")
+                log_message(f"The single cell data file {args.sc_path} does not exist.", logfile)
             elif not args.sc_path.endswith('.h5ad'):
-                log_message(f"The single cell data file {args.sc_path} has an unsupported file format. Please provide a .h5ad file.")
+                log_message(f"The single cell data file {args.sc_path} has an unsupported file format. Please provide a .h5ad file.", logfile)
             else:
                 log_message("Loading SC AnnData object ...", logfile, 2)
 
@@ -256,7 +256,7 @@ def main():
                 log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 4)
 
                 if not args.cell_label in adata_sc.obs.keys():
-                    log_message(f"'{args.cell_label}' is not a column in adata.obs (SingleCell). Please provide a valid cell label key.", 2)
+                    log_message(f"'{args.cell_label}' is not a column in adata.obs (SingleCell). Please provide a valid cell label key.", logfile, 2)
                 else:
                     # Preprocessing
                     if args.filter_sc:

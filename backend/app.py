@@ -4,6 +4,7 @@ import subprocess
 import random
 import shutil
 from datetime import datetime
+import json
 
 def dict2params(param_dict):
     python_params = []
@@ -50,7 +51,7 @@ def dict2params(param_dict):
                         python_params.append("-tangram")
                         network_params.append("--tangram") 
                     else:
-                        if param_dict.get(key).get(tkey) is not None:
+                        if param_dict.get(key).get(tkey) is not None and param_dict.get(key).get(tkey):
                             match tkey:
                                 case "filtering":
                                     python_params.append("-filter_sc")
@@ -86,10 +87,10 @@ def dict2params(param_dict):
                                     match skey:
                                         case "m_score_threshold":
                                             network_params.append("--mscor")
-                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                            network_params.append(str(float(param_dict.get(key).get(nkey).get(skey))))
                                         case "p_adjust":
                                             network_params.append("--padj")
-                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                            network_params.append(str(float(param_dict.get(key).get(nkey).get(skey))))
                                         case "ensembl_id_col": 
                                             network_params.append("--ensembl_col")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
@@ -101,20 +102,20 @@ def dict2params(param_dict):
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
                                         case "max_modules": 
                                             network_params.append("--max_modules")
-                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                            network_params.append(str(int(param_dict.get(key).get(nkey).get(skey))))
                         case "genie3_params":
                             for gkey in param_dict.get(key).get(nkey).keys():
                                 if param_dict.get(key).get(nkey).get(gkey) is not None:
                                     match gkey:
                                         case "top_n_weights": 
                                             network_params.append("--top_n")
-                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+                                            network_params.append(str(int(param_dict.get(key).get(nkey).get(gkey))))
                                         case "n_regulatory_genes":
                                             network_params.append("--k_reg_genes")
-                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+                                            network_params.append(str(int(param_dict.get(key).get(nkey).get(gkey))))
                                         case "n_regulons":
                                             network_params.append("--n_regulons")
-                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+                                            network_params.append(str(int(param_dict.get(key).get(nkey).get(gkey))))
             case "squidpy":
                 for skey in param_dict.get(key).keys():
                     if (not skey.endswith("_params")) and (param_dict.get(key).get(skey)):
@@ -125,7 +126,7 @@ def dict2params(param_dict):
                                 for param in score_dict.keys():
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_autocorr_mI")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(str(int(score_dict.get(param))))
                                     if param == "two_tailed" and score_dict.get(param):
                                         python_params.append("-two_tailed_mI")
                                     if param == "corr_method" and score_dict.get(param) is not None:
@@ -137,7 +138,7 @@ def dict2params(param_dict):
                                 for param in score_dict.keys():
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_autocorr_gC")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(str(int(score_dict.get(param))))
                                     if param == "two_tailed" and score_dict.get(param):
                                         python_params.append("-two_tailed_gC")
                                     if param == "corr_method" and score_dict.get(param) is not None:
@@ -159,10 +160,10 @@ def dict2params(param_dict):
                                         python_params.append(score_dict.get(param))
                                     if param == "interval" and score_dict.get(param) is not None:
                                         python_params.append("-interval")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(str(int(score_dict.get(param))))
                                     if param == "n_splits" and score_dict.get(param) is not None:
                                         python_params.append("-n_splits")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(str(int(score_dict.get(param))))
                             case "neighborhood_enrichment":
                                 python_params.append("-nhood_enrichment")
                                 score_dict = param_dict.get(key).get(f"{skey}_params")
@@ -170,22 +171,22 @@ def dict2params(param_dict):
                                     if param == "cluster_key" and score_dict.get(param) is not None:
                                         python_params.append("-cluster_nhood")
                                         python_params.append(score_dict.get(param))
-                                    if param == "library_key" and score_dict.get(param) is not None:
+                                    if param == "library_key" and score_dict.get(param) is not None and score_dict.get(param) != "":
                                         python_params.append("-library_key")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(None if score_dict.get(param)=="" else score_dict.get(param))
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_nhood")
-                                        python_params.append(score_dict.get(param))
+                                        python_params.append(str(int(score_dict.get(param))))
             case "liana": 
                 for lkey in param_dict.get(key).keys():
                     if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
                         python_params.append("-cell_comp_key")
-                        python_params.append(param_dict.get(key))                
+                        python_params.append(param_dict.get(key).get(lkey))                
 
     return (python_params, network_params)
 
 #          job_dir, payload
-def upload(job_dir, json_dict):
+async def calculate_scores_helper(job_dir, json_dict):
     try:
         # create directory for files created during computations
         base_dir_choices = ["plasmidpoop", "junkDNA420", "kackhaufen1", "dumpase1"]
@@ -195,15 +196,13 @@ def upload(job_dir, json_dict):
         os.makedirs(out_dir, exist_ok=True)
 
         # create log file
-        job_id = json_dict.get('jobId')
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        log_file = os.path.join(out_dir, f"{job_id}_{timestamp}.log")
+        log_file = os.path.join(out_dir, "calc_scores.log")
         print(log_file)
         
         # get parameters from json_dict
-        #python_params, R_params = dict2params(json_dict)
+        python_params, R_params = dict2params(json_dict)
 
-        
+        """
         python_params = ["-input", "./datasets_prepro_new/GSM6592049_M2_prepro.h5ad", 
                          "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad",
                          "-liana", "-cell_comp_key", "celltype_scores",
@@ -216,24 +215,24 @@ def upload(job_dir, json_dict):
                     "--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
                     "--genie_network", "./networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
                     "--aucell", "--gsva", "--ssgsea", "--viper"]
-        
+        """
 
         print(python_params)
         print(R_params)
-        
+
         # Run scripts sequentially
-        subprocess.run(["python3", "calc_python_scores/calc_scores.py",
+        subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
                         "-outdir", out_dir,
                         "-log", log_file] + python_params,
                         check=True)
         
         if R_params:
-            subprocess.run(["Rscript", "calc_R_scores/calc_scores.R",
+            subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
                             "--log", log_file] + R_params,
                             check=True)
 
-            subprocess.run(["python3", "calc_python_scores/add_to_adata.py",
+            subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
                             "-indir", out_dir,
                             "-log", log_file],
                             check=True)
@@ -251,7 +250,7 @@ def upload(job_dir, json_dict):
             f.write(message + "\n")
         print(message)
 
-        return {"status": "success", "jobId": job_id}
+        return out_dir
 
     except subprocess.CalledProcessError as e:
         # error from one of the subprocesses
@@ -259,13 +258,24 @@ def upload(job_dir, json_dict):
         with open(log_file, "a") as f:
             f.write(err_msg + "\n")
         print(err_msg)
-        return {"status": "error", "message": err_msg}
+        return None
 
     except Exception as e:
         # all other errors
         err_msg = f"Unexpected error: {str(e)}"
         print(err_msg)
-        return {"status": "error", "message": err_msg}
+        return None
 
 if __name__ == "__main__":
-    upload("./uploads", {'jobId':'job_0001'})
+    #upload("./uploads", {'jobId':'job_0001'})
+    """
+    json_path = "frontend/uploads/job_1756565308052_b1e618e1-7ef9-4055-9588-ea1be53d1020/job_1756565308052_config.json"
+    
+    # open the file and load JSON
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    p, r = dict2params(data)
+    print(p)
+    print(r)
+    """
