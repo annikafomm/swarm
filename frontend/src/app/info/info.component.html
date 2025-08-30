@@ -1,9 +1,185 @@
 <div class="info-page">
-  <h2>Informationen</h2>
-  <p>
-    Hier erklärst du, was die Visualisierung macht, Steuerung, Datenquellen etc.
-  </p>
+  <header>
+    <img src="assets/info/logo.png" alt="MOPITAS Logo" />
+    <div>
+      <h1>MOPITAS MaPra</h1>
+    </div>
+  </header>
 
-  <button (click)="goBack()" class="back-btn">← Zurück</button>
+  <h2>Overview</h2>
+  <img src="assets/info/overview.png" alt="Overview" class="overview-img" />
 
+  <section class="card">
+    <h2>Format Requirements</h2>
+    <p>
+      The web-tool is working with the <code>anndata</code>-format. This is a tutorial on how counts and scores should
+      be saved.
+    </p>
+
+    <h3>Counts</h3>
+    <ul>
+      <li><strong>Counts</strong>
+        <ul>
+          <li>Stored in <code>anndata.X</code></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>Observations (per Spot)</h3>
+    <ul>
+      <li>Stored in <code>anndata.obs</code> (all observation columns will be shown, so make sure to clean your anndata
+        before upload).</li>
+    </ul>
+
+    <h3>Clustering</h3>
+    <ul>
+      <li>Save the Leiden clustering for Leiden-based scores in <code>anndata.obs["leiden"]</code></li>
+    </ul>
+
+    <h3>Gene-wise scores</h3>
+    <ul>
+      <li><strong>Moran's I</strong>: stored in <code>anndata.uns["moranI"]</code> as DataFrame with columns:
+        <ul>
+          <li><code>I</code></li>
+          <li><code>pval_norm</code></li>
+          <li><code>var_norm</code></li>
+          <li><code>pval_norm_fdr_bh</code></li>
+        </ul>
+      </li>
+      <li><strong>Geary's C</strong>: stored in <code>anndata.uns["gearyC"]</code> as DataFrame
+        <ul>
+          <li><code>C</code></li>
+          <li><code>pval_norm</code></li>
+          <li><code>var_norm</code></li>
+          <li><code>pval_norm_fdr_bh</code></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>Leiden cluster scores</h3>
+    <ul>
+      <li><strong>Leiden centrality</strong>: stored in <code>anndata.uns["leiden_centrality_scores"]</code> as
+        DataFrame with columns:
+        <ul>
+          <li><code>degree_centrality</code></li>
+          <li><code>average_clustering</code></li>
+          <li><code>closeness_centrality</code></li>
+        </ul>
+      </li>
+      <li><strong>Leiden co-occurrence</strong>: stored in <code>anndata.uns["leiden_co_occurrence"]</code> as
+        dictionary with entries:
+        <ul>
+          <li><code>intervals</code>: interval boundaries, array of shape <code>(n_intervals - 1,)</code></li>
+          <li><code>occ</code>: 3D array of shape <code>(n_clusters, n_clusters, n_intervals)</code> (Make sure to
+            select the right <em>num_intervals</em> in Upload form)</li>
+        </ul>
+      </li>
+      <li><strong>Leiden neighborhood enrichment</strong>: stored in <code>anndata.uns["leiden_nhood_enrichment"]</code>
+        as dictionary with entries:
+        <ul>
+          <li><code>counts</code>: array of shape <code>(n_clust, n_clust)</code></li>
+          <li><code>zscore</code>: array of shape <code>(n_clust, nclust)</code></li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>Regulon scores</h3>
+    <ul>
+      <li><strong>Gene sets</strong>: stored in <code>anndata.uns["genie_genesets"]</code> and
+        <code>anndata.uns["sponge_genesets"]</code> as dictionaries with format:
+        <ul>
+          <li><code>regulator</code>: <code>[gene1, gene2, ..., geneN]</code></li>
+        </ul>
+      </li>
+      <li><strong>AUCell</strong>: stored in <code>anndata.obsm["aucell_scores_sponge|genie3"]</code> as DataFrames with
+        regulators as columns.</li>
+      <li><strong>GSVA</strong>: stored in <code>anndata.obsm["spongeffects_GSVA_scores_sponge|genie3"]</code> as
+        DataFrames with regulators as columns.</li>
+      <li><strong>ssGSEA</strong>: stored in <code>anndata.obsm["spongeffects_ssGSEA_scores_sponge|genie3"]</code> as
+        DataFrames with regulators as columns.</li>
+      <li><strong>Viper</strong>: stored in <code>anndata.obsm["viper_scores_genie3"]</code> as DataFrame with
+        regulators as columns.</li>
+    </ul>
+
+    <h3>Tangram</h3>
+    <ul>
+      <li><strong>Cell type compositions</strong>: stored in <code>anndata.obsm["tangram_ct_pred"]</code> as DataFrame
+        with cell types as columns.</li>
+    </ul>
+
+    <h3>LIANA+ scores</h3>
+    <ul>
+      <li><strong>Ligand receptor relationships</strong>:
+        <ul>
+          <li><strong>Cosine similarity</strong>: stored in
+            <code>anndata.obsm["ligand_receptor_cosine_similarity"]</code> as array of shape
+            <code>(n_spots, n_interactions)</code></li>
+          <li><strong>P-value</strong>: stored in <code>anndata.obsm["ligand_receptor_p_value"]</code> as array of shape
+            <code>(n_spots, n_interactions)</code></li>
+          <li><strong>Category</strong>: stored in <code>anndata.obsm["ligand_receptor_category"]</code> as array of
+            shape <code>(n_spots, n_interactions)</code></li>
+          <li><strong>NMF factors</strong>: stored in <code>anndata.obsm["ligand_receptor_NMF_factors"]</code> as
+            DataFrame with factors as columns.</li>
+          <li><strong>Global scores</strong>: stored in <code>anndata.uns["ligand_receptor_global_scores"]</code> as
+            DataFrame with columns:
+            <ul>
+              <li><code>cosine_similarity_mean</code></li>
+              <li><code>cosine_similarity_std</code></li>
+              <li><code>ligand_receptor_morans</code>: Moran's R score</li>
+            </ul>
+          </li>
+          <li><strong>Interaction names</strong>: stored in <code>anndata.uns["liana_columns"]["ligand_receptor"]</code>
+            as array of shape <code>(n_interactions,)</code></li>
+        </ul>
+      </li>
+      <li><strong>Cell type composition - TF activity similarity</strong>:
+        <ul>
+          <li><strong>Cosine similarity</strong>: stored in
+            <code>anndata.obsm["cell_comp_tf_activity_cosine_similarity"]</code> as array of shape
+            <code>(n_spots, n_interactions)</code></li>
+          <li><strong>Category</strong>: stored in <code>anndata.obsm["cell_comp_tf_activity_category"]</code> as array
+            of shape <code>(n_spots, n_interactions)</code></li>
+          <li><strong>Global scores</strong>: stored in <code>anndata.uns["cell_comp_tf_activity_global_scores"]</code>
+            as DataFrame with columns:
+            <ul>
+              <li><code>cosine_similarity_mean</code></li>
+              <li><code>cosine_similarity_std</code></li>
+            </ul>
+          </li>
+          <li><strong>Interaction names</strong>: stored in
+            <code>anndata.uns["liana_columns"]["cell_comp_tf_activity"]</code> as array of shape
+            <code>(n_interactions,)</code></li>
+        </ul>
+      </li>
+      <li><strong>TF activity</strong>:
+        <ul>
+          <li><strong>ULM score</strong>: stored in <code>adata.obsm["tf_activity_score_ulm"]</code> as DataFrame with
+            TFs as columns.</li>
+          <li><strong>ULM p-adjusted value</strong>: stored in <code>adata.obsm["tf_activity_padj_ulm"]</code> as
+            DataFrame with TFs as columns.</li>
+        </ul>
+      </li>
+      <li><strong>Pathway activity</strong>:
+        <ul>
+          <li><strong>MLM score</strong>: stored in <code>adata.obsm["pathway_activity_score_mlm"]</code> as DataFrame
+            with pathways as columns.</li>
+          <li><strong>MLM p-adjusted value</strong>: stored in <code>adata.obsm["pathway_activity_padj_mlm"]</code> as
+            DataFrame with pathways as columns.</li>
+        </ul>
+      </li>
+    </ul>
+
+    <h3>We furthermore use GRNs computed using sponge and genie3, both CSV-formatted.</h3>
+
+    <h4>Genie:</h4>
+    <pre class="codeblock"><code>regulatoryGene,targetGene,weight
+FOXM1,KIF20A,0.06364686682258</code></pre>
+
+    <h4>Sponge:</h4>
+    <pre
+      class="codeblock"><code>geneA,geneB,df,cor,pcor,mscor,p.val,p.adj
+ENSG00000182141,ENSG00000258630,1,0.121684631317227,0.0764637550413806,0.0452208762758468,0.029426,0.519790968019617</code></pre>
+  </section>
+
+  <button (click)="goBack()" class="back-btn">← Back</button>
 </div>
