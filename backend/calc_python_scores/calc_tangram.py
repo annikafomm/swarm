@@ -75,6 +75,7 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
     
     ad_ge.obsm['spatial'] = adata.obsm['spatial']
+    ad_ge.uns['spatial'] = adata.uns['spatial']
 
     print(f"[done] using label '{cell_label}'.")
 

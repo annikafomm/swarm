@@ -19,6 +19,8 @@ import pandas as pd
 import scanpy as sc
 import uvicorn
 
+from app import dict2params
+
 # ---------------------------------
 # Third-Party (FastAPI / Starlette)
 # ---------------------------------
@@ -483,6 +485,13 @@ async def upload(
         json.dumps(payload, indent=2), encoding="utf-8"
     )
 
+    # TODO call visium_to_geojson
+    print(payload)
+    """
+    python_params, R_params = dict2params(payload)
+    print(python_params)
+    print(R_params)
+    """
     # 6) Return a clean JSON response the frontend can consume
     return payload
 

@@ -5,7 +5,184 @@ import random
 import shutil
 from datetime import datetime
 
-from calc_python_scores.translate_json import dict2params
+def dict2params(param_dict):
+    python_params = []
+    network_params = []
+
+    for key in param_dict.keys():
+        match key:
+            case "spatial":
+                for skey in param_dict.get(key).keys():
+                    if param_dict.get(key).get(skey):
+                        match skey:
+                            case "normalization":
+                                python_params.append("-normalize_st")
+                            case "filtering":
+                                python_params.append("-filter_st")
+            case "files":
+                for fkey in param_dict.get(key).keys():
+                    if param_dict.get(key).get(fkey) is not None:
+                        match fkey:
+                            case "spatial_h5ad":
+                                python_params.append("-input")
+                                python_params.append(param_dict.get(key).get(fkey))
+                            case "single_cell_h5ad": 
+                                python_params.append("-sc_path")
+                                python_params.append(param_dict.get(key).get(fkey))
+                            case "genie3_network": 
+                                network_params.append("--genie_network")
+                                network_params.append(param_dict.get(key).get(fkey))
+                            case "sponge_networkanalysis": 
+                                network_params.append("--sponge_analysis")
+                                network_params.append(param_dict.get(key).get(fkey))
+                            case "sponge_networkinteractions": 
+                                network_params.append("--sponge_network")
+                                network_params.append(param_dict.get(key).get(fkey))
+                            case "liana_genie3_network":
+                                python_params.append("-grn") 
+                                python_params.append(param_dict.get(key).get(fkey))
+                            case "liana_pathway_network":
+                                python_params.append("-pathway_net")
+                                python_params.append(param_dict.get(key).get(fkey))
+            case "tangram":
+                for tkey in param_dict.get(key).keys():
+                    if tkey == "use" and param_dict.get(key).get(tkey):
+                        python_params.append("-tangram")
+                        network_params.append("--tangram") 
+                    else:
+                        if param_dict.get(key).get(tkey) is not None:
+                            match tkey:
+                                case "filtering":
+                                    python_params.append("-filter_sc")
+                                case "normalization":
+                                    python_params.append("-normalize_sc")
+            case "scores":
+                for skey in param_dict.get(key).keys():
+                    if param_dict.get(key).get(skey):
+                        match skey:
+                            case "network":
+                                python_params.append("-R_scores")
+                            case "liana_plus":
+                                python_params.append("-liana")
+            
+            case "network":
+                for nkey in param_dict.get(key).keys():
+                    match nkey:
+                        case "algorithms":
+                            for akey in param_dict.get(key).get(nkey).keys():
+                                if param_dict.get(key).get(nkey).get(akey):
+                                    match akey:
+                                        case "viper":
+                                            network_params.append("--viper")
+                                        case "aucell":
+                                            network_params.append("--aucell")
+                                        case "gsva":
+                                            network_params.append("--gsva")
+                                        case "ssgsea":
+                                            network_params.append("--ssgsea")
+                        case "sponge_params":
+                            for skey in param_dict.get(key).get(nkey).keys():
+                                if param_dict.get(key).get(nkey).get(skey) is not None:
+                                    match skey:
+                                        case "m_score_threshold":
+                                            network_params.append("--mscor")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                        case "p_adjust":
+                                            network_params.append("--padj")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                        case "ensembl_id_col": 
+                                            network_params.append("--ensembl_col")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                        case "feature_col": 
+                                            network_params.append("--feature_col")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                        case "rna_types": 
+                                            network_params.append("--RNA_types")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                        case "max_modules": 
+                                            network_params.append("--max_modules")
+                                            network_params.append(param_dict.get(key).get(nkey).get(skey))
+                        case "genie3_params":
+                            for gkey in param_dict.get(key).get(nkey).keys():
+                                if param_dict.get(key).get(nkey).get(gkey) is not None:
+                                    match gkey:
+                                        case "top_n_weights": 
+                                            network_params.append("--top_n")
+                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+                                        case "n_regulatory_genes":
+                                            network_params.append("--k_reg_genes")
+                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+                                        case "n_regulons":
+                                            network_params.append("--n_regulons")
+                                            network_params.append(param_dict.get(key).get(nkey).get(gkey))
+            case "squidpy":
+                for skey in param_dict.get(key).keys():
+                    if (not skey.endswith("_params")) and (param_dict.get(key).get(skey)):
+                        match skey:
+                            case "moranI":
+                                python_params.append("-moranI")
+                                score_dict = param_dict.get(key).get(f"{skey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        python_params.append("-n_perms_autocorr_mI")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        python_params.append("-two_tailed_mI")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        python_params.append("-corr_method_mI")
+                                        python_params.append(score_dict.get(param))
+                            case "gearyC":
+                                python_params.append("-gearyC")
+                                score_dict = param_dict.get(key).get(f"{skey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        python_params.append("-n_perms_autocorr_gC")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        python_params.append("-two_tailed_gC")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        python_params.append("-corr_method_gC")
+                                        python_params.append(score_dict.get(param))
+                            case "centrality_score":
+                                python_params.append("-centrality_scores")
+                                score_dict = param_dict.get(key).get(f"{skey}_params")
+                                for param in score_dict.keys():
+                                    if param == "cluster_key" and score_dict.get(param) is not None:
+                                        python_params.append("-cluster_cs")
+                                        python_params.append(score_dict.get(param))
+                            case "co_occurrence":
+                                python_params.append("-co_occurrence")
+                                score_dict = param_dict.get(key).get(f"{skey}_params")
+                                for param in score_dict.keys():
+                                    if param == "cluster_key" and score_dict.get(param) is not None:
+                                        python_params.append("-cluster_co")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "interval" and score_dict.get(param) is not None:
+                                        python_params.append("-interval")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "n_splits" and score_dict.get(param) is not None:
+                                        python_params.append("-n_splits")
+                                        python_params.append(score_dict.get(param))
+                            case "neighborhood_enrichment":
+                                python_params.append("-nhood_enrichment")
+                                score_dict = param_dict.get(key).get(f"{skey}_params")
+                                for param in score_dict.keys():
+                                    if param == "cluster_key" and score_dict.get(param) is not None:
+                                        python_params.append("-cluster_nhood")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "library_key" and score_dict.get(param) is not None:
+                                        python_params.append("-library_key")
+                                        python_params.append(score_dict.get(param))
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        python_params.append("-n_perms_nhood")
+                                        python_params.append(score_dict.get(param))
+            case "liana": 
+                for lkey in param_dict.get(key).keys():
+                    if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
+                        python_params.append("-cell_comp_key")
+                        python_params.append(param_dict.get(key))                
+
+    return (python_params, network_params)
 
 #          job_dir, payload
 def upload(job_dir, json_dict):
@@ -24,20 +201,23 @@ def upload(job_dir, json_dict):
         print(log_file)
         
         # get parameters from json_dict
-        python_params, R_params = dict2params(json_dict)
+        #python_params, R_params = dict2params(json_dict)
 
-        """
+        
         python_params = ["-input", "./datasets_prepro_new/GSM6592049_M2_prepro.h5ad", 
                          "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad",
                          "-liana", "-cell_comp_key", "celltype_scores",
-                         "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment",
+                         "-moranI", "-gearyC", 
+                         "-centrality_scores", "-cluster_cs", "cell_type", 
+                         "-co_occurrence", "-cluster_co", "cell_type",
+                         "-nhood_enrichment", "-cluster_nhood", "cell_type",
                          "-R_scores"]
         R_params = ["--tangram", 
                     "--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
                     "--genie_network", "./networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
                     "--aucell", "--gsva", "--ssgsea", "--viper"]
-        """
         
+
         print(python_params)
         print(R_params)
         
@@ -88,4 +268,4 @@ def upload(job_dir, json_dict):
         return {"status": "error", "message": err_msg}
 
 if __name__ == "__main__":
-    upload("./uploads/job_0001", {'jobId':'job_0001'})
+    upload("./uploads", {'jobId':'job_0001'})
