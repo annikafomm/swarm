@@ -6,6 +6,8 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 
+import { DEFAULT_PATHS } from './constants';
+
 @Component({
   selector: 'app-root',
   standalone: true,
@@ -32,7 +34,7 @@ export class AppComponent implements OnInit {
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_adata`,
-          { path: '../backend/data/adata.h5ad' },
+          { path: DEFAULT_PATHS.adataPath },
           { withCredentials: true },
         ),
       )
@@ -45,7 +47,7 @@ export class AppComponent implements OnInit {
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_network_genie`,
-          { path: '../backend/data/genie_network_filt.csv' },
+          { path: DEFAULT_PATHS.genieFiltPath },
           { withCredentials: true },
         ),
       )
@@ -59,7 +61,7 @@ export class AppComponent implements OnInit {
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_network_sponge`,
-          { path: '../backend/data/sponge_network_filt.csv' },
+          { path: DEFAULT_PATHS.spongeFiltPath },
           { withCredentials: true },
         ),
       )

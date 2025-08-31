@@ -28,6 +28,7 @@ __pycache__/
 *.py[cod]
 
 backend/uploads/
+frontend/uploads/
 
 rindler.h5ad
 

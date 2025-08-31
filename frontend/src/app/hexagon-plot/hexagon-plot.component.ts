@@ -11,6 +11,8 @@ import { KeyValue } from '@angular/common';
 import { TranslationService } from '../translation.service';
 import { TranslatePipe } from '../translate.pipe';
 
+import { DEFAULT_PATHS } from '../constants';
+
 @Component({
   selector: 'app-hexagon-plot',
   imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe],
@@ -30,7 +32,7 @@ export class HexagonPlotComponent implements OnInit {
   public Math = Math;
 
   // GeoJson
-  public dataPath = 'assets/hexagons.geojson';
+  public dataPath = DEFAULT_PATHS.geojsonPath;
   public dataSetTitle =
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 

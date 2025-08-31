@@ -75,7 +75,7 @@ export class FormPageComponent {
         ensemblId: ['ensembl_id'],
         featureCol: ['feature_type'],
         rnaTypes: ['lncRNA,protein_coding'],
-        maxModules: [''],
+        maxModules: ['20'],
         }),
       genie3Params: this.fb.group({
         topNWeights: [100000],
@@ -321,13 +321,17 @@ export class FormPageComponent {
       const m = sq.methods;
       if (m.moranI) {
         fd.append('squidpy_moranI', 'true');
-        fd.append('squidpy_moranI_n_perms', sq.moranI.nPerms ?? '');
+        if (sq.moranI.nPerms !== null && sq.moranI.nPerms !== undefined && sq.moranI.nPerms !== '') {
+          fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
+        }
         fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {
         fd.append('squidpy_gearyC', 'true');
-        fd.append('squidpy_gearyC_n_perms', sq.gearyC.nPerms ?? '');
+        if (sq.gearyC.nPerms !== null && sq.gearyC.nPerms !== undefined && sq.gearyC.nPerms !== '') {
+          fd.append('squidpy_gearyC_n_perms', String(sq.gearyC.nPerms));
+        }
         fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
         fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
       }
@@ -339,7 +343,9 @@ export class FormPageComponent {
         fd.append('squidpy_co_occurrence', 'true');
         fd.append('squidpy_co_occurrence_cluster_key', sq.co_occurrence.clusterKey ?? '');
         fd.append('squidpy_co_occurrence_interval', sq.co_occurrence.interval ?? '');
-        fd.append('squidpy_co_occurrence_n_splits', sq.co_occurrence.nSplits ?? '');
+        if (sq.co_occurrence.nSplits !== null && sq.co_occurrence.nSplits !== undefined && sq.co_occurrence.nSplits !== '') {
+          fd.append('squidpy_co_occurrence_n_splits', String(sq.gearyC.nPerms));
+        }
       }
       if (m.neighborhood_enrichment) {
         fd.append('squidpy_neighborhood_enrichment', 'true');
@@ -378,7 +384,7 @@ export class FormPageComponent {
           ensemblId: 'ensembl_id',
           featureCol: 'feature_type',
           rnaTypes: 'lncRNA,protein_coding',
-          maxModules: '',
+          maxModules: '20',
         },
         genie3Params: { topNWeights: 100000, nRegulatoryGenes: 20, nRegulons: 20 },
       },
