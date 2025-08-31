@@ -47,6 +47,7 @@ export class HexagonPlotComponent implements OnInit {
   public selectedCellRegulatoryScores: { [key: string]: number } | null = null;
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
+  private requestTokens: { [key: string]: number } = {};
 
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
@@ -124,6 +125,11 @@ export class HexagonPlotComponent implements OnInit {
     this.createHexagonPlot();
     this.loadAndRenderData(this.dataPath);
   }
+
+  private nextRequestToken(graphType: string): number {
+  if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
+  return ++this.requestTokens[graphType];
+}
 
   private createHexagonPlot(): void {
     const width = 500;
@@ -478,6 +484,7 @@ export class HexagonPlotComponent implements OnInit {
   }
 
   public updateAucellGraphGenie3(): void {
+    const token = this.nextRequestToken('genie3');
     console.log('Updating AUCELL graph for Genie3...');
     this.isLoadingGenie3 = true;
     d3.select('#aucell_graph_genie3').selectAll('*').remove();
@@ -505,10 +512,12 @@ export class HexagonPlotComponent implements OnInit {
       )
       .subscribe({
         next: (res) => {
-          const data = res as {
-            regulatoryGene: string;
-            targetGene: string;
-            weight: number;
+          if (token !== this.requestTokens['genie3']) return;
+          {
+            const data = res as {
+              regulatoryGene: string;
+              targetGene: string;
+              weight: number;
           }[];
           console.log('Data', data);
           this.genie3Network = data.map((d) => ({
@@ -730,18 +739,23 @@ export class HexagonPlotComponent implements OnInit {
           console.log(
             `[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`,
           );
+        }
         },
-        error: (err) =>
-          console.error(
-            `[Backend] Failed to load Genie Connections for["${this.selectedGeneSetGenie3}]`,
-            err,
-          ),
+        error: (err) => {
+          if (token === this.requestTokens['genie3']) {
+            console.error(
+              `[Backend] Failed to load Genie Connections for["${this.selectedGeneSetGenie3}]`,
+              err,
+            );
+          }
+        },
       });
 
     console.log('Genie3 Network 2:', this.genie3Network);
   }
 
   public updateAucellGraphSponge(): void {
+    const token = this.nextRequestToken('sponge');
     console.log('Updating AUCELL graph for Sponge...');
     d3.select('#aucell_graph_sponge').selectAll('*').remove();
 
@@ -780,11 +794,13 @@ export class HexagonPlotComponent implements OnInit {
       )
       .subscribe({
         next: (res) => {
-          const data = res as {
-            geneA: string;
-            geneB: string;
-            'p.adj': number;
-            mscor: number;
+          if (token !== this.requestTokens['sponge']) return;
+          {
+            const data = res as {
+              geneA: string;
+              geneB: string;
+              'p.adj': number;
+              mscor: number;
           }[];
 
           this.isLoadingSponge = true;
@@ -1000,12 +1016,16 @@ export class HexagonPlotComponent implements OnInit {
           this.isLoadingSponge = false;
 
           console.log('Network visualization complete');
+        }
         },
-        error: (err) =>
-          console.error(
-            `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
-            err,
-          ),
+        error: (err) => {
+          if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
+            console.error(
+              `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+              err,
+            );
+          }
+        },
       });
   }
 
