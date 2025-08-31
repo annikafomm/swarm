@@ -1,4 +1,4 @@
-/* Container */
+/* Container */V
 .info-page {
   max-width: 980px;
   margin: 0 auto;
@@ -15,18 +15,32 @@ header {
   margin-bottom: 8px;
 
   img {
-    max-height: 96px;
+    max-height: 80px;
     width: auto;
     display: block;
   }
 }
 
-/* Overview-Grafik */
+/* Container mit Flexbox */
+.overview-container {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.overview-box {
+  border: 1px solid #e6e9f2;
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
 .overview-img {
   display: block;
-  max-width: auto;
-  height: 300px;
-  margin: 8px auto 0;
+  max-height: 450px;
+  width: auto;
   border-radius: 8px;
 }
 
