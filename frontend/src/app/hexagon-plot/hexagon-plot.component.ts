@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
@@ -12,6 +12,8 @@ import { TranslationService } from '../translation.service';
 import { TranslatePipe } from '../translate.pipe';
 
 import { DEFAULT_PATHS } from '../constants';
+import { Subscription } from 'rxjs';
+import { PathsService } from '../paths.service';
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -20,19 +22,23 @@ import { DEFAULT_PATHS } from '../constants';
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
 })
-export class HexagonPlotComponent implements OnInit {
+export class HexagonPlotComponent implements OnInit, OnDestroy {
+  private sub!: Subscription;
+
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
     private geoDataService: GeoDataService,
     private translationService: TranslationService,
+    private pathsService: PathsService,
   ) {}
+
 
   // Define to use Math functions in the html template
   public Math = Math;
 
   // GeoJson
-  public dataPath = DEFAULT_PATHS.geojsonPath;
+  public dataPath = DEFAULT_PATHS.hexagonPath;
   public dataSetTitle =
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
@@ -122,8 +128,34 @@ export class HexagonPlotComponent implements OnInit {
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
   ngOnInit(): void {
-    this.createHexagonPlot();
-    this.loadAndRenderData(this.dataPath);
+    // Subscribe to path changes
+    this.sub = this.pathsService.paths$.subscribe(paths => {
+      console.log("init hexagon plot")
+      if (paths.hexagonPath) {
+
+        // Update the component's dataPath
+        this.dataPath = paths.hexagonPath;
+        console.log('Loading hexagon data from', this.dataPath);
+
+        // Clear hexagon-plot container
+        d3.select('#hexagon-plot').selectAll('*').remove();
+        d3.select('#hexagon-plot').html('');
+
+        // Clear hexbin container (where SVG is appended)
+        d3.select('#hexbin').selectAll('*').remove();
+        d3.select('#hexbin').html('');
+
+        // Load and render new data
+        this.createHexagonPlot();
+        this.loadAndRenderData(this.dataPath);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    if (this.sub) {
+      this.sub.unsubscribe();
+    }
   }
 
   private createHexagonPlot(): void {

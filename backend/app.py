@@ -267,7 +267,7 @@ async def calculate_scores_helper(job_dir, json_dict):
         return None
 
 if __name__ == "__main__":
-    #upload("./uploads", {'jobId':'job_0001'})
+    #calculate_scores_helper("./uploads", {'jobId':'job_0001'})
     """
     json_path = "frontend/uploads/job_1756565308052_b1e618e1-7ef9-4055-9588-ea1be53d1020/job_1756565308052_config.json"
     

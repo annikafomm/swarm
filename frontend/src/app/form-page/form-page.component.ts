@@ -5,6 +5,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 
+import { PathsService } from '../paths.service';
+import { DEFAULT_PATHS } from '../constants';
+
 @Component({
   selector: 'app-form-page',
   standalone: true,
@@ -37,7 +40,7 @@ export class FormPageComponent {
   serverPayload: any = null;             // vom Server zurückgegebenes Payload-Objekt
 
 
-  constructor(private fb: FormBuilder, private http: HttpClient) {
+  constructor(private fb: FormBuilder, private http: HttpClient, private pathsService: PathsService) {
     this.form = this.fb.group({
 
       email: ['', [Validators.required, Validators.email]],
@@ -247,6 +250,36 @@ export class FormPageComponent {
           this.serverPayload = body.payload || null;
           this.uploadProgress = 100;
           this.uploading = false;
+
+          console.log('Upload finished, output_files', body.output_files)
+          
+          const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
+          const parts = geojsonPath?.split('/');
+          const user = parts?.at(-3);
+          const subdir = parts?.at(-2);
+          const filename = parts?.at(-1);
+
+          console.log('filepath', geojsonPath)
+
+          const genieFiltPath = body.output_files?.genieFiltPath
+          ? `/api/hexagon/${user}/${subdir}/${body.output_files.genieFiltPath.split('/').pop()}`
+          : DEFAULT_PATHS.genieFiltPath;
+
+          const spongeFiltPath = body.output_files?.spongeFiltPath
+          ? `/api/hexagon/${user}/${subdir}/${body.output_files.spongeFiltPath.split('/').pop()}`
+          : DEFAULT_PATHS.spongeFiltPath;
+
+          // --- update paths here ---
+          const newPaths = {
+            adataPath: `/api/hexagon/${user}/${subdir}/${body.output_files?.adataPath.split('/').pop()}`,
+            genieFiltPath:  genieFiltPath,
+            spongeFiltPath: spongeFiltPath,
+            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, // browser-accessible URL
+          };
+
+          console.log('New Paths', newPaths)
+
+          this.pathsService.updatePaths(newPaths);
         }
       },
       error: (err) => {

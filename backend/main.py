@@ -493,14 +493,14 @@ async def upload(
         
         out_files = {}
         if adata_path is not None:  
-            out_files["adata"] = adata_path
+            out_files["adataPath"] = adata_path
             subprocess.run(["python", "../backend/visium_to_geojson.py", "--adata", adata_path, "--outpath", os.path.join(out_dir, "hexagons.geojson")])
-            out_files["geojson"] = os.path.join(out_dir, "hexagons.geojson")
+            out_files["geojsonPath"] = os.path.join(out_dir,  "hexagons.geojson")
 
         if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
-            out_files["genie_filt"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
+            out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
         if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
-            out_files["sponge_filt"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+            out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
 
         payload["output_files"] = out_files
     
@@ -511,6 +511,18 @@ async def upload(
 
     # 6) Return a clean JSON response the frontend can consume
     return payload
+
+@app.get("/api/hexagon/{user}/{subdir}/{filename}")
+async def get_hexagon(user:str, subdir:str, filename: str):
+    """
+    file_path = Path("./uploads") / filename
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    """
+    file_path = Path("./uploads") / Path(user) / Path(subdir) / filename
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.post("/create_session/{name}")

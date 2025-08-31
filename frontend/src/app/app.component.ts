@@ -5,8 +5,7 @@ import { FormPageComponent } from './form-page/form-page.component';
 import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
-
-import { DEFAULT_PATHS } from './constants';
+import { PathsService } from './paths.service';
 
 @Component({
   selector: 'app-root',
@@ -25,16 +24,19 @@ export class AppComponent implements OnInit {
   constructor(
     private http: HttpClient,
     public sessionService: SessionService,
+    private pathsService: PathsService,
   ) {}
 
   ngOnInit() {
     this.sessionService.initSession();
 
+    const paths = this.pathsService.currentPaths; // use service instead of DEFAULT_PATHS
+
     this.sessionService
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_adata`,
-          { path: DEFAULT_PATHS.adataPath },
+          { path: paths.adataPath },
           { withCredentials: true },
         ),
       )
@@ -47,7 +49,7 @@ export class AppComponent implements OnInit {
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_network_genie`,
-          { path: DEFAULT_PATHS.genieFiltPath },
+          { path: paths.genieFiltPath },
           { withCredentials: true },
         ),
       )
@@ -61,7 +63,7 @@ export class AppComponent implements OnInit {
       .callWithSession(() =>
         this.http.post(
           `${this.sessionService.apiUrl}/read_network_sponge`,
-          { path: DEFAULT_PATHS.spongeFiltPath },
+          { path: paths.spongeFiltPath },
           { withCredentials: true },
         ),
       )

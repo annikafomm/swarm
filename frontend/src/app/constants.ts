@@ -3,5 +3,5 @@ export const DEFAULT_PATHS = {
   adataPath: '../backend/data/adata.h5ad',
   genieFiltPath: '../backend/data/genie_network_filt.csv',
   spongeFiltPath: '../backend/data/sponge_network_filt.csv',
-  geojsonPath: 'assets/hexagons.geojson',
+  hexagonPath: 'assets/hexagons.geojson',
 };
