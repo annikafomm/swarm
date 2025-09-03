@@ -48,7 +48,7 @@ from starlette.responses import RedirectResponse
 # -----------------------------------------------------------------------------
 
 # Base folder for all uploads (created on startup).
-BASE_UPLOAD_DIR = Path.cwd() / "uploads"
+BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
 BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Allow configuring CORS origins via environment variable (comma-separated).
@@ -299,29 +299,24 @@ async def upload(
     # --- core ---
     email: str = Form(...),
     dataset: str = Form(...),
-
     # Spatial
     spatial_h5ad: UploadFile = File(...),
     spatial_normalization: bool = Form(False),
     spatial_filtering: bool = Form(False),
-
     # Tangram
     use_tangram: bool = Form(False),
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
-
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
-
     # Network Algos
     alg_viper: bool = Form(False),
     alg_aucell: bool = Form(False),
     alg_gsva: bool = Form(False),
     alg_ssgsea: bool = Form(False),
-
     # SPONGE-Params
     net_m_score_threshold: Optional[float] = Form(None),
     net_p_adjust: Optional[str] = Form(None),
@@ -329,46 +324,37 @@ async def upload(
     net_feature_col: Optional[str] = Form(None),
     net_rna_types: Optional[str] = Form(None),
     net_max_modules: Optional[int] = Form(None),
-
     # GENIE3-Params
     genie3_top_n_weights: Optional[int] = Form(None),
     genie3_n_regulatory_genes: Optional[int] = Form(None),
     genie3_n_regulons: Optional[int] = Form(None),
-
     # Network-Dateien
     genie3_network: Optional[UploadFile] = File(None),
     sponge_networkanalysis: Optional[UploadFile] = File(None),
     sponge_networkinteractions: Optional[UploadFile] = File(None),
-
     # Squidpy Flags + Params
     squidpy_moranI: bool = Form(False),
     squidpy_moranI_n_perms: Optional[int] = Form(None),
     squidpy_moranI_two_tailed: bool = Form(False),
     squidpy_moranI_corr_method: Optional[str] = Form(None),
-
     squidpy_gearyC: bool = Form(False),
     squidpy_gearyC_n_perms: Optional[int] = Form(None),
     squidpy_gearyC_two_tailed: bool = Form(False),
     squidpy_gearyC_corr_method: Optional[str] = Form(None),
-
     squidpy_centrality_score: bool = Form(False),
     squidpy_centrality_score_cluster_key: Optional[str] = Form(None),
-
     squidpy_co_occurrence: bool = Form(False),
     squidpy_co_occurrence_cluster_key: Optional[str] = Form(None),
     squidpy_co_occurrence_interval: Optional[int] = Form(None),
     squidpy_co_occurrence_n_splits: Optional[int] = Form(None),
-
     squidpy_neighborhood_enrichment: bool = Form(False),
     squidpy_neighborhood_enrichment_cluster_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_library_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_n_perms: Optional[int] = Form(None),
-
     # LIANA
     liana_composition_column: Optional[str] = Form(None),
     liana_genie3_network: Optional[UploadFile] = File(None),
     liana_pathway_network: Optional[UploadFile] = File(None),
-
     session_data: "SessionData" = Depends(verifier),
 ):
 
@@ -397,7 +383,9 @@ async def upload(
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
         "genie3_network": save_file(genie3_network, job_dir),
         "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
-        "sponge_networkinteractions": save_file(sponge_networkinteractions, job_dir),
+        "sponge_networkinteractions": save_file(
+            sponge_networkinteractions, job_dir
+        ),
         "liana_genie3_network": save_file(liana_genie3_network, job_dir),
         "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
@@ -471,11 +459,11 @@ async def upload(
                 "cluster_key": squidpy_neighborhood_enrichment_cluster_key,
                 "library_key": squidpy_neighborhood_enrichment_library_key,
                 "n_perms": squidpy_neighborhood_enrichment_n_perms,
-            }
+            },
         },
         "liana": {
             "composition_column": liana_composition_column,
-        }
+        },
     }
 
     # 5) Persist a copy of the payload next to the uploaded files

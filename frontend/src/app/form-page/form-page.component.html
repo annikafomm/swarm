@@ -153,6 +153,29 @@
       </div>
     </div>
 
+        <div class="section" *ngIf="form.get('network.algorithms.viper')?.value && genie3Selected"
+          formGroupName="genie3Params">
+          <div class="section-title">Genie3 — options</div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label>top n weights</label>
+              <input type="number" formControlName="topNWeights" placeholder="100000" />
+              <small>Default: 100000</small>
+            </div>
+            <div class="field">
+              <label>Number of connections used to score regulons</label>
+              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+              <small>Default: 20</small>
+            </div>
+            <div class="field">
+              <label>number of regulons</label>
+              <input type="number" formControlName="nRegulons" placeholder="20" />
+              <small>Default: 20</small>
+            </div>
+          </div>
+        </div>
+
     <!-- AUCell / GSVA / ssGSEA share the same options & upload rules -->
     <div class="section" *ngIf="hasTriadSelected()">
 
