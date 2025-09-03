@@ -141,9 +141,9 @@
 
     <!-- VIPER needs Genie3 only -->
     <div class="section" *ngIf="form.get('network.algorithms.viper')?.value">
-      <label>Upload Genie3 network (.csv/.tsv) — <span class="required">required</span>:</label>
+      <label>Upload Genie3 network (.csv) — <span class="required">required</span>:</label>
       <div class="file">
-        <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv">
+        <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
         <label for="genie3Net" class="file-control">
           <span class="btn">Choose file</span>
           <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
@@ -182,9 +182,9 @@
       <!-- Upload rule: Genie3 OR both SPONGE files -->
       <div class="section" style="margin-top:10px;">
         <div class="subsection">
-          <label>Upload Genie3 network (.csv/.tsv) — optional (required if SPONGE not provided):</label>
+          <label>Upload Genie3 network (.csv) — optional (required if SPONGE not provided):</label>
           <div class="file">
-            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv,.tsv">
+            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
             <label for="genie3NetTriad" class="file-control">
               <span class="btn">Choose file</span>
               <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
@@ -221,7 +221,7 @@
         <div class="subsection" style="margin-top:12px;">
           <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
           <div class="file">
-            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv,.tsv">
+            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv">
             <label for="spongeNA" class="file-control">
               <span class="btn">Choose <br> networkanalysis</span>
               <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
@@ -230,7 +230,7 @@
             </label>
           </div>
           <div class="file" style="margin-top:8px;">
-            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv,.tsv">
+            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv">
             <label for="spongeNI" class="file-control">
               <span class="btn">Choose <br> networkinteractions</span>
               <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
@@ -241,7 +241,7 @@
           <small>Please upload either a Genie3 network or both SPONGE files.</small>
         </div>
       </div>
-      <!-- SPONGE-Parameter NUR zeigen, wenn beide SPONGE-Dateien da sind -->
+      <!-- Show SPONGE parameters only if both SPONGE input files are provided -->
       <div class="section" *ngIf="usingSponge" formGroupName="params">
         <div class="section-title">SPONGEeffects — options</div>
 
@@ -425,9 +425,9 @@
     <br>
 
     <!-- Upload Genie3 (optional) -->
-    <label>Upload Genie3 network (.csv/.tsv) — optional:</label>
+    <label>Upload Genie3 network (.csv) — optional:</label>
     <div class="file">
-      <input id="lianaGenie3" type="file" (change)="onFileSelected($event, 'lianaGenie3')" accept=".csv,.tsv">
+      <input id="lianaGenie3" type="file" (change)="onFileSelected($event, 'lianaGenie3')" accept=".csv">
       <label for="lianaGenie3" class="file-control">
         <span class="btn">Choose file</span>
         <span class="file-name" [title]="lianaGenie3File?.name || 'No file selected'">
@@ -436,11 +436,11 @@
       </label>
     </div>
 
-    <!-- NEW: Upload pathway network (optional) -->
+    <!-- Upload pathway network (optional) -->
     <div class="section">
-      <label>Upload pathway network (.csv/.tsv) — optional:</label>
+      <label>Upload pathway network (.csv) — optional:</label>
       <div class="file">
-        <input id="lianaPathway" type="file" (change)="onFileSelected($event, 'lianaPathway')" accept=".csv,.tsv">
+        <input id="lianaPathway" type="file" (change)="onFileSelected($event, 'lianaPathway')" accept=".csv">
         <label for="lianaPathway" class="file-control">
           <span class="btn">Choose file</span>
           <span class="file-name" [title]="lianaPathwayFile?.name || 'No file selected'">
