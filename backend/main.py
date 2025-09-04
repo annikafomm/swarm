@@ -19,6 +19,9 @@ import pandas as pd
 import scanpy as sc
 import uvicorn
 
+from app import calculate_scores_helper
+import subprocess
+
 # ---------------------------------
 # Third-Party (FastAPI / Starlette)
 # ---------------------------------
@@ -466,6 +469,29 @@ async def upload(
         },
     }
 
+    # TODO call visium_to_geojson
+    out_dir = await calculate_scores_helper(job_dir, payload)
+    if out_dir is not None:
+        print(out_dir)
+
+        adata_path = None
+        for filename in os.listdir(out_dir):
+            if filename.endswith('st_scores.h5ad'):
+                adata_path = os.path.join(out_dir, filename)
+        
+        out_files = {}
+        if adata_path is not None:  
+            out_files["adataPath"] = adata_path
+            subprocess.run(["python", "../backend/visium_to_geojson.py", "--adata", adata_path, "--outpath", os.path.join(out_dir, "hexagons.geojson")])
+            out_files["geojsonPath"] = os.path.join(out_dir,  "hexagons.geojson")
+
+        if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
+            out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
+        if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
+            out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+
+        payload["output_files"] = out_files
+    
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
@@ -473,6 +499,18 @@ async def upload(
 
     # 6) Return a clean JSON response the frontend can consume
     return payload
+
+@app.get("/api/hexagon/{user}/{subdir}/{filename}")
+async def get_hexagon(user:str, subdir:str, filename: str):
+    """
+    file_path = Path("./uploads") / filename
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    """
+    file_path = Path("./uploads") / Path(user) / Path(subdir) / filename
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path))
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.post("/create_session/{name}")

@@ -5,6 +5,7 @@ import { FormPageComponent } from './form-page/form-page.component';
 import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
+import { PathsService } from './paths.service';
 
 @Component({
   selector: 'app-root',
@@ -23,51 +24,32 @@ export class AppComponent implements OnInit {
   constructor(
     private http: HttpClient,
     public sessionService: SessionService,
+    private pathsService: PathsService,
   ) {}
 
   ngOnInit() {
     this.sessionService.initSession();
 
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_adata`,
-          { path: '../backend/data/adata.h5ad' },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded adata', res),
-        error: (err) => console.error('[Backend] Failed to load adata', err),
-      });
+    this.pathsService.paths$.subscribe((paths) => {
+      if (!paths) return;
 
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_network_genie`,
-          { path: '../backend/data/genie_network_filt.csv' },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded network_genie', res),
-        error: (err) =>
-          console.error('[Backend] Failed to load network_genie', err),
-      });
+      const loadPath = (backendUrl: string, path: string, label: string) => {
+        this.sessionService.callWithSession(() =>
+          this.http.post(
+            `${this.sessionService.apiUrl}/${backendUrl}`,
+            { path },
+            { withCredentials: true }
+          )
+        ).subscribe({
+          next: (res) => console.log(`[Backend] Loaded ${label}`, res),
+          error: (err) => console.error(`[Backend] Failed to load ${label} ${path}`, err),
+        });
+      };
 
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_network_sponge`,
-          { path: '../backend/data/sponge_network_filt.csv' },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded network_sponge', res),
-        error: (err) =>
-          console.error('[Backend] Failed to load network_sponge', err),
-      });
+      if (paths.adataPath) loadPath('read_adata', paths.adataPath, 'adata');
+      if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
+      if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
+    });
   }
 
   title = 'frontend';

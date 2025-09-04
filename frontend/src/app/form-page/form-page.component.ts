@@ -5,6 +5,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 
+import { PathsService } from '../paths.service';
+import { DEFAULT_PATHS } from '../constants';
+
 @Component({
   selector: 'app-form-page',
   standalone: true,
@@ -37,7 +40,7 @@ export class FormPageComponent {
   serverPayload: any = null;             // vom Server zurückgegebenes Payload-Objekt
 
 
-  constructor(private fb: FormBuilder, private http: HttpClient) {
+  constructor(private fb: FormBuilder, private http: HttpClient, private pathsService: PathsService) {
     this.form = this.fb.group({
 
       email: ['', [Validators.required, Validators.email]],
@@ -75,7 +78,7 @@ export class FormPageComponent {
         ensemblId: ['ensembl_id'],
         featureCol: ['feature_type'],
         rnaTypes: ['lncRNA,protein_coding'],
-        maxModules: [''],
+        maxModules: ['20'],
         }),
       genie3Params: this.fb.group({
         topNWeights: [100000],
@@ -247,6 +250,28 @@ export class FormPageComponent {
           this.serverPayload = body.payload || null;
           this.uploadProgress = 100;
           this.uploading = false;
+
+          console.log('Upload finished, output_files', body.output_files)
+          
+          const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
+          const parts = geojsonPath?.split('/');
+          const user = parts?.at(-3);
+          const subdir = parts?.at(-2);
+          const filename = parts?.at(-1);
+
+          console.log('filepath', geojsonPath)
+
+          // --- update paths here ---
+          const newPaths = {
+            adataPath: body.output_files?.adataPath,
+            genieFiltPath:  body.output_files?.genieFiltPath,
+            spongeFiltPath: body.output_files?.spongeFiltPath,
+            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, // browser-accessible URL
+          };
+
+          console.log('New Paths', newPaths)
+
+          this.pathsService.updatePaths(newPaths);
         }
       },
       error: (err) => {
@@ -321,13 +346,17 @@ export class FormPageComponent {
       const m = sq.methods;
       if (m.moranI) {
         fd.append('squidpy_moranI', 'true');
-        fd.append('squidpy_moranI_n_perms', sq.moranI.nPerms ?? '');
+        if (sq.moranI.nPerms !== null && sq.moranI.nPerms !== undefined && sq.moranI.nPerms !== '') {
+          fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
+        }
         fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {
         fd.append('squidpy_gearyC', 'true');
-        fd.append('squidpy_gearyC_n_perms', sq.gearyC.nPerms ?? '');
+        if (sq.gearyC.nPerms !== null && sq.gearyC.nPerms !== undefined && sq.gearyC.nPerms !== '') {
+          fd.append('squidpy_gearyC_n_perms', String(sq.gearyC.nPerms));
+        }
         fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
         fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
       }
@@ -339,7 +368,9 @@ export class FormPageComponent {
         fd.append('squidpy_co_occurrence', 'true');
         fd.append('squidpy_co_occurrence_cluster_key', sq.co_occurrence.clusterKey ?? '');
         fd.append('squidpy_co_occurrence_interval', sq.co_occurrence.interval ?? '');
-        fd.append('squidpy_co_occurrence_n_splits', sq.co_occurrence.nSplits ?? '');
+        if (sq.co_occurrence.nSplits !== null && sq.co_occurrence.nSplits !== undefined && sq.co_occurrence.nSplits !== '') {
+          fd.append('squidpy_co_occurrence_n_splits', String(sq.gearyC.nPerms));
+        }
       }
       if (m.neighborhood_enrichment) {
         fd.append('squidpy_neighborhood_enrichment', 'true');
@@ -378,7 +409,7 @@ export class FormPageComponent {
           ensemblId: 'ensembl_id',
           featureCol: 'feature_type',
           rnaTypes: 'lncRNA,protein_coding',
-          maxModules: '',
+          maxModules: '20',
         },
         genie3Params: { topNWeights: 100000, nRegulatoryGenes: 20, nRegulons: 20 },
       },

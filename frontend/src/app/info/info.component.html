@@ -1,6 +1,7 @@
 <div class="info-page">
   <header>
     <img src="assets/info/logo.png" alt="MOPITAS Logo" />
+
   </header>
 
   <h2>Overview</h2>
@@ -13,6 +14,7 @@
     </div>
   </div>
   <br>
+
   <section class="card">
     <h2>Format Requirements</h2>
     <p>
@@ -35,12 +37,7 @@
         before upload).</li>
     </ul>
 
-    <h3>Clustering</h3>
-    <ul>
-      <li>Save the Leiden clustering for Leiden-based scores in <code>anndata.obs["leiden"]</code></li>
-    </ul>
-
-    <h3>Gene-wise scores</h3>
+    <h3>Spatial autocorrelation scores</h3>
     <ul>
       <li><strong>Moran's I</strong>: stored in <code>anndata.uns["moranI"]</code> as DataFrame with columns:
         <ul>
@@ -60,9 +57,10 @@
       </li>
     </ul>
 
-    <h3>Leiden cluster scores</h3>
+    <h3>Cluster relationship scores</h3>
+    <p>'cluster' is the column in <code>anndata.obs</code> choosen as cluster to calculate the score</p>
     <ul>
-      <li><strong>Leiden centrality</strong>: stored in <code>anndata.uns["leiden_centrality_scores"]</code> as
+      <li><strong>Centrality scores</strong>: stored in <code>anndata.uns["'cluster'_centrality_scores"]</code> as
         DataFrame with columns:
         <ul>
           <li><code>degree_centrality</code></li>
@@ -70,7 +68,7 @@
           <li><code>closeness_centrality</code></li>
         </ul>
       </li>
-      <li><strong>Leiden co-occurrence</strong>: stored in <code>anndata.uns["leiden_co_occurrence"]</code> as
+      <li><strong>Co-occurrence probability</strong>: stored in <code>anndata.uns["'cluster'_co_occurrence"]</code> as
         dictionary with entries:
         <ul>
           <li><code>intervals</code>: interval boundaries, array of shape <code>(n_intervals - 1,)</code></li>
@@ -78,7 +76,7 @@
             select the right <em>num_intervals</em> in Upload form)</li>
         </ul>
       </li>
-      <li><strong>Leiden neighborhood enrichment</strong>: stored in <code>anndata.uns["leiden_nhood_enrichment"]</code>
+      <li><strong>Neighborhood enrichment</strong>: stored in <code>anndata.uns["'cluster'_nhood_enrichment"]</code>
         as dictionary with entries:
         <ul>
           <li><code>counts</code>: array of shape <code>(n_clust, n_clust)</code></li>
@@ -87,7 +85,7 @@
       </li>
     </ul>
 
-    <h3>Regulon scores</h3>
+    <h3>Gene set scores</h3>
     <ul>
       <li><strong>Gene sets</strong>: stored in <code>anndata.uns["genie_genesets"]</code> and
         <code>anndata.uns["sponge_genesets"]</code> as dictionaries with format:
@@ -180,9 +178,67 @@
 FOXM1,KIF20A,0.06364686682258</code></pre>
 
     <h4>Sponge:</h4>
+    <p>interaction network</p>
     <pre
       class="codeblock"><code>geneA,geneB,df,cor,pcor,mscor,p.val,p.adj
 ENSG00000182141,ENSG00000258630,1,0.121684631317227,0.0764637550413806,0.0452208762758468,0.029426,0.519790968019617</code></pre>
+    <p>network analysis</p>
+    <pre class="codeblock"><code>gene,degree,eigenvector,betweenness,page_rank
+ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</code></pre>
+  </section>
+
+  <section class="card">
+    <h2>Explanation of the scores</h2>
+
+    <h3>Squidpy scores</h3>
+    <ul>
+    <li>Spatial Autocorrelation scores</li>
+    <ul>
+    <li>Is the expression of a gene clustered in space or more randomly distributed?</li>
+    <li>Moran's I (global correlation)</li>
+    <li>Geary's C (local correlation)</li>
+    </ul>
+    <li>Cluster interaction scores</li>
+    <ul>
+    <li>How do clusters of cells interact with each other?</li>
+    <li>Centrality scores</li>
+    <ul>
+    <li>How structurally important is each cluster is in the tissue 'network'?</li>
+    </ul>
+    <li>Neighborhood enrichment</li>
+    <ul>
+    <li>Do certain clusters tend to be neighbors more often than expected by chance?</li>
+    </ul>
+    <li>Co-occurrence probability</li>
+    <ul>
+    <li>How often do two clusters occur within a given radius?</li>
+    </ul>
+    </ul>
+    </ul>
+    <p>&nbsp;</p>
+    <h3>Gene set scores</h3>
+    <ul>
+    <li>GSVA</li>
+    <ul>
+    <li>How are the genes in a gene set expressed compared to the rest of the genes?</li>
+    </ul>
+    <li>ssGSEA</li>
+    <ul>
+    <li>&nbsp;like running GSEA on each sample individually</li>
+    <li>Are the genes from this gene set enriched in this spot?</li>
+    </ul>
+    <li>AUCell</li>
+    <ul>
+    <li><em>How many genes of a gene set are highly expressed in this spot?</em></li>
+    </ul>
+    <li>VIPER</li>
+    <ul>
+    <li><em>How active is the regulator based on how active and coordinately regulated the target genes are?</em></li>
+    </ul>
+    </ul>
+    <p>&nbsp;</p>
+    
+
   </section>
 
   <button (click)="goBack()" class="back-btn">← Back</button>

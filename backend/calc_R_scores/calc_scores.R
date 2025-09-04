@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
   suppressWarnings(library(AUCell))
 })
 
-source("./calc_R_scores/utils.R")
+source("../backend/calc_R_scores/utils.R")
 
 #  Rscript calc_scores.R   --dir ../datasets_scores/GSM6592049_M2_prepro   --dir ../datasets_scores/GSM6592049_M2_scores   --sponge_network ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv   --sponge_analysis ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv --genie_network ../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv --ensembl_col ensemble_id  --aucell --gsva --ssgsea --viper
 
@@ -85,9 +85,17 @@ compute_network_scores <- function(description, args, logfile) {
           ceRNA_centralities <- ceRNA_interactions
           ceRNA_interactions <- centralities
         }
+        
+        ids <- var_df[, get(args$ensembl_col)]
+        
+        # 1. Drop NA rownames
+        valid_idx <- !is.na(ids) & ids != ""
+        expr_sp <- expr[valid_idx, ]
+        ids <- ids[valid_idx]
 
-        rownames(expr) <- var_df[,get(args$ensembl_col)]
+        rownames(expr_sp) <- ids[!is.na(ids)]
 
+        
         t0 <- Sys.time()
         sponge_modules <- create_Sponge_modules(var_df, ceRNA_interactions, ceRNA_centralities, mscor=args$mscor, padj=args$padj,
                                           feature_col=args$feature_col, RNAs=args$RNA_types, ensembl_col=args$ensembl_col, max_modules=args$max_modules, n_cores=args$n_cores)
@@ -122,7 +130,7 @@ compute_network_scores <- function(description, args, logfile) {
 
           if (args$gsva) {
             t0 <- Sys.time()
-            gsva_scores <- calc_spongeffects_gsva(expr, sponge_modules, n_cores=args$n_cores)
+            gsva_scores <- calc_spongeffects_gsva(expr_sp, sponge_modules, n_cores=args$n_cores)
             log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 4)
 
             t0 <- Sys.time()
@@ -132,7 +140,7 @@ compute_network_scores <- function(description, args, logfile) {
 
           if (args$ssgsea) {
             t0 <- Sys.time()
-            ssgsea_scores <- calc_spongeffects_ssgsea(expr, sponge_modules, n_cores=args$n_cores)
+            ssgsea_scores <- calc_spongeffects_ssgsea(expr_sp, sponge_modules, n_cores=args$n_cores)
             log_message(sprintf("SPONGeffects-ssGSEA scores computed in %s", format_runtime(t0)), logfile, 4)
             
             t0 <- Sys.time()
@@ -143,7 +151,7 @@ compute_network_scores <- function(description, args, logfile) {
           # calculate AUCell scores
           if (args$aucell) {
             t0 <- Sys.time()
-            aucell_scores <- calc_aucell_score(expr, sponge_modules, args$n_cores)
+            aucell_scores <- calc_aucell_score(expr_sp, sponge_modules, args$n_cores)
             log_message(sprintf("AUCell scores computed in %s", format_runtime(t0)), logfile, 4)
             
             t0 <- Sys.time()
