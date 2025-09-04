@@ -27,8 +27,8 @@ backend/.DS_Store
 __pycache__/
 *.py[cod]
 
-backend/uploads/
-frontend/uploads/
+backend/datasets_scores/*
+frontend/uploads/*
 
 rindler.h5ad
 

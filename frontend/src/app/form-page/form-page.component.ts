@@ -261,19 +261,11 @@ export class FormPageComponent {
 
           console.log('filepath', geojsonPath)
 
-          const genieFiltPath = body.output_files?.genieFiltPath
-          ? `/api/hexagon/${user}/${subdir}/${body.output_files.genieFiltPath.split('/').pop()}`
-          : DEFAULT_PATHS.genieFiltPath;
-
-          const spongeFiltPath = body.output_files?.spongeFiltPath
-          ? `/api/hexagon/${user}/${subdir}/${body.output_files.spongeFiltPath.split('/').pop()}`
-          : DEFAULT_PATHS.spongeFiltPath;
-
           // --- update paths here ---
           const newPaths = {
-            adataPath: `/api/hexagon/${user}/${subdir}/${body.output_files?.adataPath.split('/').pop()}`,
-            genieFiltPath:  genieFiltPath,
-            spongeFiltPath: spongeFiltPath,
+            adataPath: body.output_files?.adataPath,
+            genieFiltPath:  body.output_files?.genieFiltPath,
+            spongeFiltPath: body.output_files?.spongeFiltPath,
             hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, // browser-accessible URL
           };
 

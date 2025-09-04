@@ -11,6 +11,7 @@ import scanpy as sc
 import tangram as tg
 import gene_selection
 import torch
+import math
 
 
 def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
@@ -48,8 +49,9 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
     return genes
 
 
-def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', device_choice: str = 'cpu'):
-    adata = ad_sp.copy()
+def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu'):
+    adata_sp_copy = ad_sp.copy()
+    adata_sc_copy = ad_sc.copy()  
 
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
@@ -74,8 +76,19 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
     
-    ad_ge.obsm['spatial'] = adata.obsm['spatial']
-    ad_ge.uns['spatial'] = adata.uns['spatial']
+    ad_ge.obsm['spatial'] = adata_sp_copy.obsm['spatial']
+    ad_ge.uns['spatial'] = adata_sp_copy.uns['spatial']
+
+    if (ensembl_col != "" and feature_col != "") and (ensembl_col in adata_sc_copy.var.columns and feature_col in adata_sc_copy.var.columns):
+        
+        # Create mapping dictionaries with uppercase gene names for case-insensitive matching
+        ensembl_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[ensembl_col]))
+        feature_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[feature_col]))
+
+        # Assign columns using case-insensitive mapping
+        ad_ge.var[ensembl_col] = [ensembl_map.get(x.upper(), pd.NA) for x in ad_ge.var_names]
+        ad_ge.var[feature_col] = [feature_map.get(x.upper(), pd.NA) for x in ad_ge.var_names]
+
 
     print(f"[done] using label '{cell_label}'.")
 

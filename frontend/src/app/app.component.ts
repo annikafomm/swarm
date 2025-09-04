@@ -30,48 +30,26 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     this.sessionService.initSession();
 
-    const paths = this.pathsService.currentPaths; // use service instead of DEFAULT_PATHS
+    this.pathsService.paths$.subscribe((paths) => {
+      if (!paths) return;
 
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_adata`,
-          { path: paths.adataPath },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded adata', res),
-        error: (err) => console.error('[Backend] Failed to load adata', err),
-      });
+      const loadPath = (backendUrl: string, path: string, label: string) => {
+        this.sessionService.callWithSession(() =>
+          this.http.post(
+            `${this.sessionService.apiUrl}/${backendUrl}`,
+            { path },
+            { withCredentials: true }
+          )
+        ).subscribe({
+          next: (res) => console.log(`[Backend] Loaded ${label}`, res),
+          error: (err) => console.error(`[Backend] Failed to load ${label} ${path}`, err),
+        });
+      };
 
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_network_genie`,
-          { path: paths.genieFiltPath },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded network_genie', res),
-        error: (err) =>
-          console.error('[Backend] Failed to load network_genie', err),
-      });
-
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/read_network_sponge`,
-          { path: paths.spongeFiltPath },
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Loaded network_sponge', res),
-        error: (err) =>
-          console.error('[Backend] Failed to load network_sponge', err),
-      });
+      if (paths.adataPath) loadPath('read_adata', paths.adataPath, 'adata');
+      if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
+      if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
+    });
   }
 
   title = 'frontend';

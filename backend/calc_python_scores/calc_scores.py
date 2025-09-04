@@ -82,7 +82,7 @@ def compute_spatial_scores(adata, description, args, logfile):
             else:
                 t0 = time.time()
                 sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
-                log_message(f"Centrality scores calculated in {format_runtime(t0)}", logfile, 2)
+                log_message(f"Centrality scores for cluster {args.cluster_cs} calculated in {format_runtime(t0)}", logfile, 2)
         
         # Compute co-occurrence probability
         if args.co_occurrence:
@@ -91,7 +91,7 @@ def compute_spatial_scores(adata, description, args, logfile):
             else:
                 t0 = time.time()
                 sq.gr.co_occurrence(adata, cluster_key=args.cluster_co, interval = args.interval, n_splits = args.n_splits, show_progress_bar=True)
-                log_message(f"Co-occurrence probabilities calculated in {format_runtime(t0)}", logfile, 2)
+                log_message(f"Co-occurrence probabilities for cluster {args.cluster_co} calculated in {format_runtime(t0)}", logfile, 2)
 
         # Compute neighborhood enrichment
         if args.nhood_enrichment:
@@ -102,7 +102,7 @@ def compute_spatial_scores(adata, description, args, logfile):
             else:
                 t0 = time.time()
                 sq.gr.nhood_enrichment(adata, cluster_key=args.cluster_nhood, library_key = args.library_key, seed=42, n_perms=args.n_perms_nhood, show_progress_bar=True)
-                log_message(f"Neighborhood enrichment calculated in {format_runtime(t0)}", logfile, 2)
+                log_message(f"Neighborhood enrichment for cluster {args.cluster_nhood} calculated in {format_runtime(t0)}", logfile, 2)
 
         # Compute Moran's I
         if args.moranI:
@@ -163,6 +163,8 @@ def main():
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
     parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
+    parser.add_argument('-feature_col', type=str, default='', help="Column in adata.var with type of gene")
 
     # liana
     parser.add_argument("-liana", action='store_true', help='Compute Liana')
@@ -279,7 +281,7 @@ def main():
 
                     log_message("Running Tangram script ...", logfile, 2)
                     t0 = time.time()
-                    adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, 'cpu')
+                    adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)
 
                     compute_spatial_scores(adata_tangram, "tg", args, logfile)

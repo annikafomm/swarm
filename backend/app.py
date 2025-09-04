@@ -4,7 +4,7 @@ import subprocess
 import random
 import shutil
 from datetime import datetime
-import json
+import asyncio
 
 def dict2params(param_dict):
     python_params = []
@@ -94,9 +94,13 @@ def dict2params(param_dict):
                                         case "ensembl_id_col": 
                                             network_params.append("--ensembl_col")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                            python_params.append("-ensembl_col")
+                                            python_params.append(param_dict.get(key).get(nkey).get(skey))
                                         case "feature_col": 
                                             network_params.append("--feature_col")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
+                                            python_params.append("-feature_col")
+                                            python_params.append(param_dict.get(key).get(nkey).get(skey))
                                         case "rna_types": 
                                             network_params.append("--RNA_types")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
@@ -199,23 +203,18 @@ async def calculate_scores_helper(job_dir, json_dict):
         log_file = os.path.join(out_dir, "calc_scores.log")
         print(log_file)
         
-        # get parameters from json_dict
-        python_params, R_params = dict2params(json_dict)
+        if len(json_dict.keys()) and "params_python_script" in json_dict.keys() and "params_R_script" in json_dict.keys():
+            python_params = json_dict.get("params_python_script")
+            R_params = json_dict.get("params_R_script")
 
-        """
-        python_params = ["-input", "./datasets_prepro_new/GSM6592049_M2_prepro.h5ad", 
-                         "-tangram", "-sc_path", "./datasets_prepro/Wu_annotated_prepro.h5ad",
-                         "-liana", "-cell_comp_key", "celltype_scores",
-                         "-moranI", "-gearyC", 
-                         "-centrality_scores", "-cluster_cs", "cell_type", 
-                         "-co_occurrence", "-cluster_co", "cell_type",
-                         "-nhood_enrichment", "-cluster_nhood", "cell_type",
-                         "-R_scores"]
-        R_params = ["--tangram", 
-                    "--sponge_network", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", "--sponge_analysis", "./networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", "--ensembl_col", "ensemble_id", 
-                    "--genie_network", "./networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
-                    "--aucell", "--gsva", "--ssgsea", "--viper"]
-        """
+            with open(log_file, "w") as f:
+                f.write("Parameters for python pipeline:" + "\n")
+                f.write(str(python_params) + "\n")
+                f.write("Parameters for R pipeline:" + "\n")
+                f.write(str(R_params) + "\n\n")
+        else:
+            # get parameters from json_dict
+            python_params, R_params = dict2params(json_dict)
 
         print(python_params)
         print(R_params)
@@ -237,11 +236,11 @@ async def calculate_scores_helper(job_dir, json_dict):
                             "-log", log_file],
                             check=True)
 
-        # delete temporary folders
-        for folder in ["expr_info_st", "Rscores_st", "expr_info_tg", "Rscores_tg"]:
-            path = os.path.join(out_dir, folder)
-            if os.path.exists(path):
-                shutil.rmtree(path)  # removes the whole folder tree
+            # delete temporary folders
+            for folder in ["expr_info_st", "Rscores_st", "expr_info_tg", "Rscores_tg"]:
+                path = os.path.join(out_dir, folder)
+                if os.path.exists(path):
+                    shutil.rmtree(path)  # removes the whole folder tree
 
 
         # finish the log file
@@ -267,15 +266,27 @@ async def calculate_scores_helper(job_dir, json_dict):
         return None
 
 if __name__ == "__main__":
-    #calculate_scores_helper("./uploads", {'jobId':'job_0001'})
-    """
-    json_path = "frontend/uploads/job_1756565308052_b1e618e1-7ef9-4055-9588-ea1be53d1020/job_1756565308052_config.json"
-    
-    # open the file and load JSON
-    with open(json_path, "r") as f:
-        data = json.load(f)
 
-    p, r = dict2params(data)
-    print(p)
-    print(r)
-    """
+    visium_files = "../backend/datasets_prepro_new"
+    for file in os.listdir(visium_files):
+        if file.startswith("GSM"):
+            file_path = os.path.join(visium_files, file)
+            
+            python_params = ["-input", file_path, 
+                            "-tangram", "-sc_path", "../backend/datasets_prepro_new/Wu_annotated_prepro.h5ad", 
+                            "-cell_label", "cell_subclass", "-ensembl_col", "ensembl_id", "-feature_col", "feature_type",
+                            "-liana", "-cell_comp_key", "celltype_scores",
+                            "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment", 
+                            "-R_scores"]
+            R_params = ["--tangram", 
+                        "--sponge_network", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", 
+                        "--sponge_analysis", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", 
+                        "--genie_network", "../backend/networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
+                        "--aucell", "--gsva", "--ssgsea", "--viper"]
+            
+            params_dict = {"params_python_script": python_params,
+                        "params_R_script": R_params}
+            
+            asyncio.run(calculate_scores_helper(os.path.join("../backend/datasets_scores", file.replace(".h5ad", "")), params_dict))
+            
+            # ! needs to be called from frontend directory
