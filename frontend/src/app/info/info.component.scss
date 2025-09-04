@@ -1,3 +1,100 @@
+/* Container */
+.info-page {
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Header mit zentriertem Logo */
+header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  margin-bottom: 8px;
+
+  img {
+    max-height: 200px;
+    width: auto;
+    display: block;
+  }
+}
+
+/* Container mit Flexbox */
+.overview-container {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.overview-box {
+  border: 1px solid #e6e9f2;
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.overview-img {
+  display: block;
+  max-height: 450px;
+  width: auto;
+  border-radius: 8px;
+}
+
+/* Card */
+.card {
+  background: #fff;
+  border: 1px solid #e6e9f2;
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06);
+  padding: 16px 18px;
+}
+
+/* Typografie & Listen */
+h2, h3, h4 { margin: 10px 0 8px; line-height: 1.25; }
+p { margin: .5rem 0; line-height: 1.45; }
+ul { padding-left: 1.25rem; margin: 0 0 .75rem; }
+li { margin: .4rem 0; line-height: 1.45; }
+
+/* Inline-Code: „Pill“ + weicher Umbruch (verhindert Überlappungen) */
+code {
+  background: #f3f5ff;
+  border: 1px solid #e6e9f2;
+  border-radius: 10px;
+  padding: .18em .5em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .95rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* CSV-Beispiele: einzeilig + horizontal scrollen */
+.codeblock {
+  background: #f8f9ff;
+  border: 1px solid #e6e9f2;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+
+  code {
+    display: inline-block;
+    white-space: pre;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    line-height: 1.4;
+  }
+}
+
+/* Back-Button im App-Stil */
 .back-btn, .back-link {
   margin-top: 1rem;
   padding: 0.5rem 1rem;

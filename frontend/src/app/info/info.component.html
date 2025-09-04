@@ -1,13 +1,19 @@
 <div class="info-page">
   <header>
     <img src="assets/info/logo.png" alt="MOPITAS Logo" />
-    <div>
-      <h1>MOPITAS MaPra</h1>
-    </div>
+
   </header>
 
   <h2>Overview</h2>
-  <img src="assets/info/overview.png" alt="Overview" class="overview-img" />
+  <div class="overview-container">
+    <div class="overview-box">
+      <img src="assets/info/upload-flow.png" alt="Upload Workflow" class="overview-img" />
+    </div>
+    <div class="overview-box">
+      <img src="assets/info/overview.png" alt="Overview" class="overview-img" />
+    </div>
+  </div>
+  <br>
 
   <section class="card">
     <h2>Format Requirements</h2>
@@ -234,8 +240,6 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
     
 
   </section>
-  
-  
-  <button (click)="goBack()" class="back-btn">← Back</button>
 
+  <button (click)="goBack()" class="back-btn">← Back</button>
 </div>
