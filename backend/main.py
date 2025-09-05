@@ -507,7 +507,7 @@ async def get_hexagon(user:str, subdir:str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     """
-    file_path = Path("./uploads") / Path(user) / Path(subdir) / filename
+    file_path = Path("../backend/uploads") / Path(user) / Path(subdir) / filename
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
