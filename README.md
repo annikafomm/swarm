@@ -1,4 +1,4 @@
-![all_yellow_cursive_white](https://github.com/user-attachments/assets/765e6a4a-6df7-492d-9e1e-09e0fa73c6dd)
+![all_yellow_cursive_white](all_yellow_cursive_white.svg)
 
 # MOPITAS MaPra
 
