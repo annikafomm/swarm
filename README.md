@@ -1,6 +1,6 @@
 ![all_yellow_cursive_white](all_yellow_cursive_white.svg)
 
-# MOPITAS MaPra
+# SWARM
 
 
 This is the Github-Repository of the MoPiTas Project in the Master Practical course of DaisyBioLab 2025.
@@ -29,7 +29,10 @@ Start the frontend development server:
 cd frontend
 npm start
 ```
-
+OR use
+```sh
+bash launch.sh
+```
 ## Format Requirements
 
 The web-tool is working with the anndata-format. This is a tutorial on how counts and scores should be saved.
