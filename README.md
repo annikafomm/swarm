@@ -1,7 +1,8 @@
-
+![all_yellow_cursive_white](https://github.com/user-attachments/assets/765e6a4a-6df7-492d-9e1e-09e0fa73c6dd)
 
 # MOPITAS MaPra
-![All_yellow_cursive](https://github.com/user-attachments/assets/84ff82f7-9c5d-4f68-a3d5-2d96d7a68bac)<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+![Uploading<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 
 <svg
@@ -11,8 +12,8 @@
    version="1.1"
    id="svg1"
    xml:space="preserve"
-   inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
-   sodipodi:docname="All_yellow_cursive.svg"
+   inkscape:version="1.4.2 (2aeb623e1d, 2025-05-12)"
+   sodipodi:docname="all_yellow_cursive_white.svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
@@ -28,10 +29,10 @@
      inkscape:document-units="mm"
      showguides="true"
      inkscape:zoom="0.34"
-     inkscape:cx="954.41176"
-     inkscape:cy="569.11765"
-     inkscape:window-width="1920"
-     inkscape:window-height="1080"
+     inkscape:cx="952.94118"
+     inkscape:cy="570.58824"
+     inkscape:window-width="1440"
+     inkscape:window-height="818"
      inkscape:window-x="0"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
@@ -206,8 +207,8 @@
        inkscape:transform-center-x="39.032033"
        inkscape:transform-center-y="5.0792163"><tspan
          x="104.16602"
-         y="474.87249"
-         id="tspan6">S</tspan></text><text
+         y="479.46289"
+         id="tspan1">S</tspan></text><text
        xml:space="preserve"
        transform="matrix(0.21453852,0.00235331,-0.00286054,0.17649657,176.18917,16.115915)"
        id="text19-7"
@@ -215,8 +216,8 @@
        inkscape:transform-center-x="33.333288"
        inkscape:transform-center-y="4.1451088"><tspan
          x="104.16602"
-         y="474.87249"
-         id="tspan7">W</tspan></text><text
+         y="479.46289"
+         id="tspan2">W</tspan></text><text
        xml:space="preserve"
        transform="scale(0.26458333)"
        id="text69"
@@ -1150,8 +1151,8 @@
          inkscape:transform-center-x="41.105199"
          inkscape:transform-center-y="6.2133175"><tspan
            x="104.16602"
-           y="474.87249"
-           id="tspan8">A</tspan></text><text
+           y="479.46289"
+           id="tspan3">A</tspan></text><text
          xml:space="preserve"
          transform="matrix(0.26455982,0.0035275,-0.0035275,0.26455982,176.19215,-42.173727)"
          id="text19-3"
@@ -1165,8 +1166,8 @@
        inkscape:transform-center-x="33.960178"
        inkscape:transform-center-y="5.0661402"><tspan
          x="104.16602"
-         y="474.87249"
-         id="tspan9">R</tspan></text><text
+         y="479.46289"
+         id="tspan4">R</tspan></text><text
        xml:space="preserve"
        transform="matrix(0.22050221,0.00287083,-0.00294006,0.21531049,255.3474,112.45161)"
        id="text19-4"
@@ -1174,64 +1175,65 @@
        inkscape:transform-center-x="34.259888"
        inkscape:transform-center-y="5.056678"><tspan
          x="104.16602"
-         y="474.87249"
-         id="tspan11">M</tspan></text><text
+         y="479.46289"
+         id="tspan5">M</tspan></text><text
        xml:space="preserve"
-       style="font-weight:bold;font-size:35.2778px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#ea901f;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
+       style="font-weight:bold;font-size:35.2778px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Bold';text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:#ea901f;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
        x="201.55023"
        y="68.480385"
        id="text13"><tspan
          sodipodi:role="line"
          id="tspan13"
-         style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2778px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#000000;stroke:#000000;stroke-width:0;stroke-opacity:1"
+         style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2778px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;stroke:#000000;stroke-width:0;stroke-opacity:1;fill-opacity:1"
          x="201.55023"
          y="68.480385">patial Transcriptomics</tspan></text><text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
+       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
        x="238.12497"
        y="101.94239"
        id="text14"><tspan
          sodipodi:role="line"
          id="tspan14"
-         style="stroke-width:0"
+         style="stroke-width:0;fill:#ffffff;fill-opacity:1"
          x="238.12497"
          y="101.94239">ebtool <tspan
-   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal"
+   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1"
    id="tspan18">for</tspan></tspan></text><text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
+       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
        x="254.46692"
        y="137.73897"
        id="text15"><tspan
          sodipodi:role="line"
          id="tspan15"
-         style="stroke-width:0"
+         style="stroke-width:0;fill:#ffffff;fill-opacity:1"
          x="254.46692"
          y="137.73897">nalysis <tspan
-   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal"
+   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1"
    id="tspan19">of</tspan></tspan></text><text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
+       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
        x="283.25983"
        y="178.98285"
        id="text16"><tspan
          sodipodi:role="line"
          id="tspan16"
-         style="stroke-width:0"
+         style="stroke-width:0;fill:#ffffff;fill-opacity:1"
          x="283.25983"
          y="178.98285">egulation <tspan
-   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal"
+   style="font-style:normal;font-variant:normal;font-weight:250;font-stretch:normal;font-size:35.2777px;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, weight=250';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;fill:#ffffff;fill-opacity:1"
    id="tspan20">on a</tspan></tspan></text><text
        xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#000000;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
+       style="font-style:normal;font-variant:normal;font-weight:300;font-stretch:normal;font-size:35.2777px;line-height:0;font-family:Ubuntu;-inkscape-font-specification:'Ubuntu, Light';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;text-align:start;writing-mode:lr-tb;direction:ltr;text-anchor:start;fill:#ffffff;fill-opacity:1;stroke:#000000;stroke-width:0;stroke-linecap:round;stroke-opacity:1;paint-order:stroke markers fill"
        x="315.16541"
        y="214.77942"
        id="text17"><tspan
          sodipodi:role="line"
          id="tspan17"
-         style="stroke-width:0"
+         style="stroke-width:0;fill:#ffffff;fill-opacity:1"
          x="315.16541"
          y="214.77942">ap</tspan></text></g></svg>
+ all_yellow_cursive_white.svg…]()
 
 
 This is the Github-Repository of the MoPiTas Project in the Master Practical course of DaisyBioLab 2025.
