@@ -25,7 +25,7 @@ dependencies:
   - bioconda::bioconductor-viper
   - bioconda::bioconductor-gsva
   - conda-forge::r-optparse
-  - python=3.10
+  - python
   - numpy
   - pandas
   - scipy=1.10.*
@@ -39,9 +39,9 @@ dependencies:
   - fastapi
   - decoupler-py
   - mudata
-  - bioconda::liana
   - simplejson
   - pip:
+      - liana
       - spatialde
       - git+https://github.com/broadinstitute/Tangram.git
       - git+https://github.com/theislab/spapros.git@bump_python3.13

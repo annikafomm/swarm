@@ -1397,32 +1397,37 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     const n = enrichment.length;
     const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
 
-    const data: Partial<Plotly.PlotData>[] = [
-      {
-        z: [enrichment],
-        x: clusterLabels,
-        y: [leiden.toString()],
-        type: 'heatmap',
-        colorscale: 'Viridis',
-      },
-    ];
+    const minValue = Math.min(...enrichment);
+    const maxValue = Math.max(...enrichment);
+    const normalized = (maxValue > minValue)
+    ? enrichment.map(v => (v - minValue) / (maxValue - minValue))
+    : enrichment.map(() => 0);
+
+     const data: Partial<Plotly.PlotData>[] = [
+    {
+      x: clusterLabels,
+      y: normalized,
+      type: 'bar',
+      marker: { color: 'rgba(55,128,191,0.7)' },
+      name: `Cluster ${leiden}`,
+    },
+  ];
 
     const layout = {
-      margin: { t: 30, l: 60, r: 10, b: 40 },
-      width: 300,
-      height: 170,
-      xaxis: {
-        title: { text: 'Cluster' },
-        automargin: true,
-        tickfont: { size: 10 },
-      },
-      yaxis: {
-        title: { text: '' },
-        automargin: true,
-        showticklabels: false,
-        tickfont: { size: 10 },
-      },
-    };
+    margin: { t: 30, l: 60, r: 10, b: 40 },
+    width: 300,
+    height: 170,
+    xaxis: {
+      title: { text: 'Cluster' },
+      automargin: true,
+      tickfont: { size: 10 },
+    },
+    yaxis: {
+      title: { text: 'Enrichment' },
+      automargin: true,
+      tickfont: { size: 10 },
+    }
+  };
 
     const container = document.getElementById('cluster-nhood-heatmap');
     if (!container) {
