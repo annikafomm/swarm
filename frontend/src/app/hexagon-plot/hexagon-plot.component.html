@@ -6,130 +6,88 @@
 
     <div>
       <label for="colorBy">Color hexagons by:</label>
-        <select
-          id="colorBy"
-          [(ngModel)]="colorByProperty"
-          (change)="onColorbyPropertyChange()"
-        >
+      <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
         <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
           <option *ngFor="let prop of group.value" [value]="prop">
             {{ prop | translate | async }}
           </option>
         </optgroup>
-        </select>
+      </select>
 
-      <div
-        *ngIf="colorByProperty === 'ligand_receptor_relationships'"
-        class="hx-toolbar"
-      >
-        <button
-          type="button"
-          class="hx-btn hx-btn-pill hx-btn-upload"
-          [attr.aria-pressed]="showGlobalLigandReceptorScores"
-          (click)="
+      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
+        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+          [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
             showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
-          "
-        >
+          ">
           Show
           {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
         </button>
       </div>
       <div *ngIf="colorByProperty === 'gene_expression'">
-        <button
-          type="button"
-          class="hx-btn hx-btn-pill hx-btn-upload"
-          [attr.aria-pressed]="showMoranI"
-          (click)="showMoranI = !showMoranI"
-        >
+        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
+          (click)="showMoranI = !showMoranI">
           Show
           {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
         </button>
       </div>
     </div>
 
-    <div
-      *ngIf="colorByProperty === 'regulatory_scores'"
-      class="gene-set-section"
-    >
+    <div *ngIf="colorByProperty === 'regulatory_scores'" class="gene-set-section">
       <h2>Gene Set Analysis for Selected Cell</h2>
-      <div
-        *ngIf="(geneSetsGenie3 | keyvalue).length > 0"
-        class="gene-set-selector"
-        style="margin-bottom: 1rem"
-      >
-        <label for="genie3-select">Select Genie3 Gene Set:</label>
-        <select
-          id="genie3-select"
-          [(ngModel)]="selectedGeneSetGenie3"
-          (change)="onGeneSetChange()"
-        >
-          <option value="">-- Select a Genie3 gene set --</option>
-          <option
-            *ngFor="let geneSet of meta['genie_genesets'] | keyvalue"
-            [value]="geneSet.key"
-          >
-            {{ geneSet.key }}
-          </option>
-        </select>
-        <br /><br />
 
-        <label for="sponge-select">Select Sponge Gene Set:</label>
-        <select
-          id="sponge-select"
-          [(ngModel)]="selectedGeneSetSponge"
-          (change)="onGeneSetChange()"
-        >
-          <option value="">-- Select a Sponge gene set --</option>
-          <option
-            *ngFor="let geneSet of meta['sponge_genesets'] | keyvalue"
-            [value]="geneSet.key"
-          >
-            {{ geneSet.key }}
-          </option>
-        </select>
+      <!-- TOP: selectors and score chooser (always above graphs) -->
+      <div class="gene-set-top">
+        <div *ngIf="(geneSetsGenie3 | keyvalue).length > 0" class="gene-set-selector">
+          <label for="genie3-select">Select Genie3 Gene Set:</label>
+          <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
+            <option value="">-- Select a Genie3 gene set --</option>
+            <option *ngFor="let geneSet of meta['genie_genesets'] | keyvalue" [value]="geneSet.key">
+              {{ geneSet.key }}
+            </option>
+          </select>
 
-        <br /><br />
+          <label for="sponge-select">Select Sponge Gene Set:</label>
+          <select id="sponge-select" [(ngModel)]="selectedGeneSetSponge" (change)="onGeneSetChange()">
+            <option value="">-- Select a Sponge gene set --</option>
+            <option *ngFor="let geneSet of meta['sponge_genesets'] | keyvalue" [value]="geneSet.key">
+              {{ geneSet.key }}
+            </option>
+          </select>
 
-        <label for="regscore-select">Select Regulatory Score:</label>
-        <select
-          id="regscore-select"
-          [(ngModel)]="selectedRegulatoryScore"
-          (change)="onRegulatoryScoreChange()"
-        >
-          <option value="">-- Select a Regulatory Score --</option>
-          <option
-            *ngFor="let score of this.meta['grn_score_names']"
-            [value]="score"
-          >
-            {{ score | translate | async }}
-          </option>
-        </select>
+          <label for="regscore-select">Select Regulatory Score:</label>
+          <select id="regscore-select" [(ngModel)]="selectedRegulatoryScore" (change)="onRegulatoryScoreChange()">
+            <option value="">-- Select a Regulatory Score --</option>
+            <option *ngFor="let score of this.meta['grn_score_names']" [value]="score">
+              {{ score | translate | async }}
+            </option>
+          </select>
+        </div>
+      </div>
 
-        <div>
+      <!-- BODY: graphs stacked vertically (each has its controls, loading and svg) -->
+      <div class="gene-set-body">
+
+        <!-- Genie3 block -->
+        <section class="graph-block genie3-block">
           <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
 
-          <div
-            class="genie3-controls"
-            style="margin-bottom: 15px; text-align: center"
-          >
-            <label
-              for="max-edges-slider"
-              style="display: block; margin-bottom: 5px; font-weight: bold"
-            >
-              Min Best Edges: {{ minGenie3Edges }}
-            </label>
-            <input
-              type="range"
-              id="max-edges-slider"
-              min="10"
-              max="75"
-              step="5"
-              [(ngModel)]="minGenie3Edges"
-              (input)="onMinEdgesChangeGenie3()"
-              style="width: 300px; cursor: pointer"
-            />
-            <div style="font-size: 12px; color: #666; margin-top: 5px">
-              10 ← → 75 edges
+          <div *ngIf="genie3SliderData" class="genie3-controls">
+            <div class="control-row">
+              <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+              <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
+                [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
+                [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
+                [(ngModel)]="genie3WeightCutoff" />
+              <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}</div>
+            </div>
+
+            <div class="controls-divider" aria-hidden="true"></div>
+
+            <div class="control-row">
+              <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+              <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
+                (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
+              <div class="helper small">1 ←→ 50</div>
             </div>
           </div>
 
@@ -138,66 +96,40 @@
             <div class="loading-text">Loading Genie3 network...</div>
           </div>
 
-          <div
-            id="aucell_graph_genie3"
-            [style.display]="isLoadingGenie3 ? 'none' : 'block'"
-          ></div>
+          <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
-          <div
-            class="gprofiler-button-container"
-            style="text-align: center; margin-top: 10px"
-            *ngIf="!isLoadingGenie3"
-          >
-            <button
-              class="gprofiler-btn"
-              (click)="analyzeGeneSetInGProfiler()"
-              [disabled]="!selectedGeneSetGenie3"
-              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
-              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'"
-            >
+          <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
+            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetGenie3">
               🧬 Analyze All Genie3 Genes in gProfiler
             </button>
           </div>
 
-          <div
-            *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null"
-            style="
-              text-align: center;
-              margin-top: 5px;
-              font-size: 12px;
-              color: #666;
-            "
-          >
-            Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: "1.2-5" }}
+          <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
+            Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{ genie3MinEdges }}
           </div>
-        </div>
+        </section>
 
-        <div>
+        <!-- Sponge block -->
+        <section class="graph-block sponge-block">
           <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
 
-          <!-- Add slider control for max nodes -->
-          <div
-            class="sponge-controls"
-            style="margin-bottom: 15px; text-align: center"
-          >
-            <label
-              for="max-nodes-slider"
-              style="display: block; margin-bottom: 5px; font-weight: bold"
-            >
-              Min Best Edges: {{ minSpongeEdges }}
-            </label>
-            <input
-              type="range"
-              id="max-nodes-slider"
-              min="10"
-              max="75"
-              step="5"
-              [(ngModel)]="minSpongeEdges"
-              (input)="onMinEdgesChangeSponge()"
-              style="width: 300px; cursor: pointer"
-            />
-            <div style="font-size: 12px; color: #666; margin-top: 5px">
-              10 ← → 75 nodes
+          <div *ngIf="spongeSliderData" class="sponge-controls">
+            <div class="control-row">
+              <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+              <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
+                [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
+                [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
+                (input)="onSliderChangeSponge()" />
+              <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}</div>
+            </div>
+
+            <div class="controls-divider" aria-hidden="true"></div>
+
+            <div class="control-row">
+              <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+              <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
+                (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
+              <div class="helper small">1 ←→ 50</div>
             </div>
           </div>
 
@@ -206,40 +138,18 @@
             <div class="loading-text">Loading Sponge network...</div>
           </div>
 
-          <div
-            id="aucell_graph_sponge"
-            [style.display]="isLoadingSponge ? 'none' : 'block'"
-          ></div>
+          <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
 
-          <!-- gProfiler button below the Sponge graph -->
-          <div
-            class="gprofiler-button-container"
-            style="text-align: center; margin-top: 10px"
-            *ngIf="!isLoadingSponge"
-          >
-            <button
-              class="gprofiler-btn"
-              (click)="analyzeGeneSetInGProfiler()"
-              [disabled]="!selectedGeneSetSponge"
-              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.3)'"
-              onmouseout="this.style.transform='translateY(0px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.2)'"
-            >
+          <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
+            <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()" [disabled]="!selectedGeneSetSponge">
               🧬 Analyze All Sponge Genes in gProfiler
             </button>
           </div>
 
-          <div
-            *ngIf="!isLoadingSponge && spongePValueCutoff !== null"
-            style="
-              text-align: center;
-              margin-top: 5px;
-              font-size: 12px;
-              color: #666;
-            "
-          >
-            P-value cutoff: {{ spongePValueCutoff | number: "1.2-4" }}
+          <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
+            P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
           </div>
-        </div>
+        </section>
       </div>
     </div>
 
@@ -249,18 +159,11 @@
         <div class="controls-row">
           <div class="interval-selector">
             <label for="interval-select">Interval:</label>
-            <select
-              id="interval-select"
-              [(ngModel)]="selectedInterval"
-              (change)="updateCoOccurrenceTable()"
-            >
-              <option
-                *ngFor="
+            <select id="interval-select" [(ngModel)]="selectedInterval" (change)="updateCoOccurrenceTable()">
+              <option *ngFor="
                   let i of [].constructor(maxInterval + 1);
                   let idx = index
-                "
-                [ngValue]="idx"
-              >
+                " [ngValue]="idx">
                 Interval {{ idx }}
               </option>
             </select>
@@ -281,9 +184,7 @@
           <thead>
             <tr>
               <th>Target Cluster</th>
-              <th
-                *ngFor="let i of [].constructor(clusterCount); let idx = index"
-              >
+              <th *ngFor="let i of [].constructor(clusterCount); let idx = index">
                 {{ idx }}
               </th>
             </tr>
@@ -291,20 +192,16 @@
           <tbody>
             <tr>
               <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-              <td
-                *ngFor="let value of coOccurrenceData; let j = index"
-                [class.high-cooccurrence]="value > coOccurrenceThreshold"
-                [class.diagonal]="selectedCluster === j"
-                [style.background-color]="getCoOccurrenceColor(value)"
-                [title]="
+              <td *ngFor="let value of coOccurrenceData; let j = index"
+                [class.high-cooccurrence]="value > coOccurrenceThreshold" [class.diagonal]="selectedCluster === j"
+                [style.background-color]="getCoOccurrenceColor(value)" [title]="
                   'Cluster ' +
                   selectedCluster +
                   ' → Cluster ' +
                   j +
                   ': ' +
                   value
-                "
-              >
+                ">
                 {{ value | number: "1.0-3" }}
               </td>
             </tr>
@@ -317,65 +214,44 @@
       </div>
 
       <div class="interval-navigation">
-        <button
-          class="nav-btn"
-          (click)="
+        <button class="nav-btn" (click)="
             selectedInterval = Math.max(0, selectedInterval - 1);
             updateCoOccurrenceTable()
-          "
-          [disabled]="selectedInterval === 0"
-        >
+          " [disabled]="selectedInterval === 0">
           ← Previous
         </button>
-        <span class="current-interval"
-          >Interval {{ selectedInterval }} of {{ maxInterval }}</span
-        >
-        <button
-          class="nav-btn"
-          (click)="
+        <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval }}</span>
+        <button class="nav-btn" (click)="
             selectedInterval = Math.min(maxInterval, selectedInterval + 1);
             updateCoOccurrenceTable()
-          "
-          [disabled]="selectedInterval === maxInterval"
-        >
+          " [disabled]="selectedInterval === maxInterval">
           Next →
         </button>
       </div>
     </div>
 
     <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
-      <div
-        *ngIf="
+      <div *ngIf="
           showGlobalLigandReceptorScores;
           then global_scores;
           else nmf_scores
-        "
-      ></div>
+        "></div>
 
       <ng-template #global_scores>
         <h4>Ligand–Receptor Global Scores</h4>
-        <app-table
-          [data]="this.meta['ligand_receptor_global_scores']"
-          [actionColumns]="[
+        <app-table [data]="this.meta['ligand_receptor_global_scores']" [actionColumns]="[
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
-          ]"
-          [features]="features"
-          [updateColumn]="'ligand_receptor_relationships'"
-          (featuresUpdated)="updateHexColors()"
-        ></app-table>
+          ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+          (featuresUpdated)="updateHexColors()"></app-table>
       </ng-template>
 
       <ng-template #nmf_scores>
         <h4>Ligand-Receptor NMF Scores</h4>
-        <app-table
-          [data]="this.meta['nmf_factors']"
-          [actionColumns]="['ligand_receptor_NMF_factors']"
-          [features]="features"
-          [updateColumn]="'ligand_receptor_relationships'"
-          (featuresUpdated)="updateHexColors()"
-        ></app-table>
+        <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
+          [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+          (featuresUpdated)="updateHexColors()"></app-table>
       </ng-template>
     </div>
 
@@ -383,64 +259,38 @@
       <div *ngIf="showMoranI; then moranI; else gearyC"></div>
       <ng-template #moranI>
         <h4>Moran's I</h4>
-        <app-table
-          [data]="this.meta['moranI']"
-          [actionColumns]="['gene_expression']"
-          [features]="features"
-          [updateColumn]="'gene_expression'"
-          (featuresUpdated)="updateHexColors()"
-        ></app-table>
+        <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
+          [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
       </ng-template>
 
       <ng-template #gearyC>
         <h4>Geary's C</h4>
-        <app-table
-          [data]="this.meta['gearyC']"
-          [actionColumns]="['gene_expression']"
-          [features]="features"
-          [updateColumn]="'gene_expression'"
-          (featuresUpdated)="updateHexColors()"
-        ></app-table>
+        <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
+          [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
       </ng-template>
     </div>
 
     <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
       <h4>Cell Composition TF Activity Global Scores</h4>
-      <app-table
-        [data]="this.meta['cell_comp_tf_activity_global_scores']"
-        [actionColumns]="[
+      <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
-        ]"
-        [features]="features"
-        [updateColumn]="'cell_comp_tf_activity_similarity'"
-        (featuresUpdated)="updateHexColors()"
-      ></app-table>
+        ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
+        (featuresUpdated)="updateHexColors()"></app-table>
     </div>
 
     <div *ngIf="colorByProperty === 'tf_activity'">
       <h4>TF Activity</h4>
-      <app-table
-        [data]="this.meta['tf_names']"
-        [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
-        [features]="features"
-        [updateColumn]="'tf_activity'"
-        (featuresUpdated)="updateHexColors()"
-      ></app-table>
+      <app-table [data]="this.meta['tf_names']" [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']"
+        [features]="features" [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors()"></app-table>
     </div>
 
     <div *ngIf="colorByProperty === 'pathway_activity'">
       <h4>Pathway Activity</h4>
-      <app-table
-        [data]="this.meta['pathway_names']"
-        [actionColumns]="[
+      <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]"
-        [features]="features"
-        [updateColumn]="'pathway_activity'"
-        (featuresUpdated)="updateHexColors()"
-      ></app-table>
+        ]" [features]="features" [updateColumn]="'pathway_activity'" (featuresUpdated)="updateHexColors()"></app-table>
     </div>
   </div>
 
@@ -591,15 +441,10 @@
       <div class="cell-types">
         <h4>Cell Type Distribution</h4>
         <div class="cell-type-item" *ngFor="let cellType of clusterCellTypes">
-          <div
-            class="cell-type-color"
-            [style.background-color]="colorScale(cellType.type)"
-          ></div>
-          <span
-            >{{ cellType.type }}: {{ cellType.count }} ({{
-              cellType.percentage
-            }}%)</span
-          >
+          <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
+          <span>{{ cellType.type }}: {{ cellType.count }} ({{
+            cellType.percentage
+            }}%)</span>
         </div>
       </div>
 
@@ -622,10 +467,7 @@
       </div>
       <div class="cluster-nhood" *ngIf="selectedCell">
         <h4>Neighborhood Enrichment (Selected Cell)</h4>
-        <div
-          id="cluster-nhood-heatmap"
-          style="width: 300px; height: 220px"
-        ></div>
+        <div id="cluster-nhood-heatmap" style="width: 300px; height: 220px"></div>
       </div>
     </div>
   </div>

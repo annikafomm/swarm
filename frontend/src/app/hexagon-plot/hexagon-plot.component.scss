@@ -31,14 +31,16 @@ select {
   top: 200px;
 }
 
-#aucell_graph_genie3, #aucell_graph_sponge {
+#aucell_graph_genie3,
+#aucell_graph_sponge {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
   padding: 2rem;
-  width: 500px;
+  width: 1000px;
   top: 200px;
+  align-content: center;
 }
 
 #main-visualization {
@@ -102,33 +104,49 @@ select {
     }
   }
 }
+
 .loading-container {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   align-items: center;
   justify-content: center;
-  min-height: 340px;
-  /* Height of graph + padding */
-  background-color: #f8f9fa;
-  border: 1px solid #e9ecef;
+  padding: 18px;
+  color: #1f2937;
+  position: relative;
+  min-height: 96px;
+  /* make loader area taller so it doesn't look tiny */
   border-radius: 8px;
-  margin: 10px 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(250, 250, 250, 0.4));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
 }
 
 .loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #e9ecef;
-  border-top: 4px solid #007bff;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 15px;
+  border: 4px solid rgba(11, 116, 193, 0.18);
+  border-top-color: #0b74c1;
+  animation: spin 0.9s linear infinite;
 }
 
 .loading-text {
-  font-size: 16px;
-  color: #6c757d;
-  font-weight: 500;
+  font-size: 0.95rem;
+  color: #334155;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+/* Optional full-overlay variant (apply to parent element if desired) */
+.loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.6);
+  z-index: 40;
+  border-radius: 8px;
 }
 
 @keyframes spin {
@@ -319,6 +337,7 @@ select {
     font-size: 12px;
   }
 }
+
 .co-occurrence-section {
   margin-top: 2rem;
   padding: 1.5rem;
@@ -678,7 +697,7 @@ select {
   --hx-text: #111827;
   --hx-muted: #6b7280;
   --hx-focus: #93c5fd;
-  --hx-focus-ring: rgba(59,130,246,.25);
+  --hx-focus-ring: rgba(59, 130, 246, .25);
 }
 
 .hx-toolbar {
@@ -704,15 +723,24 @@ select {
   white-space: nowrap;
   transition: background .15s ease, box-shadow .15s ease, transform .05s ease;
 }
-.hx-btn:hover   { background: var(--hx-bg-hover); }
-.hx-btn:active  { transform: translateY(1px); }
+
+.hx-btn:hover {
+  background: var(--hx-bg-hover);
+}
+
+.hx-btn:active {
+  transform: translateY(1px);
+}
+
 .hx-btn:focus {
   outline: none;
   border-color: var(--hx-focus);
   box-shadow: 0 0 0 3px var(--hx-focus-ring);
 }
 
-.hx-btn-pill { border-radius: 9999px; }
+.hx-btn-pill {
+  border-radius: 9999px;
+}
 
 .hx-btn-ghost {
   background: transparent;
@@ -721,21 +749,44 @@ select {
   padding: 4px 6px;
   border-radius: 10px;
 }
-.hx-btn-ghost:hover { background: var(--hx-bg); color: var(--hx-text); }
+
+.hx-btn-ghost:hover {
+  background: var(--hx-bg);
+  color: var(--hx-text);
+}
 
 .kv-table .row {
   border-bottom: 1px dashed var(--border);
 }
-.kv-table .row:last-child { border-bottom: 0; }
-.kv-table dt { color: var(--text); }
-.kv-table dd { color: var(--text); }
+
+.kv-table .row:last-child {
+  border-bottom: 0;
+}
+
+.kv-table dt {
+  color: var(--text);
+}
+
+.kv-table dd {
+  color: var(--text);
+}
 
 .sidenav-content.compact {
   gap: .65rem;
 }
-.sidenav-content.compact .section { padding: .45rem .6rem; }
-.sidenav-content.compact .chip { padding: .22rem .45rem; font-size: .85rem; }
-.sidenav-content.compact .row { gap: .2rem .6rem; }
+
+.sidenav-content.compact .section {
+  padding: .45rem .6rem;
+}
+
+.sidenav-content.compact .chip {
+  padding: .22rem .45rem;
+  font-size: .85rem;
+}
+
+.sidenav-content.compact .row {
+  gap: .2rem .6rem;
+}
 
 /* Array chips */
 .array-header {
@@ -747,7 +798,7 @@ select {
 
 .array-header .badge {
   background: var(--hx-muted, #eef2f7);
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid rgba(0, 0, 0, .06);
   padding: .1rem .5rem;
   border-radius: 999px;
   font-size: .75rem;
@@ -777,19 +828,23 @@ select {
   padding: 0;
 }
 
-.chip-list.collapsed .chip:nth-child(n + 11) { display: none; }
+.chip-list.collapsed .chip:nth-child(n + 11) {
+  display: none;
+}
 
 .chip {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: .85rem;
   padding: .15rem .5rem;
   background: var(--hx-chip-bg, #f6f7fb);
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid rgba(0, 0, 0, .06);
   border-radius: 999px;
   white-space: nowrap;
 }
 
-.chip-json { white-space: nowrap; }
+.chip-json {
+  white-space: nowrap;
+}
 
 .row-list {
   list-style: none;
@@ -799,7 +854,9 @@ select {
   gap: .35rem;
 }
 
-.row-list.collapsed .row:nth-child(n + 4) { display: none; }
+.row-list.collapsed .row:nth-child(n + 4) {
+  display: none;
+}
 
 .row {
   display: flex;
@@ -810,7 +867,7 @@ select {
 
 .row-badge {
   background: #d7d7d7;
-  border: 1px solid rgba(0,0,0,.06);
+  border: 1px solid rgba(0, 0, 0, .06);
   border-radius: .5rem;
   padding: .1rem .4rem;
   font-size: .75rem;
@@ -833,4 +890,197 @@ select {
   border-radius: 999px;
   font-size: .75rem;
   line-height: 1.4;
+}
+
+/* Layout for the gene-set section */
+.gene-set-section {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+  padding: 16px;
+  margin: 12px 0;
+  color: #0f172a;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 14px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+}
+
+/* top area only contains selectors */
+.gene-set-top {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* keep selector layout tidy */
+.gene-set-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+/* body holds stacked graph blocks */
+.gene-set-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* each block contains sliders, loading and svg graph stacked */
+.graph-block {
+  background: #fbfdff;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #eef6ff;
+}
+
+/* make graphs full width and visually separated from controls */
+.graph-block>#aucell_graph_genie3,
+.graph-block>#aucell_graph_sponge {
+  width: 100%;
+  min-height: 240px;
+  margin-top: 8px;
+}
+
+/* center gprofiler button */
+.gprofiler-button-container {
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* small summary line */
+.graph-summary {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #555;
+}
+
+/* keep existing control and slider rules (reused) */
+.genie3-controls,
+.sponge-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  /* center label + slider so user doesn't have to move mouse far */
+  align-items: center;
+  text-align: center;
+}
+
+/* label centered above the slider */
+.control-row>label {
+  align-self: center;
+  font-weight: 700;
+  color: #0b3a66;
+}
+
+/* make sliders narrower and centered; keep responsive fallback for small screens */
+.slider {
+  width: 280px;
+  /* smaller travel distance */
+  max-width: 80%;
+  cursor: pointer;
+  height: 10px;
+  margin: 0 auto;
+  /* center in row */
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(11, 116, 193, 0.08), rgba(11, 116, 193, 0.03));
+  border: 1px solid rgba(11, 116, 193, 0.08);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow .12s ease, transform .06s ease;
+}
+
+/* WebKit track: make subtle pale-blue fill */
+.slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e6f6ff, #dbeefd);
+  border: 0;
+}
+
+/* WebKit thumb (blue) */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -4px;
+  /* center thumb on track */
+  background: #0b74c1;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  box-shadow: 0 4px 10px rgba(11, 116, 193, 0.22);
+  cursor: pointer;
+}
+
+/* Firefox track & thumb */
+.slider::-moz-range-track {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #e6f6ff, #dbeefd);
+}
+
+.slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  background: #0b74c1;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 10px rgba(11, 116, 193, 0.22);
+  cursor: pointer;
+}
+
+/* keyboard-focus ring */
+.slider:focus {
+  outline: none;
+  box-shadow: 0 0 0 6px rgba(11, 116, 193, 0.12);
+  transform: translateY(-1px);
+}
+
+/* helper text keeps left alignment when space allows but stays centered with slider */
+.helper.small {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+  text-align: center;
+}
+
+/* responsive: allow full width on small screens */
+@media (max-width: 480px) {
+  .slider {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .control-row>label,
+  .helper.small {
+    text-align: center;
+  }
+}
+
+/* Responsive: ensure stacked layout remains on small screens */
+@media (max-width: 900px) {
+  .gene-set-selector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .graph-block>#aucell_graph_genie3,
+  .graph-block>#aucell_graph_sponge {
+    min-height: 200px;
+  }
 }
