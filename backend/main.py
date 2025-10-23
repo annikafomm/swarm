@@ -92,6 +92,7 @@ class SessionData(BaseModel):
     sponge_network_path: str | None = None
 
 
+
 class BasicVerifier(SessionVerifier[UUID, SessionData]):
     def __init__(
         self,
@@ -234,25 +235,74 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
     return str(dest.resolve())
 
 
-def filter_network_csv(file_path, gene_set, network_type):
+
+def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
+    """
+    Given an array of edge annotations, compute an appropriate step size and borders
+    for binning the annotations into categories.
+
+    Returns (step_size, min_border, max_border)
+    """
+    w_min = np.min(edge_annotations)
+    w_max = np.max(edge_annotations)
+    w_range = w_max - w_min
+
+    if w_range == 0:
+        return (1.0, w_min - 0.5, w_max + 0.5)
+
+    # Determine step size based on range
+    if w_range <= 0.1:
+        step = 0.01
+    elif w_range <= 1.0:
+        step = 0.1
+    elif w_range <= 10.0:
+        step = 1.0
+    else:
+        step = 10.0
+
+    num_possible_steps = w_range / step
+
+    # Calculate borders
+    min_border = np.floor(w_min / step) * step
+    max_border = np.ceil(w_max / step) * step
+
+    default_value = min_border + (np.ceil(num_possible_steps / 2) * step)
+
+    return {"step": step, "min_border": min_border, "max_border": max_border, "default_value": default_value}
+
+
+
+def get_subnetwork_data(file_path, gene_set, network_type):
     # gene_set is a set or list of gene names
     filtered_rows = []
-    for chunk in pd.read_csv(file_path, chunksize=100000):
+    edge_annotations = []
+    for chunk in pd.read_csv(file_path, chunksize=100):
         if network_type == "genie":
             mask = chunk["regulatoryGene"].isin(gene_set) | chunk[
                 "targetGene"
             ].isin(gene_set)
+            annotation = "weight"
         elif network_type == "sponge":
-            mask = chunk["geneA"].isin(gene_set) | chunk["geneB"].isin(
-                gene_set
+            gene_mask = chunk["geneA"].isin(gene_set) | chunk["geneB"].isin(gene_set)
+
+            mask = (
+                gene_mask
+                & chunk["p.adj"].notna()
+                & chunk["p.adj"].lt(0.05)
+                & chunk["mscor"].notna()
+                & chunk["mscor"].abs().gt(0.1)
             )
+            annotation = "p.adj"
         else:
             continue
         filtered_chunk = chunk[mask]
+        edge_annotations.extend(filtered_chunk[annotation].values.tolist())
         if not filtered_chunk.empty:
             filtered_rows.append(filtered_chunk)
+            # remove chunk from memory
+            del filtered_chunk, chunk
     if filtered_rows:
-        return pd.concat(filtered_rows, ignore_index=True)
+        return pd.concat(filtered_rows, ignore_index=True), _step_and_borders_networks(np.array(edge_annotations))
     else:
         return pd.DataFrame()
 
@@ -638,8 +688,7 @@ async def read_network_genie(
 
 
 @app.post("/read_network_sponge")
-async def read_network_sponge(
-    sponge_network_path: SpongeNetworksPath, session_id: UUID = Depends(cookie)
+async def read_network_sponge(sponge_network_path: SpongeNetworksPath, session_id: UUID = Depends(cookie)
 ):
     """
     Example:
@@ -674,14 +723,14 @@ async def get_geneset_connections(
     gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from genie_network
-    connections = filter_network_csv(
+    connections, slider_data = get_subnetwork_data(
         session_data.genie_network_path, gene_set, "genie"
     )
 
     # Write to dict
     connections = connections.to_dict(orient="records")
 
-    return connections
+    return {"connections": connections, "slider_data": slider_data}
 
 
 @app.get("/geneset_connections_sponge", dependencies=[Depends(cookie)])
@@ -698,12 +747,12 @@ async def get_geneset_connections(
     gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from sponge_network
-    connections = filter_network_csv(
+    connections, slider_data = get_subnetwork_data(
         session_data.sponge_network_path, gene_set, "sponge"
     )
     connections = connections.to_dict(orient="records")
 
-    return connections
+    return {"connections": connections, "slider_data": slider_data}
 
 
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
