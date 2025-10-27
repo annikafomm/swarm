@@ -203,7 +203,7 @@ async def calculate_scores_helper(job_dir, json_dict):
         log_file = os.path.join(out_dir, "calc_scores.log")
         print(log_file)
         
-        if len(json_dict.keys()) and "params_python_script" in json_dict.keys() and "params_R_script" in json_dict.keys():
+        if len(json_dict.keys()) == 2 and "params_python_script" in json_dict.keys() and "params_R_script" in json_dict.keys():
             python_params = json_dict.get("params_python_script")
             R_params = json_dict.get("params_R_script")
 

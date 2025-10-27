@@ -1,0 +1,16 @@
+Python score pipeline started at 2025-09-05 08:59:09
+Loading ST AnnData object ...
+  AnnData object loaded in 0 min 0 sec
+Preparing score calculation for the Spatial data ...
+  Spatial neighbors calculated in 0 min 0 sec
+  LIANA+ scores calculated in 0 min 26 sec
+  Centrality scores for cluster leiden calculated in 0 min 0 sec
+  Co-occurrence probabilities for cluster leiden calculated in 0 min 0 sec
+  Neighborhood enrichment for cluster leiden calculated in 0 min 1 sec
+  Moran's I scores calculated in 0 min 0 sec
+  Geary's C scores calculated in 0 min 0 sec
+  Saving calculations ...
+    AnnData object written in 0 min 5 sec
+Python score pipeline finished at 2025-09-05 08:59:42
+
+Finished! Check out the log file and the AnnData object(s) in /nfs/home/students/r.ellenrieder/mopitas/mopitas-mapra/frontend/../backend/uploads/job_1757055531649_08e81227-baeb-4cca-86d4-577ae7002ee2/plasmidpoop for details.

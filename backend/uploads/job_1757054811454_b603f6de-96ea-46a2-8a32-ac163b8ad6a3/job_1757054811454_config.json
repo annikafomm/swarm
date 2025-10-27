@@ -1,0 +1,85 @@
+{
+  "email": "name@domai.web.de",
+  "dataset": "Visium",
+  "spatial": {
+    "normalization": false,
+    "filtering": false
+  },
+  "files": {
+    "spatial_h5ad": "/nfs/home/students/r.ellenrieder/mopitas/mopitas-mapra/backend/uploads/job_1757054811454_b603f6de-96ea-46a2-8a32-ac163b8ad6a3/GSM6592053_M6_prepro.h5ad",
+    "single_cell_h5ad": null,
+    "genie3_network": null,
+    "sponge_networkanalysis": null,
+    "sponge_networkinteractions": null,
+    "liana_genie3_network": null,
+    "liana_pathway_network": null
+  },
+  "tangram": {
+    "use": false,
+    "filtering": null,
+    "normalization": null
+  },
+  "scores": {
+    "network": false,
+    "squidpy": true,
+    "liana_plus": true
+  },
+  "network": {
+    "algorithms": {
+      "viper": false,
+      "aucell": false,
+      "gsva": false,
+      "ssgsea": false
+    },
+    "sponge_params": {
+      "m_score_threshold": null,
+      "p_adjust": null,
+      "ensembl_id_col": null,
+      "feature_col": null,
+      "rna_types": null,
+      "max_modules": null
+    },
+    "genie3_params": {
+      "top_n_weights": null,
+      "n_regulatory_genes": null,
+      "n_regulons": null
+    }
+  },
+  "squidpy": {
+    "moranI": true,
+    "moranI_params": {
+      "n_perms": null,
+      "two_tailed": false,
+      "corr_method": "fdr_bh"
+    },
+    "gearyC": true,
+    "gearyC_params": {
+      "n_perms": null,
+      "two_tailed": false,
+      "corr_method": "fdr_bh"
+    },
+    "centrality_score": true,
+    "centrality_score_params": {
+      "cluster_key": "leiden"
+    },
+    "co_occurrence": true,
+    "co_occurrence_params": {
+      "cluster_key": "leiden",
+      "interval": 50,
+      "n_splits": null
+    },
+    "neighborhood_enrichment": true,
+    "neighborhood_enrichment_params": {
+      "cluster_key": "leiden",
+      "library_key": "",
+      "n_perms": 1000
+    }
+  },
+  "liana": {
+    "composition_column": "celltype_scores"
+  },
+  "output_files": {
+    "adataPath": "/nfs/home/students/r.ellenrieder/mopitas/mopitas-mapra/frontend/../backend/uploads/job_1757054811454_b603f6de-96ea-46a2-8a32-ac163b8ad6a3/junkDNA420/GSM6592053_M6_prepro_st_scores.h5ad",
+    "geojsonPath": "/nfs/home/students/r.ellenrieder/mopitas/mopitas-mapra/frontend/../backend/uploads/job_1757054811454_b603f6de-96ea-46a2-8a32-ac163b8ad6a3/junkDNA420/hexagons.geojson"
+  }
+}

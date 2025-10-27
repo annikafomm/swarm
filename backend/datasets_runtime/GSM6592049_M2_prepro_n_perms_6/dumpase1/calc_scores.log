@@ -1,0 +1,18 @@
+Parameters for python pipeline:
+['-input', '../backend/datasets_prepro_new/GSM6592049_M2_prepro.h5ad', '-moranI', '-n_perms_autocorr_mI', '1000', '-gearyC', '-n_perms_autocorr_gC', '1000', '-nhood_enrichment', '-n_perms_nhood', '100000']
+Parameters for R pipeline:
+[]
+
+Python score pipeline started at 2025-09-09 19:07:02
+Loading ST AnnData object ...
+  AnnData object loaded in 0 min 0 sec
+Preparing score calculation for the Spatial data ...
+  Spatial neighbors calculated in 0 min 0 sec
+  Neighborhood enrichment for cluster leiden calculated in 0 min 20 sec
+  Moran's I scores calculated in 3 min 20 sec
+  Geary's C scores calculated in 3 min 14 sec
+  Saving calculations ...
+    AnnData object written in 0 min 1 sec
+Python score pipeline finished at 2025-09-09 19:13:58
+
+Finished! Check out the log file and the AnnData object(s) in ../backend/datasets_runtime/GSM6592049_M2_prepro_n_perms_6/dumpase1 for details.
