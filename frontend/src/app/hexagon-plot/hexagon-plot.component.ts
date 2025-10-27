@@ -31,7 +31,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     private geoDataService: GeoDataService,
     private translationService: TranslationService,
     private pathsService: PathsService,
-  ) {}
+  ) { }
 
 
   // Define to use Math functions in the html template
@@ -72,20 +72,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     average_clustering: number;
     closeness_centrality: number;
   } = {
-    degree_centrality: 0,
-    average_clustering: 0,
-    closeness_centrality: 0,
-  };
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
 
   public genie3Network: genie3RegGraphConnection[] = [];
   public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
-  public minGenie3Edges: number = 25;
-  public minSpongeEdges: number = 25;
-  public genie3WeightCutoff: number | null = null;
-  public spongePValueCutoff: number | null = null;
+
+  public genie3WeightCutoff: number = 0.5;
+  public spongePValueCutoff: number = 0.05;
+  public genie3MinEdges: number = 25;
+  public spongeMinEdges: number = 25;
+  public genie3SliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
+  public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
+
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
@@ -161,9 +165,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   private nextRequestToken(graphType: string): number {
-  if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
-  return ++this.requestTokens[graphType];
-}
+    if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
+    return ++this.requestTokens[graphType];
+  }
 
   private createHexagonPlot(): void {
     const width = 500;
@@ -216,6 +220,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           Object.keys(this.meta['genie_genesets'] || {})[0] || null;
         this.selectedGeneSetSponge =
           Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+        this.previousGeneSetGenie3 =
+          Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+        this.previousGeneSetSponge =
+          Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
 
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
@@ -231,9 +239,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-          { key: 'Other', value: this.colorableProperties.filter(
-            (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
-          ) },
+          {
+            key: 'Other', value: this.colorableProperties.filter(
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+            )
+          },
         ];
 
         //this.colorableProperties.push('regulatory_scores');  // Exists in geojson
@@ -271,7 +281,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .attr('fill', (d) => {
             const value = d.properties?.[this.colorByProperty];
             if (this.currentLegendType === 'categorical') {
-                return this.colorScale(String(value));
+              return this.colorScale(String(value));
             } else {
               const num = this.toNumber(value);
               if (!isNaN(num)) {
@@ -402,8 +412,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           this.selectedRegulatoryScore,
           this.selectedGeneSetGenie3,
         );
-        this.updateAucellGraphGenie3();
-        this.updateAucellGraphSponge();
+        this.updateSubgraphGenie3();
+        this.updateSubgraphSponge();
+
       } else if (
         this.selectedRegulatoryScore?.endsWith('sponge') &&
         this.selectedGeneSetSponge
@@ -412,8 +423,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           this.selectedRegulatoryScore,
           this.selectedGeneSetSponge,
         );
-        this.updateAucellGraphGenie3();
-        this.updateAucellGraphSponge();
+        this.updateSubgraphGenie3();
+        this.updateSubgraphSponge();
       }
     }
     this.updateHexColors();
@@ -517,7 +528,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     this.renderLegend();
   }
 
-  public updateAucellGraphGenie3(): void {
+  public updateSubgraphGenie3(): void {
     const token = this.nextRequestToken('genie3');
     console.log('Updating AUCELL graph for Genie3...');
     this.isLoadingGenie3 = true;
@@ -527,15 +538,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       this.isLoadingGenie3 = false;
       return;
     }
-
-    const regulator = this.selectedGeneSetGenie3;
-    const targets = this.geneSetsGenie3[regulator] || [];
-
-    const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
-    const edges: { source: string; target: string; weight: number }[] = [];
-
-    let candidateEdges: { source: string; target: string; weight: number }[] =
-      [];
 
     this.sessionService
       .callWithSession(() =>
@@ -548,509 +550,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         next: (res) => {
           if (token !== this.requestTokens['genie3']) return;
           {
-            const data = res as {
-              regulatoryGene: string;
-              targetGene: string;
-              weight: number;
-          }[];
-          console.log('Data', data);
-          this.genie3Network = data.map((d) => ({
-            source: d.regulatoryGene,
-            target: d.targetGene,
-            weight: d.weight,
-          }));
+            const payload: any = res;
+            const data = payload['connections'] as { regulatoryGene: string; targetGene: string; weight: number }[];
+            this.genie3Network = data.map((d) => ({
+              source: d.regulatoryGene,
+              target: d.targetGene,
+              weight: d.weight,
+            }));
 
-          this.genie3Network.forEach((connection) => {
-            if (
-              connection.source === regulator ||
-              connection.target === regulator ||
-              targets.includes(connection.source) ||
-              targets.includes(connection.target)
-            ) {
-              candidateEdges.push({
-                source: connection.source,
-                target: connection.target,
-                weight: connection.weight,
-              });
+            // slider_data may be returned as an object or an array; handle both safely
+            const sliderData: any = payload['slider_data'];
+
+            if (sliderData && typeof sliderData === 'object') {
+              this.genie3SliderData = {
+                step: sliderData.step || 1,
+                min_border: sliderData.min_border || 0,
+                max_border: sliderData.max_border || 100,
+                default_value: sliderData.default_value || 50,
+              };
+              this.genie3WeightCutoff = this.genie3SliderData.default_value;
             }
-          });
 
-          console.log('Candidate edges before filtering:', candidateEdges);
+            this.visualizeGenie3Subgraph();
 
-          candidateEdges.sort((a, b) => b.weight - a.weight);
-          candidateEdges = candidateEdges.slice(0, this.minGenie3Edges);
-
-          this.genie3WeightCutoff =
-            candidateEdges.length > 0
-              ? Math.min(...candidateEdges.map((edge) => edge.weight))
-              : null;
-
-          // Create nodes from all edges (source and target)
-          const nodeSet = new Set<string>();
-          candidateEdges.forEach((edge) => {
-            nodeSet.add(edge.source);
-            nodeSet.add(edge.target);
-          });
-          // Add regulator to nodeset
-          nodeSet.add(regulator);
-
-          // For the nodes with top edges we reinset their original edges
-
-          this.genie3Network.forEach((connection) => {
-            if (
-              nodeSet.has(connection.source) &&
-              nodeSet.has(connection.target)
-            ) {
-              candidateEdges.push({
-                source: connection.source,
-                target: connection.target,
-                weight: connection.weight,
-              });
-            }
-          });
-
-          // Create nodes array with proper groups
-          Array.from(nodeSet).forEach((nodeId) => {
-            if (nodeId === regulator) {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 0 }); // regulator
-              }
-            } else if (targets.includes(nodeId)) {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 1 }); // targets
-              }
-            } else {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 2 }); // neighbors
-              }
-            }
-          });
-
-          edges.push(...candidateEdges);
-
-          // Create the graph
-          const graph = {
-            nodes: nodes.filter((node) => node.id && node.id.length > 0),
-            edges: edges.filter(
-              (edge) =>
-                nodes.some((node) => node.id === edge.source) &&
-                nodes.some((node) => node.id === edge.target),
-            ),
-          };
-
-          // Create the graph visualization
-          const width = 500;
-          const height = 300;
-
-          const svg = d3
-            .select('#aucell_graph_genie3')
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height)
-            .style('background-color', '#f8f9fa');
-
-          // Draw links (edges)
-          const link = svg
-            .append('g')
-            .attr('stroke', '#999')
-            .attr('stroke-opacity', 0.6)
-            .selectAll('line')
-            .data(graph.edges)
-            .enter()
-            .append('line')
-            .attr('stroke-width', (d: any) =>
-              Math.max(1, Math.sqrt(d.weight) * 10),
-            )
-            .attr('stroke', (d: any) => {
-              // Color edges based on weight
-              const intensity = Math.min(d.weight * 10, 1);
-              return d3.interpolateReds(0.3 + intensity * 0.7);
-            });
-
-          // Draw nodes
-          const node = svg
-            .append('g')
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 1.5)
-            .selectAll('circle')
-            .data(graph.nodes)
-            .enter()
-            .append('circle')
-            .attr('r', (d: any) => {
-              switch (d.group) {
-                case 0:
-                  return 15; // regulator
-                case 1:
-                  return 12; // targets
-                case 2:
-                  return 8; // neighbors
-                case 3:
-                  return 6;
-                default:
-                  return 10;
-              }
-            })
-            .attr('fill', (d: any) => {
-              switch (d.group) {
-                case 0:
-                  return '#e41a1c'; // regulator - red
-                case 1:
-                  return '#377eb8'; // targets - blue
-                case 2:
-                  return '#4daf4a'; // neighbors - green
-                case 3:
-                  return '#ff7f00'; // high-weight - orange
-                default:
-                  return '#999';
-              }
-            });
-
-          // Add labels
-          const labels = svg
-            .append('g')
-            .selectAll('text')
-            .data(graph.nodes)
-            .enter()
-            .append('text')
-            .attr('text-anchor', 'middle')
-            .attr('dy', '.35em')
-            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-            .style('font-weight', (d: any) =>
-              d.group === 0 ? 'bold' : 'normal',
-            )
-            .style('fill', '#333')
-            .text((d: any) =>
-              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-            );
-
-          // Initialize simulation with stronger forces
-          const simulation = d3
-            .forceSimulation(graph.nodes)
-            .force(
-              'link',
-              d3
-                .forceLink(graph.edges)
-                .id((d: any) => d.id)
-                .distance(30)
-                .strength(0.5),
-            )
-            .force('charge', d3.forceManyBody().strength(-500))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(30))
-            .force('boundary', () => {
-              graph.nodes.forEach((node: any) => {
-                const radius =
-                  node.group === 0
-                    ? 15
-                    : node.group === 1
-                      ? 12
-                      : node.group === 2
-                        ? 8
-                        : 6;
-
-                node.x = Math.max(radius, Math.min(width - radius, node.x));
-
-                node.y = Math.max(radius, Math.min(height - radius, node.y));
-              });
-            });
-
-          simulation.on('tick', () => {
-            link
-              .attr('x1', (d: any) => d.source.x)
-              .attr('y1', (d: any) => d.source.y)
-              .attr('x2', (d: any) => d.target.x)
-              .attr('y2', (d: any) => d.target.y);
-
-            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
-
-            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
-          });
-
-          this.isLoadingGenie3 = false;
-
-          console.log('Network visualization complete');
-          console.log('Genie3 Network:', this.genie3Network);
-          console.log(
-            `[Backend] Loaded Genie Connections for["${this.selectedGeneSetGenie3}]`,
-          );
-        }
-        },
-        error: (err) => {
-          if (token === this.requestTokens['genie3']) {
-            console.error(
-              `[Backend] Failed to load Genie Connections for["${this.selectedGeneSetGenie3}]`,
-              err,
-            );
           }
-        },
-      });
-
-    console.log('Genie3 Network 2:', this.genie3Network);
-  }
-
-  public updateAucellGraphSponge(): void {
-    const token = this.nextRequestToken('sponge');
-    console.log('Updating AUCELL graph for Sponge...');
-    d3.select('#aucell_graph_sponge').selectAll('*').remove();
-
-    if (!this.selectedGeneSetSponge || !this.spongeNetwork) {
-      return;
-    }
-
-    this.isLoadingSponge = true;
-    const regulator = this.selectedGeneSetSponge;
-    const targets = this.geneSetsSponge[regulator] || [];
-
-    const nodes: { id: string; x?: number; y?: number; group: number }[] = [];
-    const edges: { source: string; target: string; p_adjusted: number }[] = [];
-
-    let candidateEdges: {
-      source: string;
-      target: string;
-      p_adjusted: number;
-    }[] = [];
-    /*
-    this.spongeNetwork.forEach(connection => {
-     if ((connection.source === regulator || connection.target === regulator) ||
-         targets.includes(connection.source) || targets.includes(connection.target)) {
-       candidateEdges.push({
-         source: connection.source,
-         target: connection.target,
-         p_adjusted: connection.p_adjusted
-       });
-     }
-   }) */ this.sessionService
-      .callWithSession(() =>
-        this.http.get(
-          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => {
-          if (token !== this.requestTokens['sponge']) return;
-          {
-            const data = res as {
-              geneA: string;
-              geneB: string;
-              'p.adj': number;
-              mscor: number;
-          }[];
-
-          this.isLoadingSponge = true;
-
-          console.log('Sponge Network:', data);
-
-          this.spongeNetwork = data.map((d) => ({
-            source: d.geneA,
-            target: d.geneB,
-            p_adjusted: d['p.adj'],
-            mscore: d['mscor'],
-          }));
-
-          // Push all edges of filtered Network (filtered to geneset edges)
-          candidateEdges.push(
-            ...this.spongeNetwork.filter((connection) => {
-              return (
-                connection.source === regulator ||
-                connection.target === regulator ||
-                targets.includes(connection.source) ||
-                targets.includes(connection.target)
-              );
-            }),
-          );
-          // Sort such that smallest p_values are kept
-          candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-          candidateEdges = candidateEdges.slice(0, this.minSpongeEdges);
-
-          this.spongePValueCutoff =
-            candidateEdges.length > 0
-              ? Math.max(...candidateEdges.map((edge) => edge.p_adjusted))
-              : null;
-
-          // Create nodes from all edges (source and target)
-          const nodeSet = new Set<string>();
-          candidateEdges.forEach((edge) => {
-            nodeSet.add(edge.source);
-            nodeSet.add(edge.target);
-          });
-          // Add regulator to nodeset
-          nodeSet.add(regulator);
-
-          this.spongeNetwork.forEach((connection) => {
-            if (
-              nodeSet.has(connection.source) &&
-              nodeSet.has(connection.target)
-            ) {
-              candidateEdges.push({
-                source: connection.source,
-                target: connection.target,
-                p_adjusted: connection.p_adjusted,
-              });
-            }
-          });
-
-          edges.push(...candidateEdges);
-
-          // Create nodes array with proper groups
-          Array.from(nodeSet).forEach((nodeId) => {
-            if (nodeId === regulator) {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 0 }); // regulator
-              }
-            } else if (targets.includes(nodeId)) {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 1 }); // targets
-              }
-            } else {
-              if (!nodes.some((n) => n.id === nodeId)) {
-                nodes.push({ id: nodeId, group: 2 }); // neighbors
-              }
-            }
-          });
-
-          // Create the graph
-          const graph = {
-            nodes: nodes.filter((node) => node.id && node.id.length > 0),
-            edges: edges.filter(
-              (edge) =>
-                nodes.some((node) => node.id === edge.source) &&
-                nodes.some((node) => node.id === edge.target),
-            ),
-          };
-
-          // Create the graph visualization
-          const width = 500;
-          const height = 300;
-
-          const svg = d3
-            .select('#aucell_graph_sponge')
-            .append('svg')
-            .attr('width', width)
-            .attr('height', height)
-            .style('background-color', '#f8f9fa');
-
-          // Draw links (edges)
-          const link = svg
-            .append('g')
-            .attr('stroke', '#999')
-            .attr('stroke-opacity', 0.6)
-            .selectAll('line')
-            .data(graph.edges)
-            .enter()
-            .append('line')
-            .attr('stroke-width', (d: any) =>
-              Math.max(1, Math.sqrt(d.p_adjusted) * 10),
-            )
-            .attr('stroke', (d: any) => {
-              // Color edges based on p_adjusted
-              const intensity = Math.min(d.p_adjusted * 10, 1);
-              return d3.interpolateReds(0.3 + intensity * 0.7);
-            });
-
-          // Draw nodes
-          const node = svg
-            .append('g')
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 1.5)
-            .selectAll('circle')
-            .data(graph.nodes)
-            .enter()
-            .append('circle')
-            .attr('r', (d: any) => {
-              switch (d.group) {
-                case 0:
-                  return 15; // regulator
-                case 1:
-                  return 12; // targets
-                case 2:
-                  return 8; // neighbors
-                case 3:
-                  return 6;
-                default:
-                  return 10;
-              }
-            })
-            .attr('fill', (d: any) => {
-              switch (d.group) {
-                case 0:
-                  return '#e41a1c'; // regulator - red
-                case 1:
-                  return '#377eb8'; // targets - blue
-                case 2:
-                  return '#4daf4a'; // neighbors - green
-                case 3:
-                  return '#ff7f00'; // high-weight - orange
-                default:
-                  return '#999';
-              }
-            });
-
-          // Add labels
-          const labels = svg
-            .append('g')
-            .selectAll('text')
-            .data(graph.nodes)
-            .enter()
-            .append('text')
-            .attr('text-anchor', 'middle')
-            .attr('dy', '.35em')
-            .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-            .style('font-weight', (d: any) =>
-              d.group === 0 ? 'bold' : 'normal',
-            )
-            .style('fill', '#333')
-            .text((d: any) =>
-              d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-            );
-
-          // Initialize simulation with stronger forces
-          const simulation = d3
-            .forceSimulation(graph.nodes)
-            .force(
-              'link',
-              d3
-                .forceLink(graph.edges)
-                .id((d: any) => d.id)
-                .distance(20)
-                .strength(0.5),
-            )
-            .force('charge', d3.forceManyBody().strength(-500))
-            .force('center', d3.forceCenter(width / 2, height / 2))
-            .force('collision', d3.forceCollide().radius(30))
-            .force('boundary', () => {
-              graph.nodes.forEach((node: any) => {
-                const radius =
-                  node.group === 0
-                    ? 15
-                    : node.group === 1
-                      ? 12
-                      : node.group === 2
-                        ? 8
-                        : 6;
-
-                node.x = Math.max(radius, Math.min(width - radius, node.x));
-
-                node.y = Math.max(radius, Math.min(height - radius, node.y));
-              });
-            });
-
-          simulation.on('tick', () => {
-            link
-              .attr('x1', (d: any) => d.source.x)
-              .attr('y1', (d: any) => d.source.y)
-              .attr('x2', (d: any) => d.target.x)
-              .attr('y2', (d: any) => d.target.y);
-
-            node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
-
-            labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
-          });
-
-          this.isLoadingSponge = false;
-
-          console.log('Network visualization complete');
-        }
         },
         error: (err) => {
           if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
@@ -1063,17 +586,503 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       });
   }
 
-  public onMinEdgesChangeSponge(): void {
+  public visualizeGenie3Subgraph(): void {
+
+    this.isLoadingGenie3 = true;
+    d3.select('#aucell_graph_genie3').html('');
+
+    if (!this.selectedGeneSetGenie3 || !this.genie3Network) {
+      this.isLoadingGenie3 = false;
+      return;
+    }
+
+    let regulator = this.selectedGeneSetGenie3;
+    let targets = this.geneSetsGenie3[regulator] || [];
+
+    let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    let edges: { source: string; target: string; weight: number }[] = [];
+
+    let candidateEdges: { source: string; target: string; weight: number }[] = [];
+    let slicedEdges: { source: string; target: string; weight: number }[] = [];
+
+
+    candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
+      source: String(e.source),
+      target: String(e.target),
+      weight: e.weight,
+    }));
+
+    candidateEdges.sort((a, b) => b.weight - a.weight);
+    slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
+
+    // Infer nodes from edges
+    const nodeSet = new Set<string>();
+
+    slicedEdges.forEach((edge) => {
+      if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
+        console.log("Adding edge nodes:", edge.source, edge.target);
+        nodeSet.add(edge.source);
+        nodeSet.add(edge.target);
+      }
+    });
+
+    // Add regulator to node set
+    nodeSet.add(regulator);
+
+    // Readd edges that passed the cutoff
+    candidateEdges.forEach((edge) => {
+      if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
+        edges.push(edge);
+      }
+    });
+
+    // Add nodes with groups
+    nodeSet.forEach((nodeId) => {
+      if (nodeId === regulator) {
+        nodes.push({ id: nodeId, group: 0 });
+      } else if (targets.includes(nodeId)) {
+        nodes.push({ id: nodeId, group: 1 });
+      } else {
+        nodes.push({ id: nodeId, group: 2 });
+      }
+    });
+
+    console.log(nodes);
+
+    edges.push(...candidateEdges);
+
+    // Create the graph
+    let graph = {
+      nodes: nodes.filter((node) => node.id && node.id.length > 0),
+      edges: edges.filter(
+        (edge) =>
+          nodes.some((node) => node.id === edge.source) &&
+          nodes.some((node) => node.id === edge.target),
+      ),
+    };
+
+    console.log(graph)
+
+    // Create the graph visualization
+    const width = 1000;
+    const height = 300;
+
+    const svg = d3
+      .select('#aucell_graph_genie3')
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('background-color', '#f8f9fa');
+
+    // Draw links (edges)
+    const link = svg
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(graph.edges)
+      .enter()
+      .append('line')
+      .attr('stroke-width', (d: any) =>
+        Math.max(1, Math.sqrt(d.weight) * 10),
+      )
+      .attr('stroke', (d: any) => {
+        // Color edges based on weight
+        const intensity = Math.min(d.weight * 10, 1);
+        return d3.interpolateReds(0.3 + intensity * 0.7);
+      });
+
+    // Draw nodes
+    const node = svg
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .selectAll('circle')
+      .data(graph.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return 15; // regulator
+          case 1:
+            return 12; // targets
+          case 2:
+            return 8; // neighbors
+          case 3:
+            return 6;
+          default:
+            return 10;
+        }
+      })
+      .attr('fill', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return '#e41a1c'; // regulator - red
+          case 1:
+            return '#377eb8'; // targets - blue
+          case 2:
+            return '#4daf4a'; // neighbors - green
+          case 3:
+            return '#ff7f00'; // high-weight - orange
+          default:
+            return '#999';
+        }
+      });
+
+    // Add labels
+    const labels = svg
+      .append('g')
+      .selectAll('text')
+      .data(graph.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+      .style('font-weight', (d: any) =>
+        d.group === 0 ? 'bold' : 'normal',
+      )
+      .style('fill', '#333')
+      .text((d: any) =>
+        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+      );
+
+    // Initialize simulation with stronger forces
+    const simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(graph.edges)
+          .id((d: any) => d.id)
+          .distance(30)
+          .strength(0.5),
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius =
+            node.group === 0
+              ? 15
+              : node.group === 1
+                ? 12
+                : node.group === 2
+                  ? 8
+                  : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - radius, node.y));
+        });
+      });
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+    });
+
+    this.isLoadingGenie3 = false;
+
+
+  }
+
+
+  public updateSubgraphSponge(): void {
+    const token = this.nextRequestToken('sponge');
+    console.log('Updating AUCELL graph for Sponge...');
+    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+
+    if (!this.selectedGeneSetSponge || !this.spongeNetwork) {
+      return;
+    }
+
+    this.isLoadingSponge = true;
+    const regulator = this.selectedGeneSetSponge;
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          if (token !== this.requestTokens['sponge']) return;
+          {
+            const payload: any = res;
+
+            const data = payload['connections'] as {
+              geneA: string;
+              geneB: string;
+              'p.adj': number;
+              mscor: number;
+            }[];
+            const sliderData: any = payload['slider_data'];
+
+            if (sliderData && typeof sliderData === 'object') {
+              this.spongeSliderData = {
+                step: sliderData.step || 0.01,
+                min_border: sliderData.min_border || 0,
+                max_border: sliderData.max_border || 100,
+                default_value: sliderData.default_value || 50,
+              };
+            }
+
+            this.isLoadingSponge = true;
+
+            console.log('Sponge Network:', data);
+
+            this.spongeNetwork = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            }));
+
+            this.visualizeSpongeSubgraph();
+          }
+        },
+        error: (err) => {
+          if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
+            console.error(
+              `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+              err,
+            );
+          }
+        },
+      });
+  }
+
+  public visualizeSpongeSubgraph(): void {
+
+    this.isLoadingSponge = true;
+    d3.select('#aucell_graph_sponge').html('');
+
+    if (!this.selectedGeneSetSponge || !this.spongeNetwork) {
+      this.isLoadingSponge = false;
+      return;
+    }
+
+    let regulator = this.selectedGeneSetSponge;
+    let targets = this.geneSetsSponge[regulator] || [];
+
+    let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    let edges: { source: string; target: string; p_adjusted: number }[] = [];
+
+    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
+    let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
+
+
+    candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+      source: String(e.source),
+      target: String(e.target),
+      p_adjusted: e.p_adjusted,
+    }));
+
+    candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+    slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
+
+    // Infer nodes from edges
+    const nodeSet = new Set<string>();
+
+    slicedEdges.forEach((edge) => {
+      if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
+        console.log("Adding edge nodes:", edge.source, edge.target);
+        nodeSet.add(edge.source);
+        nodeSet.add(edge.target);
+      }
+    });
+
+    // Add regulator to node set
+    nodeSet.add(regulator);
+
+    // Add nodes with groups
+    nodeSet.forEach((nodeId) => {
+      if (nodeId === regulator) {
+        nodes.push({ id: nodeId, group: 0 });
+      } else if (targets.includes(nodeId)) {
+        nodes.push({ id: nodeId, group: 1 });
+      } else {
+        nodes.push({ id: nodeId, group: 2 });
+      }
+    });
+
+    // Readd edges of the nodes that passed the cutoff
+    candidateEdges.forEach((edge) => {
+      if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
+        edges.push(edge);
+      }
+    });
+
+    edges.push(...candidateEdges);
+
+    // Create the graph
+    let graph = {
+      nodes: nodes.filter((node) => node.id && node.id.length > 0),
+      edges: edges.filter(
+        (edge) =>
+          nodes.some((node) => node.id === edge.source) &&
+          nodes.some((node) => node.id === edge.target),
+      ),
+    };
+
+    // Create the graph visualization
+    const width = 1000;
+    const height = 300;
+
+    const svg = d3
+      .select('#aucell_graph_sponge')
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('background-color', '#f8f9fa');
+
+    // Draw links (edges)
+    const link = svg
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(graph.edges)
+      .enter()
+      .append('line')
+      .attr('stroke-width', (d: any) =>
+        Math.max(1, Math.sqrt(d.p_adjusted) * 10),
+      )
+      .attr('stroke', (d: any) => {
+        // Color edges based on p_adjusted
+        const intensity = Math.min(d.p_adjusted * 10, 1);
+        return d3.interpolateReds(0.3 + intensity * 0.7);
+      });
+
+    // Draw nodes
+    const node = svg
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .selectAll('circle')
+      .data(graph.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return 15; // regulator
+          case 1:
+            return 12; // targets
+          case 2:
+            return 8; // neighbors
+          case 3:
+            return 6;
+          default:
+            return 10;
+        }
+      })
+      .attr('fill', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return '#e41a1c'; // regulator - red
+          case 1:
+            return '#377eb8'; // targets - blue
+          case 2:
+            return '#4daf4a'; // neighbors - green
+          case 3:
+            return '#ff7f00'; // high-weight - orange
+          default:
+            return '#999';
+        }
+      });
+
+    // Add labels
+    const labels = svg
+      .append('g')
+      .selectAll('text')
+      .data(graph.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+      .style('font-weight', (d: any) =>
+        d.group === 0 ? 'bold' : 'normal',
+      )
+      .style('fill', '#333')
+      .text((d: any) =>
+        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+      );
+
+    // Initialize simulation with stronger forces
+    const simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(graph.edges)
+          .id((d: any) => d.id)
+          .distance(20)
+          .strength(0.5),
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius =
+            node.group === 0
+              ? 15
+              : node.group === 1
+                ? 12
+                : node.group === 2
+                  ? 8
+                  : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - radius, node.y));
+        });
+      });
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+    });
+
+    this.isLoadingSponge = false;
+
+    console.log('Network visualization complete');
+  }
+
+
+  public onSliderChangeSponge(): void {
     if (this.selectedGeneSetSponge) {
       this.isLoadingSponge = true;
-      setTimeout(() => this.updateAucellGraphSponge(), 50);
+      setTimeout(() => this.visualizeSpongeSubgraph(), 50);
     }
   }
 
-  public onMinEdgesChangeGenie3(): void {
+
+  public onSliderChangeGenie3(): void {
     if (this.selectedGeneSetGenie3) {
       this.isLoadingGenie3 = true;
-      setTimeout(() => this.updateAucellGraphGenie3(), 50);
+      setTimeout(() => this.visualizeGenie3Subgraph(), 50);
     }
   }
 
@@ -1173,7 +1182,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
     setTimeout(() => this.renderNhoodHeatmap(), 0);
 
-    setTimeout(() => this.updateAucellGraphGenie3(), 0);
+    setTimeout(() => this.updateSubgraphGenie3(), 0);
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -1189,12 +1198,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     if (this.clusterCells.length > 0) {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
-      setTimeout(() => this.updateAucellGraphGenie3(), 100);
+      setTimeout(() => this.updateSubgraphGenie3(), 100);
     }
   }
 
   public onGeneSetChange(): void {
-    // Check if Genie3 gene set has actually changed
     if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
       this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
 
@@ -1202,7 +1210,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         d3.select('#aucell_graph_genie3').selectAll('*').remove();
         this.isLoadingGenie3 = true;
         setTimeout(() => {
-          this.updateAucellGraphGenie3();
+          this.updateSubgraphGenie3();
           if (
             this.selectedRegulatoryScore?.endsWith('genie3') &&
             this.selectedGeneSetGenie3
@@ -1232,7 +1240,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         );
         this.isLoadingSponge = true;
         setTimeout(() => {
-          this.updateAucellGraphSponge();
+          // this.updateAucellGraphSponge();
           if (
             this.selectedRegulatoryScore?.endsWith('sponge') &&
             this.selectedGeneSetSponge
@@ -1254,7 +1262,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public selectCellFromCluster(cell: CellFeature): void {
     this.selectedCell = cell;
     setTimeout(() => this.renderNhoodHeatmap(), 0);
-    setTimeout(() => this.updateAucellGraphGenie3(), 0);
+    setTimeout(() => this.updateSubgraphGenie3(), 0);
   }
 
   public closeClusterSidenav(): void {
@@ -1400,34 +1408,34 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     const minValue = Math.min(...enrichment);
     const maxValue = Math.max(...enrichment);
     const normalized = (maxValue > minValue)
-    ? enrichment.map(v => (v - minValue) / (maxValue - minValue))
-    : enrichment.map(() => 0);
+      ? enrichment.map(v => (v - minValue) / (maxValue - minValue))
+      : enrichment.map(() => 0);
 
-     const data: Partial<Plotly.PlotData>[] = [
-    {
-      x: clusterLabels,
-      y: normalized,
-      type: 'bar',
-      marker: { color: 'rgba(55,128,191,0.7)' },
-      name: `Cluster ${leiden}`,
-    },
-  ];
+    const data: Partial<Plotly.PlotData>[] = [
+      {
+        x: clusterLabels,
+        y: normalized,
+        type: 'bar',
+        marker: { color: 'rgba(55,128,191,0.7)' },
+        name: `Cluster ${leiden}`,
+      },
+    ];
 
     const layout = {
-    margin: { t: 30, l: 60, r: 10, b: 40 },
-    width: 300,
-    height: 170,
-    xaxis: {
-      title: { text: 'Cluster' },
-      automargin: true,
-      tickfont: { size: 10 },
-    },
-    yaxis: {
-      title: { text: 'Enrichment' },
-      automargin: true,
-      tickfont: { size: 10 },
-    }
-  };
+      margin: { t: 30, l: 60, r: 10, b: 40 },
+      width: 300,
+      height: 170,
+      xaxis: {
+        title: { text: 'Cluster' },
+        automargin: true,
+        tickfont: { size: 10 },
+      },
+      yaxis: {
+        title: { text: 'Enrichment' },
+        automargin: true,
+        tickfont: { size: 10 },
+      }
+    };
 
     const container = document.getElementById('cluster-nhood-heatmap');
     if (!container) {
@@ -1606,7 +1614,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
   isNumberLike(v: unknown): v is number | string {
     return (typeof v === 'number' && Number.isFinite(v)) ||
-          (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
+      (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
   }
 
   toNumberLike(v: number | string): number {
@@ -1618,7 +1626,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   isPrimitive(v: unknown): v is string | number | boolean | null {
-    return v === null || ['string','number','boolean'].includes(typeof v as string);
+    return v === null || ['string', 'number', 'boolean'].includes(typeof v as string);
   }
 
   getArrayStats(arr: (number | string)[]) {
@@ -1702,7 +1710,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
   prettyKey(k: string): string {
     return k.replace(/[_-]+/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase());
+      .replace(/\b\w/g, c => c.toUpperCase());
   }
 
   dictId(propLabel: string): string {
@@ -1990,12 +1998,12 @@ interface CellProperties {
   leiden_centrality: { [key: string]: number };
   leiden_co_occurrence: number[][];
   [key: string]:
-    | string
-    | number
-    | number[]
-    | []
-    | undefined
-    | { [key: string]: any };
+  | string
+  | number
+  | number[]
+  | []
+  | undefined
+  | { [key: string]: any };
 }
 
 interface CellFeature {
