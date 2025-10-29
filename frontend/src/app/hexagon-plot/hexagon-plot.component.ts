@@ -77,12 +77,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       closeness_centrality: 0,
     };
 
+  // GRN network and genesets
+
   public genie3Network: genie3RegGraphConnection[] = [];
   public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
-
+  // Slider params
   public genie3WeightCutoff: number = 0.5;
   public spongePValueCutoff: number = 0.05;
   public genie3MinEdges: number = 25;
@@ -90,23 +92,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public genie3SliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
   public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
 
+  // Loading screen trackers
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
+  // Co-occurrence table
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
-  public colorableProperties = [
-    'cell_type',
-    'leiden',
-    'degree_centrality',
-    'average_clustering',
-    'closeness_centrality',
-  ];
-  public leidenCentralityProps = [
+  public colorableProperties: string[] = [];
+  public leidenCentralityProps: string[] = [
     'degree_centrality',
     'average_clustering',
     'closeness_centrality',
@@ -228,7 +226,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           this.previousGeneSetSponge =
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
         }
-        
+
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
@@ -306,7 +304,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         console.error('Error loading or rendering data:', error);
       });
   }
-  
+
 
   private toNumber(v: unknown): number {
     if (typeof v === 'number') return v;
