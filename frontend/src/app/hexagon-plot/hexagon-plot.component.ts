@@ -84,12 +84,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       closeness_centrality: 0,
     };
 
+  // GRN network and genesets
+
   public genie3Network: genie3RegGraphConnection[] = [];
   public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
-
+  // Slider params
   public genie3WeightCutoff: number = 0.5;
   public spongePValueCutoff: number = 0.05;
   public genie3MinEdges: number = 25;
@@ -97,9 +99,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public genie3SliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
   public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
 
+  // Loading screen trackers
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
+  // Co-occurrence table
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
@@ -230,6 +234,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   private loadAndRenderData(dataPath: string): void {
+    // Load GeoJSON data
     d3.json<GeoJsonData>(dataPath)
       .then((data) => {
         console.log('Data loaded:', data);
@@ -240,21 +245,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
         this.geoDataService.setData(data);
 
-        // This is for showing all properties for coloring
+        // Infer properties for coloring dropdown
         this.features = data.features;
-        this.meta = data.meta;
-        this.selectedRegulatoryScore =
-          this.meta['grn_score_names']?.[0] || null;
-        this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
-        this.geneSetsSponge = this.meta['sponge_genesets'] || {};
-        this.selectedGeneSetGenie3 =
-          Object.keys(this.meta['genie_genesets'] || {})[0] || null;
-        this.selectedGeneSetSponge =
-          Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
-        this.previousGeneSetGenie3 =
-          Object.keys(this.meta['genie_genesets'] || {})[0] || null;
-        this.previousGeneSetSponge =
-          Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+
+        if (data.meta) {
+          this.meta = data.meta;
+          this.selectedRegulatoryScore =
+            this.meta['grn_score_names']?.[0] || null;
+          this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+          this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+          this.selectedGeneSetGenie3 =
+            Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+          this.selectedGeneSetSponge =
+            Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+          this.previousGeneSetGenie3 =
+            Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+          this.previousGeneSetSponge =
+            Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+        }
 
         const firstProps = this.features[0]?.properties || {};
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
@@ -262,9 +270,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           return typeof val === 'string' || typeof val === 'number';
         });
 
-        // sort in alphabetical order
+        // Alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
+        // Group similar properties together
         const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
         const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
         this.groupedProperties = [
@@ -277,7 +286,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           },
         ];
 
-        //this.colorableProperties.push('regulatory_scores');  // Exists in geojson
         if (this.colorableProperties.includes('regulatory_scores')) {
           this.colorByProperty = 'regulatory_scores';
         } else if (this.colorableProperties.includes('cell_type')) {
@@ -332,96 +340,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
       });
-
-    /* d3.csv('assets/sponge_network_smaller.csv', d3.autoType)
-      .then((rows) => {
-        console.log('WEird')
-        this.spongeNetwork = rows.map((row) => ({
-          source: String((row as any)['geneA'] ?? ''),
-          target: String((row as any)['geneB'] ?? ''),
-          p_adjusted: Number((row as any)['p.adj'] ?? 0),
-        }));
-        console.log('Sponge network loaded:', this.spongeNetwork);
-      })
-      .catch((error) => {
-        console.error('Error loading sponge network:', error);
-      });
-
-    // Read genie3 csv
-    d3.csv('assets/genie_network_filt.csv', d3.autoType)
-      .then((rows) => {
-        // Each row should have source, target, weight columns
-        this.genie3Network = rows.map((row) => ({
-          source: String((row as any)['regulatoryGene'] ?? ''),
-          target: String((row as any)['targetGene'] ?? ''),
-          weight: Number((row as any)['weight'] ?? 0),
-        }));
-        console.log('Genie3 network loaded:', this.genie3Network);
-      })
-      .catch((error) => {
-        console.error('Error loading genie3 network:', error);
-      });
- */
   }
 
-  //public updateHexColors(): void {
-  //  this.resetClusterExtension();
-  //
-  //  if (this.selectedCell && this.selectedCluster) {
-  //    this.selectedCluster = null;
-  //    this.clusterCells = [];
-  //    this.clusterCellTypes = [];
-  //    this.clusterCentralityAvg = {
-  //      degree_centrality: 0,
-  //      average_clustering: 0,
-  //      closeness_centrality: 0,
-  //    };
-  //  }
-  //
-  //  if (this.selectedCell) {
-  //    this.selectedCell = null;
-  //  }
-  //
-  //  if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-  //    // Get all values for the selected centrality property
-  //    const values = this.features.map(
-  //      (f) => f.properties.leiden_centrality[this.colorByProperty],
-  //    );
-  //    const min = Math.min(...values);
-  //    const max = Math.max(...values);
-  //
-  //    this.continuousColorScale.domain([min, max]);
-  //
-  //    // Update hexagon colors using the continuous scale
-  //    this.g
-  //      .selectAll<SVGPathElement, CellFeature>('path')
-  //      .transition()
-  //      .duration(300)
-  //      .attr('fill', (d: CellFeature) =>
-  //        this.continuousColorScale(
-  //          d.properties.leiden_centrality[this.colorByProperty],
-  //        ),
-  //      );
-  //  } else {
-  //    // Categorical color scale for other properties
-  //    this.colorScale.domain([
-  //      ...new Set(
-  //        this.features.map((f) => String(f.properties[this.colorByProperty])),
-  //      ),
-  //    ]);
-  //    this.g
-  //      .selectAll<SVGPathElement, CellFeature>('path')
-  //      .transition()
-  //      .duration(300)
-  //      .style('stroke', 'transparent')
-  //      .attr('fill', (d: CellFeature) =>
-  //        this.colorScale(String(d.properties[this.colorByProperty])),
-  //      );
-  //  }
-  //
-  //  this.renderLegend();
-  //}
-  //
 
   private toNumber(v: unknown): number {
     if (typeof v === 'number') return v;
@@ -2045,7 +1965,7 @@ interface CellFeature {
 interface GeoJsonData {
   type: 'FeatureCollection';
   features: CellFeature[];
-  meta: { [key: string]: any };
+  meta?: { [key: string]: any };
 }
 
 interface genie3RegGraphConnection {
