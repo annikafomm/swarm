@@ -10,14 +10,20 @@ import { GeoDataService } from '../geo-data.service';
 import { KeyValue } from '@angular/common';
 import { TranslationService } from '../translation.service';
 import { TranslatePipe } from '../translate.pipe';
+import { Router } from '@angular/router';
 
 import { DEFAULT_PATHS } from '../constants';
 import { Subscription } from 'rxjs';
 import { PathsService } from '../paths.service';
 
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialogModule } from '@angular/material/dialog';
+
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrl: './hexagon-plot.component.scss',
@@ -26,6 +32,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   private sub!: Subscription;
 
   constructor(
+    private router: Router,
     private http: HttpClient,
     private sessionService: SessionService,
     private geoDataService: GeoDataService,
@@ -106,6 +113,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     'average_clustering',
     'closeness_centrality',
   ];
+
+  public colorByTooltip = [
+    'This dropdown switches the view of the hexagon map.',
+    'Options include Regulatory Scores, Gene Expression, TF Activity and more.',
+    '',
+    'Click this button for more information.'
+  ].join('\n');
+
   public leidenCentralityProps = [
     'degree_centrality',
     'average_clustering',
@@ -167,6 +182,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   private nextRequestToken(graphType: string): number {
     if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
     return ++this.requestTokens[graphType];
+  }
+
+  public openInfoPage(fragmentId?: string): void {
+    const frag = fragmentId ? `#${fragmentId}` : '';
+    const targetUrl = `/info${frag}`;
+
+    // Navigate via the router (keeps SPA behavior) then force a full-page load
+    // to ensure the browser jumps to the fragment reliably.
+    this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {}).then(() => {
+      // Use replaceState to avoid adding a duplicate history entry, then reload.
+      try {
+        history.replaceState(null, '', targetUrl);
+      } catch { }
+      // Force reload so the browser will honor the fragment scroll.
+      window.location.href = targetUrl;
+    });
   }
 
   private createHexagonPlot(): void {
@@ -1230,7 +1261,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
     if (this.selectedGeneSetSponge !== this.previousGeneSetSponge) {
       this.previousGeneSetSponge = this.selectedGeneSetSponge;
-
       if (this.selectedGeneSetSponge) {
         d3.select('#aucell_graph_sponge').selectAll('*').remove();
         console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
@@ -1240,7 +1270,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         );
         this.isLoadingSponge = true;
         setTimeout(() => {
-          // this.updateAucellGraphSponge();
+          this.updateSubgraphSponge();
           if (
             this.selectedRegulatoryScore?.endsWith('sponge') &&
             this.selectedGeneSetSponge
