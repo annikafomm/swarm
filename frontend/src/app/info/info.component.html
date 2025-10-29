@@ -115,9 +115,11 @@
         <ul>
           <li><strong>Cosine similarity</strong>: stored in
             <code>anndata.obsm["ligand_receptor_cosine_similarity"]</code> as array of shape
-            <code>(n_spots, n_interactions)</code></li>
+            <code>(n_spots, n_interactions)</code>
+          </li>
           <li><strong>P-value</strong>: stored in <code>anndata.obsm["ligand_receptor_p_value"]</code> as array of shape
-            <code>(n_spots, n_interactions)</code></li>
+            <code>(n_spots, n_interactions)</code>
+          </li>
           <li><strong>Category</strong>: stored in <code>anndata.obsm["ligand_receptor_category"]</code> as array of
             shape <code>(n_spots, n_interactions)</code></li>
           <li><strong>NMF factors</strong>: stored in <code>anndata.obsm["ligand_receptor_NMF_factors"]</code> as
@@ -138,7 +140,8 @@
         <ul>
           <li><strong>Cosine similarity</strong>: stored in
             <code>anndata.obsm["cell_comp_tf_activity_cosine_similarity"]</code> as array of shape
-            <code>(n_spots, n_interactions)</code></li>
+            <code>(n_spots, n_interactions)</code>
+          </li>
           <li><strong>Category</strong>: stored in <code>anndata.obsm["cell_comp_tf_activity_category"]</code> as array
             of shape <code>(n_spots, n_interactions)</code></li>
           <li><strong>Global scores</strong>: stored in <code>anndata.uns["cell_comp_tf_activity_global_scores"]</code>
@@ -150,7 +153,8 @@
           </li>
           <li><strong>Interaction names</strong>: stored in
             <code>anndata.uns["liana_columns"]["cell_comp_tf_activity"]</code> as array of shape
-            <code>(n_interactions,)</code></li>
+            <code>(n_interactions,)</code>
+          </li>
         </ul>
       </li>
       <li><strong>TF activity</strong>:
@@ -192,54 +196,125 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
 
     <h3>Squidpy scores</h3>
     <ul>
-    <li>Spatial Autocorrelation scores</li>
-    <ul>
-    <li>Is the expression of a gene clustered in space or more randomly distributed?</li>
-    <li>Moran's I (global correlation)</li>
-    <li>Geary's C (local correlation)</li>
-    </ul>
-    <li>Cluster interaction scores</li>
-    <ul>
-    <li>How do clusters of cells interact with each other?</li>
-    <li>Centrality scores</li>
-    <ul>
-    <li>How structurally important is each cluster is in the tissue 'network'?</li>
-    </ul>
-    <li>Neighborhood enrichment</li>
-    <ul>
-    <li>Do certain clusters tend to be neighbors more often than expected by chance?</li>
-    </ul>
-    <li>Co-occurrence probability</li>
-    <ul>
-    <li>How often do two clusters occur within a given radius?</li>
-    </ul>
-    </ul>
+      <li>Spatial Autocorrelation scores</li>
+      <ul>
+        <li>Is the expression of a gene clustered in space or more randomly distributed?</li>
+        <li>Moran's I (global correlation)</li>
+        <li>Geary's C (local correlation)</li>
+      </ul>
+      <li>Cluster interaction scores</li>
+      <ul>
+        <li>How do clusters of cells interact with each other?</li>
+        <li>Centrality scores</li>
+        <ul>
+          <li>How structurally important is each cluster is in the tissue 'network'?</li>
+        </ul>
+        <li>Neighborhood enrichment</li>
+        <ul>
+          <li>Do certain clusters tend to be neighbors more often than expected by chance?</li>
+        </ul>
+        <li>Co-occurrence probability</li>
+        <ul>
+          <li>How often do two clusters occur within a given radius?</li>
+        </ul>
+      </ul>
     </ul>
     <p>&nbsp;</p>
     <h3>Gene set scores</h3>
     <ul>
-    <li>GSVA</li>
-    <ul>
-    <li>How are the genes in a gene set expressed compared to the rest of the genes?</li>
-    </ul>
-    <li>ssGSEA </li>
-    <ul>
-    <li>&nbsp;like GSEA on each sample individually</li>
-    <li>Are the genes from this gene set enriched in this spot?</li>
-    </ul>
-    <li>AUCell</li>
-    <ul>
-    <li>How many genes of a gene set are highly expressed in this spot?</li>
-    </ul>
-    <li>VIPER</li>
-    <ul>
-    <li>How active is the regulator based on how active and coordinately regulated the target genes are?</li>
-    </ul>
+      <li>GSVA</li>
+      <ul>
+        <li>How are the genes in a gene set expressed compared to the rest of the genes?</li>
+      </ul>
+      <li>ssGSEA </li>
+      <ul>
+        <li>&nbsp;like GSEA on each sample individually</li>
+        <li>Are the genes from this gene set enriched in this spot?</li>
+      </ul>
+      <li>AUCell</li>
+      <ul>
+        <li>How many genes of a gene set are highly expressed in this spot?</li>
+      </ul>
+      <li>VIPER</li>
+      <ul>
+        <li>How active is the regulator based on how active and coordinately regulated the target genes are?</li>
+      </ul>
     </ul>
     <p>&nbsp;</p>
-    
+
 
   </section>
+
+  <section class="card" id="views-section">
+    <h2>Views</h2>
+    <p>Different views for the hexagon map can be selected through a dropdown menu.
+      The views visualize different types of regulatory information as well as the observation columns of the anndata
+    </p>
+    <section id="gene-expression-view">
+    <h3>Gene Expression View</h3>
+    The user can visualize normalized gene expression for each spot in the map. A table
+    appears underneath the main visualization, where rows represent genes, and autocor-
+    relation scores such as Moran’s I or Geary’s C, along with p-values, are shown. Genes
+    can be sorted by any column or filtered by name. Pressing the ”Show” button triggers
+    a request to the backend that retrieves expression values for each spot and updates the
+    main visualization.
+    </section>
+    <h3>Leiden Clustering View</h3>
+    The Leiden clustering view has specific properties that allow the user to analyze differ-
+    ent spatial transcriptomics scores that are determined based on the clustering and/or a
+    nearest neighbor graph built on the spatial data. When you click on a spot, the whole
+    cluster will be selected instead of just a single spot. In the side panel,
+    the cell-type composition, number of spots in the cluster, neighborhood enrichment
+    scores, and centrality scores of the cluster can be viewed.
+
+    <h3>Regulatory Scores View</h3>
+    To explore important regulatory modules in specific tissue areas, the user is provided
+    with the regulatory scores view, which is also visible when the website is first loaded.
+    To integrate the regulatory information into the spatial map, upon selection of a gene
+    set of the GENIE3 or SPONGE network, different types of scores can be visualized
+    on the map. These scores show the importance of the gene set in a spot and can be
+    compared directly on the map, allowing for the identification of tissue regions where a
+    specific regulatory module shows higher activity.
+
+    <h3>LIANA+ Scores</h3>
+    For the bivariate LIANA+ scores, a table containing the global scores, such as mean
+    and standard deviation of the local cosine similarities or Moran’s R, appears below the
+    main visualization. Each row has ”Show” buttons for fetching and visualizing
+    either the local scores, p-values, or categories.
+    The LIANA+ scores also contain the TF and pathway activity scores and p-values
+    computed with decoupler’s univariate and multivariate linear model functions, respec-
+    tively
+
+    <h2> Unique features of the Views </h2>
+    <h3>GeneSet Subgraphs</h3>
+    In the <strong>Regulatory Scores View</strong> you are provided with a subgraph of the network that is based on
+    the currently selected gene set in the geneset-dropdown menu. This subgraph is built from the geneset and the prefiltered
+    GENIE3/Sponge network. After selecting all edges involving a gene set node, the edges are filtered for your weight/pvalue filter (slider above the graph).
+    The MinEdges slider controls the size of the network by selecting the best MinEdges edges from the remaining network after filtering for your p-value/weight threshold.
+    From these edges, the nodes and the real cutoff are inferred (if you have less nodes than MinEdges after filtering with weight/pvalue than cutoff will differ from what you selected in the slider).
+    The parameter is called MinEdges,because the original edges of the nodes inferred from the best edges are re-added to the graph. So MinEdges essentially regulates the Number
+    of Nodes by limiting the edges we take into account first and inferring the nodes from them. This ensures that the graph does not get too large but you can still assume that for a given all significant
+    edges are displayed.
+    <h3>Co-Occurrence-Table</h3>
+    At the bottom of the <strong>Leiden-Cluster-View</strong>, the co-occurrence table will open, where the user can explore the
+    co-occurrence of clusters in different bin-like intervals (default is 50 intervals).
+    Therefore, this view does not just allow visualization of the clustering but also helps
+    discover more complex patterns like how clusters of spots interact and whether they form
+    organizational ’hubs’. This is specifically useful
+    to understand tissue organization and how the cells in the spots act collectively.
+
+  </section>
+
+
+
+  <section class="card">
+    <h2>Contact</h2>
+    <p>
+      For questions, suggestions or feedback, please contact
+      <a href="mailto:annika.fomm@tum.de">annika.fomm(at)tum.de</a>
+    </p>
+  </section>
+
 
   <button (click)="goBack()" class="back-btn">← Back</button>
 </div>
