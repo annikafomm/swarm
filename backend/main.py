@@ -276,7 +276,7 @@ def get_subnetwork_data(file_path, gene_set, network_type):
     # gene_set is a set or list of gene names
     filtered_rows = []
     edge_annotations = []
-    for chunk in pd.read_csv(file_path, chunksize=100):
+    for chunk in pd.read_csv(file_path, chunksize=10000):
         if network_type == "genie":
             mask = chunk["regulatoryGene"].isin(gene_set) | chunk[
                 "targetGene"
