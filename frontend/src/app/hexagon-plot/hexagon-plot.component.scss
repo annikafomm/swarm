@@ -21,6 +21,7 @@ select {
   margin-top: 0.5rem;
 }
 
+
 #hexbin {
   background: #fff;
   border: 1px solid #ddd;
@@ -29,6 +30,40 @@ select {
   padding: 1rem;
   width: 500px;
   top: 200px;
+}
+
+#hexbin-compare {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 1rem;
+  width: 500px;
+  top: 200px;
+}
+
+#main_visualization>div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  width: 100%;
+}
+#compare-button {
+  margin-left: 1rem;
+  height: 36px;
+  padding: 0 1rem;
+  border: none;
+  border-radius: 8px;
+  background-color: #0b74c1;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(11, 116, 193, 0.12);
+  align-items: center;
+  align-self: center;
+  display: inline-flex;
+  justify-content: center;
 }
 
 #aucell_graph_genie3,
@@ -126,14 +161,14 @@ select {
   height: 36px;
   min-width: 36px;
   padding: 0;
-  border-radius: 8px; 
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: #0b74c1;
   color: #fff;
   border: none;
-  box-shadow: 0 4px 10px rgba(11,116,193,0.12);
+  box-shadow: 0 4px 10px rgba(11, 116, 193, 0.12);
   cursor: pointer;
   font-weight: 700;
 }
@@ -146,13 +181,13 @@ select {
   vertical-align: middle;
 }
 
-.hx-dropdown > label {
+.hx-dropdown>label {
   margin: 0;
   font-weight: 600;
   color: #0b3a66;
 }
 
-.hx-dropdown > select {
+.hx-dropdown>select {
   flex: 0 1 520px;
   max-width: calc(100% - 56px);
   width: auto;

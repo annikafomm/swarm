@@ -1,29 +1,35 @@
 <div class="hexagon-plot">
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
-    <div style="display: flex; align-items: flex-start">
-      <div id="hexbin"></div>
-    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
+      <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; position: relative;">
+        <div id="hexbin"></div>
+        <button id="compare-button" (click)="onCompareMode()"><mat-icon>compare_arrows</mat-icon></button>
+        <div *ngIf="compareMode" id="hexbin-compare"></div>
+      </div>
 
-    <div class="hx-dropdown">
-      <label for="colorBy">Color hexagons by:</label>
-      <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
-        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-          <option *ngFor="let prop of group.value" [value]="prop">
-            {{ prop | translate | async }}
-          </option>
-        </optgroup>
-      </select>
-      <button
-         class="info-button"
-         mat-icon-button
-         [matTooltip]="colorByTooltip"
-         (click)="openInfoPage('views-section')"
-         matTooltipPosition="above"
-         matTooltipShowDelay="150"
-       >
-         <mat-icon>help_outline</mat-icon>
-
-       </button>
+      <div class="hx-dropdown">
+        <label for="colorBy">Color hexagons by:</label>
+        <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
+          <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <option *ngFor="let prop of group.value" [value]="prop">
+              {{ prop | translate | async }}
+            </option>
+          </optgroup>
+        </select>
+        <label for="colorByCompare" *ngIf="compareMode">Compare hexagons by:</label>
+        <select id="colorByCompare" *ngIf="compareMode" [(ngModel)]="selectedCompareView"
+          (change)="onColorbyPropertyChange()">
+          <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <option *ngFor="let prop of group.value" [value]="prop">
+              {{ prop | translate | async }}
+            </option>
+          </optgroup>
+        </select>
+        <button class="info-button" mat-icon-button [matTooltip]="colorByTooltip"
+          (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </div>
 
 
 
@@ -45,7 +51,8 @@
       </div>
     </div>
 
-    <div *ngIf="colorByProperty === 'regulatory_scores'" class="gene-set-section">
+    <div *ngIf="colorByProperty === 'regulatory_scores' || selectedCompareView === 'regulatory_scores'"
+      class="gene-set-section">
       <h2>Gene Set Analysis for Selected Cell</h2>
 
       <!-- TOP: selectors and score chooser (always above graphs) -->

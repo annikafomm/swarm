@@ -52,10 +52,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   // Map svg and g elements
   private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
   private g!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
+  private g_compare!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
+  private svg_compare!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
 
   public selectedCell: CellFeature | null = null;
   public selectedCluster: number | null = null;
-  public colorByProperty = 'cell_type';
+  public colorByProperty = 'regulatory_scores';
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
@@ -152,6 +154,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
+  // Comparison
+  public compareMode: boolean = false;
+  public selectedCompareView: string = 'regulatory_scores';
+  public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
+  private dataCompare: GeoJsonData | null = null;
+
   ngOnInit(): void {
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
@@ -166,9 +174,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         d3.select('#hexagon-plot').selectAll('*').remove();
         d3.select('#hexagon-plot').html('');
 
+
         // Clear hexbin container (where SVG is appended)
         d3.select('#hexbin').selectAll('*').remove();
         d3.select('#hexbin').html('');
+        d3.select('#hexbin-compare').selectAll('*').remove();
+        d3.select('#hexbin-compare').html('');
 
         // Load and render new data
         this.createHexagonPlot();
@@ -204,29 +215,123 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     });
   }
 
-  private createHexagonPlot(): void {
+  private createHexagonPlot(containerName?: string): void {
+    if (!containerName) {
+      containerName = '#hexbin';
+    }
+
+    this.currentCompareLegendType
     const width = 500;
     const height = 400;
-    this.svg = d3
-      .select('#hexbin')
+    const svgSel = d3
+      .select(containerName)
       .append('svg')
       .attr('width', width)
       .attr('height', height)
       .attr('viewBox', [0, 0, 1000, 1000] as [number, number, number, number])
       .style('background-color', 'white')
       .style('overflow', 'hidden')
-      .call(
-        d3
-          .zoom<SVGSVGElement, unknown>()
-          .scaleExtent([1, 5])
-          .extent([
-            [0, 0],
-            [width, height],
-          ])
-          .on('zoom', (event) => this.zoomed(event)),
-      );
 
-    this.g = this.svg.append('g');
+
+    const gSel = svgSel.append('g');
+
+    if (containerName === '#hexbin-compare') {
+      this.svg_compare = svgSel;
+      this.g_compare = gSel;
+    }
+    else {
+      this.svg = svgSel;
+      this.g = gSel;
+    }
+
+    svgSel.call(
+      d3
+        .zoom<SVGSVGElement, unknown>()
+        .scaleExtent([1, 5])
+        .extent([
+          [0, 0],
+          [width, height],
+        ])
+        .on('zoom', (event) => {
+          // apply transform to the matching group
+          if (containerName === '#hexbin-compare' && this.g_compare) {
+            this.g_compare.attr('transform', event.transform.toString());
+          } else if (this.g) {
+            this.g.attr('transform', event.transform.toString());
+          }
+        }),
+    );
+  }
+
+  private initCompareHexagonPlot(): void {
+
+    if (!document.getElementById('hexbin-compare')) {
+      setTimeout(() => this.initCompareHexagonPlot(), 100);
+      return;
+    }
+
+    this.createHexagonPlot('#hexbin-compare');
+
+    this.dataCompare = this.geoDataService.getData();
+
+    const featuresToDraw = this.dataCompare ? this.dataCompare.features : [];
+
+    if (!this.selectedCompareView) {
+      console.log('No compare view selected. Even though compare mode is on, not rendering compare plot. ');
+      return;
+    }
+    this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView) ? 'continuous' : 'categorical';
+
+    const width = 1200;
+    const height = 1000;
+
+    const projection = d3.geoIdentity().fitSize([width, height], {
+      type: 'FeatureCollection',
+      features: featuresToDraw,
+    });
+
+
+    // Create a geoPath generator with the projection
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+
+    // Draw the map inside the zoomable group
+    this.g_compare
+      .style('cursor', 'pointer')
+      .append('g')
+      .selectAll('path')
+      .data(this.features)
+      .join('path')
+      .attr('d', (d) => pathGenerator(d))
+      .attr('fill', (d) => {
+        const value = d.properties?.[this.colorByProperty];
+        if (this.currentLegendType === 'categorical') {
+          return this.colorScale(String(value));
+        } else {
+          const num = this.toNumber(value);
+          if (!isNaN(num)) {
+            return this.continuousColorScale(num);
+          } else {
+            return '#ccc';
+          }
+        }
+      })
+      .style('opacity', 0.8)
+      .on('mouseover', (event, d) => this.mouseOver(event, d))
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+      .on('click', (event, d) => this.openSidenav(event, d));
+
+  }
+
+  public onCompareMode(): void {
+    this.compareMode = !this.compareMode;
+    if (this.compareMode) {
+      setTimeout(() => this.initCompareHexagonPlot(), 50);
+    }
+    else {
+      d3.select('#hexbin-compare').selectAll('*').remove();
+      this.svg_compare = null as any;
+      this.g_compare = null as any;
+  }
   }
 
   private zoomed(event: d3.D3ZoomEvent<SVGSVGElement, unknown>): void {
@@ -353,7 +458,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   public onColorbyPropertyChange(): void {
-    if (this.colorByProperty === 'regulatory_scores') {
+    if (this.colorByProperty === 'regulatory_scores' || this.selectedCompareView === 'regulatory_scores') {
       if (
         this.selectedRegulatoryScore?.endsWith('genie3') &&
         this.selectedGeneSetGenie3
@@ -378,15 +483,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         this.updateSubgraphSponge();
       }
     }
+    if (this.compareMode) {
+      this.updateHexColors('#hexbin-compare');
+    }
     this.updateHexColors();
   }
 
-  isContinuousScale() {
+  isContinuousScale(view?: string) {
+    if (!view) {
+      view = this.colorByProperty;
+    }
     const valuesRaw = this.features.map((f) => {
-      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-        return f.properties.leiden_centrality[this.colorByProperty];
+      if (this.leidenCentralityProps.includes(view)) {
+        return f.properties.leiden_centrality[view];
       }
-      return f.properties[this.colorByProperty];
+      return f.properties[view];
     });
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
@@ -403,7 +514,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
   }
 
-  public updateHexColors(): void {
+  public updateHexColors(containerName?: string): void {
+    if (!containerName) {
+      containerName = '#hexbin';
+    }
+
     this.resetClusterExtension();
 
     if (this.selectedCell && this.selectedCluster) {
@@ -1512,6 +1627,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
                 feature.properties[this.colorByProperty] = data[barcode];
+              }
+            }
+          }
+          if (this.compareMode && this.dataCompare?.features) {
+            for (const feature of this.dataCompare.features) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[this.selectedCompareView] = data[barcode];
               }
             }
           }
