@@ -50,10 +50,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
   // Map svg and g elements
-  private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private g!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
-  private g_compare!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
-  private svg_compare!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
+  private svg!: d3.Selection<SVGSVGElement, any, any, any>;
+  private g!: d3.Selection<SVGGElement, any, any, any>;
+  private g_compare!: d3.Selection<SVGGElement, any, any, any>;
+  private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
   public selectedCell: CellFeature | null = null;
   public selectedCluster: number | null = null;
@@ -158,6 +158,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public compareMode: boolean = false;
   public selectedCompareView: string = 'regulatory_scores';
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
+  public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
@@ -216,44 +217,44 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   private createHexagonPlot(containerName?: string): void {
-    if (!containerName) {
-      containerName = '#hexbin';
-    }
+    if (!containerName) containerName = '#hexbin';
 
-    this.currentCompareLegendType
     const width = 500;
     const height = 400;
-    const svgSel = d3
-      .select(containerName)
-      .append('svg')
+
+    // use data-join to reuse an existing svg in the container or create a new one
+    const container = d3.select(containerName);
+    const svgSel = container
+      .selectAll('svg')
+      .data([0])
+      .join('svg')
       .attr('width', width)
       .attr('height', height)
       .attr('viewBox', [0, 0, 1000, 1000] as [number, number, number, number])
       .style('background-color', 'white')
-      .style('overflow', 'hidden')
+      .style('overflow', 'hidden');
 
-
-    const gSel = svgSel.append('g');
+    // create (or reuse) a root group inside the svg
+    const gSel = svgSel.selectAll<SVGGElement, number>('g.root-group').data([0]).join('g').attr('class', 'root-group');
 
     if (containerName === '#hexbin-compare') {
-      this.svg_compare = svgSel;
-      this.g_compare = gSel;
-    }
-    else {
-      this.svg = svgSel;
-      this.g = gSel;
+      this.svg_compare = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
+      this.g_compare = gSel as any;
+    } else {
+      this.svg = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
+      this.g = gSel as any;
     }
 
-    svgSel.call(
+    // attach a zoom handler once (reusing svgSel is safe)
+    (svgSel as any).call(
       d3
-        .zoom<SVGSVGElement, unknown>()
+        .zoom<SVGSVGElement, number>()
         .scaleExtent([1, 5])
         .extent([
           [0, 0],
           [width, height],
         ])
         .on('zoom', (event) => {
-          // apply transform to the matching group
           if (containerName === '#hexbin-compare' && this.g_compare) {
             this.g_compare.attr('transform', event.transform.toString());
           } else if (this.g) {
@@ -265,54 +266,53 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
   private initCompareHexagonPlot(): void {
 
-    if (!document.getElementById('hexbin-compare')) {
-      setTimeout(() => this.initCompareHexagonPlot(), 100);
+    // Do not recurse — if the compare container isn't in the DOM, abort and let the caller retry once.
+    const node = document.getElementById('hexbin-compare');
+    if (!node) {
+      console.warn('hexbin-compare not present in DOM, skipping compare init');
       return;
     }
 
+    // prepare svg/group
     this.createHexagonPlot('#hexbin-compare');
 
     this.dataCompare = this.geoDataService.getData();
-
-    const featuresToDraw = this.dataCompare ? this.dataCompare.features : [];
+    const featuresToDraw = (this.dataCompare && Array.isArray(this.dataCompare.features)) ? this.dataCompare.features : [];
 
     if (!this.selectedCompareView) {
-      console.log('No compare view selected. Even though compare mode is on, not rendering compare plot. ');
+      console.log('No compare view selected; skipping compare render');
       return;
     }
     this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView) ? 'continuous' : 'categorical';
 
     const width = 1200;
     const height = 1000;
-
     const projection = d3.geoIdentity().fitSize([width, height], {
       type: 'FeatureCollection',
       features: featuresToDraw,
     });
-
-
-    // Create a geoPath generator with the projection
     const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
-    // Draw the map inside the zoomable group
-    this.g_compare
-      .style('cursor', 'pointer')
-      .append('g')
+    if (!this.g_compare) {
+      console.warn('g_compare not initialized after createHexagonPlot');
+      return;
+    }
+
+    // draw using the intended feature set (featuresToDraw)
+    this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer')
       .selectAll('path')
-      .data(this.features)
+      .data(featuresToDraw)
       .join('path')
-      .attr('d', (d) => pathGenerator(d))
+      .attr('d', (d) => pathGenerator(d) || '')
       .attr('fill', (d) => {
-        const value = d.properties?.[this.colorByProperty];
-        if (this.currentLegendType === 'categorical') {
+        const value = (this.leidenCentralityProps.includes(this.selectedCompareView))
+          ? d.properties.leiden_centrality[this.selectedCompareView]
+          : d.properties[this.selectedCompareView];
+        if (this.currentCompareLegendType === 'categorical') {
           return this.colorScale(String(value));
         } else {
           const num = this.toNumber(value);
-          if (!isNaN(num)) {
-            return this.continuousColorScale(num);
-          } else {
-            return '#ccc';
-          }
+          return Number.isFinite(num) ? this.continuousColorScale(num) : '#ccc';
         }
       })
       .style('opacity', 0.8)
@@ -320,18 +320,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       .on('mouseleave', (event, d) => this.mouseLeave(event, d))
       .on('click', (event, d) => this.openSidenav(event, d));
 
+    setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
+
   }
 
   public onCompareMode(): void {
     this.compareMode = !this.compareMode;
     if (this.compareMode) {
+      // schedule a single init attempt so Angular has time to render the compare container
       setTimeout(() => this.initCompareHexagonPlot(), 50);
-    }
-    else {
+
+    } else {
+      // remove compare svg and clear references
       d3.select('#hexbin-compare').selectAll('*').remove();
+      try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
       this.svg_compare = null as any;
       this.g_compare = null as any;
-  }
+    }
   }
 
   private zoomed(event: d3.D3ZoomEvent<SVGSVGElement, unknown>): void {
@@ -519,6 +524,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       containerName = '#hexbin';
     }
 
+    // Determine which view (property) we're updating: main or compare
+    const view = containerName === '#hexbin' ? this.colorByProperty : this.selectedCompareView;
+
+    let valuesRaw;
+    let sel;
+    // Use explicit continuity test for the correct view
+    const viewIsContinuous = this.isContinuousScale(view);
+
     this.resetClusterExtension();
 
     if (this.selectedCell && this.selectedCluster) {
@@ -533,20 +546,39 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    const sel = this.g
-      .selectAll<SVGPathElement, CellFeature>('path')
-      .data(this.features);
 
-    const valuesRaw = this.features.map((f) => {
-      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-        return f.properties.leiden_centrality[this.colorByProperty];
-      }
-      return f.properties[this.colorByProperty];
-    });
+    if (containerName === "#hexbin") {
+      sel = this.g
+        .selectAll<SVGPathElement, CellFeature>('path')
+        .data(this.features);
+
+      valuesRaw = this.features.map((f) => {
+        if (this.leidenCentralityProps.includes(this.colorByProperty)) {
+          return f.properties.leiden_centrality[this.colorByProperty];
+        }
+        return f.properties[this.colorByProperty];
+      });
+    }
+    else if (this.dataCompare) {
+      sel = this.g_compare
+        .selectAll<SVGPathElement, CellFeature>('path')
+        .data(this.dataCompare?.features)
+
+      valuesRaw = this.dataCompare?.features.map((f) => {
+        if (this.leidenCentralityProps.includes(this.selectedCompareView)) {
+          return f.properties.leiden_centrality[this.selectedCompareView];
+        }
+        return f.properties[this.selectedCompareView];
+      });
+    }
+    else {
+      console.log('dataCompare not defined')
+      return
+    }
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
-    if (this.isContinuousScale()) {
+    if (viewIsContinuous) {
       // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
@@ -555,40 +587,102 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         min -= eps;
         max += eps;
       }
-      this.continuousColorScale.domain([min, max]);
-      this.currentLegendDomain = [min, max];
-      this.currentLegendType = 'continuous';
 
-      sel
-        .transition()
-        .duration(300)
-        .attr('stroke-width', 1)
-        .attr('stroke', 'transparent')
-        .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-            ? d.properties.leiden_centrality[this.colorByProperty]
-            : d.properties[this.colorByProperty];
-          const n = this.toNumber(raw);
-          return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
-        });
+      if (containerName === '#hexbin') {
+        this.continuousColorScale.domain([min, max]);
+
+        this.currentLegendDomain = [min, max];
+        this.currentLegendType = 'continuous';
+
+        sel
+          .transition()
+          .duration(300)
+          .attr('stroke-width', 1)
+          .attr('stroke', 'transparent')
+          .attr('fill', (d) => {
+            const raw = this.leidenCentralityProps.includes(this.colorByProperty)
+              ? d.properties.leiden_centrality[this.colorByProperty]
+              : d.properties[this.colorByProperty];
+            const n = this.toNumber(raw);
+            return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
+
+          });
+
+      }
+
+      else {
+
+        this.continuousColorScale.domain([min, max]);
+
+        this.currentLegendDomainCompare = [min, max];
+        this.currentCompareLegendType = 'continuous';
+
+        sel
+          .transition()
+          .duration(300)
+          .attr('stroke-width', 1)
+          .attr('stroke', 'transparent')
+          .attr('fill', (d) => {
+            const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
+              ? d.properties.leiden_centrality[this.selectedCompareView]
+              : d.properties[this.selectedCompareView];
+            const n = this.toNumber(raw);
+            return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
+
+          });
+
+      }
+
+
     } else {
       // categorical scale - for non-numeric, integers with few unique values, or mixed data
       const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
-      this.colorScale.domain(domain);
-      this.currentLegendDomain = domain;
-      this.currentLegendType = 'categorical';
 
-      sel
-        .transition()
-        .duration(300)
-        .attr('stroke-width', 1)
-        .attr('stroke', 'transparent')
-        .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-            ? d.properties.leiden_centrality[this.colorByProperty]
-            : d.properties[this.colorByProperty];
-          return this.colorScale(String(raw));
-        });
+      this.colorScale.domain(domain);
+      if (containerName === '#hexbin') {
+        this.currentLegendDomain = domain;
+        this.currentLegendType = 'categorical';
+
+        if (this.compareMode) {
+          this.currentLegendDomainCompare = domain;
+          this.currentCompareLegendType = 'categorical'
+        }
+
+        sel
+          .transition()
+          .duration(300)
+          .attr('stroke-width', 1)
+          .attr('stroke', 'transparent')
+          .attr('fill', (d) => {
+            if (this.compareMode) {
+              const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
+                ? d.properties.leiden_centrality[this.selectedCompareView]
+                : d.properties[this.selectedCompareView];
+              return this.colorScale(String(raw));
+            }
+            const raw = this.leidenCentralityProps.includes(this.colorByProperty)
+              ? d.properties.leiden_centrality[this.colorByProperty]
+              : d.properties[this.colorByProperty];
+            return this.colorScale(String(raw));
+
+          });
+      }
+      else {
+        this.currentLegendDomainCompare = domain;
+        this.currentCompareLegendType = 'categorical';
+        sel
+          .transition()
+          .duration(300)
+          .attr('stroke-width', 1)
+          .attr('stroke', 'transparent')
+          .attr('fill', (d) => {
+            const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
+              ? d.properties.leiden_centrality[this.selectedCompareView]
+              : d.properties[this.selectedCompareView];
+            return this.colorScale(String(raw));
+          });
+      }
+
     }
 
     this.renderLegend();
@@ -1792,264 +1886,492 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
 
   private renderLegend(): void {
-    // Remove any existing legend
-    this.svg.selectAll('.svg-legend').remove();
+    if (this.compareMode) {
+      // remove previous compare legend
+      this.svg_compare.selectAll('.svg-legend-compare').remove();
 
-    if (this.currentLegendType === 'continuous') {
-      // Continuous legend
-      const [min, max] = this.currentLegendDomain as number[];
-      const legendX = -100;
-      const legendY = 50;
-      const width = 250;
-      const height = 30;
-      const fontSize = 24;
-      const padding = 15;
+      if (this.currentCompareLegendType === 'continuous') {
+        const [min, max] = this.currentLegendDomainCompare as number[] || [0, 1];
+        const legendX = -100;
+        const legendY = 50;
+        const width = 250;
+        const height = 30;
+        const fontSize = 24;
+        const padding = 15;
 
-      // Create gradient for continuous legend
-      const defs = this.svg.select('defs').empty()
-        ? this.svg.append('defs')
-        : this.svg.select('defs');
+        // Use standard <defs>
+        const defs = this.svg_compare.select('defs').empty()
+          ? this.svg_compare.append('defs')
+          : this.svg_compare.select('defs');
 
-      defs.select('#svg-legend-gradient').remove();
+        defs.select('#svg-legend-gradient-compare').remove();
 
-      const gradient = defs
-        .append('linearGradient')
-        .attr('id', 'svg-legend-gradient')
-        .attr('x1', '0%')
-        .attr('x2', '100%')
-        .attr('y1', '0%')
-        .attr('y2', '0%');
+        const gradient = defs
+          .append('linearGradient')
+          .attr('id', 'svg-legend-gradient-compare')
+          .attr('x1', '0%')
+          .attr('x2', '100%')
+          .attr('y1', '0%')
+          .attr('y2', '0%');
 
-      const numStops = 10;
-      for (let i = 0; i <= numStops; i++) {
-        const t = i / numStops;
-        const value = min + t * (max - min);
-        gradient
-          .append('stop')
-          .attr('offset', `${t * 100}%`)
-          .attr('stop-color', this.continuousColorScale(value));
-      }
+        const numStops = 10;
+        for (let i = 0; i <= numStops; i++) {
+          const t = i / numStops;
+          const value = min + t * (max - min);
+          gradient
+            .append('stop')
+            .attr('offset', `${t * 100}%`)
+            .attr('stop-color', this.continuousColorScale(value));
+        }
 
-      const legendG = this.svg
-        .append('g')
-        .attr('class', 'svg-legend')
-        .attr('transform', `translate(${legendX},${legendY})`);
-
-      // Measure title text width for dynamic background
-      const titleText = this.translationService.translateSync(
-        this.colorByProperty,
-      );
-      //const titleText = this.colorByProperty;
-      const tempSvg = this.svg.append('g').style('opacity', 0);
-      const titleWidth =
-        tempSvg
-          .append('text')
-          .text(titleText)
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .node()
-          ?.getBBox().width || 0;
-
-      // Measure min value
-      const minText = min.toFixed(2);
-      const minWidth =
-        tempSvg
-          .append('text')
-          .text(minText)
-          .style('font-size', `${fontSize}px`)
-          .node()
-          ?.getBBox().width || 0;
-
-      // Measure max value
-      const maxText = max.toFixed(2);
-      const maxWidth =
-        tempSvg
-          .append('text')
-          .text(maxText)
-          .style('font-size', `${fontSize}px`)
-          .node()
-          ?.getBBox().width || 0;
-
-      tempSvg.remove();
-
-      // Calculate required dimensions
-      const textHeight = fontSize * 1.2; // Approximate text height
-      const requiredWidth = Math.max(
-        width,
-        titleWidth,
-        minWidth + maxWidth + 20,
-      );
-      const bgWidth = requiredWidth + padding * 2;
-      const bgHeight = height + textHeight * 2 + padding * 3;
-
-      // Background
-      legendG
-        .append('rect')
-        .attr('x', -padding)
-        .attr('y', -padding - textHeight)
-        .attr('width', bgWidth)
-        .attr('height', bgHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 5);
-
-      // Gradient rectangle
-      legendG
-        .append('rect')
-        .attr('x', (bgWidth - width) / 2 - padding)
-        .attr('y', 0)
-        .attr('width', width)
-        .attr('height', height)
-        .style('fill', 'url(#svg-legend-gradient)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 3);
-
-      // Min label
-      legendG
-        .append('text')
-        .attr('x', (bgWidth - width) / 2 - padding)
-        .attr('y', height + textHeight)
-        .attr('text-anchor', 'start')
-        .style('font-size', `${fontSize}px`)
-        .style('fill', '#333')
-        .text(minText);
-
-      // Max label
-      legendG
-        .append('text')
-        .attr('x', (bgWidth - width) / 2 - padding + width)
-        .attr('y', height + textHeight)
-        .attr('text-anchor', 'end')
-        .style('font-size', `${fontSize}px`)
-        .style('fill', '#333')
-        .text(maxText);
-
-      // Title
-      legendG
-        .append('text')
-        .attr('x', bgWidth / 2 - padding)
-        .attr('y', -5)
-        .attr('text-anchor', 'middle')
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .style('fill', '#333')
-        .text(titleText);
-    } else {
-      // Categorical legend
-      const categories = this.currentLegendDomain as string[];
-      categories.sort();
-      const legendX = -100;
-      const legendY = 10;
-      const itemHeight = 40;
-      const rectHeight = 20;
-      const rectWidth = 30;
-      const fontSize = 24;
-      const titlePadding = 15;
-
-      // Create temporary text elements to measure actual width
-      const tempSvg = this.svg.append('g').style('opacity', 0);
-
-      // Measure title text
-      //const titleText = this.colorByProperty;
-      const titleText = this.translationService.translateSync(
-        this.colorByProperty,
-      );
-      const titleWidth =
-        tempSvg
-          .append('text')
-          .text(titleText)
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .node()
-          ?.getBBox().width || 0;
-
-      // Measure category text widths
-      const textNodes = tempSvg
-        .selectAll('text')
-        .data(categories)
-        .enter()
-        .append('text')
-        .text((d) => d)
-        .style('font-size', `${fontSize}px`);
-
-      const maxTextWidth = Math.max(
-        ...textNodes
-          .nodes()
-          .map((node) => (node as SVGGraphicsElement).getBBox().width),
-      );
-      tempSvg.remove();
-
-      const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
-
-      const legendG = this.svg
-        .append('g')
-        .attr('class', 'svg-legend')
-        .attr('transform', `translate(${legendX},${legendY})`);
-
-      // Calculate title height and total background height
-      const titleHeight = fontSize + titlePadding;
-      const backgroundHeight =
-        categories.length * itemHeight + 20 + titleHeight;
-      const backgroundWidth = itemWidth + 20;
-
-      // Background - positioned to include title space
-      legendG
-        .append('rect')
-        .attr('x', -10)
-        .attr('y', -10)
-        .attr('width', backgroundWidth)
-        .attr('height', backgroundHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 5);
-
-      // Add title
-      legendG
-        .append('text')
-        .attr('x', backgroundWidth / 2 - 10)
-        .attr('y', titlePadding + fontSize / 2)
-        .attr('dy', '0.35em')
-        .attr('text-anchor', 'middle')
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .style('fill', '#333')
-        .text(titleText);
-
-      categories.forEach((cat, i) => {
-        const yPosition = i * itemHeight + titleHeight;
-        const legendItem = legendG
+        const legendG = this.svg_compare
           .append('g')
-          .attr('transform', `translate(0, ${yPosition})`);
+          .attr('class', 'svg-legend-compare')
+          .attr('transform', `translate(${legendX},${legendY})`);
 
-        // Color rectangle - centered vertically within the item height
-        const rectY = (itemHeight - rectHeight) / 2;
-        legendItem
+        const titleText = this.translationService.translateSync(this.selectedCompareView);
+        // fallback if translation returns empty
+        const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+
+        // measure sizes using svg_compare
+        const tempSvg = this.svg_compare.append('g').style('opacity', 0);
+        const titleWidth =
+          tempSvg
+            .append('text')
+            .text(titleText)
+            .style('font-size', `${fontSize}px`)
+            .style('font-weight', 'bold')
+            .node()
+            ?.getBBox().width || 0;
+
+        const minText = (min ?? 0).toFixed(2);
+        const minWidth =
+          tempSvg
+            .append('text')
+            .text(minText)
+            .style('font-size', `${fontSize}px`)
+            .node()
+            ?.getBBox().width || 0;
+
+        const maxText = (max ?? 0).toFixed(2);
+        const maxWidth =
+          tempSvg
+            .append('text')
+            .text(maxText)
+            .style('font-size', `${fontSize}px`)
+            .node()
+            ?.getBBox().width || 0;
+
+        tempSvg.remove();
+
+        const textHeight = fontSize * 1.2;
+        const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+        const bgWidth = requiredWidth + padding * 2;
+        const bgHeight = height + textHeight * 2 + padding * 3;
+
+        legendG
           .append('rect')
-          .attr('y', rectY)
-          .attr('width', rectWidth)
-          .attr('height', rectHeight)
-          .style('fill', this.colorScale(cat))
-          .attr('stroke', '#333')
-          .attr('stroke-width', 0.5)
-          .attr('rx', 2);
+          .attr('x', -padding)
+          .attr('y', -padding - textHeight)
+          .attr('width', bgWidth)
+          .attr('height', bgHeight)
+          .style('fill', 'rgba(255, 255, 255, 0.9)')
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 1)
+          .attr('rx', 5);
 
-        // Text - aligned with the center of the rectangle
-        const textY = rectY + rectHeight / 2;
-        legendItem
+        legendG
+          .append('rect')
+          .attr('x', (bgWidth - width) / 2 - padding)
+          .attr('y', 0)
+          .attr('width', width)
+          .attr('height', height)
+          .style('fill', 'url(#svg-legend-gradient-compare)')
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 1)
+          .attr('rx', 3);
+
+        // Min label
+        legendG
           .append('text')
-          .attr('x', rectWidth + 10)
-          .attr('y', textY)
-          .attr('dy', '0.35em')
+          .attr('x', (bgWidth - width) / 2 - padding)
+          .attr('y', height + textHeight)
+          .attr('text-anchor', 'start')
           .style('font-size', `${fontSize}px`)
           .style('fill', '#333')
-          .text(cat);
+          .text(minText);
 
-        // Add tooltip for full text
-        legendItem.append('title').text(cat);
-      });
+        // Max label
+        legendG
+          .append('text')
+          .attr('x', (bgWidth - width) / 2 - padding + width)
+          .attr('y', height + textHeight)
+          .attr('text-anchor', 'end')
+          .style('font-size', `${fontSize}px`)
+          .style('fill', '#333')
+          .text(maxText);
+
+        // Title (compare) — position inside background with padding so it's not clipped
+        const titleY = -padding + Math.round(fontSize / 2);
+        legendG
+          .append('text')
+          .attr('x', bgWidth / 2 - padding)
+          .attr('y', titleY)
+          .attr('text-anchor', 'middle')
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('fill', '#333')
+          .text(legendTitle);
+
+      } else {
+        // Categorical legend for compare view
+        const categories = this.currentLegendDomainCompare as string[] || [];
+        categories.sort();
+        const legendX = -100;
+        const legendY = 10;
+        const itemHeight = 40;
+        const rectHeight = 20;
+        const rectWidth = 30;
+        const fontSize = 24;
+        const titlePadding = 15;
+
+        // Measure using svg_compare
+        const tempSvg = this.svg_compare.append('g').style('opacity', 0);
+        const titleText = this.translationService.translateSync(this.selectedCompareView);
+        const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+        const titleWidth =
+          tempSvg
+            .append('text')
+            .text(titleText)
+            .style('font-size', `${fontSize}px`)
+            .style('font-weight', 'bold')
+            .node()
+            ?.getBBox().width || 0;
+
+        const textNodes = tempSvg
+          .selectAll('text')
+          .data(categories)
+          .enter()
+          .append('text')
+          .text((d) => d)
+          .style('font-size', `${fontSize}px`);
+
+        const maxTextWidth = categories.length
+          ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
+          : 0;
+        tempSvg.remove();
+
+        const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
+        const backgroundWidth = itemWidth + 20;
+        const titleHeight = fontSize * 1.2 + titlePadding;
+
+        const legendG = this.svg_compare
+          .append('g')
+          .attr('class', 'svg-legend-compare')
+          .attr('transform', `translate(${legendX},${legendY})`);
+
+        // Title (categorical compare)
+        legendG
+          .append('text')
+          .attr('x', backgroundWidth / 2 - 10)
+          .attr('y', titlePadding + fontSize / 2)
+          .attr('dy', '0.35em')
+          .attr('text-anchor', 'middle')
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('fill', '#333')
+          .text(legendTitleCat);
+
+        categories.forEach((cat, i) => {
+          const yPosition = i * itemHeight + titleHeight;
+          const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
+          const rectY = (itemHeight - rectHeight) / 2;
+          legendItem
+            .append('rect')
+            .attr('y', rectY)
+            .attr('width', rectWidth)
+            .attr('height', rectHeight)
+            .style('fill', this.colorScale(cat))
+            .attr('stroke', '#333')
+            .attr('stroke-width', 0.5)
+            .attr('rx', 2);
+          const textY = rectY + rectHeight / 2;
+          legendItem
+            .append('text')
+            .attr('x', rectWidth + 10)
+            .attr('y', textY)
+            .attr('dy', '0.35em')
+            .style('font-size', `${fontSize}px`)
+            .style('fill', '#333')
+            .text(cat);
+          legendItem.append('title').text(cat);
+        });
+      }
+    } else {
+      // existing non-compare legend logic (unchanged)
+      this.svg.selectAll('.svg-legend').remove();
+
+      if (this.currentLegendType === 'continuous') {
+        // Continuous legend
+        const [min, max] = this.currentLegendDomain as number[];
+        const legendX = -100;
+        const legendY = 50;
+        const width = 250;
+        const height = 30;
+        const fontSize = 24;
+        const padding = 15;
+
+
+
+        // Create gradient for continuous legend
+        const defs = this.svg.select('defs').empty()
+          ? this.svg.append('defs')
+          : this.svg.select('defs');
+
+
+
+        defs.select('#svg-legend-gradient').remove();
+
+        const gradient = defs
+          .append('linearGradient')
+          .attr('id', 'svg-legend-gradient')
+          .attr('x1', '0%')
+          .attr('x2', '100%')
+          .attr('y1', '0%')
+          .attr('y2', '0%');
+
+        const numStops = 10;
+        for (let i = 0; i <= numStops; i++) {
+          const t = i / numStops;
+          const value = min + t * (max - min);
+          gradient
+            .append('stop')
+            .attr('offset', `${t * 100}%`)
+            .attr('stop-color', this.continuousColorScale(value));
+        }
+
+        const legendG = this.svg
+          .append('g')
+          .attr('class', 'svg-legend')
+          .attr('transform', `translate(${legendX},${legendY})`);
+
+        // Measure title text width for dynamic background
+        const titleText = this.translationService.translateSync(
+          this.colorByProperty,
+        );
+
+        const tempSvg = this.svg.append('g').style('opacity', 0);
+        const titleWidth =
+          tempSvg
+            .append('text')
+            .text(titleText)
+            .style('font-size', `${fontSize}px`)
+            .style('font-weight', 'bold')
+            .node()
+            ?.getBBox().width || 0;
+
+        // Measure min value
+        const minText = min.toFixed(2);
+        const minWidth =
+          tempSvg
+            .append('text')
+            .text(minText)
+            .style('font-size', `${fontSize}px`)
+            .node()
+            ?.getBBox().width || 0;
+
+        // Measure max value
+        const maxText = max.toFixed(2);
+        const maxWidth =
+          tempSvg
+            .append('text')
+            .text(maxText)
+            .style('font-size', `${fontSize}px`)
+            .node()
+            ?.getBBox().width || 0;
+
+        tempSvg.remove();
+
+        // Calculate required dimensions
+        const textHeight = fontSize * 1.2; // Approximate text height
+        const requiredWidth = Math.max(
+          width,
+          titleWidth,
+          minWidth + maxWidth + 20,
+        );
+        const bgWidth = requiredWidth + padding * 2;
+        const bgHeight = height + textHeight * 2 + padding * 3;
+
+        // Background
+        legendG
+          .append('rect')
+          .attr('x', -padding)
+          .attr('y', -padding - textHeight)
+          .attr('width', bgWidth)
+          .attr('height', bgHeight)
+          .style('fill', 'rgba(255, 255, 255, 0.9)')
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 1)
+          .attr('rx', 5);
+
+        // Gradient rectangle
+        legendG
+          .append('rect')
+          .attr('x', (bgWidth - width) / 2 - padding)
+          .attr('y', 0)
+          .attr('width', width)
+          .attr('height', height)
+          .style('fill', 'url(#svg-legend-gradient)')
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 1)
+          .attr('rx', 3);
+
+        // Min label
+        legendG
+          .append('text')
+          .attr('x', (bgWidth - width) / 2 - padding)
+          .attr('y', height + textHeight)
+          .attr('text-anchor', 'start')
+          .style('font-size', `${fontSize}px`)
+          .style('fill', '#333')
+          .text(minText);
+
+        // Max label
+        legendG
+          .append('text')
+          .attr('x', (bgWidth - width) / 2 - padding + width)
+          .attr('y', height + textHeight)
+          .attr('text-anchor', 'end')
+          .style('font-size', `${fontSize}px`)
+          .style('fill', '#333')
+          .text(maxText);
+
+        // Title
+        legendG
+          .append('text')
+          .attr('x', bgWidth / 2 - padding)
+          .attr('y', -5)
+          .attr('text-anchor', 'middle')
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('fill', '#333')
+          .text(titleText);
+      } else {
+        // Categorical legend
+        const categories = this.currentLegendDomain as string[];
+        categories.sort();
+        const legendX = -100;
+        const legendY = 10;
+        const itemHeight = 40;
+        const rectHeight = 20;
+        const rectWidth = 30;
+        const fontSize = 24;
+        const titlePadding = 15;
+
+        // Create temporary text elements to measure actual width
+        const tempSvg = this.svg.append('g').style('opacity', 0);
+
+        // Measure title text
+        //const titleText = this.colorByProperty;
+        const titleText = this.translationService.translateSync(
+          this.colorByProperty,
+        );
+        const titleWidth =
+          tempSvg
+            .append('text')
+            .text(titleText)
+            .style('font-size', `${fontSize}px`)
+            .style('font-weight', 'bold')
+            .node()
+            ?.getBBox().width || 0;
+
+        // Measure category text widths
+        const textNodes = tempSvg
+          .selectAll('text')
+          .data(categories)
+          .enter()
+          .append('text')
+          .text((d) => d)
+          .style('font-size', `${fontSize}px`);
+
+        const maxTextWidth = Math.max(
+          ...textNodes
+            .nodes()
+            .map((node) => (node as SVGGraphicsElement).getBBox().width),
+        );
+        tempSvg.remove();
+
+        const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
+
+        const legendG = this.svg
+          .append('g')
+          .attr('class', 'svg-legend')
+          .attr('transform', `translate(${legendX},${legendY})`);
+
+        // Calculate title height and total background height
+        const titleHeight = fontSize + titlePadding;
+        const backgroundHeight =
+          categories.length * itemHeight + 20 + titleHeight;
+        const backgroundWidth = itemWidth + 20;
+
+        // Background - positioned to include title space
+        legendG
+          .append('rect')
+          .attr('x', -10)
+          .attr('y', -10)
+          .attr('width', backgroundWidth)
+          .attr('height', backgroundHeight)
+          .style('fill', 'rgba(255, 255, 255, 0.9)')
+          .attr('stroke', '#ccc')
+          .attr('stroke-width', 1)
+          .attr('rx', 5);
+
+        // Add title
+        legendG
+          .append('text')
+          .attr('x', backgroundWidth / 2 - 10)
+          .attr('y', titlePadding + fontSize / 2)
+          .attr('dy', '0.35em')
+          .attr('text-anchor', 'middle')
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .style('fill', '#333')
+          .text(titleText);
+
+        categories.forEach((cat, i) => {
+          const yPosition = i * itemHeight + titleHeight;
+          const legendItem = legendG
+            .append('g')
+            .attr('transform', `translate(0, ${yPosition})`);
+
+          // Color rectangle - centered vertically within the item height
+          const rectY = (itemHeight - rectHeight) / 2;
+          legendItem
+            .append('rect')
+            .attr('y', rectY)
+            .attr('width', rectWidth)
+            .attr('height', rectHeight)
+            .style('fill', this.colorScale(cat))
+            .attr('stroke', '#333')
+            .attr('stroke-width', 0.5)
+            .attr('rx', 2);
+
+          // Text - aligned with the center of the rectangle
+          const textY = rectY + rectHeight / 2;
+          legendItem
+            .append('text')
+            .attr('x', rectWidth + 10)
+            .attr('y', textY)
+            .attr('dy', '0.35em')
+            .style('font-size', `${fontSize}px`)
+            .style('fill', '#333')
+            .text(cat);
+
+          // Add tooltip for full text
+          legendItem.append('title').text(cat);
+
+        });
+      }
     }
   }
 }

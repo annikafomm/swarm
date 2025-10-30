@@ -16,6 +16,10 @@
             </option>
           </optgroup>
         </select>
+         <button class="info-button" mat-icon-button [matTooltip]="colorByTooltip"
+          (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
+          <mat-icon>help_outline</mat-icon>
+        </button>
         <label for="colorByCompare" *ngIf="compareMode">Compare hexagons by:</label>
         <select id="colorByCompare" *ngIf="compareMode" [(ngModel)]="selectedCompareView"
           (change)="onColorbyPropertyChange()">
@@ -25,10 +29,6 @@
             </option>
           </optgroup>
         </select>
-        <button class="info-button" mat-icon-button [matTooltip]="colorByTooltip"
-          (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
-          <mat-icon>help_outline</mat-icon>
-        </button>
       </div>
 
 
