@@ -151,6 +151,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       '#E15759',
     ]);
   private continuousColorScale = d3.scaleSequential(d3.interpolateBlues);
+  // Separate scales for the compare view to avoid cross-contamination
+  public colorScaleCompare = d3.scaleOrdinal<string>().range([
+    '#FF7373',
+    '#66cdaa',
+    '#088da5',
+    '#F0E442',
+    '#0072B2',
+    '#ffc3a0',
+    '#CC79A7',
+    '#E15759',
+  ]);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateBlues);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
@@ -283,7 +295,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       console.log('No compare view selected; skipping compare render');
       return;
     }
-    this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView) ? 'continuous' : 'categorical';
+    const compareIsContinuous = this.isContinuousScale(this.selectedCompareView, featuresToDraw);
+    console.log('[compare init] selectedCompareView=', this.selectedCompareView, 'featuresToDraw=', featuresToDraw.length, 'isContinuous=', compareIsContinuous);
+    this.currentCompareLegendType = compareIsContinuous ? 'continuous' : 'categorical';
 
     const width = 1200;
     const height = 1000;
@@ -309,16 +323,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           ? d.properties.leiden_centrality[this.selectedCompareView]
           : d.properties[this.selectedCompareView];
         if (this.currentCompareLegendType === 'categorical') {
-          return this.colorScale(String(value));
+          return this.colorScaleCompare(String(value));
         } else {
           const num = this.toNumber(value);
-          return Number.isFinite(num) ? this.continuousColorScale(num) : '#ccc';
+          return Number.isFinite(num) ? this.continuousColorScaleCompare(num) : '#ccc';
         }
       })
-      .style('opacity', 0.8)
-      .on('mouseover', (event, d) => this.mouseOver(event, d))
-      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-      .on('click', (event, d) => this.openSidenav(event, d));
+      .style('opacity', 0.8);
+
 
     setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
 
@@ -336,6 +348,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
       this.svg_compare = null as any;
       this.g_compare = null as any;
+
+      // Reset compare legend / scales so reopening starts fresh
+      try {
+        this.currentLegendDomainCompare = [];
+        this.currentCompareLegendType = 'categorical';
+        // reset compare ordinal domain
+        if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
+          this.colorScaleCompare.domain([] as any);
+        }
+        // reset compare continuous domain
+        if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
+          this.continuousColorScaleCompare.domain([0, 1]);
+        }
+      } catch (e) {
+        // ignore
+      }
     }
   }
 
@@ -463,7 +491,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
   public onColorbyPropertyChange(): void {
-    if (this.colorByProperty === 'regulatory_scores' || this.selectedCompareView === 'regulatory_scores') {
+    if (this.colorByProperty === 'regulatory_scores') {
       if (
         this.selectedRegulatoryScore?.endsWith('genie3') &&
         this.selectedGeneSetGenie3
@@ -494,11 +522,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     this.updateHexColors();
   }
 
-  isContinuousScale(view?: string) {
+  /**
+   * Determine whether the given view/property should be treated as a continuous numeric scale.
+   * If `features` is provided, that dataset is used for the test (used for compare view). Otherwise
+   * the main `this.features` is used.
+   */
+  isContinuousScale(view?: string, features?: CellFeature[]) {
     if (!view) {
       view = this.colorByProperty;
     }
-    const valuesRaw = this.features.map((f) => {
+    const sourceFeatures = Array.isArray(features) ? features : this.features || [];
+
+    const valuesRaw = sourceFeatures.map((f) => {
       if (this.leidenCentralityProps.includes(view)) {
         return f.properties.leiden_centrality[view];
       }
@@ -509,8 +544,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
 
     // Check if all values are integers (for categorical treatment)
-    const allIntegers =
-      allNumbers && numericValues.every((n) => Number.isInteger(n));
+    const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
 
     // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
@@ -519,18 +553,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
   }
 
+  private getViewVariablesToUpdate(containerName: string) {
+    const isMainView = containerName === '#hexbin';
+    const viewToUpdate = isMainView ? this.colorByProperty : this.selectedCompareView;
+    const featuresToUpdate = isMainView ? this.features : (this.dataCompare?.features || []);
+    const gToUpdate = isMainView ? this.g : this.g_compare;
+    const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
+    const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
+    const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate);
+    const legendContainerName = isMainView ? 'svg-legend' : 'svg-legend-compare';
+    const legendGradientName = isMainView ? 'svg-legend-gradient' : 'svg-legend-gradient-compare';
+    return {
+      isMainView,
+      view: viewToUpdate,
+      svg: isMainView ? this.svg : this.svg_compare,
+      features: featuresToUpdate,
+      g: gToUpdate,
+      ordinal: ordinalScaleToUpdate,
+      continuous: continuousScaleToUpdate,
+      isContinuous,
+      legendContainerName,
+      legendGradientName,
+      getLegendDomain: () => isMainView ? this.currentLegendDomain : this.currentLegendDomainCompare,
+      setLegendDomain: (v: any[]) => { if (isMainView) this.currentLegendDomain = v; else this.currentLegendDomainCompare = v; },
+      getLegendType: () => isMainView ? this.currentLegendType : this.currentCompareLegendType,
+      setLegendType: (t: 'continuous' | 'categorical') => { if (isMainView) this.currentLegendType = t; else this.currentCompareLegendType = t; }
+    } as const;
+
+  }
+
   public updateHexColors(containerName?: string): void {
+
     if (!containerName) {
       containerName = '#hexbin';
     }
 
-    // Determine which view (property) we're updating: main or compare
-    const view = containerName === '#hexbin' ? this.colorByProperty : this.selectedCompareView;
-
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
     let valuesRaw;
     let sel;
-    // Use explicit continuity test for the correct view
-    const viewIsContinuous = this.isContinuousScale(view);
+
+    console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
 
     this.resetClusterExtension();
 
@@ -546,39 +608,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     }
     if (this.selectedCell) this.selectedCell = null;
 
+    sel = viewVariablesToUpdate.g
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .data(viewVariablesToUpdate.features);
 
-    if (containerName === "#hexbin") {
-      sel = this.g
-        .selectAll<SVGPathElement, CellFeature>('path')
-        .data(this.features);
-
-      valuesRaw = this.features.map((f) => {
-        if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-          return f.properties.leiden_centrality[this.colorByProperty];
-        }
-        return f.properties[this.colorByProperty];
-      });
-    }
-    else if (this.dataCompare) {
-      sel = this.g_compare
-        .selectAll<SVGPathElement, CellFeature>('path')
-        .data(this.dataCompare?.features)
-
-      valuesRaw = this.dataCompare?.features.map((f) => {
-        if (this.leidenCentralityProps.includes(this.selectedCompareView)) {
-          return f.properties.leiden_centrality[this.selectedCompareView];
-        }
-        return f.properties[this.selectedCompareView];
-      });
-    }
-    else {
-      console.log('dataCompare not defined')
-      return
-    }
+    valuesRaw = viewVariablesToUpdate.features.map((f) => {
+      if (this.leidenCentralityProps.includes(viewVariablesToUpdate.view)) {
+        return f.properties.leiden_centrality[viewVariablesToUpdate.view];
+      }
+      return f.properties[viewVariablesToUpdate.view];
+    });
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
-    if (viewIsContinuous) {
+    if (viewVariablesToUpdate.isContinuous) {
       // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
@@ -588,104 +631,48 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         max += eps;
       }
 
-      if (containerName === '#hexbin') {
-        this.continuousColorScale.domain([min, max]);
 
-        this.currentLegendDomain = [min, max];
-        this.currentLegendType = 'continuous';
+      viewVariablesToUpdate.continuous.domain([min, max]);
 
-        sel
-          .transition()
-          .duration(300)
-          .attr('stroke-width', 1)
-          .attr('stroke', 'transparent')
-          .attr('fill', (d) => {
-            const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-              ? d.properties.leiden_centrality[this.colorByProperty]
-              : d.properties[this.colorByProperty];
-            const n = this.toNumber(raw);
-            return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
+      viewVariablesToUpdate.setLegendDomain([min, max]);
+      viewVariablesToUpdate.setLegendType('continuous');
 
-          });
+      sel
+        .transition()
+        .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
+        .attr('fill', (d) => {
+          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+            ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+            : d.properties[viewVariablesToUpdate.view];
+          const n = this.toNumber(raw);
+          return Number.isFinite(n)
+            ? viewVariablesToUpdate.continuous(n)
+            : '#ccc';
 
-      }
-
-      else {
-
-        this.continuousColorScale.domain([min, max]);
-
-        this.currentLegendDomainCompare = [min, max];
-        this.currentCompareLegendType = 'continuous';
-
-        sel
-          .transition()
-          .duration(300)
-          .attr('stroke-width', 1)
-          .attr('stroke', 'transparent')
-          .attr('fill', (d) => {
-            const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
-              ? d.properties.leiden_centrality[this.selectedCompareView]
-              : d.properties[this.selectedCompareView];
-            const n = this.toNumber(raw);
-            return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
-
-          });
-
-      }
-
-
+        });
     } else {
       // categorical scale - for non-numeric, integers with few unique values, or mixed data
       const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
 
-      this.colorScale.domain(domain);
-      if (containerName === '#hexbin') {
-        this.currentLegendDomain = domain;
-        this.currentLegendType = 'categorical';
+      viewVariablesToUpdate.ordinal.domain(domain);
+      viewVariablesToUpdate.setLegendDomain(domain);
+      viewVariablesToUpdate.setLegendType('categorical');
 
-        if (this.compareMode) {
-          this.currentLegendDomainCompare = domain;
-          this.currentCompareLegendType = 'categorical'
-        }
-
-        sel
-          .transition()
-          .duration(300)
-          .attr('stroke-width', 1)
-          .attr('stroke', 'transparent')
-          .attr('fill', (d) => {
-            if (this.compareMode) {
-              const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
-                ? d.properties.leiden_centrality[this.selectedCompareView]
-                : d.properties[this.selectedCompareView];
-              return this.colorScale(String(raw));
-            }
-            const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-              ? d.properties.leiden_centrality[this.colorByProperty]
-              : d.properties[this.colorByProperty];
-            return this.colorScale(String(raw));
-
-          });
-      }
-      else {
-        this.currentLegendDomainCompare = domain;
-        this.currentCompareLegendType = 'categorical';
-        sel
-          .transition()
-          .duration(300)
-          .attr('stroke-width', 1)
-          .attr('stroke', 'transparent')
-          .attr('fill', (d) => {
-            const raw = this.leidenCentralityProps.includes(this.selectedCompareView)
-              ? d.properties.leiden_centrality[this.selectedCompareView]
-              : d.properties[this.selectedCompareView];
-            return this.colorScale(String(raw));
-          });
-      }
-
+      sel
+        .transition()
+        .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
+        .attr('fill', (d) => {
+          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+            ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+            : d.properties[viewVariablesToUpdate.view];
+          return viewVariablesToUpdate.ordinal(String(raw));
+        });
     }
-
-    this.renderLegend();
+    this.renderLegend(containerName);
   }
 
   public updateSubgraphGenie3(): void {
@@ -1704,7 +1691,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  async fetchAndUpdate(columnName: string, index: string) {
+  async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
     this.sessionService
       .callWithSession(() =>
         this.http.get(
@@ -1724,13 +1711,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
               }
             }
           }
-          if (this.compareMode && this.dataCompare?.features) {
+          // Only update the compare dataset if the caller explicitly requested it.
+          // This prevents accidental overwrites of compare properties when fetching
+          // data for the main view (e.g. fetching regulatory scores for the main map
+          // shouldn't replace categorical compare fields like 'leiden').
+          if (updateCompare && this.compareMode && this.dataCompare?.features) {
             for (const feature of this.dataCompare.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
                 feature.properties[this.selectedCompareView] = data[barcode];
               }
             }
+            console.log(`[Backend] Also updated compare view property '${this.selectedCompareView}' from obsm["${columnName}"][${index}]`);
           }
           console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
           this.updateHexColors();
@@ -1885,493 +1877,227 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
 
-  private renderLegend(): void {
-    if (this.compareMode) {
-      // remove previous compare legend
-      this.svg_compare.selectAll('.svg-legend-compare').remove();
+  private renderLegend(containerName: string): void {
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
 
-      if (this.currentCompareLegendType === 'continuous') {
-        const [min, max] = this.currentLegendDomainCompare as number[] || [0, 1];
-        const legendX = -100;
-        const legendY = 50;
-        const width = 250;
-        const height = 30;
-        const fontSize = 24;
-        const padding = 15;
+    viewVariablesToUpdate.svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
 
-        // Use standard <defs>
-        const defs = this.svg_compare.select('defs').empty()
-          ? this.svg_compare.append('defs')
-          : this.svg_compare.select('defs');
+    if (viewVariablesToUpdate.getLegendType() === 'continuous') {
+      const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
+      const legendX = -100;
+      const legendY = 50;
+      const width = 250;
+      const height = 30;
+      const fontSize = 24;
+      const padding = 15;
 
-        defs.select('#svg-legend-gradient-compare').remove();
+      // Use standard <defs>
+      const defs = viewVariablesToUpdate.svg.select('defs').empty()
+        ? viewVariablesToUpdate.svg.append('defs')
+        : viewVariablesToUpdate.svg.select('defs');
 
-        const gradient = defs
-          .append('linearGradient')
-          .attr('id', 'svg-legend-gradient-compare')
-          .attr('x1', '0%')
-          .attr('x2', '100%')
-          .attr('y1', '0%')
-          .attr('y2', '0%');
+      defs.select(`#${viewVariablesToUpdate.legendGradientName}`).remove();
 
-        const numStops = 10;
-        for (let i = 0; i <= numStops; i++) {
-          const t = i / numStops;
-          const value = min + t * (max - min);
-          gradient
-            .append('stop')
-            .attr('offset', `${t * 100}%`)
-            .attr('stop-color', this.continuousColorScale(value));
-        }
+      const gradient = defs
+        .append('linearGradient')
+        .attr('id', viewVariablesToUpdate.legendGradientName)
+        .attr('x1', '0%')
+        .attr('x2', '100%')
+        .attr('y1', '0%')
+        .attr('y2', '0%');
 
-        const legendG = this.svg_compare
-          .append('g')
-          .attr('class', 'svg-legend-compare')
-          .attr('transform', `translate(${legendX},${legendY})`);
-
-        const titleText = this.translationService.translateSync(this.selectedCompareView);
-        // fallback if translation returns empty
-        const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
-
-        // measure sizes using svg_compare
-        const tempSvg = this.svg_compare.append('g').style('opacity', 0);
-        const titleWidth =
-          tempSvg
-            .append('text')
-            .text(titleText)
-            .style('font-size', `${fontSize}px`)
-            .style('font-weight', 'bold')
-            .node()
-            ?.getBBox().width || 0;
-
-        const minText = (min ?? 0).toFixed(2);
-        const minWidth =
-          tempSvg
-            .append('text')
-            .text(minText)
-            .style('font-size', `${fontSize}px`)
-            .node()
-            ?.getBBox().width || 0;
-
-        const maxText = (max ?? 0).toFixed(2);
-        const maxWidth =
-          tempSvg
-            .append('text')
-            .text(maxText)
-            .style('font-size', `${fontSize}px`)
-            .node()
-            ?.getBBox().width || 0;
-
-        tempSvg.remove();
-
-        const textHeight = fontSize * 1.2;
-        const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
-        const bgWidth = requiredWidth + padding * 2;
-        const bgHeight = height + textHeight * 2 + padding * 3;
-
-        legendG
-          .append('rect')
-          .attr('x', -padding)
-          .attr('y', -padding - textHeight)
-          .attr('width', bgWidth)
-          .attr('height', bgHeight)
-          .style('fill', 'rgba(255, 255, 255, 0.9)')
-          .attr('stroke', '#ccc')
-          .attr('stroke-width', 1)
-          .attr('rx', 5);
-
-        legendG
-          .append('rect')
-          .attr('x', (bgWidth - width) / 2 - padding)
-          .attr('y', 0)
-          .attr('width', width)
-          .attr('height', height)
-          .style('fill', 'url(#svg-legend-gradient-compare)')
-          .attr('stroke', '#ccc')
-          .attr('stroke-width', 1)
-          .attr('rx', 3);
-
-        // Min label
-        legendG
-          .append('text')
-          .attr('x', (bgWidth - width) / 2 - padding)
-          .attr('y', height + textHeight)
-          .attr('text-anchor', 'start')
-          .style('font-size', `${fontSize}px`)
-          .style('fill', '#333')
-          .text(minText);
-
-        // Max label
-        legendG
-          .append('text')
-          .attr('x', (bgWidth - width) / 2 - padding + width)
-          .attr('y', height + textHeight)
-          .attr('text-anchor', 'end')
-          .style('font-size', `${fontSize}px`)
-          .style('fill', '#333')
-          .text(maxText);
-
-        // Title (compare) — position inside background with padding so it's not clipped
-        const titleY = -padding + Math.round(fontSize / 2);
-        legendG
-          .append('text')
-          .attr('x', bgWidth / 2 - padding)
-          .attr('y', titleY)
-          .attr('text-anchor', 'middle')
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .style('fill', '#333')
-          .text(legendTitle);
-
-      } else {
-        // Categorical legend for compare view
-        const categories = this.currentLegendDomainCompare as string[] || [];
-        categories.sort();
-        const legendX = -100;
-        const legendY = 10;
-        const itemHeight = 40;
-        const rectHeight = 20;
-        const rectWidth = 30;
-        const fontSize = 24;
-        const titlePadding = 15;
-
-        // Measure using svg_compare
-        const tempSvg = this.svg_compare.append('g').style('opacity', 0);
-        const titleText = this.translationService.translateSync(this.selectedCompareView);
-        const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
-        const titleWidth =
-          tempSvg
-            .append('text')
-            .text(titleText)
-            .style('font-size', `${fontSize}px`)
-            .style('font-weight', 'bold')
-            .node()
-            ?.getBBox().width || 0;
-
-        const textNodes = tempSvg
-          .selectAll('text')
-          .data(categories)
-          .enter()
-          .append('text')
-          .text((d) => d)
-          .style('font-size', `${fontSize}px`);
-
-        const maxTextWidth = categories.length
-          ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
-          : 0;
-        tempSvg.remove();
-
-        const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
-        const backgroundWidth = itemWidth + 20;
-        const titleHeight = fontSize * 1.2 + titlePadding;
-
-        const legendG = this.svg_compare
-          .append('g')
-          .attr('class', 'svg-legend-compare')
-          .attr('transform', `translate(${legendX},${legendY})`);
-
-        // Title (categorical compare)
-        legendG
-          .append('text')
-          .attr('x', backgroundWidth / 2 - 10)
-          .attr('y', titlePadding + fontSize / 2)
-          .attr('dy', '0.35em')
-          .attr('text-anchor', 'middle')
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .style('fill', '#333')
-          .text(legendTitleCat);
-
-        categories.forEach((cat, i) => {
-          const yPosition = i * itemHeight + titleHeight;
-          const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
-          const rectY = (itemHeight - rectHeight) / 2;
-          legendItem
-            .append('rect')
-            .attr('y', rectY)
-            .attr('width', rectWidth)
-            .attr('height', rectHeight)
-            .style('fill', this.colorScale(cat))
-            .attr('stroke', '#333')
-            .attr('stroke-width', 0.5)
-            .attr('rx', 2);
-          const textY = rectY + rectHeight / 2;
-          legendItem
-            .append('text')
-            .attr('x', rectWidth + 10)
-            .attr('y', textY)
-            .attr('dy', '0.35em')
-            .style('font-size', `${fontSize}px`)
-            .style('fill', '#333')
-            .text(cat);
-          legendItem.append('title').text(cat);
-        });
+      const numStops = 10;
+      for (let i = 0; i <= numStops; i++) {
+        const t = i / numStops;
+        const value = min + t * (max - min);
+        gradient
+          .append('stop')
+          .attr('offset', `${t * 100}%`)
+          .attr('stop-color', viewVariablesToUpdate.continuous(value));
       }
+
+      const legendG = viewVariablesToUpdate.svg
+        .append('g')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
+        .attr('transform', `translate(${legendX},${legendY})`);
+
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      // fallback if translation returns empty
+      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+
+      // measure sizes using svg_compare
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
+
+      const minText = (min ?? 0).toFixed(2);
+      const minWidth =
+        tempSvg
+          .append('text')
+          .text(minText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
+
+      const maxText = (max ?? 0).toFixed(2);
+      const maxWidth =
+        tempSvg
+          .append('text')
+          .text(maxText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
+
+      tempSvg.remove();
+
+      const textHeight = fontSize * 1.2;
+      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+      const bgWidth = requiredWidth + padding * 2;
+      const bgHeight = height + textHeight * 2 + padding * 3;
+
+      legendG
+        .append('rect')
+        .attr('x', -padding)
+        .attr('y', -padding - textHeight)
+        .attr('width', bgWidth)
+        .attr('height', bgHeight)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 5);
+
+      legendG
+        .append('rect')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', 0)
+        .attr('width', width)
+        .attr('height', height)
+        .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 3);
+
+      // Min label
+      legendG
+        .append('text')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', height + textHeight)
+        .attr('text-anchor', 'start')
+        .style('font-size', `${fontSize}px`)
+        .style('fill', '#333')
+        .text(minText);
+
+      // Max label
+      legendG
+        .append('text')
+        .attr('x', (bgWidth - width) / 2 - padding + width)
+        .attr('y', height + textHeight)
+        .attr('text-anchor', 'end')
+        .style('font-size', `${fontSize}px`)
+        .style('fill', '#333')
+        .text(maxText);
+
+      // Title (compare) — position inside background with padding so it's not clipped
+      const titleY = -padding + Math.round(fontSize / 2);
+      legendG
+        .append('text')
+        .attr('x', bgWidth / 2 - padding)
+        .attr('y', titleY)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(legendTitle);
+
     } else {
-      // existing non-compare legend logic (unchanged)
-      this.svg.selectAll('.svg-legend').remove();
+      // Categorical legend for compare view
+      const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
+      categories.sort();
+      const legendX = -100;
+      const legendY = 10;
+      const itemHeight = 40;
+      const rectHeight = 20;
+      const rectWidth = 30;
+      const fontSize = 24;
+      const titlePadding = 15;
 
-      if (this.currentLegendType === 'continuous') {
-        // Continuous legend
-        const [min, max] = this.currentLegendDomain as number[];
-        const legendX = -100;
-        const legendY = 50;
-        const width = 250;
-        const height = 30;
-        const fontSize = 24;
-        const padding = 15;
-
-
-
-        // Create gradient for continuous legend
-        const defs = this.svg.select('defs').empty()
-          ? this.svg.append('defs')
-          : this.svg.select('defs');
-
-
-
-        defs.select('#svg-legend-gradient').remove();
-
-        const gradient = defs
-          .append('linearGradient')
-          .attr('id', 'svg-legend-gradient')
-          .attr('x1', '0%')
-          .attr('x2', '100%')
-          .attr('y1', '0%')
-          .attr('y2', '0%');
-
-        const numStops = 10;
-        for (let i = 0; i <= numStops; i++) {
-          const t = i / numStops;
-          const value = min + t * (max - min);
-          gradient
-            .append('stop')
-            .attr('offset', `${t * 100}%`)
-            .attr('stop-color', this.continuousColorScale(value));
-        }
-
-        const legendG = this.svg
-          .append('g')
-          .attr('class', 'svg-legend')
-          .attr('transform', `translate(${legendX},${legendY})`);
-
-        // Measure title text width for dynamic background
-        const titleText = this.translationService.translateSync(
-          this.colorByProperty,
-        );
-
-        const tempSvg = this.svg.append('g').style('opacity', 0);
-        const titleWidth =
-          tempSvg
-            .append('text')
-            .text(titleText)
-            .style('font-size', `${fontSize}px`)
-            .style('font-weight', 'bold')
-            .node()
-            ?.getBBox().width || 0;
-
-        // Measure min value
-        const minText = min.toFixed(2);
-        const minWidth =
-          tempSvg
-            .append('text')
-            .text(minText)
-            .style('font-size', `${fontSize}px`)
-            .node()
-            ?.getBBox().width || 0;
-
-        // Measure max value
-        const maxText = max.toFixed(2);
-        const maxWidth =
-          tempSvg
-            .append('text')
-            .text(maxText)
-            .style('font-size', `${fontSize}px`)
-            .node()
-            ?.getBBox().width || 0;
-
-        tempSvg.remove();
-
-        // Calculate required dimensions
-        const textHeight = fontSize * 1.2; // Approximate text height
-        const requiredWidth = Math.max(
-          width,
-          titleWidth,
-          minWidth + maxWidth + 20,
-        );
-        const bgWidth = requiredWidth + padding * 2;
-        const bgHeight = height + textHeight * 2 + padding * 3;
-
-        // Background
-        legendG
-          .append('rect')
-          .attr('x', -padding)
-          .attr('y', -padding - textHeight)
-          .attr('width', bgWidth)
-          .attr('height', bgHeight)
-          .style('fill', 'rgba(255, 255, 255, 0.9)')
-          .attr('stroke', '#ccc')
-          .attr('stroke-width', 1)
-          .attr('rx', 5);
-
-        // Gradient rectangle
-        legendG
-          .append('rect')
-          .attr('x', (bgWidth - width) / 2 - padding)
-          .attr('y', 0)
-          .attr('width', width)
-          .attr('height', height)
-          .style('fill', 'url(#svg-legend-gradient)')
-          .attr('stroke', '#ccc')
-          .attr('stroke-width', 1)
-          .attr('rx', 3);
-
-        // Min label
-        legendG
+      // Measure using svg_compare
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+      const titleWidth =
+        tempSvg
           .append('text')
-          .attr('x', (bgWidth - width) / 2 - padding)
-          .attr('y', height + textHeight)
-          .attr('text-anchor', 'start')
-          .style('font-size', `${fontSize}px`)
-          .style('fill', '#333')
-          .text(minText);
-
-        // Max label
-        legendG
-          .append('text')
-          .attr('x', (bgWidth - width) / 2 - padding + width)
-          .attr('y', height + textHeight)
-          .attr('text-anchor', 'end')
-          .style('font-size', `${fontSize}px`)
-          .style('fill', '#333')
-          .text(maxText);
-
-        // Title
-        legendG
-          .append('text')
-          .attr('x', bgWidth / 2 - padding)
-          .attr('y', -5)
-          .attr('text-anchor', 'middle')
+          .text(titleText)
           .style('font-size', `${fontSize}px`)
           .style('font-weight', 'bold')
-          .style('fill', '#333')
-          .text(titleText);
-      } else {
-        // Categorical legend
-        const categories = this.currentLegendDomain as string[];
-        categories.sort();
-        const legendX = -100;
-        const legendY = 10;
-        const itemHeight = 40;
-        const rectHeight = 20;
-        const rectWidth = 30;
-        const fontSize = 24;
-        const titlePadding = 15;
+          .node()
+          ?.getBBox().width || 0;
 
-        // Create temporary text elements to measure actual width
-        const tempSvg = this.svg.append('g').style('opacity', 0);
+      const textNodes = tempSvg
+        .selectAll('text')
+        .data(categories)
+        .enter()
+        .append('text')
+        .text((d) => d)
+        .style('font-size', `${fontSize}px`);
 
-        // Measure title text
-        //const titleText = this.colorByProperty;
-        const titleText = this.translationService.translateSync(
-          this.colorByProperty,
-        );
-        const titleWidth =
-          tempSvg
-            .append('text')
-            .text(titleText)
-            .style('font-size', `${fontSize}px`)
-            .style('font-weight', 'bold')
-            .node()
-            ?.getBBox().width || 0;
+      const maxTextWidth = categories.length
+        ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
+        : 0;
+      tempSvg.remove();
 
-        // Measure category text widths
-        const textNodes = tempSvg
-          .selectAll('text')
-          .data(categories)
-          .enter()
-          .append('text')
-          .text((d) => d)
-          .style('font-size', `${fontSize}px`);
+      const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
+      const backgroundWidth = itemWidth + 20;
+      const titleHeight = fontSize * 1.2 + titlePadding;
 
-        const maxTextWidth = Math.max(
-          ...textNodes
-            .nodes()
-            .map((node) => (node as SVGGraphicsElement).getBBox().width),
-        );
-        tempSvg.remove();
+      const legendG = viewVariablesToUpdate.svg
+        .append('g')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
+        .attr('transform', `translate(${legendX},${legendY})`);
 
-        const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
+      // Title (categorical compare)
+      legendG
+        .append('text')
+        .attr('x', backgroundWidth / 2 - 10)
+        .attr('y', titlePadding + fontSize / 2)
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(legendTitleCat);
 
-        const legendG = this.svg
-          .append('g')
-          .attr('class', 'svg-legend')
-          .attr('transform', `translate(${legendX},${legendY})`);
-
-        // Calculate title height and total background height
-        const titleHeight = fontSize + titlePadding;
-        const backgroundHeight =
-          categories.length * itemHeight + 20 + titleHeight;
-        const backgroundWidth = itemWidth + 20;
-
-        // Background - positioned to include title space
-        legendG
+      categories.forEach((cat, i) => {
+        const yPosition = i * itemHeight + titleHeight;
+        const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
+        const rectY = (itemHeight - rectHeight) / 2;
+        legendItem
           .append('rect')
-          .attr('x', -10)
-          .attr('y', -10)
-          .attr('width', backgroundWidth)
-          .attr('height', backgroundHeight)
-          .style('fill', 'rgba(255, 255, 255, 0.9)')
-          .attr('stroke', '#ccc')
-          .attr('stroke-width', 1)
-          .attr('rx', 5);
-
-        // Add title
-        legendG
+          .attr('y', rectY)
+          .attr('width', rectWidth)
+          .attr('height', rectHeight)
+          .style('fill', this.colorScaleCompare(cat))
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
+          .attr('rx', 2);
+        const textY = rectY + rectHeight / 2;
+        legendItem
           .append('text')
-          .attr('x', backgroundWidth / 2 - 10)
-          .attr('y', titlePadding + fontSize / 2)
+          .attr('x', rectWidth + 10)
+          .attr('y', textY)
           .attr('dy', '0.35em')
-          .attr('text-anchor', 'middle')
           .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
           .style('fill', '#333')
-          .text(titleText);
-
-        categories.forEach((cat, i) => {
-          const yPosition = i * itemHeight + titleHeight;
-          const legendItem = legendG
-            .append('g')
-            .attr('transform', `translate(0, ${yPosition})`);
-
-          // Color rectangle - centered vertically within the item height
-          const rectY = (itemHeight - rectHeight) / 2;
-          legendItem
-            .append('rect')
-            .attr('y', rectY)
-            .attr('width', rectWidth)
-            .attr('height', rectHeight)
-            .style('fill', this.colorScale(cat))
-            .attr('stroke', '#333')
-            .attr('stroke-width', 0.5)
-            .attr('rx', 2);
-
-          // Text - aligned with the center of the rectangle
-          const textY = rectY + rectHeight / 2;
-          legendItem
-            .append('text')
-            .attr('x', rectWidth + 10)
-            .attr('y', textY)
-            .attr('dy', '0.35em')
-            .style('font-size', `${fontSize}px`)
-            .style('fill', '#333')
-            .text(cat);
-
-          // Add tooltip for full text
-          legendItem.append('title').text(cat);
-
-        });
-      }
+          .text(cat);
+        legendItem.append('title').text(cat);
+      });
     }
   }
 }
