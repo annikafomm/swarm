@@ -48,3 +48,4 @@ dependencies:
       - git+https://github.com/theislab/spapros.git@bump_python3.13
       - fastapi-sessions
       - gdown
+      - nichepca
