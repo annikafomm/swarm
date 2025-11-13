@@ -1,58 +1,65 @@
 <div class="hexagon-plot">
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px;">
-      <div style="display: flex; flex-direction: row; align-items: center; gap: 8px; position: relative;">
-        <div id="hexbin"></div>
-        <button id="compare-button" (click)="onCompareMode()"><mat-icon>compare_arrows</mat-icon></button>
-        <div *ngIf="compareMode" id="hexbin-compare"></div>
+    <div id="comparison-box">
+
+      <div class="loading-container" [class.loading]="!isLoadingHexagons">
+            <mat-progress-spinner *ngIf="isLoadingHexagons" mode="indeterminate" [diameter]="44" color="primary"
+              aria-label="Loading hexagon plot">
+            </mat-progress-spinner>
       </div>
 
-      <div class="hx-dropdown">
-        <label for="colorBy">Color hexagons by:</label>
-        <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
-          <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-            <option *ngFor="let prop of group.value" [value]="prop">
-              {{ prop | translate | async }}
-            </option>
-          </optgroup>
-        </select>
-         <button class="info-button" mat-icon-button [matTooltip]="'This dropdown switches the view of the hexagon map.,Options include Regulatory Scores, Gene Expression, TF Activity and more. Click this button for more information.'"
-          (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
-          <mat-icon>help_outline</mat-icon>
-        </button>
-        <label for="colorByCompare" *ngIf="compareMode">Compare hexagons by:</label>
-        <select id="colorByCompare" *ngIf="compareMode" [(ngModel)]="selectedCompareView"
-          (change)="onColorbyPropertyChange()">
-          <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-            <option *ngFor="let prop of group.value" [value]="prop">
-              {{ prop | translate | async }}
-            </option>
-          </optgroup>
-        </select>
-      </div>
+      <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
-
-
-      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
-        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
-          [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
-            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
-          ">
-          Show
-          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
-        </button>
-      </div>
-      <div *ngIf="colorByProperty === 'gene_expression'">
-        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
-          (click)="showMoranI = !showMoranI">
-          Show
-          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
-        </button>
-      </div>
+      <button id="compare-button" (click)="onCompareMode()"><mat-icon>compare_arrows</mat-icon></button>
+      <div *ngIf="compareMode" id="hexbin-compare"></div>
     </div>
 
-    <div *ngIf="colorByProperty === 'regulatory_scores'"
-      class="gene-set-section">
+    <div class="hx-dropdown">
+      <label for="colorBy">Color hexagons by:</label>
+      <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
+        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+          <option *ngFor="let prop of group.value" [value]="prop">
+            {{ prop | translate | async }}
+          </option>
+        </optgroup>
+      </select>
+      <button class="info-button" mat-icon-button
+        [matTooltip]="'This dropdown switches the view of the hexagon map.,Options include Regulatory Scores, Gene Expression, TF Activity and more. Click this button for more information.'"
+        (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+      <label for="colorByCompare" *ngIf="compareMode">Compare hexagons by:</label>
+      <select id="colorByCompare" *ngIf="compareMode" [(ngModel)]="selectedCompareView"
+        (change)="onColorbyPropertyChange()">
+        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+          <option *ngFor="let prop of group.value" [value]="prop">
+            {{ prop | translate | async }}
+          </option>
+        </optgroup>
+      </select>
+    </div>
+
+
+
+    <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
+      <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+        [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
+            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
+          ">
+        Show
+        {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+      </button>
+    </div>
+    <div *ngIf="colorByProperty === 'gene_expression'">
+      <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
+        (click)="showMoranI = !showMoranI">
+        Show
+        {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
+      </button>
+    </div>
+
+
+    <div *ngIf="colorByProperty === 'regulatory_scores'" class="gene-set-section">
       <h2>Gene Set Analysis for Selected Cell</h2>
 
       <!-- TOP: selectors and score chooser (always above graphs) -->

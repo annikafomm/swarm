@@ -20,10 +20,11 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -102,6 +103,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
 
   // Loading screen trackers
+  public isLoadingHexagons: boolean = true;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
@@ -119,7 +121,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     'average_clustering',
     'closeness_centrality',
   ];
-  
+
   public leidenCentralityProps = [
     'degree_centrality',
     'average_clustering',
@@ -167,6 +169,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
+    this.isLoadingHexagons = true;
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
       console.log("init hexagon plot")
@@ -177,20 +180,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         console.log('Loading hexagon data from', this.dataPath);
 
         // Clear hexagon-plot container
-        d3.select('#hexagon-plot').selectAll('*').remove();
-        d3.select('#hexagon-plot').html('');
-
-
-        // Clear hexbin container (where SVG is appended)
-        d3.select('#hexbin').selectAll('*').remove();
-        d3.select('#hexbin').html('');
-        d3.select('#hexbin-compare').selectAll('*').remove();
-        d3.select('#hexbin-compare').html('');
+        d3.select('#hexbin').selectAll('svg').remove();
+        d3.select('#hexbin-compare').selectAll('svg').remove();
 
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
       }
+
     });
   }
 
@@ -394,17 +391,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           this.previousGeneSetSponge =
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
         }
-        console.log('Score:', this.selectedRegulatoryScore, 'GeneSetGenie3:', this.selectedGeneSetGenie3, 'GeneSetSponge:', this.selectedGeneSetSponge);
-         this.onRegulatoryScoreChange();
 
         let firstProps = this.features[0]?.properties || {};
-        firstProps['regulatory_scores'] = 0;
+
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
           return typeof val === 'string' || typeof val === 'number';
         });
 
-
+        console.log('Initial colorable properties:', this.colorableProperties);
 
 
         // Alphabetical order
@@ -473,6 +468,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .on('click', (event, d) => this.openSidenav(event, d));
 
         this.onColorbyPropertyChange();
+        setTimeout(() => {
+          this.isLoadingHexagons = false;
+        }, 0);
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
@@ -1316,7 +1314,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
     this.resetClusterExtension();
     this.selectedCell = cell;
-
+    if (this.colorByProperty === 'regulatory_scores') {
+      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+    }
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
       this.extendCluster(cell.properties.leiden);
@@ -1690,6 +1690,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
+  async getRegulatoryScoresforSpots(barcode: string) {
+    this.sessionService.callWithSession(() =>
+      this.http.get(
+        `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}`,
+        { withCredentials: true },
+      ),
+    ).subscribe({
+      next: (res) => {
+        const data = res as { [key: string]: any };
+        
+
+        console.log('Regulatory scores for barcode', barcode, ':', data);
+      },
+      error: (err) =>
+        console.error(
+          `[Backend] Failed to load adata.obsm["row"][${barcode}]`,
+          err,
+        ),
+    });
+  }
+
   async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
     this.sessionService
       .callWithSession(() =>
@@ -1710,10 +1731,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
               }
             }
           }
-          // Only update the compare dataset if the caller explicitly requested it.
-          // This prevents accidental overwrites of compare properties when fetching
-          // data for the main view (e.g. fetching regulatory scores for the main map
-          // shouldn't replace categorical compare fields like 'leiden').
+          console.log('Features:', this.features);
           if (updateCompare && this.compareMode && this.dataCompare?.features) {
             for (const feature of this.dataCompare.features) {
               const barcode = feature.properties?.barcode;

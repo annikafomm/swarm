@@ -765,6 +765,7 @@ async def get_obs_column(
     return session_data.adata.obs[column].to_dict()
 
 
+
 @app.get("/var/{column}", dependencies=[Depends(cookie)])
 async def get_var_column(
     column: str, session_data: SessionData = Depends(verifier)
@@ -783,6 +784,24 @@ async def get_obsm_column(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
     """
     return session_data.adata.obsm[table][column].to_dict()
+
+@app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
+async def get_obsm_row(
+    barcode: str, session_data: SessionData = Depends(verifier)
+):
+    """
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/AAACCTCATGAAGTTG-1`
+    """
+    available_scores = list(session_data.adata.obsm.keys())
+    row_data = {}
+    for score in available_scores:
+        obsm_data = session_data.adata.obsm[score]
+        if not isinstance(obsm_data, pd.DataFrame):
+            obsm_data = pd.DataFrame(
+                obsm_data, index=session_data.adata.obs_names
+            )
+        row_data[score] = obsm_data.loc[barcode].to_dict()
+    return row_data
 
 
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])
