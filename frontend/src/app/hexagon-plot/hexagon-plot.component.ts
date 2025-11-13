@@ -26,7 +26,7 @@ import { MatDialogModule } from '@angular/material/dialog';
   imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
-  styleUrl: './hexagon-plot.component.scss',
+  styleUrls: ['./hexagon-plot.component.scss'],
 })
 export class HexagonPlotComponent implements OnInit, OnDestroy {
   private sub!: Subscription;
@@ -119,14 +119,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     'average_clustering',
     'closeness_centrality',
   ];
-
-  public colorByTooltip = [
-    'This dropdown switches the view of the hexagon map.',
-    'Options include Regulatory Scores, Gene Expression, TF Activity and more.',
-    '',
-    'Click this button for more information.'
-  ].join('\n');
-
+  
   public leidenCentralityProps = [
     'degree_centrality',
     'average_clustering',
@@ -401,12 +394,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           this.previousGeneSetSponge =
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
         }
+        console.log('Score:', this.selectedRegulatoryScore, 'GeneSetGenie3:', this.selectedGeneSetGenie3, 'GeneSetSponge:', this.selectedGeneSetSponge);
+         this.onRegulatoryScoreChange();
 
-        const firstProps = this.features[0]?.properties || {};
+        let firstProps = this.features[0]?.properties || {};
+        firstProps['regulatory_scores'] = 0;
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
           return typeof val === 'string' || typeof val === 'number';
         });
+
+
+
 
         // Alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));

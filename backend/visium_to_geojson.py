@@ -1,6 +1,5 @@
 import argparse
 import os
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -171,10 +170,15 @@ class Hexagons:
             for score in genie3_score_names + sponge_score_names:
                 if score in self.anndata.obsm:
                     first_col = self.anndata.obsm[score].columns[0]
-                    property_dict["regulatory_scores"] = self.anndata.obsm[
+                    property_dict[score] = self.anndata.obsm[
                         score
                     ].loc[barcode, first_col]
-                    break
+                    if property_dict.keys().__contains__('regulatory_scores'):
+                        continue
+                    else:
+                        property_dict['regulatory_scores'] = self.anndata.obsm[
+                            score
+                        ].loc[barcode, first_col]
 
             score_mappings = {
                 "ligand_receptor_relationships": (
