@@ -1,43 +1,64 @@
 <div class="hexagon-plot">
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
-    <div id="comparison-box">
 
-      <div class="loading-container" [class.loading]="!isLoadingHexagons">
-            <mat-progress-spinner *ngIf="isLoadingHexagons" mode="indeterminate" [diameter]="44" color="primary"
-              aria-label="Loading hexagon plot">
-            </mat-progress-spinner>
+    <div layout="row">
+
+    <div id="comparison-box" layout="column" >
+
+      <div *ngIf="isLoadingHexagons" class="loading-container">
+        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+          aria-label="Loading hexagon plot">
+        </mat-progress-spinner>
       </div>
 
       <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
-      <button id="compare-button" (click)="onCompareMode()"><mat-icon>compare_arrows</mat-icon></button>
-      <div *ngIf="compareMode" id="hexbin-compare"></div>
+      <button matFabExtended color="primary" id="compare-button" (click)="onCompareMode()"
+        matTooltip="Toggle comparison view">
+        <mat-icon>compare_arrows</mat-icon>
+      </button>
+
+      <div *ngIf="compareMode && isLoadingCompare" class="loading-container">
+        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+          aria-label="Loading hexagon plot">
+        </mat-progress-spinner>
+      </div>
+
+      <div id="hexbin-compare" [class.hidden]="isLoadingCompare || !compareMode"></div>
+
     </div>
 
-    <div class="hx-dropdown">
-      <label for="colorBy">Color hexagons by:</label>
-      <select id="colorBy" [(ngModel)]="colorByProperty" (change)="onColorbyPropertyChange()">
-        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-          <option *ngFor="let prop of group.value" [value]="prop">
-            {{ prop | translate | async }}
-          </option>
-        </optgroup>
-      </select>
-      <button class="info-button" mat-icon-button
-        [matTooltip]="'This dropdown switches the view of the hexagon map.,Options include Regulatory Scores, Gene Expression, TF Activity and more. Click this button for more information.'"
-        (click)="openInfoPage('views-section')" matTooltipPosition="above" matTooltipShowDelay="150">
+    <div class="filter-row">
+      <mat-form-field appearance="fill"> <mat-label>Color hexagons by</mat-label>
+        <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
+          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-option *ngFor="let prop of group.value" [value]="prop">
+              {{ prop | translate | async }}
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
+
+      <button mat-icon-button class="info-btn" matTooltip="This dropdown switches the view...Click for more info."
+        (click)="openInfoPage('views-section')">
         <mat-icon>help_outline</mat-icon>
       </button>
-      <label for="colorByCompare" *ngIf="compareMode">Compare hexagons by:</label>
-      <select id="colorByCompare" *ngIf="compareMode" [(ngModel)]="selectedCompareView"
-        (change)="onColorbyPropertyChange()">
-        <optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-          <option *ngFor="let prop of group.value" [value]="prop">
-            {{ prop | translate | async }}
-          </option>
-        </optgroup>
-      </select>
+
+      <mat-form-field appearance="fill" *ngIf="compareMode">
+        <mat-label>Compare hexagons by</mat-label>
+        <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
+          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-option *ngFor="let prop of group.value" [value]="prop">
+              {{ prop | translate | async }}
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
+
     </div>
+    </div>
+
+
 
 
 

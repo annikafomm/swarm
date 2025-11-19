@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
@@ -21,15 +21,24 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatFormField } from '@angular/material/form-field';
+import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
+import { MatLabel } from '@angular/material/form-field';
+import { MatSelect } from '@angular/material/select';
+
+
+
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
 })
-export class HexagonPlotComponent implements OnInit, OnDestroy {
+export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element! : ElementRef<HTMLElement>;
+  @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement! : ElementRef<HTMLElement>;
   private sub!: Subscription;
 
   constructor(
@@ -93,6 +102,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
+  public genie3Width: number = 600;
+  public spongeWidth: number = 600;
 
   // Slider params
   public genie3WeightCutoff: number = 0.5;
@@ -104,6 +115,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
   // Loading screen trackers
   public isLoadingHexagons: boolean = true;
+  public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
@@ -197,6 +209,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     }
   }
 
+  ngAfterViewInit(): void {
+    this.genie3Width = this.aucellGraphGenie3Element.nativeElement.clientWidth as number;
+    this.spongeWidth = this.aucellGraphSpongeElement.nativeElement.clientWidth as number;
+  }
+
+
   private nextRequestToken(graphType: string): number {
     if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
     return ++this.requestTokens[graphType];
@@ -276,6 +294,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     }
 
     // prepare svg/group
+
     this.createHexagonPlot('#hexbin-compare');
 
     this.dataCompare = this.geoDataService.getData();
@@ -321,16 +340,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       })
       .style('opacity', 0.8);
 
+    setTimeout(() => { this.isLoadingCompare = false; }, 100);
 
     setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
+
 
   }
 
   public onCompareMode(): void {
+
     this.compareMode = !this.compareMode;
+
     if (this.compareMode) {
+      this.isLoadingCompare = true;
       // schedule a single init attempt so Angular has time to render the compare container
       setTimeout(() => this.initCompareHexagonPlot(), 50);
+
 
     } else {
       // remove compare svg and clear references
@@ -808,7 +833,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     console.log(graph)
 
     // Create the graph visualization
-    const width = 1000;
+    const width = this.genie3Width;
     const height = 300;
 
     const svg = d3
@@ -1082,7 +1107,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     };
 
     // Create the graph visualization
-    const width = 1000;
+    const width = this.spongeWidth;
     const height = 300;
 
     const svg = d3
@@ -1699,7 +1724,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     ).subscribe({
       next: (res) => {
         const data = res as { [key: string]: any };
-        
+
 
         console.log('Regulatory scores for barcode', barcode, ':', data);
       },

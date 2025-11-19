@@ -26,9 +26,13 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 50px;
+  flex-direction: column;
 }
 
-#comparison-box .loading-container{
+/* Base size and appearance for all main content blocks */
+#hexbin-compare,
+#hexbin,
+#comparison-box .loading-container {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 12px;
@@ -36,34 +40,18 @@
   padding: 1rem;
   width: 500px;
   height: 400px;
-  top: auto;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
-#comparison-box .loading-container.loading {
+#comparison-box #hexbin.hidden #hexbin-compare.hidden{
   visibility: hidden;
-  display: none;
 }
 
-#hexbin-compare, #hexbin {
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-  padding: 1rem;
-  width: 500px;
-  top: auto;
-  margin: 0 auto;
-}
-
-
-#comparison-box #hexbin.hidden{
-  visibility: hidden;
-  display: none;
-}
 
 #compare-button {
   margin-left: 1rem;
@@ -175,47 +163,51 @@ select {
 }
 
 
-.hx-dropdown .info-button {
-  min-width: 36px;
-  padding: 0;
-  border-radius: 8px;
+.filter-row {
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Optional tweaks */
+mat-form-field {
+  font-size: 14px;
+  max-width: 100%;
+}
+
+.info-btn {
+  color: gray;
+  margin-bottom: 18px;
+}
+
+#comparison-box {
+  display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  background: #0b74c1;
-  color: #fff;
-  border: none;
-  box-shadow: 0 4px 10px rgba(11, 116, 193, 0.12);
-  cursor: pointer;
-  font-weight: 700;
-}
-
-.hx-dropdown {
+  width: 500px;
+  min-height: 400px;
   position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  vertical-align: middle;
 }
 
-.hx-dropdown>label {
-  margin: 0;
-  font-weight: 600;
-  color: #0b3a66;
+/* Both map containers */
+#hexbin, #hexbin-compare {
+  flex: 1;
+  width: 100%;
+  transition: all 0.3s ease;
 }
 
-.hx-dropdown>select {
-  flex: 0 1 520px;
-  max-width: calc(100% - 56px);
-  width: auto;
-  margin-right: 0;
-  height: 36px;
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid #e6edf3;
-  background: #fff;
-  display: inline-flex;
-  align-items: center;
+#compare-button {
+  margin: 0 16px;
+  z-index: 10;
+  cursor: pointer;
+}
+
+/* Helper to hide elements */
+.hidden {
+  display: none !important;
 }
 
 .loading-spinner {
@@ -255,7 +247,6 @@ select {
   }
 }
 
-/* Alternative pulse animation for variety */
 .loading-pulse {
   width: 40px;
   height: 40px;
