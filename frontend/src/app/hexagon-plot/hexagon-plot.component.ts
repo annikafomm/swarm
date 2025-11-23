@@ -25,20 +25,22 @@ import { MatFormField } from '@angular/material/form-field';
 import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
 import { MatLabel } from '@angular/material/form-field';
 import { MatSelect } from '@angular/material/select';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatTableModule } from '@angular/material/table';
 
 
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
 })
 export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
-  @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element! : ElementRef<HTMLElement>;
-  @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement! : ElementRef<HTMLElement>;
+  @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element!: ElementRef<HTMLElement>;
+  @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement!: ElementRef<HTMLElement>;
   private sub!: Subscription;
 
   constructor(
@@ -71,7 +73,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
-  public selectedCellRegulatoryScores: { [key: string]: number } | null = null;
+
+  // Data sources for the two tables
+  public genie3RawData: RawScoreData = {};
+  public spongeRawData: RawScoreData = {};
+
+  // Column lists for the two tables
+  public genie3Elements: string[] = [];
+  public spongeElements: string[] = [];
+
+
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private requestTokens: { [key: string]: number } = {};
@@ -1715,7 +1726,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  async getRegulatoryScoresforSpots(barcode: string) {
+  // In hexagon-plot.component.ts
+
+  // In hexagon-plot.component.ts
+
+async getRegulatoryScoresforSpots(barcode: string) {
     this.sessionService.callWithSession(() =>
       this.http.get(
         `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}`,
@@ -1723,18 +1738,48 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       ),
     ).subscribe({
       next: (res) => {
-        const data = res as { [key: string]: any };
+        // Raw data received: { "scoreType": { "element": score } }
+        const rawData = res as { [scoreType: string]: { [element: string]: number } };
 
+        const genie3Data: RawScoreData = {};
+        const spongeData: RawScoreData = {};
+        const genie3ElementsSet = new Set<string>();
+        const spongeElementsSet = new Set<string>();
 
-        console.log('Regulatory scores for barcode', barcode, ':', data);
+        // 1. FILTERING: Separate the raw score groups by suffix (_genie3 or _sponge)
+        for (const [scoreType, scores] of Object.entries(rawData)) {
+            if (scoreType.endsWith('_genie3')) {
+                genie3Data[scoreType] = scores;
+                Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
+            } else if (scoreType.endsWith('_sponge')) {
+                spongeData[scoreType] = scores;
+                Object.keys(scores).forEach(element => spongeElementsSet.add(element));
+            }
+        }
+
+        // 2. ASSIGN FINAL DATA AND COLUMN LISTS (Element Names)
+
+        // Data assigned as the required raw object format
+        this.genie3RawData = genie3Data;
+        this.spongeRawData = spongeData;
+
+        // Features/Columns assigned as the list of elements (TFs or Genes)
+        this.genie3Elements = Array.from(genie3ElementsSet);
+        this.spongeElements = Array.from(spongeElementsSet);
+
       },
-      error: (err) =>
+      error: (err) => {
+        this.genie3RawData = {};
+        this.spongeRawData = {};
+        this.genie3Elements = [];
+        this.spongeElements = [];
         console.error(
-          `[Backend] Failed to load adata.obsm["row"][${barcode}]`,
+          `[Backend] Failed to load regulatory scores for ${barcode}`,
           err,
-        ),
+        );
+      }
     });
-  }
+}
 
   async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
     this.sessionService
@@ -2191,4 +2236,8 @@ interface spongeRegGraphConnection {
   source: string;
   target: string;
   p_adjusted: number;
+}
+
+interface RawScoreData {
+  [scoreType: string]: { [element: string]: string | number };
 }

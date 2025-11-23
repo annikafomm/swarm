@@ -94,7 +94,6 @@ select {
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
   padding: 2rem;
-  width: 1000px;
   top: 200px;
   align-content: center;
 }
@@ -971,24 +970,6 @@ mat-form-field {
   line-height: 1.4;
 }
 
-/* Layout for the gene-set section */
-.gene-set-section {
-  background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
-  padding: 16px;
-  margin: 12px 0;
-  color: #0f172a;
-  align-items: center;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 14px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
-}
-
 /* top area only contains selectors */
 .gene-set-top {
   display: flex;
@@ -1014,8 +995,9 @@ mat-form-field {
   gap: 18px;
 }
 
+
 .graph-block {
-  width: 100%;
+  width: 1000px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1024,14 +1006,6 @@ mat-form-field {
   padding: 12px;
   border-radius: 8px;
   border: 1px solid #eef6ff;
-}
-
-/* make graphs full width and visually separated from controls */
-.graph-block>#aucell_graph_genie3,
-.graph-block>#aucell_graph_sponge {
-  width: 100%;
-  min-height: 240px;
-  margin-top: 8px;
 }
 
 /* center gprofiler button */
@@ -1052,8 +1026,11 @@ mat-form-field {
 .genie3-controls,
 .sponge-controls {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
 }
 
 .control-row {
