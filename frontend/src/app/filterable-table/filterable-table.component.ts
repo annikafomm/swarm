@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { SessionService } from '../session.service';
@@ -12,7 +12,7 @@ import { TranslatePipe } from '../translate.pipe';
   standalone: true,
   imports: [FormsModule, CommonModule, TranslatePipe],
 })
-export class FilterableTableComponent implements OnInit {
+export class FilterableTableComponent implements OnInit, OnChanges {
   /**
    * If data is an object, treat as {col: {index: value}}
    * If data is a string array, treat as index column
@@ -28,7 +28,7 @@ export class FilterableTableComponent implements OnInit {
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
-  ) {}
+  ) { }
 
   columns: string[] = [];
   rows: any[] = [];
@@ -42,6 +42,17 @@ export class FilterableTableComponent implements OnInit {
 
   ngOnInit() {
     this.prepareTable();
+  }
+
+  ngOnChanges(changes: SimpleChanges) {
+    // Rebuild table whenever the provided data or features change
+    if (changes['data'] || changes['features']) {
+      this.currentPage = 1;
+      this.sortColumn = null;
+      this.sortAsc = true;
+      this.filters = {};
+      this.prepareTable();
+    }
   }
 
   prepareTable() {

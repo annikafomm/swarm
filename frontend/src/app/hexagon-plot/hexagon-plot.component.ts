@@ -1756,10 +1756,6 @@ async getRegulatoryScoresforSpots(barcode: string) {
                 Object.keys(scores).forEach(element => spongeElementsSet.add(element));
             }
         }
-
-        // 2. ASSIGN FINAL DATA AND COLUMN LISTS (Element Names)
-
-        // Data assigned as the required raw object format
         this.genie3RawData = genie3Data;
         this.spongeRawData = spongeData;
 

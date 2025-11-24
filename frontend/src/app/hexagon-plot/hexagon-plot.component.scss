@@ -48,7 +48,7 @@
   flex-grow: 0;
 }
 
-#comparison-box #hexbin.hidden #hexbin-compare.hidden{
+#comparison-box #hexbin.hidden #hexbin-compare.hidden {
   visibility: hidden;
 }
 
@@ -170,11 +170,12 @@ select {
   flex-wrap: wrap;
 }
 
-/* Optional tweaks */
+
 mat-form-field {
   font-size: 14px;
   max-width: 100%;
 }
+
 
 .info-btn {
   color: gray;
@@ -192,7 +193,8 @@ mat-form-field {
 }
 
 /* Both map containers */
-#hexbin, #hexbin-compare {
+#hexbin,
+#hexbin-compare {
   flex: 1;
   width: 100%;
   transition: all 0.3s ease;
@@ -778,6 +780,12 @@ mat-form-field {
   --hx-focus-ring: rgba(59, 130, 246, .25);
 }
 
+/* Ensure expansion panels span the available content width */
+mat-expansion-panel {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .hx-toolbar {
   margin: 8px 0 12px;
   display: flex;
@@ -996,8 +1004,12 @@ mat-form-field {
 }
 
 
+
+
 .graph-block {
-  width: 1000px;
+  /* responsive: fill available width but don't exceed the designed layout width */
+  width: 100%;
+  max-width: 1000px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1006,6 +1018,16 @@ mat-form-field {
   padding: 12px;
   border-radius: 8px;
   border: 1px solid #eef6ff;
+}
+
+/* Make the cell-reg-scores (second expansion panel body) match the same max width and center it */
+.cell-reg-scores {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 /* center gprofiler button */

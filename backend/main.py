@@ -78,7 +78,6 @@ class Method(str, Enum):
     Genie3 = "Genie3"
     Sponge = "Sponge"
 
-
 class BaseModel(PydanticBaseModel):
     class Config:
         arbitrary_types_allowed = True
@@ -792,7 +791,15 @@ async def get_obsm_row(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/AAACCTCATGAAGTTG-1`
     """
-    available_scores = list(session_data.adata.obsm.keys())
+    regulatory_scores = [
+    'aucell_scores',
+    'spongeeeffects_ssGSEA_scores',
+    'spongeeffects_GSVA_scores',
+    'viper_scores',
+    ]
+    available_scores = session_data.adata.obsm.keys()
+    available_scores = [score for score in available_scores if score.endswith("_genie3") or score.endswith("_sponge")]
+
     row_data = {}
     for score in available_scores:
         obsm_data = session_data.adata.obsm[score]
