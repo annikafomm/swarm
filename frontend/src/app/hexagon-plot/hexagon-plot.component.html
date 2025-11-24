@@ -79,31 +79,7 @@
       <mat-expansion-panel-header> Gene Set Analysis Global</mat-expansion-panel-header>
 
       <div class="gene-set-top">
-        <div *ngIf="(geneSetsGenie3 | keyvalue).length > 0" class="gene-set-selector">
-          <label for="genie3-select">Select Genie3 Gene Set:</label>
-          <select id="genie3-select" [(ngModel)]="selectedGeneSetGenie3" (change)="onGeneSetChange()">
-            <option value="">-- Select a Genie3 gene set --</option>
-            <option *ngFor="let geneSet of meta['genie_genesets'] | keyvalue" [value]="geneSet.key">
-              {{ geneSet.key }}
-            </option>
-          </select>
-
-          <label for="sponge-select">Select Sponge Gene Set:</label>
-          <select id="sponge-select" [(ngModel)]="selectedGeneSetSponge" (change)="onGeneSetChange()">
-            <option value="">-- Select a Sponge gene set --</option>
-            <option *ngFor="let geneSet of meta['sponge_genesets'] | keyvalue" [value]="geneSet.key">
-              {{ geneSet.key }}
-            </option>
-          </select>
-
-          <label for="regscore-select">Select Regulatory Score:</label>
-          <select id="regscore-select" [(ngModel)]="selectedRegulatoryScore" (change)="onRegulatoryScoreChange()">
-            <option value="">-- Select a Regulatory Score --</option>
-            <option *ngFor="let score of this.meta['grn_score_names']" [value]="score">
-              {{ score | translate | async }}
-            </option>
-          </select>
-        </div>
+        <app-table [data]="this.meta['global_regulatory_scores']"></app-table>
       </div>
 
       <div class="gene-set-body">
