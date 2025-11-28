@@ -9,6 +9,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
     micromamba clean --all --yes
 
+# Install SeuratDisk inside the "base" env
+RUN micromamba run -n base R -q -e "\
+  if (!requireNamespace('remotes', quietly = TRUE)) \
+    install.packages('remotes', repos = 'https://cloud.r-project.org'); \
+  remotes::install_github('mojaveazure/seurat-disk')"
+
 USER root
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1

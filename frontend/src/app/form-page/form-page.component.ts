@@ -16,11 +16,13 @@ import { DEFAULT_PATHS } from '../constants';
   styleUrls: ['./form-page.component.scss'],
 })
 export class FormPageComponent {
+
   form: FormGroup;
 
   // files
   spatialFile?: File;
   singleCellFile?: File;
+  multiomeFile?: File;
   // network scores uploads (shared)
   genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
   spongeNAFile?: File;           // SPONGE networkanalysis
@@ -57,11 +59,18 @@ export class FormPageComponent {
         normalizeSingleCell: [false],
       }),
 
+      useTangramMultiome: [false],
+      // tangram: this.fb.group({
+      //   filterSingleCell: [false],
+      //   normalizeSingleCell: [false],
+      // }),
+
       // score toggles
       scores: this.fb.group({
         networkScores: [false],
         squidpy: [false],
         lianaPlus: [false],
+        chromVAR: [false],
       }),
 
       // network scores options
@@ -167,6 +176,9 @@ export class FormPageComponent {
   useTangramChecked(): boolean {
     return !!this.form.get('useTangram')?.value;
   }
+  useTangramMultiomeChecked(): boolean {
+    return !!this.form.get('useTangramMultiome')?.value;
+  }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
   }
@@ -179,7 +191,7 @@ export class FormPageComponent {
 
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
-      'spatial' | 'singleCell' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
+      'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
     const input = evt.target as HTMLInputElement;
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
@@ -187,6 +199,7 @@ export class FormPageComponent {
     switch (type) {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
+      case 'multiome': this.multiomeFile = file; break;
       case 'genie3Net': this.genie3NetFile = file; break;
       case 'spongeNA': this.spongeNAFile = file; break;
       case 'spongeNI': this.spongeNIFile = file; break;
@@ -216,10 +229,13 @@ export class FormPageComponent {
     const needsSingleCell = !!this.form.get('useTangram')!.value;
     const singleCellOk = !needsSingleCell || !!this.singleCellFile;
 
+    const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
+    const multiomeOK = !needsMultiome || !!this.multiomeFile;
+
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
 
-    return spatialOk && singleCellOk && networkOk && !this.uploading;
+    return spatialOk && singleCellOk &&  multiomeOK  && networkOk && !this.uploading;
   }
 
   // ---------- submit ----------
@@ -237,7 +253,7 @@ export class FormPageComponent {
     this.http.post<{ ok: boolean; json_url: string; json_filename: string; payload: any }>(
       '/api/upload',
       fd,
-      { observe: 'events', reportProgress: true }
+      { observe: 'events', reportProgress: true, withCredentials: true }
     ).subscribe({
       next: (evt: HttpEvent<any>) => {
         if (evt.type === HttpEventType.UploadProgress && evt.total) {
@@ -251,8 +267,8 @@ export class FormPageComponent {
           this.uploading = false;
 
           console.log('Upload finished, output_files', body.output_files)
-          
-          const geojsonPath = body.output_files?.geojsonPath; 
+
+          const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
           const parts = geojsonPath?.split('/');
           const user = parts?.at(-3);
           const subdir = parts?.at(-2);
@@ -300,11 +316,20 @@ export class FormPageComponent {
       fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
     }
 
+     // --- multiome
+    fd.append('use_multiome', String(this.form.value.useTangramMultiome));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('multiome_rds', this.multiomeFile);
+    }
+
     // --- scores toggles
     const scores = this.form.value.scores;
     fd.append('score_network', String(scores.networkScores));
     fd.append('score_squidpy', String(scores.squidpy));
     fd.append('score_liana_plus', String(scores.lianaPlus));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('score_chromVar', String(scores.chromVAR));
+    }
 
     // --- network details
     if (scores.networkScores) {
