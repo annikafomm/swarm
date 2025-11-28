@@ -66,7 +66,7 @@
 
     <!-- Only visible if Tangram is enabled -->
     <div *ngIf="useTangramChecked()" class="section" [formGroup]="tangramGroup">
-      <label>Upload single-cell dataset (.h5ad):</label>
+      <label>Upload single-cell dataset (.h5ad) file:</label>
       <div class="file">
         <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
         <label for="singleCell" class="file-control">
@@ -96,6 +96,33 @@
     </div>
   </div>
 
+    <!-- Tangram toggle MULTIOME -->
+  <div class="section">
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="useTangramMultiome" />
+      Analyse 10xMultiome data (mapped to spaial data with Tangram)
+    </label>
+
+    <!-- Only visible if Tangram is enabled -->
+    <div *ngIf="useTangramMultiomeChecked()" class="section"> <!-- [formGroup]="tangramGroup">-->
+      <label>Upload multiome dataset (.rds) file:</label>
+      <div class="file">
+        <input id="multiome" type="file" (change)="onFileSelected($event, 'multiome')" accept=".rds">
+        <label for="multiome" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="multiomeFile?.name || 'No file selected'">
+            {{ multiomeFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+
+      <div class="hint" *ngIf="form.get('useTangramMultiome')?.value && !multiomeFile" style="margin-top:6px;">
+        Please upload a multiome file. If multiome and single cell file are uploaded, only multiome will be concidered.
+      </div>
+    </div>
+  </div>
+  <!-- MULTIOME input end-->
+
   <!-- Scores master switches -->
   <div class="section">
     <div class="section-title">Select Scores</div>
@@ -111,6 +138,11 @@
       <label class="score-option">
         <input type="checkbox" formControlName="lianaPlus" />
         <span class="score-text">LIANA+</span>
+      </label>
+      <!-- Multiome data Scores master switches -->
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="chromVAR" />
+        <span class="score-text">chromVAR</span>
       </label>
     </div>
   </div>

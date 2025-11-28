@@ -27,20 +27,20 @@ def dict2params(param_dict):
                             case "spatial_h5ad":
                                 python_params.append("-input")
                                 python_params.append(param_dict.get(key).get(fkey))
-                            case "single_cell_h5ad": 
+                            case "single_cell_h5ad":
                                 python_params.append("-sc_path")
                                 python_params.append(param_dict.get(key).get(fkey))
-                            case "genie3_network": 
+                            case "genie3_network":
                                 network_params.append("--genie_network")
                                 network_params.append(param_dict.get(key).get(fkey))
-                            case "sponge_networkanalysis": 
+                            case "sponge_networkanalysis":
                                 network_params.append("--sponge_analysis")
                                 network_params.append(param_dict.get(key).get(fkey))
-                            case "sponge_networkinteractions": 
+                            case "sponge_networkinteractions":
                                 network_params.append("--sponge_network")
                                 network_params.append(param_dict.get(key).get(fkey))
                             case "liana_genie3_network":
-                                python_params.append("-grn") 
+                                python_params.append("-grn")
                                 python_params.append(param_dict.get(key).get(fkey))
                             case "liana_pathway_network":
                                 python_params.append("-pathway_net")
@@ -49,7 +49,7 @@ def dict2params(param_dict):
                 for tkey in param_dict.get(key).keys():
                     if tkey == "use" and param_dict.get(key).get(tkey):
                         python_params.append("-tangram")
-                        network_params.append("--tangram") 
+                        network_params.append("--tangram")
                     else:
                         if param_dict.get(key).get(tkey) is not None and param_dict.get(key).get(tkey):
                             match tkey:
@@ -65,7 +65,7 @@ def dict2params(param_dict):
                                 python_params.append("-R_scores")
                             case "liana_plus":
                                 python_params.append("-liana")
-            
+
             case "network":
                 for nkey in param_dict.get(key).keys():
                     match nkey:
@@ -91,27 +91,27 @@ def dict2params(param_dict):
                                         case "p_adjust":
                                             network_params.append("--padj")
                                             network_params.append(str(float(param_dict.get(key).get(nkey).get(skey))))
-                                        case "ensembl_id_col": 
+                                        case "ensembl_id_col":
                                             network_params.append("--ensembl_col")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
                                             python_params.append("-ensembl_col")
                                             python_params.append(param_dict.get(key).get(nkey).get(skey))
-                                        case "feature_col": 
+                                        case "feature_col":
                                             network_params.append("--feature_col")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
                                             python_params.append("-feature_col")
                                             python_params.append(param_dict.get(key).get(nkey).get(skey))
-                                        case "rna_types": 
+                                        case "rna_types":
                                             network_params.append("--RNA_types")
                                             network_params.append(param_dict.get(key).get(nkey).get(skey))
-                                        case "max_modules": 
+                                        case "max_modules":
                                             network_params.append("--max_modules")
                                             network_params.append(str(int(param_dict.get(key).get(nkey).get(skey))))
                         case "genie3_params":
                             for gkey in param_dict.get(key).get(nkey).keys():
                                 if param_dict.get(key).get(nkey).get(gkey) is not None:
                                     match gkey:
-                                        case "top_n_weights": 
+                                        case "top_n_weights":
                                             network_params.append("--top_n")
                                             network_params.append(str(int(param_dict.get(key).get(nkey).get(gkey))))
                                         case "n_regulatory_genes":
@@ -181,11 +181,11 @@ def dict2params(param_dict):
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_nhood")
                                         python_params.append(str(int(score_dict.get(param))))
-            case "liana": 
+            case "liana":
                 for lkey in param_dict.get(key).keys():
                     if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
                         python_params.append("-cell_comp_key")
-                        python_params.append(param_dict.get(key).get(lkey))                
+                        python_params.append(param_dict.get(key).get(lkey))
 
     return (python_params, network_params)
 
@@ -202,7 +202,7 @@ async def calculate_scores_helper(job_dir, json_dict):
         # create log file
         log_file = os.path.join(out_dir, "calc_scores.log")
         print(log_file)
-        
+
         if len(json_dict.keys()) == 2 and "params_python_script" in json_dict.keys() and "params_R_script" in json_dict.keys():
             python_params = json_dict.get("params_python_script")
             R_params = json_dict.get("params_R_script")
@@ -224,7 +224,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                         "-outdir", out_dir,
                         "-log", log_file] + python_params,
                         check=True)
-        
+
         if R_params:
             subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
@@ -265,28 +265,29 @@ async def calculate_scores_helper(job_dir, json_dict):
         print(err_msg)
         return None
 
+
 if __name__ == "__main__":
 
     visium_files = "../backend/datasets_prepro_new"
     for file in os.listdir(visium_files):
         if file.startswith("GSM"):
             file_path = os.path.join(visium_files, file)
-            
-            python_params = ["-input", file_path, 
-                            "-tangram", "-sc_path", "../backend/datasets_prepro_new/Wu_annotated_prepro.h5ad", 
+
+            python_params = ["-input", file_path,
+                            "-tangram", "-sc_path", "../backend/datasets_prepro_new/Wu_annotated_prepro.h5ad",
                             "-cell_label", "cell_subclass", "-ensembl_col", "ensembl_id", "-feature_col", "feature_type",
                             "-liana", "-cell_comp_key", "celltype_scores",
-                            "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment", 
+                            "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment",
                             "-R_scores"]
-            R_params = ["--tangram", 
-                        "--sponge_network", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv", 
-                        "--sponge_analysis", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv", 
-                        "--genie_network", "../backend/networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv", 
+            R_params = ["--tangram",
+                        "--sponge_network", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv",
+                        "--sponge_analysis", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv",
+                        "--genie_network", "../backend/networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv",
                         "--aucell", "--gsva", "--ssgsea", "--viper"]
-            
+
             params_dict = {"params_python_script": python_params,
                         "params_R_script": R_params}
-            
+
             asyncio.run(calculate_scores_helper(os.path.join("../backend/datasets_scores", file.replace(".h5ad", "")), params_dict))
-            
+
             # ! needs to be called from frontend directory

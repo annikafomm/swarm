@@ -21,6 +21,9 @@ import scanpy as sc
 import uvicorn
 from app import calculate_scores_helper
 
+# merit
+import re
+
 # ---------------------------------
 # Third-Party (FastAPI / Starlette)
 # ---------------------------------
@@ -58,7 +61,8 @@ BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
-        "ALLOWED_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200"
+        "ALLOWED_ORIGINS",
+        "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201"
     ).split(",")
     if o.strip()
 ]
@@ -360,10 +364,15 @@ async def upload(
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
+    # Multiome
+    use_multiome: bool = Form(False),
+    multiome_rds: Optional[UploadFile] = File(None),
+
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
+    score_chromVar: bool = Form(False),
     # Network Algos
     alg_viper: bool = Form(False),
     alg_aucell: bool = Form(False),
@@ -407,8 +416,18 @@ async def upload(
     liana_composition_column: Optional[str] = Form(None),
     liana_genie3_network: Optional[UploadFile] = File(None),
     liana_pathway_network: Optional[UploadFile] = File(None),
-    session_data: "SessionData" = Depends(verifier),
+    #session_data: "SessionData" = Depends(verifier),
 ):
+    print("in method")
+    #raw_username = session_data.username
+    raw_username = "merit"
+    user_safe = _sanitize_filename(raw_username) or "anon"
+    job_id = f"job_{int(time.time() * 1000)}"
+    job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(job_dir / f"{job_id}_multiome.txt", "w") as f:
+        f.write(f"use_multiome: {use_multiome}\n")
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
@@ -421,18 +440,12 @@ async def upload(
                 status_code=400, detail=f"Field '{name}' must be valid JSON."
             )
 
-    raw_username = session_data.username
-    user_safe = _sanitize_filename(raw_username) or "anon"
-
-    job_id = f"job_{int(time.time() * 1000)}"
-    job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
-    job_dir.mkdir(parents=True, exist_ok=True)
-
     # 3) Save all files into that directory
     # Dateien speichern (alles in ./uploads)
     saved_files = {
         "spatial_h5ad": save_file(spatial_h5ad, job_dir),
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
+        "multiome_rds": save_file(multiome_rds, job_dir),
         "genie3_network": save_file(genie3_network, job_dir),
         "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
         "sponge_networkinteractions": save_file(
@@ -441,6 +454,44 @@ async def upload(
         "liana_genie3_network": save_file(liana_genie3_network, job_dir),
         "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
+
+
+    # TODO: if .rds: convert to h5ad file, and read again
+    if use_multiome:
+        print("in rds2h5ad block")
+        rds_path = saved_files["multiome_rds"]
+        assay_name = "RNA"
+        h5ad_path = re.sub(r"\.rds$", f".h5ad", rds_path)
+        # subprocess.run(["Rscript",
+        #             "../backend/rds_to_h5ad.R",
+        #             "--rds_path", rds_path,
+        #             "--assay", assay_name,
+        #             "--h5ad_path", h5ad_path
+        #             ],check=True,)
+
+        log_path = Path(h5ad_path).with_suffix(".log")
+        with log_path.open("w") as log_file:
+            result = subprocess.run(
+                [
+                    "Rscript",
+                    "../backend/rds_to_h5ad.R",
+                    "--rds_path", rds_path,
+                    "--assay", assay_name,
+                    "--h5ad_path", h5ad_path,
+                ],
+                stdout=log_file,
+                stderr=log_file,
+                text=True,
+                check=False,
+            )
+        use_tangram = True
+        single_cell_h5ad = h5ad_path
+        print(single_cell_h5ad)
+        saved_files["single_cell_h5ad"] = single_cell_h5ad
+
+
+    # TODO: change saved files dict. spatial_h5ad should become the h5ad path
+    # or single_cell_h5ad?
 
     # 4) Build response payload
     payload = {
@@ -457,10 +508,14 @@ async def upload(
             "filtering": singlecell_filtering if use_tangram else None,
             "normalization": singlecell_normalization if use_tangram else None,
         },
+        "multiome": {
+            "use": use_multiome,
+        },
         "scores": {
             "network": score_network,
             "squidpy": score_squidpy,
             "liana_plus": score_liana_plus,
+            "chromVar": score_chromVar,
         },
         "network": {
             "algorithms": {
@@ -519,6 +574,7 @@ async def upload(
     }
 
     # TODO call visium_to_geojson
+
     out_dir = await calculate_scores_helper(job_dir, payload)
     if out_dir is not None:
         print(out_dir)
