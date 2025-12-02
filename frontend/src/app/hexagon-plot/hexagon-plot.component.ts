@@ -27,13 +27,12 @@ import { MatLabel } from '@angular/material/form-field';
 import { MatSelect } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
-
-
+import { MatDividerModule } from '@angular/material/divider';
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -75,8 +74,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedRegulatoryScore: string | null = null;
 
   // Data sources for the two tables
-  public genie3RawData: RawScoreData = {};
-  public spongeRawData: RawScoreData = {};
+  public genie3RawData: TableData = {};
+  public spongeRawData: TableData = {};
 
   // Column lists for the two tables
   public genie3Elements: string[] = [];
@@ -1726,10 +1725,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  // In hexagon-plot.component.ts
-
-  // In hexagon-plot.component.ts
-
 async getRegulatoryScoresforSpots(barcode: string) {
     this.sessionService.callWithSession(() =>
       this.http.get(
@@ -1738,15 +1733,14 @@ async getRegulatoryScoresforSpots(barcode: string) {
       ),
     ).subscribe({
       next: (res) => {
-        // Raw data received: { "scoreType": { "element": score } }
         const rawData = res as { [scoreType: string]: { [element: string]: number } };
 
-        const genie3Data: RawScoreData = {};
-        const spongeData: RawScoreData = {};
+        const genie3Data: TableData = {};
+        const spongeData: TableData = {};
         const genie3ElementsSet = new Set<string>();
         const spongeElementsSet = new Set<string>();
 
-        // 1. FILTERING: Separate the raw score groups by suffix (_genie3 or _sponge)
+        // Separate the raw score groups by suffix (_genie3 or _sponge) for separate tables
         for (const [scoreType, scores] of Object.entries(rawData)) {
             if (scoreType.endsWith('_genie3')) {
                 genie3Data[scoreType] = scores;
@@ -2234,6 +2228,6 @@ interface spongeRegGraphConnection {
   p_adjusted: number;
 }
 
-interface RawScoreData {
-  [scoreType: string]: { [element: string]: string | number };
+interface TableData {
+  [columnHeader: string]: { [rowHeader: string]: string | number };
 }

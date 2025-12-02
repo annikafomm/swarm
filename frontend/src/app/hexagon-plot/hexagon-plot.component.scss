@@ -7,9 +7,9 @@
 
 #main-visualization {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: flex-start;
   margin-right: 0;
   transition: margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   margin-top: 1rem;
@@ -26,7 +26,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 50px;
-  flex-direction: column;
+  flex-direction: row;
 }
 
 /* Base size and appearance for all main content blocks */
@@ -64,10 +64,8 @@
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(11, 116, 193, 0.12);
-  align-items: center;
-  align-self: center;
-  display: inline-flex;
   justify-content: center;
+ 
 }
 
 
@@ -202,7 +200,8 @@ mat-form-field {
 
 #compare-button {
   margin: 0 16px;
-  z-index: 10;
+  z-index: 1;
+  /* keep button above map content but below expansion panels */
   cursor: pointer;
 }
 
@@ -784,6 +783,9 @@ mat-form-field {
 mat-expansion-panel {
   width: 100%;
   box-sizing: border-box;
+  position: relative;
+  z-index: 5;
+  /* ensure panels render above floating controls like the compare button */
 }
 
 .hx-toolbar {
@@ -983,6 +985,7 @@ mat-expansion-panel {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding-bottom: .35rem;
 }
 
 /* keep selector layout tidy */

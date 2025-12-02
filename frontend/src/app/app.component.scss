@@ -2,8 +2,8 @@
   background-color: #fff;
   font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
-  --topbar-h: 70px;
-  min-height: calc(100vh - 70px);
+  --topbar-h: 100px;
+  min-height: calc(100vh - 100px);
 }
 
 .app-shell {
@@ -99,7 +99,6 @@
 
 .top-bar button {
   color: #000000;
-  font-weight: bold;
   background-color: #c9d6ff;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
   border: #000000;

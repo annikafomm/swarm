@@ -116,17 +116,6 @@ class Hexagons:
             return dtype(expressions.flatten()[0])
 
 
-    def aggregate_scores_globally(self):
-        """
-        Aggregate scores globally for the entire dataset.
-        This is a placeholder function and should be implemented based on
-        specific aggregation logic required.
-        """
-        self.global_scores = {}
-        # Aggregate regulatory scores by taking the mean across all barcodes
-
-        self.global_scores['global_regulatory_scores'] = [self.anndata.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in self.anndata.obsm]
-
     def to_geojson(self):
         hexagons = {"type": "FeatureCollection", "features": []}
 
@@ -326,8 +315,6 @@ if __name__ == "__main__":
         data_type=args.data_type,
     )
 
-    hexagons.aggregate_scores_globally()
-
     geojson_data = hexagons.to_geojson()
 
     # Add meta information like ligand receptor pair names for api fetching
@@ -337,6 +324,9 @@ if __name__ == "__main__":
             meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
         elif global_score in hexagons.global_scores:
             meta_dict[global_score] = hexagons.global_scores[global_score]
+
+    meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
+    meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
 
 
     # The names in the tuple are options; all should have the same column names
