@@ -1,6 +1,18 @@
 {
   "/api": {
-    "target": "http://localhost:3000",
+    "target": "http://localhost:3005",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "info"
+  },
+  "/create_session": {
+    "target": "http://localhost:3005",
+    "secure": false,
+    "changeOrigin": true,
+    "logLevel": "info"
+  },
+  "/whoami": {
+    "target": "http://localhost:3005",
     "secure": false,
     "changeOrigin": true,
     "logLevel": "info"

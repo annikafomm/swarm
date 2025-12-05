@@ -71,7 +71,11 @@ export class FormPageComponent {
         squidpy: [false],
         lianaPlus: [false],
         chromVAR: [false],
+        diffMotifActivity: [false],
+        motifEnrichment: [false],
+        FootprintingBias: [false]
       }),
+      genome: ['hg38'],
 
       // network scores options
       network: this.fb.group({
@@ -303,6 +307,7 @@ export class FormPageComponent {
     fd.append('email', this.form.value.email);
     fd.append('dataset', this.form.value.dataset);
 
+
     // --- spatial
     if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
     fd.append('spatial_normalization', String(this.form.value.spatialOptions.normalization));
@@ -329,6 +334,10 @@ export class FormPageComponent {
     fd.append('score_liana_plus', String(scores.lianaPlus));
     if (this.form.value.useTangramMultiome && this.multiomeFile) {
       fd.append('score_chromVar', String(scores.chromVAR));
+      fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
+      fd.append('score_motifEnrichment', String(scores.motifEnrichment));
+      fd.append('score_FootprintingBias', String(scores.FootprintingBias));
+      fd.append('genome', this.form.value.genome);
     }
 
     // --- network details

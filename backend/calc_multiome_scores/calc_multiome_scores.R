@@ -1,14 +1,14 @@
 suppressPackageStartupMessages({
-  # suppressWarnings(library(Matrix))
-  # suppressWarnings(library(data.table))
-  # suppressWarnings(library(viper))
-  # suppressWarnings(library(jsonlite))
-  # suppressWarnings(library(optparse))
-  # suppressWarnings(library(SPONGE))
-  # suppressWarnings(library(dplyr))
-  # suppressWarnings(library(tibble))
-  # suppressWarnings(library(GSVA))
-  # suppressWarnings(library(AUCell))
+  suppressWarnings(library(Matrix))
+  suppressWarnings(library(data.table))
+  suppressWarnings(library(viper))
+  suppressWarnings(library(jsonlite))
+  suppressWarnings(library(optparse))
+  suppressWarnings(library(SPONGE))
+  suppressWarnings(library(dplyr))
+  suppressWarnings(library(tibble))
+  suppressWarnings(library(GSVA))
+  suppressWarnings(library(AUCell))
   suppressWarnings(library(Signac))
   suppressWarnings(library(Seurat))
   suppressWarnings(library(JASPAR2024))
@@ -21,9 +21,9 @@ suppressPackageStartupMessages({
 # source("../backend/calc_R_scores/utils.R")
 source("../backend/calc_multiome_scores/calc_global_motif_analysis.R")
 
-#  Rscript calc_scores.R   --dir ../datasets_scores/GSM6592049_M2_prepro   --dir ../datasets_scores/GSM6592049_M2_scores   --sponge_network ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv   --sponge_analysis ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv --genie_network ../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv --ensembl_col ensemble_id  --aucell --gsva --ssgsea --viper
 #  Rscript calc_multiome_scores.R --outdir path/to/out_dir -log path/to/log_file -multiome -chromvar --multiome_rds path/to/multiome_rds path/to/multiome_rds_file
-
+# eg:
+# Rscript ../backend/calc_multiome_scores/calc_multiome_scores.R --outdir /workspaces/swarm/frontend/../backend/uploads/job_1764602732819_merit/dumpase1 --log /workspaces/swarm/frontend/../backend/uploads/job_1764602732819_merit/dumpase1/calc_scores.log --multiome_rds /workspaces/swarm/backend/uploads/job_1764602732819_merit/healthy_breast_preprocessed_RNA_peaks_only.rds --multiome --chromvar --genome hg38
 # ! parallel::detectCores()
 
 # logging helper
@@ -42,10 +42,23 @@ format_runtime <- function(t0) {
 }
 
 global_motif_analysis <- function(object, args, logfile) {
+  print("Running global motif analysis...")
 
   outdir <- args$outdir
+  print("args$chromvar:")
+  print(args$chromvar)
 
-  if (args$chromvar | args$differential_motif_activity | args$motif_enrichment) {
+
+  if (args$chromvar | args$differential_motif_activity | args$motif_enrichment | args$footprinting ) {
+    if (args$genome == "hg38") {
+      suppressPackageStartupMessages(library(BSgenome.Hsapiens.UCSC.hg38))
+      genome <- BSgenome.Hsapiens.UCSC.hg38
+    } else if (args$genome %in% c("hg19", "hg37")) {
+      suppressPackageStartupMessages(library(BSgenome.Hsapiens.UCSC.hg19))
+      genome <- BSgenome.Hsapiens.UCSC.hg19
+    } else {
+      stop("Unknown genome: ", args$genome, " (use hg38 or hg19/hg37)")
+    }
     log_message("Adding Motifs ...", logfile, 2)
     object <- add_jaspar2024_motifs(object, genome=genome)
   }
@@ -63,17 +76,7 @@ global_motif_analysis <- function(object, args, logfile) {
     object <- find_enriched_motifs(object, save_in_misc = TRUE)
   }
 
-  if (args$footprinting | args$chromvar) {
-    if (opt$genome == "hg38") {
-      suppressPackageStartupMessages(library(BSgenome.Hsapiens.UCSC.hg38))
-      genome <- BSgenome.Hsapiens.UCSC.hg38
-    } else if (opt$genome %in% c("hg19", "hg37")) {
-      suppressPackageStartupMessages(library(BSgenome.Hsapiens.UCSC.hg19))
-      genome <- BSgenome.Hsapiens.UCSC.hg19
-    } else {
-      stop("Unknown genome: ", opt$genome, " (use hg38 or hg19/hg37)")
-    }
-  }
+
 
   if (args$chromvar) {
     # run chromVAR
@@ -84,7 +87,11 @@ global_motif_analysis <- function(object, args, logfile) {
 
     # save chromVAR scores
     chromvar_scores <- as.data.frame(t(GetAssayData(object = object, assay = "chromvar", slot = "data")))
-    write.csv(chromvar_scores, file = file.path(outdir, "chromvar_scores.csv"))
+    outdir_multiome <- file.path(outdir, "multiome")
+    if (!dir.exists(outdir_multiome)) {
+            dir.create(outdir_multiome, recursive = TRUE, showWarnings = FALSE)
+          }
+    write.csv(chromvar_scores, file = file.path(outdir_multiome, "chromvar_scores.csv"))
 
     if (args$differential_motif_activity) {
       # find differential motif activity for each cluster
@@ -114,15 +121,15 @@ main <- function() {
     make_option("--log", type="character", help="Path to the log file", metavar="file"),
 
     # score flags
-    make_option("-chromvar", action="store_true", default=FALSE, help="Calculate chromVAR score"),
-    make_option("-differential_motif_activity", action="store_true", default=FALSE, help="Calculate differential motif activity"),
-    make_option("-motif_enrichment", action="store_true", default=FALSE, help="Calculate motif enrichment for idents"),
-    make_option("-footprinting", action="store_true", default=FALSE, help="Calculate footprinting Tn5 insertion bias"),
+    make_option("--chromvar", action="store_true", default=FALSE, help="Calculate chromVAR score"),
+    make_option("--differential_motif_activity", action="store_true", default=FALSE, help="Calculate differential motif activity"),
+    make_option("--motif_enrichment", action="store_true", default=FALSE, help="Calculate motif enrichment for idents"),
+    make_option("--footprinting", action="store_true", default=FALSE, help="Calculate footprinting Tn5 insertion bias"),
     # score flags
-    make_option("-multiome", action="store_true", default=FALSE, help="Calculate for multiome"),
+    make_option("--multiome", action="store_true", default=FALSE, help="Calculate for multiome"),
 
     # motif mapping flag
-    make_option("--genome", type = "character", default = "hg38", help = "reference genome: hg38 or hg19 [default: %default]"),
+    make_option("--genome", type = "character", default = "hg38", help = "reference genome: hg38 or hg19 [default: %default]")
   )
 
   parser <- OptionParser(option_list=option_list)
@@ -141,6 +148,8 @@ main <- function() {
 
   # Prepare log file
   logfile <- args$log
+  print("logfile")
+  print(logfile)
   log_message(paste0("R Multiome Pipeline started at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")), logfile)
 
   # Load multiome RDS
