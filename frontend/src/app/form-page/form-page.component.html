@@ -144,6 +144,31 @@
         <input type="checkbox" formControlName="chromVAR" />
         <span class="score-text">chromVAR</span>
       </label>
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="diffMotifActivity" />
+        <span class="score-text">differential chromVar motif Activity</span>
+      </label>
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="motifEnrichment" />
+        <span class="score-text">Motif Enrichment</span>
+      </label>
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="FootprintingBias" />
+        <span class="score-text">Footprinting Bias</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Genome for Motif stuff -->
+  <div *ngIf="useTangramMultiomeChecked()" class="section">
+    <div class="field">
+      <label class="field-label">Select Genome</label>
+      <div class="select">
+        <select formControlName="genome">
+          <option value="hg37">hg37</option>
+          <option value="hg38">hg38</option>
+        </select>
+      </div>
     </div>
   </div>
 

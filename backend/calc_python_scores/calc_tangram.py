@@ -51,7 +51,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
 
 def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu'):
     adata_sp_copy = ad_sp.copy()
-    adata_sc_copy = ad_sc.copy()  
+    adata_sc_copy = ad_sc.copy()
 
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
@@ -62,10 +62,15 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     # Mapping logic based on user choice
     if device_choice == "gpu":
         if not torch.cuda.is_available():
-            raise RuntimeError("GPU selected but no CUDA device is available.")
-        print("[mapping] Using GPU (cuda:0) with cluster_label.")
-        ad_map = tg.map_cells_to_space(ad_sc, ad_sp, device="cuda:0")
-        ad_ge = tg.project_genes(ad_map, ad_sc)
+            #raise RuntimeError("GPU selected but no CUDA device is available.")
+            print("[mapping] Using CPU, no CUDA device available")
+            ad_map = tg.map_cells_to_space(ad_sc, ad_sp, device="cpu")
+            ad_ge = tg.project_genes(ad_map, ad_sc)
+        else:
+            print("[mapping] Using GPU (cuda:0) with cluster_label.")
+            # M = ad_map.X map dissociated to spatial
+            ad_map = tg.map_cells_to_space(ad_sc, ad_sp, device="cuda:0")
+            ad_ge = tg.project_genes(ad_map, ad_sc)
     elif device_choice == "cpu":
         print("[mapping] Using CPU with mode='clusters' and no cluster_label.")
         ad_map = tg.map_cells_to_space(ad_sc, ad_sp, mode="clusters", device="cpu", cluster_label=cell_label)
@@ -75,12 +80,13 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
 
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
-    
+
     ad_ge.obsm['spatial'] = adata_sp_copy.obsm['spatial']
     ad_ge.uns['spatial'] = adata_sp_copy.uns['spatial']
 
+
     if (ensembl_col != "" and feature_col != "") and (ensembl_col in adata_sc_copy.var.columns and feature_col in adata_sc_copy.var.columns):
-        
+
         # Create mapping dictionaries with uppercase gene names for case-insensitive matching
         ensembl_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[ensembl_col]))
         feature_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[feature_col]))
@@ -92,5 +98,5 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
 
     print(f"[done] using label '{cell_label}'.")
 
-    return(ad_ge)
+    return(ad_ge, ad_map)
 

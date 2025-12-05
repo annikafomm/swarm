@@ -9,6 +9,8 @@ import asyncio
 def dict2params(param_dict):
     python_params = []
     network_params = []
+    multiome_params = []
+    compute_R_scores = False
 
     for key in param_dict.keys():
         match key:
@@ -30,6 +32,9 @@ def dict2params(param_dict):
                             case "single_cell_h5ad":
                                 python_params.append("-sc_path")
                                 python_params.append(param_dict.get(key).get(fkey))
+                            case "multiome_rds":
+                                multiome_params.append("--multiome_rds")
+                                multiome_params.append(param_dict.get(key).get(fkey))
                             case "genie3_network":
                                 network_params.append("--genie_network")
                                 network_params.append(param_dict.get(key).get(fkey))
@@ -57,14 +62,31 @@ def dict2params(param_dict):
                                     python_params.append("-filter_sc")
                                 case "normalization":
                                     python_params.append("-normalize_sc")
+            case "multiome":
+                for tkey in param_dict.get(key).keys():
+                    if tkey == "use" and param_dict.get(key).get(tkey):
+                        multiome_params.append("--multiome")
+            case "genome":
+                if param_dict.get(key) is not None:
+                    multiome_params.append("--genome")
+                    multiome_params.append(param_dict.get(key))
             case "scores":
                 for skey in param_dict.get(key).keys():
                     if param_dict.get(key).get(skey):
                         match skey:
                             case "network":
                                 python_params.append("-R_scores")
+                                compute_R_scores = True
                             case "liana_plus":
                                 python_params.append("-liana")
+                            case "chromVar":
+                                multiome_params.append("--chromvar")
+                            case "differential_motif_activity":
+                                multiome_params.append("--differential_motif_activity")
+                            case "motif_enrichment":
+                                multiome_params.append("--motif_enrichment")
+                            case "footprinting":
+                                multiome_params.append("--footprinting")
 
             case "network":
                 for nkey in param_dict.get(key).keys():
@@ -187,7 +209,7 @@ def dict2params(param_dict):
                         python_params.append("-cell_comp_key")
                         python_params.append(param_dict.get(key).get(lkey))
 
-    return (python_params, network_params)
+    return (python_params, network_params, multiome_params, compute_R_scores)
 
 #          job_dir, payload
 async def calculate_scores_helper(job_dir, json_dict):
@@ -214,9 +236,10 @@ async def calculate_scores_helper(job_dir, json_dict):
                 f.write(str(R_params) + "\n\n")
         else:
             # get parameters from json_dict
-            python_params, R_params = dict2params(json_dict)
+            python_params, R_params, multiome_params, compute_R_scores = dict2params(json_dict)
 
         print(python_params)
+        print("these are R_params:")
         print(R_params)
 
         # Run scripts sequentially
@@ -225,7 +248,19 @@ async def calculate_scores_helper(job_dir, json_dict):
                         "-log", log_file] + python_params,
                         check=True)
 
-        if R_params:
+        if multiome_params:
+            subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",
+                            "--outdir", out_dir,
+                            "--log", log_file] + multiome_params,
+                            check=True)
+            subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                            "-indir", out_dir,
+                            "-log", log_file,
+                            "-multiome"],
+                            check=True)
+
+
+        if compute_R_scores:
             subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
                             "--log", log_file] + R_params,
@@ -233,7 +268,8 @@ async def calculate_scores_helper(job_dir, json_dict):
 
             subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
                             "-indir", out_dir,
-                            "-log", log_file],
+                            "-log", log_file,
+                            "-Rscores"],
                             check=True)
 
             # delete temporary folders

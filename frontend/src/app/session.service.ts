@@ -6,7 +6,7 @@ import { Observable, ReplaySubject, switchMap } from 'rxjs';
 export class SessionService {
   // NOTE: If you access the website under 127.0.0.1 instead of
   // localhost you need to change this here as well.
-  public apiUrl = 'http://localhost:3000';
+  public apiUrl = 'http://localhost:3005';
   private sessionReady$ = new ReplaySubject<void>(1);
 
   constructor(private http: HttpClient) {}

@@ -77,6 +77,9 @@ class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+class Genome(str, Enum):
+    Visium = "hg37"
+    Xenium = "hg38"
 
 class Method(str, Enum):
     Genie3 = "Genie3"
@@ -373,6 +376,12 @@ async def upload(
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
     score_chromVar: bool = Form(False),
+    score_differential_motif_activity: bool = Form(False),
+    score_motif_enrichment: bool = Form(False),
+    score_footprinting: bool = Form(False),
+
+    genome: str = Form(...),
+
     # Network Algos
     alg_viper: bool = Form(False),
     alg_aucell: bool = Form(False),
@@ -416,11 +425,11 @@ async def upload(
     liana_composition_column: Optional[str] = Form(None),
     liana_genie3_network: Optional[UploadFile] = File(None),
     liana_pathway_network: Optional[UploadFile] = File(None),
-    #session_data: "SessionData" = Depends(verifier),
+    session_data: "SessionData" = Depends(verifier),
 ):
     print("in method")
-    #raw_username = session_data.username
-    raw_username = "merit"
+    raw_username = session_data.username
+    #raw_username = "merit"
     user_safe = _sanitize_filename(raw_username) or "anon"
     job_id = f"job_{int(time.time() * 1000)}"
     job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
@@ -516,7 +525,12 @@ async def upload(
             "squidpy": score_squidpy,
             "liana_plus": score_liana_plus,
             "chromVar": score_chromVar,
+            "differential_motif_activity": score_differential_motif_activity,
+            "motif_enrichment": score_motif_enrichment,
+            "footprinting": score_footprinting,
         },
+        "genome": genome,
+
         "network": {
             "algorithms": {
                 "viper": alg_viper,
@@ -857,4 +871,4 @@ async def get_X_by_gene(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    uvicorn.run(app, host="0.0.0.0", port=3005)

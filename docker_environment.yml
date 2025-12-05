@@ -40,6 +40,39 @@ dependencies:
   - decoupler-py
   - mudata
   - simplejson
+   # merit
+  - r-dplyr
+  - r-seurat=5.3.0
+  - r-seuratobject=5.2.0
+  - r-signac
+  - conda-forge::r-hexbin
+  - r-zoo
+  - bioconductor-jaspar2024
+  - bioconda::bioconductor-tfbstools
+  - conda-forge::r-patchwork
+  - conda-forge::r-harmony
+  - conda-forge::r-repr
+  - conda-forge::r-fastmatch
+  - conda-forge::r-qlcmatrix
+  - conda-forge::r-tidyr
+  - conda-forge::r-stringi
+  - conda-forge::r-rcolorbrewer
+  - conda-forge::r-cowplot
+  - conda-forge::r-gridextra
+  - conda-forge::r-ggextra
+  - conda-forge::r-purrr
+  - conda-forge::r-data.table
+  - conda-forge::parallel
+  - bioconda::bioconductor-genomicranges
+  - bioconda::bioconductor-genomeinfodb
+  - bioconda::bioconductor-ensdb.hsapiens.v86
+  - bioconda::bioconductor-ensembldb
+  - bioconda::bioconductor-chromvar
+  - bioconda::bioconductor-bsgenome.hsapiens.ucsc.hg38
+  - bioconda::bioconductor-genomicfeatures
+  - bioconda::bioconductor-motifmatchr
+  - bioconda::bioconductor-rsamtools
+  - bioconda::r-presto
   - pip:
       - liana
       - spatialde
