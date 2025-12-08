@@ -70,6 +70,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private g_compare!: d3.Selection<SVGGElement, any, any, any>;
   private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
+    // ======= Xenium performance state =======
+  private fullFeatures: CellFeature[] = [];
+  private isXenium = false;
+
+  private baseLayer!: d3.Selection<SVGGElement, null, any, any>;
+  private detailLayer!: d3.Selection<SVGGElement, null, any, any>;
+
+  private currentTransform = d3.zoomIdentity;
+  private currentPathGenerator!: d3.GeoPath<any, CellFeature>;
+
+  private detailSize = 150;
+  // =======================================
+
+
   public selectedCell: CellFeature | null = null;
   public selectedCellCompare: CellFeature | null = null;
   public selectedCluster: number | null = null;
@@ -375,14 +389,32 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .style('overflow', 'hidden');
 
     // create (or reuse) a root group inside the svg
-    const gSel = svgSel.selectAll<SVGGElement, number>('g.root-group').data([0]).join('g').attr('class', 'root-group');
+    const gSel = svgSel
+      .selectAll<SVGGElement, number>('g.root-group')
+      .data([0])
+      .join('g')
+      .attr('class', 'root-group');
 
     if (containerName === '#hexbin-compare') {
+      // Compare view uses its own svg/group
       this.svg_compare = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
       this.g_compare = gSel as any;
     } else {
+      // Main view
       this.svg = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
       this.g = gSel as any;
+
+      // Xenium layers live only in main view
+      this.baseLayer = this.g.selectAll<SVGGElement, unknown>('g.base-layer')
+        .data([null])
+        .join('g')
+        .attr('class', 'base-layer');
+
+      this.detailLayer = this.g.selectAll<SVGGElement, unknown>('g.detail-layer')
+        .data([null])
+        .join('g')
+        .attr('class', 'detail-layer')
+        .attr('clip-path', 'url(#detail-clip)');
     }
 
     // attach a zoom handler once (reusing svgSel is safe)
@@ -395,6 +427,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           [width, height],
         ])
         .on('zoom', (event) => {
+          // Keep current transform for Xenium detail window calculations
+          this.currentTransform = event.transform;
+
           if (containerName === '#hexbin-compare' && this.g_compare) {
             this.g_compare.attr('transform', event.transform.toString());
           } else if (this.g) {
@@ -404,110 +439,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     );
   }
 
-  private initCompareHexagonPlot(): void {
-
-    // Do not recurse — if the compare container isn't in the DOM, abort and let the caller retry once.
-    const node = document.getElementById('hexbin-compare');
-    if (!node) {
-      console.warn('hexbin-compare not present in DOM, skipping compare init');
-      return;
-    }
-
-    // prepare svg/group
-
-    this.createHexagonPlot('#hexbin-compare');
-
-    this.dataCompare = this.geoDataService.getData();
-    const featuresToDraw = (this.dataCompare && Array.isArray(this.dataCompare.features)) ? this.dataCompare.features : [];
-
-    if (!this.selectedCompareView) {
-      console.log('No compare view selected; skipping compare render');
-      return;
-    }
-    const compareIsContinuous = this.isContinuousScale(this.selectedCompareView, featuresToDraw);
-    console.log('[compare init] selectedCompareView=', this.selectedCompareView, 'featuresToDraw=', featuresToDraw.length, 'isContinuous=', compareIsContinuous);
-    this.currentCompareLegendType = compareIsContinuous ? 'continuous' : 'categorical';
-
-    const width = 1200;
-    const height = 1000;
-    const projection = d3.geoIdentity().fitSize([width, height], {
-      type: 'FeatureCollection',
-      features: featuresToDraw,
-    });
-    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
-
-    if (!this.g_compare) {
-      console.warn('g_compare not initialized after createHexagonPlot');
-      return;
-    }
-
-    // draw using the intended feature set (featuresToDraw)
-    this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer')
-      .selectAll('path')
-      .data(featuresToDraw)
-      .join('path')
-      .attr('d', (d) => pathGenerator(d) || '')
-      .attr('fill', (d) => {
-        const value = (this.leidenCentralityProps.includes(this.selectedCompareView))
-          ? d.properties.leiden_centrality[this.selectedCompareView]
-          : d.properties[this.selectedCompareView];
-        if (this.currentCompareLegendType === 'categorical') {
-          return this.colorScaleCompare(String(value));
-        } else {
-          const num = this.toNumber(value);
-          return Number.isFinite(num) ? this.continuousColorScaleCompare(num) : '#ccc';
-        }
-      })
-      .style('opacity', 0.8)
-      .on('mouseover', (event, d) => this.mouseOver(event, d))
-      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-      .on('click', (event, d) => this.openSidenavCompare(event, d));
-
-    setTimeout(() => { this.isLoadingCompare = false; }, 100);
-
-    setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
-
-
-  }
-
-  public onCompareMode(): void {
-
-    this.compareMode = !this.compareMode;
-
-    if (this.compareMode) {
-      this.isLoadingCompare = true;
-      // schedule a single init attempt so Angular has time to render the compare container
-      setTimeout(() => this.initCompareHexagonPlot(), 50);
-
-
-    } else {
-      // remove compare svg and clear references
-      d3.select('#hexbin-compare').selectAll('*').remove();
-      try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
-      this.svg_compare = null as any;
-      this.g_compare = null as any;
-
-      // Reset compare legend / scales so reopening starts fresh
-      try {
-        this.currentLegendDomainCompare = [];
-        this.currentCompareLegendType = 'categorical';
-        // reset compare ordinal domain
-        if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
-          this.colorScaleCompare.domain([] as any);
-        }
-        // reset compare continuous domain
-        if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
-          this.continuousColorScaleCompare.domain([0, 1]);
-        }
-      } catch (e) {
-        // ignore
-      }
-    }
-  }
 
   private zoomed(event: d3.D3ZoomEvent<SVGSVGElement, unknown>): void {
+    this.currentTransform = event.transform;
     this.g.attr('transform', event.transform.toString());
   }
+
 
   private loadAndRenderData(dataPath: string): void {
     // Load GeoJSON data
@@ -525,6 +462,52 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.features = data.features;
 
         if (data.meta) {
+          // ✅ volle Daten merken
+          this.fullFeatures = data.features;
+
+          // ✅ Xenium erkennen
+          this.isXenium =
+            (data.meta && data.meta["data_type"] === "xenium") ||
+            data.features.length > 50000;
+
+          // ✅ Base-Daten setzen
+          if (this.isXenium) {
+            const target = 20000;
+            const step = Math.ceil(this.fullFeatures.length / target);
+            this.features = this.fullFeatures.filter((_, i) => i % step === 0);
+
+            // Fenster nur bei Xenium
+            this.initDetailWindow();
+            if (this.isXenium) {
+              let rafPending = false;
+              let lastMx = 0, lastMy = 0;
+
+              this.svg.on("mousemove", (event) => {
+                const [mx, my] = d3.pointer(event);
+                lastMx = mx; lastMy = my;
+
+                if (rafPending) return;
+                rafPending = true;
+
+                requestAnimationFrame(() => {
+                  rafPending = false;
+
+                  this.svg.select("#detail-window")
+                    .attr("x", lastMx - this.detailSize/2)
+                    .attr("y", lastMy - this.detailSize/2);
+
+                  this.svg.select("#detail-frame")
+                    .attr("x", lastMx - this.detailSize/2)
+                    .attr("y", lastMy - this.detailSize/2);
+
+                  this.updateDetailAtScreenPos(lastMx, lastMy);
+                });
+              });
+            }
+
+          } else {
+            this.features = this.fullFeatures;
+          }
           this.meta = data.meta;
           this.selectedRegulatoryScore =
             this.meta['grn_score_names']?.[0] || null;
@@ -584,30 +567,28 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           features: data.features,
         });
 
-        this.features = data.features;
-
         // Create a geoPath generator with the projection
-        const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+        this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
+        const pathGenerator = this.currentPathGenerator;
 
-        // Draw the map inside the zoomable group
-        this.g
+        // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
+        const drawLayer = (this.isXenium ? this.baseLayer : this.g) as unknown as d3.Selection<SVGGElement, any, any, any>;
+
+        (drawLayer
           .style('cursor', 'pointer')
-          .append('g')
-          .selectAll('path')
-          .data(data.features)
+          .selectAll('path') as unknown as d3.Selection<SVGPathElement, CellFeature, any, any>)
+          .data(this.features)
           .join('path')
-          .attr('d', (d) => pathGenerator(d))
-          .attr('fill', (d) => {
+          .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+          .attr('fill', (d: CellFeature) => {
             const value = d.properties?.[this.colorByProperty];
             if (this.currentLegendType === 'categorical') {
               return this.colorScale(String(value));
             } else {
               const num = this.toNumber(value);
-              if (!isNaN(num)) {
-                return this.continuousColorScale(num);
-              } else {
-                return '#ccc';
-              }
+              return Number.isFinite(num)
+                ? this.continuousColorScale(num)
+                : '#ccc';
             }
           })
           .style('opacity', 0.8)
@@ -735,7 +716,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
     let valuesRaw;
-    let sel;
 
     console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
 
@@ -753,8 +733,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    sel = viewVariablesToUpdate.g
-      .selectAll<SVGPathElement, CellFeature>('path')
+    const layerToColor = (
+      (containerName === '#hexbin' && this.isXenium)
+        ? this.baseLayer
+        : viewVariablesToUpdate.g
+    ) as unknown as d3.Selection<SVGGElement, any, any, any>;
+
+    const sel = layerToColor
+      .selectAll('path')
       .data(viewVariablesToUpdate.features);
 
     valuesRaw = viewVariablesToUpdate.features.map((f) => {
@@ -2306,6 +2292,109 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         legendItem.append('title').text(cat);
       });
     }
+  }
+
+  private updateDetailAtScreenPos(screenX: number, screenY: number) {
+    if (!this.isXenium || !this.currentPathGenerator) return;
+
+  const half = this.detailSize / 2;
+
+  const x0s = screenX - half;
+  const x1s = screenX + half;
+  const y0s = screenY - half;
+  const y1s = screenY + half;
+
+  // Screen → projizierte Koordinaten (gleiches System wie geoPath)
+  const [x0d, y0d] = this.currentTransform.invert([x0s, y0s]);
+  const [x1d, y1d] = this.currentTransform.invert([x1s, y1s]);
+
+  const centerX = (x0d + x1d) / 2;
+  const centerY = (y0d + y1d) / 2;
+
+  const [targetX, targetY] = this.currentTransform.invert([screenX, screenY]);
+
+  const localScale = 4;
+
+  this.detailLayer.attr(
+    'transform',
+    `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
+  );
+
+  // ⬇️ WICHTIG: wieder geoPath.centroid verwenden, nicht properties.centroid
+  const subset = this.fullFeatures.filter((f) => {
+    const c = this.currentPathGenerator!.centroid(f as any);
+    if (!c || c.length < 2) return false;
+
+    const [x, y] = c as [number, number];  // hier der kleine Type-Cast
+    return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
+  });
+
+  this.detailLayer
+    .style('cursor', 'pointer')
+    .selectAll<SVGPathElement, CellFeature>('path')
+    .data(subset)
+    .join('path')
+    .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
+    .attr('fill', (d: CellFeature) => {
+      const value = d.properties?.[this.colorByProperty];
+      if (this.currentLegendType === 'categorical') {
+        return this.colorScale(String(value));
+      } else {
+        const num = this.toNumber(value);
+        return Number.isFinite(num)
+          ? this.continuousColorScale(num)
+          : '#ccc';
+      }
+    })
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 0.4)
+    .style('opacity', 1)
+    .on('mouseover', (event, d) => this.mouseOver(event, d))
+    .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+    .on('click', (event, d) => this.openSidenav(event, d));
+}
+
+
+  private initDetailWindow() {
+    // alte ClipPaths/Frames entfernen (falls vorhanden)
+    this.svg.select("#detail-clip").remove();
+    this.svg.select("#detail-frame").remove();
+
+    // Clip-Fenster
+    this.svg.append("clipPath")
+      .attr("id", "detail-clip")
+      .append("rect")
+      .attr("id", "detail-window")
+      .attr("x", 30)
+      .attr("y", 30)
+      .attr("width", this.detailSize)
+      .attr("height", this.detailSize);
+
+    // Weißer Hintergrund nur im Detail-Layer (Xenium)
+    this.detailLayer
+      .selectAll(".detail-bg")
+      .remove();
+
+    this.detailLayer
+      .append("rect")
+      .attr("class", "detail-bg")
+      .attr("x", -10000)
+      .attr("y", -10000)
+      .attr("width", 20000)
+      .attr("height", 20000)
+      .attr("fill", "#ffffff")
+      .attr("pointer-events", "none");
+
+    // Rahmen des Fensters
+    this.svg.append("rect")
+      .attr("id", "detail-frame")
+      .attr("x", 30)
+      .attr("y", 30)
+      .attr("width", this.detailSize)
+      .attr("height", this.detailSize)
+      .attr("fill", "none")
+      .attr("stroke", "#111")
+      .attr("stroke-width", 1);
   }
 }
 

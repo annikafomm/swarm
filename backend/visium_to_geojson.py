@@ -67,32 +67,43 @@ class Hexagons:
         ] + [(x + radius * np.cos(0), y + radius * np.sin(0))]
 
     def parse_coordinates(self):
+        anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
+        barcodes = self.anndata.obs.index
+
+        hex_coords = []
+        coords = []
         if self.data_type == "visium":
-            anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
-            hex_coords = []
-            coords = []
             for coord_tuple in anndata_spatial_coordinates:
                 x, y = coord_tuple
                 hexagon = self.hexagon_points(x=x, y=y, radius=self.radius)
                 hex_coords.append(hexagon)
                 coords.append([int(x) * self.scale, int(y) * self.scale])
             barcodes = self.anndata.obs.index
-            # Convert to list of tuples (x, y)
-            hex_coordinates_dict = [
-                {barcode: hex_coord}
-                for hex_coord, barcode in zip(hex_coords, barcodes)
-            ]
-            coordinates_dict = {
-                barcode: coord for barcode, coord in zip(barcodes, coords)
-            }
-            return hex_coordinates_dict, coordinates_dict
-        if self.data_type == "xenium":
-            print("Xenium data type is not implemented yet.")
-            return [], {}
+
+        elif self.data_type == "xenium":
+            small_r = getattr(self, "cell_radius", None)
+            if small_r is None:
+                small_r = self.radius * 0.2  # Default 20% vom Visium-Radius
+
+            for coord_tuple in anndata_spatial_coordinates:
+                x, y = coord_tuple
+                # keine int-Casts -> Präzision behalten
+                hexagon = self.hexagon_points(x=x, y=y, radius=small_r)
+                hex_coords.append(hexagon)
+                coords.append([float(x) * self.scale, float(y) * self.scale])
         else:
             raise ValueError(
                 f"Unsupported data type: {self.data_type}. Supported types are 'visium' and 'xenium'."
             )
+        hex_coordinates_dict = [
+            {barcode: hex_coord}
+            for hex_coord, barcode in zip(hex_coords, barcodes)
+        ]
+        coordinates_dict = {
+            barcode: coord for barcode, coord in zip(barcodes, coords)
+        }
+
+        return hex_coordinates_dict, coordinates_dict
 
     def get_obsm(self, key, barcode, col=None, dtype=float):
         """
@@ -373,6 +384,7 @@ if __name__ == "__main__":
             "interval"
         ].tolist()
 
+    meta_dict["data_type"] = args.data_type
     geojson_data["meta"] = meta_dict
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
