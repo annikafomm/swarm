@@ -43,6 +43,7 @@ dependencies:
   - simplejson
   - pip:
       - liana
+      - stlearn
       - spatialde
       - git+https://github.com/broadinstitute/Tangram.git
       - git+https://github.com/theislab/spapros.git@bump_python3.13
