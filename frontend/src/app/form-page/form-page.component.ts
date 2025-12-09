@@ -43,7 +43,7 @@ export class FormPageComponent {
   constructor(private fb: FormBuilder, private http: HttpClient, private pathsService: PathsService) {
     this.form = this.fb.group({
 
-      email: ['', [Validators.required, Validators.email]],
+      email: [''],
       dataset: ['Visium', Validators.required],
 
       spatialOptions: this.fb.group({
@@ -211,7 +211,6 @@ export class FormPageComponent {
   }
 
   canSubmit(): boolean {
-    const emailValid = this.form.get('email')!.valid;
     const spatialOk = !!this.spatialFile;
 
     const needsSingleCell = !!this.form.get('useTangram')!.value;
@@ -220,7 +219,7 @@ export class FormPageComponent {
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
 
-    return emailValid && spatialOk && singleCellOk && networkOk && !this.uploading;
+    return spatialOk && singleCellOk && networkOk && !this.uploading;
   }
 
   // ---------- submit ----------
