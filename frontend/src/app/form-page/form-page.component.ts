@@ -252,7 +252,7 @@ export class FormPageComponent {
 
           console.log('Upload finished, output_files', body.output_files)
           
-          const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
+          const geojsonPath = body.output_files?.geojsonPath; 
           const parts = geojsonPath?.split('/');
           const user = parts?.at(-3);
           const subdir = parts?.at(-2);
@@ -265,7 +265,7 @@ export class FormPageComponent {
             adataPath: body.output_files?.adataPath,
             genieFiltPath:  body.output_files?.genieFiltPath,
             spongeFiltPath: body.output_files?.spongeFiltPath,
-            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, // browser-accessible URL
+            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, 
           };
 
           console.log('New Paths', newPaths)
