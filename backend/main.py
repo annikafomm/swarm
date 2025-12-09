@@ -444,7 +444,7 @@ async def upload(
     # 4) Build response payload
     payload = {
         "email": str(email),
-        "dataset": dataset,
+        "dataset": dataset.value,
         "spatial": {
             "normalization": spatial_normalization,
             "filtering": spatial_filtering,
@@ -530,6 +530,9 @@ async def upload(
         out_files = {}
         if adata_path is not None:
             out_files["adataPath"] = adata_path
+
+            data_type = dataset.value.lower()
+
             subprocess.run(
                 [
                     "python",
@@ -538,6 +541,8 @@ async def upload(
                     adata_path,
                     "--outpath",
                     os.path.join(out_dir, "hexagons.geojson"),
+                    "--data_type",
+                    data_type,
                 ]
             )
             out_files["geojsonPath"] = os.path.join(
@@ -575,7 +580,7 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     """
-    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / filename
+    file_path = BASE_UPLOAD_DIR / Path(subdir) / filename
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")

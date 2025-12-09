@@ -1,6 +1,7 @@
 FROM mambaorg/micromamba:1.5.8 AS base
 
 COPY docker_environment.yml /tmp/docker_environment.yml
+COPY tangram.yml /tmp/tangram.yml
 
 ARG username=mopitaner
 
@@ -8,7 +9,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
     micromamba clean --all --yes
-
+RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
+    micromamba clean --all --yes
 USER root
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
