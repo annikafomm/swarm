@@ -27,6 +27,8 @@ backend/.DS_Store
 __pycache__/
 *.py[cod]
 
+frontend/public/assets/hexagons_Xenium.geojson
+
 backend/datasets_scores/*
 frontend/uploads/*
 
