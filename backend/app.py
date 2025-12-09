@@ -217,7 +217,7 @@ def dict2params(param_dict):
                         python_params.append("-cell_comp_key")
                         python_params.append(param_dict.get(key).get(lkey))
 
-    return (python_params, network_params, multiome_params, compute_R_scores)
+    return (python_params, network_params, multiome_params, compute_R_scores, multiome_params_py)
 
 #          job_dir, payload
 async def calculate_scores_helper(job_dir, json_dict):
@@ -244,7 +244,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                 f.write(str(R_params) + "\n\n")
         else:
             # get parameters from json_dict
-            python_params, R_params, multiome_params, compute_R_scores = dict2params(json_dict)
+            python_params, R_params, multiome_params, compute_R_scores, multiome_params_py = dict2params(json_dict)
 
         print(python_params)
         print("these are R_params:")
