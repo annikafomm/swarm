@@ -10,6 +10,7 @@ def dict2params(param_dict):
     python_params = []
     network_params = []
     multiome_params = []
+    multiome_params_py = []
     compute_R_scores = False
 
     for key in param_dict.keys():
@@ -81,12 +82,18 @@ def dict2params(param_dict):
                                 python_params.append("-liana")
                             case "chromVar":
                                 multiome_params.append("--chromvar")
+                                multiome_params_py.append("-chromvar")
+                                multiome_params_py.append("-moranI")
+                                multiome_params_py.append("-gearyC")
                             case "differential_motif_activity":
                                 multiome_params.append("--differential_motif_activity")
+                                multiome_params_py.append("-differential_motif_activity")
                             case "motif_enrichment":
                                 multiome_params.append("--motif_enrichment")
+                                multiome_params_py.append("-motif_enrichment")
                             case "footprinting":
                                 multiome_params.append("--footprinting")
+                                multiome_params_py.append("-footprinting")
 
             case "network":
                 for nkey in param_dict.get(key).keys():
@@ -170,6 +177,7 @@ def dict2params(param_dict):
                                     if param == "corr_method" and score_dict.get(param) is not None:
                                         python_params.append("-corr_method_gC")
                                         python_params.append(score_dict.get(param))
+
                             case "centrality_score":
                                 python_params.append("-centrality_scores")
                                 score_dict = param_dict.get(key).get(f"{skey}_params")
@@ -242,11 +250,10 @@ async def calculate_scores_helper(job_dir, json_dict):
         print("these are R_params:")
         print(R_params)
 
-        # Run scripts sequentially
         subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
-                        "-outdir", out_dir,
-                        "-log", log_file] + python_params,
-                        check=True)
+                            "-outdir", out_dir,
+                            "-log", log_file] + python_params,
+                            check=True)
 
         if multiome_params:
             subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",
@@ -257,6 +264,11 @@ async def calculate_scores_helper(job_dir, json_dict):
                             "-indir", out_dir,
                             "-log", log_file,
                             "-multiome"],
+                            check=True)
+
+            subprocess.run(["python3", "../backend/calc_python_scores/calc_multiome_scores.py",
+                            "--dir", out_dir,
+                            "--log", log_file] + multiome_params_py,
                             check=True)
 
 

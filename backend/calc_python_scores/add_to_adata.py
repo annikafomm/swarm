@@ -70,7 +70,7 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
         if filename=="chromvar_scores.csv":
             file_path = os.path.join(scores_path, filename)
             chromvar_scores = pd.read_csv(file_path, index_col=0)
-            # adata is the AnnData object containing the mapping
+            # adata is the AnnData object containing the mapping to spatial data (probabilities)
             M = adata_map.X # cells in dissociated scRNA assay x spatial cells probabilities
             S = np.array(chromvar_scores)[:,1:] # scores for dissociated data  cells x motifs
 

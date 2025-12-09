@@ -212,6 +212,7 @@ def main():
 
     parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
 
+    parser.add_argument('-chromvar', action='store_true', help='chromvar scores present, add geary C and Moran I for chromvar motifs')
 
     args = parser.parse_args()
 
