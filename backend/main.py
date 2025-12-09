@@ -460,7 +460,7 @@ def api_root():
 async def upload(
     # --- core ---
     email: Optional[str] = Form(None),
-    dataset: str = Form(...),
+    dataset: Dataset = Form(...),
     # Spatial
     spatial_h5ad: UploadFile = File(...),
     spatial_normalization: bool = Form(False),
@@ -555,7 +555,7 @@ async def upload(
     # 4) Build response payload
     payload = {
         "email": str(email),
-        "dataset": dataset,
+        "dataset": dataset.value,
         "spatial": {
             "normalization": spatial_normalization,
             "filtering": spatial_filtering,
@@ -650,10 +650,11 @@ async def upload(
 
         # Create geojson from adata if found
         if adata_path is not None:
-            out_files["adata_path"] = adata_path
-
             # Create hexagons.geojson in the job_dir (root), not in nested dir
             hexagon_output = os.path.join(job_dir, "hexagons.geojson")
+            out_files["adataPath"] = adata_path
+
+            data_type = dataset.value.lower()
             subprocess.run(
                 [
                     "python",
@@ -661,7 +662,9 @@ async def upload(
                     "--adata",
                     adata_path,
                     "--outpath",
-                    hexagon_output,
+                    os.path.join(out_dir, "hexagons.geojson"),
+                    "--data_type",
+                    data_type,
                 ]
             )
             out_files["geojson_path"] = hexagon_output
@@ -791,7 +794,7 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     """
-    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / filename
+    file_path = BASE_UPLOAD_DIR / Path(subdir) / filename
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")

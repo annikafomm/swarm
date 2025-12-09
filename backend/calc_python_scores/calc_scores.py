@@ -153,6 +153,7 @@ def main():
     parser.add_argument('-input', type=str, required=True, help='Input AnnData file path')
     parser.add_argument('-outdir', type=str, required=True, help='Output dir file path')
     parser.add_argument('-log', type=str, required=True, help='Path to the log file')
+    parser.add_arguement('-datatype', type=str, choices=['visium', 'xenium'], required=True, help='Type of spatial data')
 
     # preprocessing options
     parser.add_argument('-filter_st', action='store_true', help='Apply filtering for ST data')
@@ -242,8 +243,35 @@ def main():
             t0 = time.time()
             # TODO: add check if counts are already normalized
             # is_integer = np.all(np.mod(dense_layer, 1) == 0)
-            normalize(adata)
+            normalize(adata, args.datatype)
             log_message(f"ST data normalized in {format_runtime(t0)}", logfile, 2)
+
+        # TODO: wenn xenium --> gridding durchführen
+        if args.datatype == "xenium":
+            log_message("Performing gridding for Xenium data ...", logfile)
+            t0 = time.time()
+            from xenium.gridding_xenium import choose_grid_n, gridding_xenium
+
+            # 1) Zell-Level-AnnData für Visualisierung sichern
+            adata_cells = adata.copy()
+            cell_file = os.path.basename(args.input).replace(
+                ".h5ad",
+                "_xenium_cells.h5ad"
+            )
+            cell_path = os.path.join(args.outdir, cell_file)
+            adata_cells.write(cell_path)
+            log_message(f"Cell-level Xenium AnnData written to {cell_path}", logfile, 2)
+
+            # 2) Spot-Level-AnnData (Grid) für Score-Berechnung erzeugen
+            n_ = choose_grid_n(adata, target_cells_per_spot=20)
+            log_message(f"Chosen grid size: {n_} x {n_} spots", logfile, 2)
+
+            adata_grid = gridding_xenium(adata, n_spots_side=n_)
+            log_message(f"Gridding performed in {format_runtime(t0)}", logfile, 2)
+
+            # 3) Für alle weiteren Berechnungen auf Spot-Level weiterarbeiten
+            adata = adata_grid
+
 
         if args.tangram:
             log_message("Prepping Tangram calculations ...", logfile)
@@ -281,9 +309,20 @@ def main():
                         normalize(adata_sc)
                         log_message(f"SC data normalized in {format_runtime(t0)}", logfile, 4)
 
+                    cmd = [
+                        "conda", "run",
+                        "-n", "tangram_env",   # <--- Name der gewünschten Conda-Umgebung
+                        "python", "-c",
+                        "from your_module import run_tangram; "
+                        "run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')"
+                    ]
+
+                    subprocess.check_call(cmd)
+
+
                     log_message("Running Tangram script ...", logfile, 2)
                     t0 = time.time()
-                    adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')
+                    #adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)
 
                     compute_spatial_scores(adata_tangram, "tg", args, logfile)
