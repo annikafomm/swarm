@@ -349,7 +349,7 @@ def api_root():
 @app.post("/api/upload", dependencies=[Depends(cookie)])
 async def upload(
     # --- core ---
-    email: str = Form(...),
+    email: Optional[str] = Form(None),
     dataset: str = Form(...),
     # Spatial
     spatial_h5ad: UploadFile = File(...),
