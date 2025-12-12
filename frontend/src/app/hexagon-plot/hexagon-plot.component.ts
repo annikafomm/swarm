@@ -28,11 +28,13 @@ import { MatSelect } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatTabChangeEvent } from '@angular/material/tabs';
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -72,6 +74,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
+
+
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
@@ -191,6 +195,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
+
     this.isLoadingHexagons = true;
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
@@ -244,6 +249,50 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       // Force reload so the browser will honor the fragment scroll.
       window.location.href = targetUrl;
     });
+  }
+
+  public onTabColorChange(newView: string): void {
+    if (this.colorByProperty !== newView) {
+      this.colorByProperty = newView;
+      this.onColorbyPropertyChange();
+    } else {
+      // If the colorByProperty is already set, simply force an update.
+      this.updateHexColors();
+    }
+  }
+
+  public onTabChange(event: MatTabChangeEvent): void {
+    let newView: string | null = null;
+
+    switch (event.tab.textLabel) {
+      case 'Regulatory Scores':
+        newView = 'regulatory_scores';
+        break;
+      case 'Co-occurence':
+        newView = 'leiden';
+        break;
+      case 'Gene Expression':
+        newView = 'gene_expression';
+        break;
+      case 'TF Activity':
+        newView = 'tf_activity';
+        break;
+      case 'Pathway Activity':
+        newView = 'pathway_activity';
+        break;
+      case 'Cell Composition TF Activity':
+        newView = 'cell_comp_tf_activity_similarity';
+        break;
+      case 'Ligand-Receptor Relationships':
+        newView = 'ligand_receptor_relationships';
+    }
+
+    console.log('[Tab Change] newView=', newView);
+
+    if (newView && this.colorByProperty !== newView) {
+      this.colorByProperty = newView;
+      this.onColorbyPropertyChange();
+    }
   }
 
   private createHexagonPlot(containerName?: string): void {
@@ -1725,7 +1774,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-async getRegulatoryScoresforSpots(barcode: string) {
+  async getRegulatoryScoresforSpots(barcode: string) {
     this.sessionService.callWithSession(() =>
       this.http.get(
         `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}`,
@@ -1742,13 +1791,13 @@ async getRegulatoryScoresforSpots(barcode: string) {
 
         // Separate the raw score groups by suffix (_genie3 or _sponge) for separate tables
         for (const [scoreType, scores] of Object.entries(rawData)) {
-            if (scoreType.endsWith('_genie3')) {
-                genie3Data[scoreType] = scores;
-                Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
-            } else if (scoreType.endsWith('_sponge')) {
-                spongeData[scoreType] = scores;
-                Object.keys(scores).forEach(element => spongeElementsSet.add(element));
-            }
+          if (scoreType.endsWith('_genie3')) {
+            genie3Data[scoreType] = scores;
+            Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
+          } else if (scoreType.endsWith('_sponge')) {
+            spongeData[scoreType] = scores;
+            Object.keys(scores).forEach(element => spongeElementsSet.add(element));
+          }
         }
         this.genie3RawData = genie3Data;
         this.spongeRawData = spongeData;
@@ -1769,7 +1818,7 @@ async getRegulatoryScoresforSpots(barcode: string) {
         );
       }
     });
-}
+  }
 
   async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
     this.sessionService
