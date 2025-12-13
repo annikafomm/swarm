@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, OnInit, Input, Output, EventEmitter, OnChanges, SimpleChanges, ElementRef } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { SessionService } from '../session.service';
@@ -28,6 +28,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
+    private el: ElementRef,
   ) { }
 
   columns: string[] = [];
@@ -232,5 +233,14 @@ export class FilterableTableComponent implements OnInit, OnChanges {
           }
         },
       });
+  }
+
+  /**
+   * Retrieve the computed CSS variable value for --ftable-min-width
+   */
+  getComputedMinWidth(): string {
+    const computedStyle = getComputedStyle(this.el.nativeElement);
+    const minWidth = computedStyle.getPropertyValue('--ftable-min-width').trim();
+    return minWidth || '0';
   }
 }

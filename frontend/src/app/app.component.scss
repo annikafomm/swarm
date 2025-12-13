@@ -7,9 +7,9 @@
 }
 
 .app-shell {
-  /* ein Wrapper um main + sidenav */
-  position: relative; /* Bezug für absolute */
-  min-height: 100svh; /* mindestens Viewport-Höhe */
+
+  position: relative;
+  min-height: 100svh;
 }
 
 .main {
@@ -47,7 +47,7 @@
 
 .nav-buttons {
   display: flex;
-  flex: 1; 
+  flex: 1;
   align-items: center;
 }
 

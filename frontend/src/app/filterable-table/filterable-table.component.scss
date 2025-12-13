@@ -4,7 +4,10 @@
    =============================== */
 
 :host {
-  --ftable-height: 420px; /* Höhe der scrollbaren Tabelle */
+  --ftable-min-width: 0;
+  /* customize per instance: app-table { --ftable-min-width: 300px; } */
+  --ftable-height: 420px;
+  /* Höhe der scrollbaren Tabelle */
   --radius: 16px;
   --radius-pill: 9999px;
   --border-color: #e5e7eb;
@@ -15,20 +18,45 @@
   --muted: #6b7280;
   --focus: #93c5fd;
   --focus-ring: rgba(59, 130, 246, 0.25);
+  /* flex layout support */
+  display: flex;
+  flex-direction: column;
+  min-width: var(--ftable-min-width);
+  min-height: 0;
+  min-height: 0;
 }
 
 /* Headerzellen dürfen Inhalt überstehen lassen */
 .ftable thead th,
 .ftable thead .th-filter {
-  overflow: visible; /* wichtig: nicht hidden */
+  overflow: visible;
+  /* wichtig: nicht hidden */
 }
 
+
+
 .ftable thead .th-filter .input {
-  height: 32px; /* kleiner als die Zellenhöhe */
+  height: 28px;
+  /* kleiner als die Zellenhöhe */
   padding: 0 12px;
-  border-radius: 9999px; /* rund */
+  border-radius: 9999px;
+  /* rund */
   box-sizing: border-box;
   border: 1px solid #d0d7de;
+  font-size: 0.875rem;
+  /* smaller font for filter inputs */
+}
+
+.ftable thead .th-top .input {
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  border: 1px solid #d0d7de;
+  font-size: 0.75rem;
+  flex-shrink: 1;
+  min-width: 80px;
+  flex: 1 1 100px;
 }
 
 .table-container.upload-style {
@@ -38,40 +66,56 @@
   // outline-offset: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  /* take available space in flex containers */
+  min-width: 0;
+  /* allow shrinking below content size */
+  min-height: 0;
+  /* allow shrinking vertically */
 
   .table-scroll {
     position: relative;
     height: var(--ftable-height);
     max-height: var(--ftable-height);
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
+    /* allow horizontal scrolling for wide tables */
     scrollbar-gutter: stable; //both-edges;
     overscroll-behavior: contain;
-    background: #fff; /* verhindert Durchscheinen */
-    transform: translateZ(0); /* Sticky-Repaint-Fix (Chrome/Safari) */
+    background: #fff;
+    /* verhindert Durchscheinen */
+    transform: translateZ(0);
+    flex: 1;
+    /* take available space */
+    min-width: 0;
+    /* allow shrinking */
   }
 
   table.ftable {
     width: 100%;
     border-collapse: separate;
-    table-layout: fixed;
+    table-layout: auto;
     border-spacing: 0;
     color: var(--text);
     border-radius: var(--radius);
     background: transparent;
+    min-width: 0;
 
-    /* ---------- STICKY HEADER (Bleed-Through-Fix) ---------- */
     thead th {
       position: sticky;
       top: 0;
-      z-index: 5; /* über Body-Zellen */
+      z-index: 5;
+      /* über Body-Zellen */
       background: var(--bg-soft);
       border-bottom: 1px solid var(--border-color);
       padding: 14px 16px;
       vertical-align: bottom;
       background-clip: padding-box;
     }
-    /* zusätzlicher Hintergrund unter jedem th, deckt Mikrolücken ab */
+
+
     thead th::before {
       content: "";
       position: absolute;
@@ -82,7 +126,7 @@
       bottom: -1px;
       background: var(--bg-soft);
     }
-    /* verhindert zweite Linie direkt unter dem Header */
+    
     tbody tr:first-child td {
       border-top: 0;
     }
@@ -102,12 +146,12 @@
     thead th .th-top {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-    thead th .th-filter {
-      margin-top: 4px;
+      justify-content: flex-start;
+      gap: 6px;
+      margin-bottom: 0;
+      flex-wrap: nowrap;
+      min-width: 0;
+      font-weight: 600;
     }
 
     tbody td {
@@ -121,17 +165,27 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
+
     tbody tr:hover {
       background: #fafafa;
     }
 
     .index-col {
-      min-width: 220px;
+      flex: 1 1 25%;
+      max-width: 250px;
+      font-size: 0.9em;
     }
+
     .other-col {
-      min-width: 140px;
+      flex: 1 1 auto;
+      font-size: 0.85em;
+      padding: 8px 10px;
+
     }
+
     .action-col {
+      flex: 0 0 80px;
+      font-size: 0.8em;
       white-space: nowrap;
     }
 
@@ -151,9 +205,11 @@
       transition:
         box-shadow 0.15s ease,
         border-color 0.15s ease;
+
       &::placeholder {
         color: var(--muted);
       }
+
       &:focus {
         border-radius: var(--radius-pill);
         border-color: var(--focus);
@@ -172,6 +228,7 @@
       overflow: visible;
       text-overflow: clip;
     }
+
     thead th,
     thead th .th-top {
       white-space: normal;
@@ -185,12 +242,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border-color);
+  border: 0.5px solid var(--border-color);
   background: var(--bg-hover);
-  padding: 8px 14px;
+  padding: 6px 12px;
   border-radius: 12px;
   font-weight: 600;
-  font-size: 14px;
+  font-size: clamp(0.75rem, 1vw, 0.875rem);
   line-height: 1;
   cursor: pointer;
   white-space: nowrap;
@@ -198,21 +255,26 @@
     background 0.15s ease,
     transform 0.05s ease,
     box-shadow 0.15s ease;
+
   &:hover {
     background: #e5e7eb;
   }
+
   &:active {
     transform: translateY(1px);
   }
+
   &:focus {
     outline: none;
     border-color: var(--focus);
     box-shadow: 0 0 0 3px var(--focus-ring);
   }
 }
+
 .btn-pill {
   border-radius: var(--radius-pill);
 }
+
 .btn-ghost {
   border: 0;
   background: transparent;
@@ -223,10 +285,12 @@
   transition:
     background 0.15s ease,
     color 0.15s ease;
+
   &:hover {
     background: var(--bg-hover);
     color: var(--text);
   }
+
   &:active {
     transform: translateY(1px);
   }
@@ -237,14 +301,31 @@ span {
   margin-right: 5px;
 }
 
-/* kompakter auf kleineren Screens */
-@media (max-width: 768px) {
-  :host {
-    --ftable-height: 360px;
+@media (max-width: 1200px) {
+
+  .ftable td,
+  .ftable th {
+    font-size: 0.8em;
+    padding: 8px 8px;
+  }
+}
+
+@media (max-width: 900px) {
+  .ftable {
+    font-size: 0.75em;
+  }
+
+  .index-col {
+    flex: 0 1 30%;
+  }
+
+  .other-col {
+    flex: 1 1 50%;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .table-container.upload-style table.ftable .btn,
   .table-container.upload-style table.ftable .input {
     transition: none;

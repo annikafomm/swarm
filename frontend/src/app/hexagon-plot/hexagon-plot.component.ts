@@ -28,13 +28,13 @@ import { MatSelect } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule } from '@angular/material/tabs';
-import { MatTabChangeEvent } from '@angular/material/tabs';
+import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
+import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -42,6 +42,8 @@ import { MatTabChangeEvent } from '@angular/material/tabs';
 export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element!: ElementRef<HTMLElement>;
   @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement!: ElementRef<HTMLElement>;
+  @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
+  private _resizeHandler: any = null;
   private sub!: Subscription;
 
   constructor(
@@ -69,6 +71,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
   public selectedCell: CellFeature | null = null;
+  public selectedCellCompare: CellFeature | null = null;
   public selectedCluster: number | null = null;
   public colorByProperty = 'regulatory_scores';
   public selectedGeneSetGenie3: string | null = null;
@@ -222,11 +225,37 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     if (this.sub) {
       this.sub.unsubscribe();
     }
+    // remove resize listener if added
+    try {
+      if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler as any);
+    } catch (e) { }
   }
 
   ngAfterViewInit(): void {
     this.genie3Width = this.aucellGraphGenie3Element.nativeElement.clientWidth as number;
     this.spongeWidth = this.aucellGraphSpongeElement.nativeElement.clientWidth as number;
+    // Force Material Tabs to recalc pagination so arrows appear when needed
+    setTimeout(() => this.updateTabPagination(), 50);
+    // update on window resize as well
+    this._resizeHandler = () => this.updateTabPagination();
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  /**
+   * Call into Angular Material's private header pagination update.
+   * We wrap in try/catch to be safe if internals change.
+   */
+  private updateTabPagination(): void {
+    try {
+      if (this.tabGroup && (this.tabGroup as any)._header && typeof (this.tabGroup as any)._header.updatePagination === 'function') {
+        (this.tabGroup as any)._header.updatePagination();
+      } else if (this.tabGroup && typeof (this.tabGroup as any)._updatePagination === 'function') {
+        (this.tabGroup as any)._updatePagination();
+      }
+    } catch (e) {
+      // silently ignore if Material internals differ
+      // console.debug('updateTabPagination failed', e);
+    }
   }
 
 
@@ -291,6 +320,38 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (newView && this.colorByProperty !== newView) {
       this.colorByProperty = newView;
+      this.onColorbyPropertyChange();
+    }
+  }
+
+  public onCompareTabChange(event: MatTabChangeEvent): void {
+    let newView: string | null = null;
+
+    const label = event.tab.textLabel;
+
+    if (label.startsWith('Compare - ')) {
+      const viewName = label.replace('Compare - ', '').toLowerCase().replace(/\s+/g, '_');
+
+      switch (viewName) {
+        case 'regulatory_scores':
+          newView = 'regulatory_scores';
+          break;
+        case 'gene_expression':
+          newView = 'gene_expression';
+          break;
+        case 'tf_activity':
+          newView = 'tf_activity';
+          break;
+        case 'pathway_activity':
+          newView = 'pathway_activity';
+          break;
+      }
+    }
+
+    console.log('[Compare Tab Change] newView=', newView);
+
+    if (newView && this.selectedCompareView !== newView) {
+      this.selectedCompareView = newView;
       this.onColorbyPropertyChange();
     }
   }
@@ -397,7 +458,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           return Number.isFinite(num) ? this.continuousColorScaleCompare(num) : '#ccc';
         }
       })
-      .style('opacity', 0.8);
+      .style('opacity', 0.8)
+      .on('mouseover', (event, d) => this.mouseOver(event, d))
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+      .on('click', (event, d) => this.openSidenavCompare(event, d));
 
     setTimeout(() => { this.isLoadingCompare = false; }, 100);
 
@@ -1383,6 +1447,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           d.properties.leiden === this.selectedCell.properties.leiden))
     )
       return;
+    if (
+      this.selectedCellCompare &&
+      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
+        (this.selectedCompareView === 'leiden' &&
+          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+    )
+      return;
     d3.selectAll('.Country')
       .transition()
       .duration(200)
@@ -1413,6 +1484,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => this.renderNhoodHeatmap(), 0);
 
     setTimeout(() => this.updateSubgraphGenie3(), 0);
+  }
+
+  public openSidenavCompare(event: MouseEvent, cell: CellFeature): void {
+    this.selectedCellCompare = cell;
+    if (this.selectedCompareView === 'regulatory_scores') {
+      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+    }
+    d3.select(event.target as SVGElement)
+      .transition()
+      .attr('stroke', 'black');
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -2010,7 +2091,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (viewVariablesToUpdate.getLegendType() === 'continuous') {
       const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
-      const legendX = -100;
+      const legendX = 0;
       const legendY = 50;
       const width = 250;
       const height = 30;
