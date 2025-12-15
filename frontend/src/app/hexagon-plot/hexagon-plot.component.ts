@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import * as d3 from 'd3';
@@ -20,15 +20,30 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatFormField } from '@angular/material/form-field';
+import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
+import { MatLabel } from '@angular/material/form-field';
+import { MatSelect } from '@angular/material/select';
+import { MatExpansionModule } from '@angular/material/expansion';
+import { MatTableModule } from '@angular/material/table';
+import { MatDividerModule } from '@angular/material/divider';
+import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
+import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
+
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
-  styleUrl: './hexagon-plot.component.scss',
+  styleUrls: ['./hexagon-plot.component.scss'],
 })
-export class HexagonPlotComponent implements OnInit, OnDestroy {
+export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
+  @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element!: ElementRef<HTMLElement>;
+  @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement!: ElementRef<HTMLElement>;
+  @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
+  private _resizeHandler: any = null;
   private sub!: Subscription;
 
   constructor(
@@ -50,16 +65,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
   // Map svg and g elements
-  private svg!: d3.Selection<SVGSVGElement, unknown, HTMLElement, any>;
-  private g!: d3.Selection<SVGGElement, unknown, HTMLElement, any>;
+  private svg!: d3.Selection<SVGSVGElement, any, any, any>;
+  private g!: d3.Selection<SVGGElement, any, any, any>;
+  private g_compare!: d3.Selection<SVGGElement, any, any, any>;
+  private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
   public selectedCell: CellFeature | null = null;
+  public selectedCellCompare: CellFeature | null = null;
   public selectedCluster: number | null = null;
-  public colorByProperty = 'cell_type';
+  public colorByProperty = 'regulatory_scores';
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
-  public selectedCellRegulatoryScores: { [key: string]: number } | null = null;
+
+
+
+  // Data sources for the two tables
+  public genie3RawData: TableData = {};
+  public spongeRawData: TableData = {};
+
+  // Column lists for the two tables
+  public genie3Elements: string[] = [];
+  public spongeElements: string[] = [];
+
+
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private requestTokens: { [key: string]: number } = {};
@@ -90,6 +119,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public spongeNetwork: spongeRegGraphConnection[] = [];
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
+  public genie3Width: number = 600;
+  public spongeWidth: number = 600;
 
   // Slider params
   public genie3WeightCutoff: number = 0.5;
@@ -100,6 +131,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
 
   // Loading screen trackers
+  public isLoadingHexagons: boolean = true;
+  public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
@@ -117,13 +150,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     'average_clustering',
     'closeness_centrality',
   ];
-
-  public colorByTooltip = [
-    'This dropdown switches the view of the hexagon map.',
-    'Options include Regulatory Scores, Gene Expression, TF Activity and more.',
-    '',
-    'Click this button for more information.'
-  ].join('\n');
 
   public leidenCentralityProps = [
     'degree_centrality',
@@ -149,10 +175,31 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       '#E15759',
     ]);
   private continuousColorScale = d3.scaleSequential(d3.interpolateBlues);
+  // Separate scales for the compare view to avoid cross-contamination
+  public colorScaleCompare = d3.scaleOrdinal<string>().range([
+    '#FF7373',
+    '#66cdaa',
+    '#088da5',
+    '#F0E442',
+    '#0072B2',
+    '#ffc3a0',
+    '#CC79A7',
+    '#E15759',
+  ]);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateBlues);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
+  // Comparison
+  public compareMode: boolean = false;
+  public selectedCompareView: string = 'regulatory_scores';
+  public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
+  public currentLegendDomainCompare: any[] = [];
+  private dataCompare: GeoJsonData | null = null;
+
   ngOnInit(): void {
+
+    this.isLoadingHexagons = true;
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
       console.log("init hexagon plot")
@@ -163,17 +210,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         console.log('Loading hexagon data from', this.dataPath);
 
         // Clear hexagon-plot container
-        d3.select('#hexagon-plot').selectAll('*').remove();
-        d3.select('#hexagon-plot').html('');
-
-        // Clear hexbin container (where SVG is appended)
-        d3.select('#hexbin').selectAll('*').remove();
-        d3.select('#hexbin').html('');
+        d3.select('#hexbin').selectAll('svg').remove();
+        d3.select('#hexbin-compare').selectAll('svg').remove();
 
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
       }
+
     });
   }
 
@@ -181,7 +225,39 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     if (this.sub) {
       this.sub.unsubscribe();
     }
+    // remove resize listener if added
+    try {
+      if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler as any);
+    } catch (e) { }
   }
+
+  ngAfterViewInit(): void {
+    this.genie3Width = this.aucellGraphGenie3Element.nativeElement.clientWidth as number;
+    this.spongeWidth = this.aucellGraphSpongeElement.nativeElement.clientWidth as number;
+    // Force Material Tabs to recalc pagination so arrows appear when needed
+    setTimeout(() => this.updateTabPagination(), 50);
+    // update on window resize as well
+    this._resizeHandler = () => this.updateTabPagination();
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  /**
+   * Call into Angular Material's private header pagination update.
+   * We wrap in try/catch to be safe if internals change.
+   */
+  private updateTabPagination(): void {
+    try {
+      if (this.tabGroup && (this.tabGroup as any)._header && typeof (this.tabGroup as any)._header.updatePagination === 'function') {
+        (this.tabGroup as any)._header.updatePagination();
+      } else if (this.tabGroup && typeof (this.tabGroup as any)._updatePagination === 'function') {
+        (this.tabGroup as any)._updatePagination();
+      }
+    } catch (e) {
+      // silently ignore if Material internals differ
+      // console.debug('updateTabPagination failed', e);
+    }
+  }
+
 
   private nextRequestToken(graphType: string): number {
     if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
@@ -204,29 +280,229 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     });
   }
 
-  private createHexagonPlot(): void {
+  public onTabColorChange(newView: string): void {
+    if (this.colorByProperty !== newView) {
+      this.colorByProperty = newView;
+      this.onColorbyPropertyChange();
+    } else {
+      // If the colorByProperty is already set, simply force an update.
+      this.updateHexColors();
+    }
+  }
+
+  public onTabChange(event: MatTabChangeEvent): void {
+    let newView: string | null = null;
+
+    switch (event.tab.textLabel) {
+      case 'Regulatory Scores':
+        newView = 'regulatory_scores';
+        break;
+      case 'Co-occurence':
+        newView = 'leiden';
+        break;
+      case 'Gene Expression':
+        newView = 'gene_expression';
+        break;
+      case 'TF Activity':
+        newView = 'tf_activity';
+        break;
+      case 'Pathway Activity':
+        newView = 'pathway_activity';
+        break;
+      case 'Cell Composition TF Activity':
+        newView = 'cell_comp_tf_activity_similarity';
+        break;
+      case 'Ligand-Receptor Relationships':
+        newView = 'ligand_receptor_relationships';
+    }
+
+    console.log('[Tab Change] newView=', newView);
+
+    if (newView && this.colorByProperty !== newView) {
+      this.colorByProperty = newView;
+      this.onColorbyPropertyChange();
+    }
+  }
+
+  public onCompareTabChange(event: MatTabChangeEvent): void {
+    let newView: string | null = null;
+
+    const label = event.tab.textLabel;
+
+    if (label.startsWith('Compare - ')) {
+      const viewName = label.replace('Compare - ', '').toLowerCase().replace(/\s+/g, '_');
+
+      switch (viewName) {
+        case 'regulatory_scores':
+          newView = 'regulatory_scores';
+          break;
+        case 'gene_expression':
+          newView = 'gene_expression';
+          break;
+        case 'tf_activity':
+          newView = 'tf_activity';
+          break;
+        case 'pathway_activity':
+          newView = 'pathway_activity';
+          break;
+      }
+    }
+
+    console.log('[Compare Tab Change] newView=', newView);
+
+    if (newView && this.selectedCompareView !== newView) {
+      this.selectedCompareView = newView;
+      this.onColorbyPropertyChange();
+    }
+  }
+
+  private createHexagonPlot(containerName?: string): void {
+    if (!containerName) containerName = '#hexbin';
+
     const width = 500;
     const height = 400;
-    this.svg = d3
-      .select('#hexbin')
-      .append('svg')
+
+    // use data-join to reuse an existing svg in the container or create a new one
+    const container = d3.select(containerName);
+    const svgSel = container
+      .selectAll('svg')
+      .data([0])
+      .join('svg')
       .attr('width', width)
       .attr('height', height)
       .attr('viewBox', [0, 0, 1000, 1000] as [number, number, number, number])
       .style('background-color', 'white')
-      .style('overflow', 'hidden')
-      .call(
-        d3
-          .zoom<SVGSVGElement, unknown>()
-          .scaleExtent([1, 5])
-          .extent([
-            [0, 0],
-            [width, height],
-          ])
-          .on('zoom', (event) => this.zoomed(event)),
-      );
+      .style('overflow', 'hidden');
 
-    this.g = this.svg.append('g');
+    // create (or reuse) a root group inside the svg
+    const gSel = svgSel.selectAll<SVGGElement, number>('g.root-group').data([0]).join('g').attr('class', 'root-group');
+
+    if (containerName === '#hexbin-compare') {
+      this.svg_compare = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
+      this.g_compare = gSel as any;
+    } else {
+      this.svg = svgSel as unknown as d3.Selection<SVGSVGElement, any, any, any>;
+      this.g = gSel as any;
+    }
+
+    // attach a zoom handler once (reusing svgSel is safe)
+    (svgSel as any).call(
+      d3
+        .zoom<SVGSVGElement, number>()
+        .scaleExtent([1, 5])
+        .extent([
+          [0, 0],
+          [width, height],
+        ])
+        .on('zoom', (event) => {
+          if (containerName === '#hexbin-compare' && this.g_compare) {
+            this.g_compare.attr('transform', event.transform.toString());
+          } else if (this.g) {
+            this.g.attr('transform', event.transform.toString());
+          }
+        }),
+    );
+  }
+
+  private initCompareHexagonPlot(): void {
+
+    // Do not recurse — if the compare container isn't in the DOM, abort and let the caller retry once.
+    const node = document.getElementById('hexbin-compare');
+    if (!node) {
+      console.warn('hexbin-compare not present in DOM, skipping compare init');
+      return;
+    }
+
+    // prepare svg/group
+
+    this.createHexagonPlot('#hexbin-compare');
+
+    this.dataCompare = this.geoDataService.getData();
+    const featuresToDraw = (this.dataCompare && Array.isArray(this.dataCompare.features)) ? this.dataCompare.features : [];
+
+    if (!this.selectedCompareView) {
+      console.log('No compare view selected; skipping compare render');
+      return;
+    }
+    const compareIsContinuous = this.isContinuousScale(this.selectedCompareView, featuresToDraw);
+    console.log('[compare init] selectedCompareView=', this.selectedCompareView, 'featuresToDraw=', featuresToDraw.length, 'isContinuous=', compareIsContinuous);
+    this.currentCompareLegendType = compareIsContinuous ? 'continuous' : 'categorical';
+
+    const width = 1200;
+    const height = 1000;
+    const projection = d3.geoIdentity().fitSize([width, height], {
+      type: 'FeatureCollection',
+      features: featuresToDraw,
+    });
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+
+    if (!this.g_compare) {
+      console.warn('g_compare not initialized after createHexagonPlot');
+      return;
+    }
+
+    // draw using the intended feature set (featuresToDraw)
+    this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer')
+      .selectAll('path')
+      .data(featuresToDraw)
+      .join('path')
+      .attr('d', (d) => pathGenerator(d) || '')
+      .attr('fill', (d) => {
+        const value = (this.leidenCentralityProps.includes(this.selectedCompareView))
+          ? d.properties.leiden_centrality[this.selectedCompareView]
+          : d.properties[this.selectedCompareView];
+        if (this.currentCompareLegendType === 'categorical') {
+          return this.colorScaleCompare(String(value));
+        } else {
+          const num = this.toNumber(value);
+          return Number.isFinite(num) ? this.continuousColorScaleCompare(num) : '#ccc';
+        }
+      })
+      .style('opacity', 0.8)
+      .on('mouseover', (event, d) => this.mouseOver(event, d))
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+      .on('click', (event, d) => this.openSidenavCompare(event, d));
+
+    setTimeout(() => { this.isLoadingCompare = false; }, 100);
+
+    setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
+
+
+  }
+
+  public onCompareMode(): void {
+
+    this.compareMode = !this.compareMode;
+
+    if (this.compareMode) {
+      this.isLoadingCompare = true;
+      // schedule a single init attempt so Angular has time to render the compare container
+      setTimeout(() => this.initCompareHexagonPlot(), 50);
+
+
+    } else {
+      // remove compare svg and clear references
+      d3.select('#hexbin-compare').selectAll('*').remove();
+      try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
+      this.svg_compare = null as any;
+      this.g_compare = null as any;
+
+      // Reset compare legend / scales so reopening starts fresh
+      try {
+        this.currentLegendDomainCompare = [];
+        this.currentCompareLegendType = 'categorical';
+        // reset compare ordinal domain
+        if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
+          this.colorScaleCompare.domain([] as any);
+        }
+        // reset compare continuous domain
+        if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
+          this.continuousColorScaleCompare.domain([0, 1]);
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
   }
 
   private zoomed(event: d3.D3ZoomEvent<SVGSVGElement, unknown>): void {
@@ -264,11 +540,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
         }
 
-        const firstProps = this.features[0]?.properties || {};
+        let firstProps = this.features[0]?.properties || {};
+
         this.colorableProperties = Object.keys(firstProps).filter((k) => {
           const val = firstProps[k];
           return typeof val === 'string' || typeof val === 'number';
         });
+
+        console.log('Initial colorable properties:', this.colorableProperties);
+
 
         // Alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
@@ -336,6 +616,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .on('click', (event, d) => this.openSidenav(event, d));
 
         this.onColorbyPropertyChange();
+        setTimeout(() => {
+          this.isLoadingHexagons = false;
+        }, 0);
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
@@ -378,23 +661,35 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         this.updateSubgraphSponge();
       }
     }
+    if (this.compareMode) {
+      this.updateHexColors('#hexbin-compare');
+    }
     this.updateHexColors();
   }
 
-  isContinuousScale() {
-    const valuesRaw = this.features.map((f) => {
-      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-        return f.properties.leiden_centrality[this.colorByProperty];
+  /**
+   * Determine whether the given view/property should be treated as a continuous numeric scale.
+   * If `features` is provided, that dataset is used for the test (used for compare view). Otherwise
+   * the main `this.features` is used.
+   */
+  isContinuousScale(view?: string, features?: CellFeature[]) {
+    if (!view) {
+      view = this.colorByProperty;
+    }
+    const sourceFeatures = Array.isArray(features) ? features : this.features || [];
+
+    const valuesRaw = sourceFeatures.map((f) => {
+      if (this.leidenCentralityProps.includes(view)) {
+        return f.properties.leiden_centrality[view];
       }
-      return f.properties[this.colorByProperty];
+      return f.properties[view];
     });
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
 
     // Check if all values are integers (for categorical treatment)
-    const allIntegers =
-      allNumbers && numericValues.every((n) => Number.isInteger(n));
+    const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
 
     // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
@@ -403,7 +698,47 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
   }
 
-  public updateHexColors(): void {
+  private getViewVariablesToUpdate(containerName: string) {
+    const isMainView = containerName === '#hexbin';
+    const viewToUpdate = isMainView ? this.colorByProperty : this.selectedCompareView;
+    const featuresToUpdate = isMainView ? this.features : (this.dataCompare?.features || []);
+    const gToUpdate = isMainView ? this.g : this.g_compare;
+    const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
+    const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
+    const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate);
+    const legendContainerName = isMainView ? 'svg-legend' : 'svg-legend-compare';
+    const legendGradientName = isMainView ? 'svg-legend-gradient' : 'svg-legend-gradient-compare';
+    return {
+      isMainView,
+      view: viewToUpdate,
+      svg: isMainView ? this.svg : this.svg_compare,
+      features: featuresToUpdate,
+      g: gToUpdate,
+      ordinal: ordinalScaleToUpdate,
+      continuous: continuousScaleToUpdate,
+      isContinuous,
+      legendContainerName,
+      legendGradientName,
+      getLegendDomain: () => isMainView ? this.currentLegendDomain : this.currentLegendDomainCompare,
+      setLegendDomain: (v: any[]) => { if (isMainView) this.currentLegendDomain = v; else this.currentLegendDomainCompare = v; },
+      getLegendType: () => isMainView ? this.currentLegendType : this.currentCompareLegendType,
+      setLegendType: (t: 'continuous' | 'categorical') => { if (isMainView) this.currentLegendType = t; else this.currentCompareLegendType = t; }
+    } as const;
+
+  }
+
+  public updateHexColors(containerName?: string): void {
+
+    if (!containerName) {
+      containerName = '#hexbin';
+    }
+
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
+    let valuesRaw;
+    let sel;
+
+    console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
+
     this.resetClusterExtension();
 
     if (this.selectedCell && this.selectedCluster) {
@@ -418,20 +753,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    const sel = this.g
+    sel = viewVariablesToUpdate.g
       .selectAll<SVGPathElement, CellFeature>('path')
-      .data(this.features);
+      .data(viewVariablesToUpdate.features);
 
-    const valuesRaw = this.features.map((f) => {
-      if (this.leidenCentralityProps.includes(this.colorByProperty)) {
-        return f.properties.leiden_centrality[this.colorByProperty];
+    valuesRaw = viewVariablesToUpdate.features.map((f) => {
+      if (this.leidenCentralityProps.includes(viewVariablesToUpdate.view)) {
+        return f.properties.leiden_centrality[viewVariablesToUpdate.view];
       }
-      return f.properties[this.colorByProperty];
+      return f.properties[viewVariablesToUpdate.view];
     });
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
-    if (this.isContinuousScale()) {
+    if (viewVariablesToUpdate.isContinuous) {
       // continuous scale - only if not integers or too many unique integers
       let min = Math.min(...numericValues);
       let max = Math.max(...numericValues);
@@ -440,9 +775,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         min -= eps;
         max += eps;
       }
-      this.continuousColorScale.domain([min, max]);
-      this.currentLegendDomain = [min, max];
-      this.currentLegendType = 'continuous';
+
+
+      viewVariablesToUpdate.continuous.domain([min, max]);
+
+      viewVariablesToUpdate.setLegendDomain([min, max]);
+      viewVariablesToUpdate.setLegendType('continuous');
 
       sel
         .transition()
@@ -450,18 +788,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-            ? d.properties.leiden_centrality[this.colorByProperty]
-            : d.properties[this.colorByProperty];
+          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+            ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+            : d.properties[viewVariablesToUpdate.view];
           const n = this.toNumber(raw);
-          return Number.isFinite(n) ? this.continuousColorScale(n) : '#ccc';
+          return Number.isFinite(n)
+            ? viewVariablesToUpdate.continuous(n)
+            : '#ccc';
+
         });
     } else {
       // categorical scale - for non-numeric, integers with few unique values, or mixed data
       const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
-      this.colorScale.domain(domain);
-      this.currentLegendDomain = domain;
-      this.currentLegendType = 'categorical';
+
+      viewVariablesToUpdate.ordinal.domain(domain);
+      viewVariablesToUpdate.setLegendDomain(domain);
+      viewVariablesToUpdate.setLegendType('categorical');
 
       sel
         .transition()
@@ -469,14 +811,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(this.colorByProperty)
-            ? d.properties.leiden_centrality[this.colorByProperty]
-            : d.properties[this.colorByProperty];
-          return this.colorScale(String(raw));
+          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+            ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+            : d.properties[viewVariablesToUpdate.view];
+          return viewVariablesToUpdate.ordinal(String(raw));
         });
     }
-
-    this.renderLegend();
+    this.renderLegend(containerName);
   }
 
   public updateSubgraphGenie3(): void {
@@ -615,7 +956,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     console.log(graph)
 
     // Create the graph visualization
-    const width = 1000;
+    const width = this.genie3Width;
     const height = 300;
 
     const svg = d3
@@ -889,7 +1230,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     };
 
     // Create the graph visualization
-    const width = 1000;
+    const width = this.spongeWidth;
     const height = 300;
 
     const svg = d3
@@ -1106,6 +1447,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           d.properties.leiden === this.selectedCell.properties.leiden))
     )
       return;
+    if (
+      this.selectedCellCompare &&
+      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
+        (this.selectedCompareView === 'leiden' &&
+          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+    )
+      return;
     d3.selectAll('.Country')
       .transition()
       .duration(200)
@@ -1121,7 +1469,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   public openSidenav(event: MouseEvent, cell: CellFeature): void {
     this.resetClusterExtension();
     this.selectedCell = cell;
-
+    if (this.colorByProperty === 'regulatory_scores') {
+      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+    }
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
       this.extendCluster(cell.properties.leiden);
@@ -1134,6 +1484,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     setTimeout(() => this.renderNhoodHeatmap(), 0);
 
     setTimeout(() => this.updateSubgraphGenie3(), 0);
+  }
+
+  public openSidenavCompare(event: MouseEvent, cell: CellFeature): void {
+    this.selectedCellCompare = cell;
+    if (this.selectedCompareView === 'regulatory_scores') {
+      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+    }
+    d3.select(event.target as SVGElement)
+      .transition()
+      .attr('stroke', 'black');
   }
 
   public openClusterSidenav(clusterId: number): void {
@@ -1495,7 +1855,53 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  async fetchAndUpdate(columnName: string, index: string) {
+  async getRegulatoryScoresforSpots(barcode: string) {
+    this.sessionService.callWithSession(() =>
+      this.http.get(
+        `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}`,
+        { withCredentials: true },
+      ),
+    ).subscribe({
+      next: (res) => {
+        const rawData = res as { [scoreType: string]: { [element: string]: number } };
+
+        const genie3Data: TableData = {};
+        const spongeData: TableData = {};
+        const genie3ElementsSet = new Set<string>();
+        const spongeElementsSet = new Set<string>();
+
+        // Separate the raw score groups by suffix (_genie3 or _sponge) for separate tables
+        for (const [scoreType, scores] of Object.entries(rawData)) {
+          if (scoreType.endsWith('_genie3')) {
+            genie3Data[scoreType] = scores;
+            Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
+          } else if (scoreType.endsWith('_sponge')) {
+            spongeData[scoreType] = scores;
+            Object.keys(scores).forEach(element => spongeElementsSet.add(element));
+          }
+        }
+        this.genie3RawData = genie3Data;
+        this.spongeRawData = spongeData;
+
+        // Features/Columns assigned as the list of elements (TFs or Genes)
+        this.genie3Elements = Array.from(genie3ElementsSet);
+        this.spongeElements = Array.from(spongeElementsSet);
+
+      },
+      error: (err) => {
+        this.genie3RawData = {};
+        this.spongeRawData = {};
+        this.genie3Elements = [];
+        this.spongeElements = [];
+        console.error(
+          `[Backend] Failed to load regulatory scores for ${barcode}`,
+          err,
+        );
+      }
+    });
+  }
+
+  async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
     this.sessionService
       .callWithSession(() =>
         this.http.get(
@@ -1514,6 +1920,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
                 feature.properties[this.colorByProperty] = data[barcode];
               }
             }
+          }
+          console.log('Features:', this.features);
+          if (updateCompare && this.compareMode && this.dataCompare?.features) {
+            for (const feature of this.dataCompare.features) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[this.selectedCompareView] = data[barcode];
+              }
+            }
+            console.log(`[Backend] Also updated compare view property '${this.selectedCompareView}' from obsm["${columnName}"][${index}]`);
           }
           console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
           this.updateHexColors();
@@ -1668,30 +2084,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
   }
 
 
-  private renderLegend(): void {
-    // Remove any existing legend
-    this.svg.selectAll('.svg-legend').remove();
+  private renderLegend(containerName: string): void {
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
 
-    if (this.currentLegendType === 'continuous') {
-      // Continuous legend
-      const [min, max] = this.currentLegendDomain as number[];
-      const legendX = -100;
+    viewVariablesToUpdate.svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
+
+    if (viewVariablesToUpdate.getLegendType() === 'continuous') {
+      const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
+      const legendX = 0;
       const legendY = 50;
       const width = 250;
       const height = 30;
       const fontSize = 24;
       const padding = 15;
 
-      // Create gradient for continuous legend
-      const defs = this.svg.select('defs').empty()
-        ? this.svg.append('defs')
-        : this.svg.select('defs');
+      // Use standard <defs>
+      const defs = viewVariablesToUpdate.svg.select('defs').empty()
+        ? viewVariablesToUpdate.svg.append('defs')
+        : viewVariablesToUpdate.svg.select('defs');
 
-      defs.select('#svg-legend-gradient').remove();
+      defs.select(`#${viewVariablesToUpdate.legendGradientName}`).remove();
 
       const gradient = defs
         .append('linearGradient')
-        .attr('id', 'svg-legend-gradient')
+        .attr('id', viewVariablesToUpdate.legendGradientName)
         .attr('x1', '0%')
         .attr('x2', '100%')
         .attr('y1', '0%')
@@ -1704,20 +2120,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         gradient
           .append('stop')
           .attr('offset', `${t * 100}%`)
-          .attr('stop-color', this.continuousColorScale(value));
+          .attr('stop-color', viewVariablesToUpdate.continuous(value));
       }
 
-      const legendG = this.svg
+      const legendG = viewVariablesToUpdate.svg
         .append('g')
-        .attr('class', 'svg-legend')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      // Measure title text width for dynamic background
-      const titleText = this.translationService.translateSync(
-        this.colorByProperty,
-      );
-      //const titleText = this.colorByProperty;
-      const tempSvg = this.svg.append('g').style('opacity', 0);
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      // fallback if translation returns empty
+      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+
+      // measure sizes using svg_compare
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
       const titleWidth =
         tempSvg
           .append('text')
@@ -1727,8 +2143,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .node()
           ?.getBBox().width || 0;
 
-      // Measure min value
-      const minText = min.toFixed(2);
+      const minText = (min ?? 0).toFixed(2);
       const minWidth =
         tempSvg
           .append('text')
@@ -1737,8 +2152,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .node()
           ?.getBBox().width || 0;
 
-      // Measure max value
-      const maxText = max.toFixed(2);
+      const maxText = (max ?? 0).toFixed(2);
       const maxWidth =
         tempSvg
           .append('text')
@@ -1749,17 +2163,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
 
       tempSvg.remove();
 
-      // Calculate required dimensions
-      const textHeight = fontSize * 1.2; // Approximate text height
-      const requiredWidth = Math.max(
-        width,
-        titleWidth,
-        minWidth + maxWidth + 20,
-      );
+      const textHeight = fontSize * 1.2;
+      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
       const bgWidth = requiredWidth + padding * 2;
       const bgHeight = height + textHeight * 2 + padding * 3;
 
-      // Background
       legendG
         .append('rect')
         .attr('x', -padding)
@@ -1771,14 +2179,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .attr('stroke-width', 1)
         .attr('rx', 5);
 
-      // Gradient rectangle
       legendG
         .append('rect')
         .attr('x', (bgWidth - width) / 2 - padding)
         .attr('y', 0)
         .attr('width', width)
         .attr('height', height)
-        .style('fill', 'url(#svg-legend-gradient)')
+        .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
         .attr('stroke', '#ccc')
         .attr('stroke-width', 1)
         .attr('rx', 3);
@@ -1803,19 +2210,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .style('fill', '#333')
         .text(maxText);
 
-      // Title
+      // Title (compare) — position inside background with padding so it's not clipped
+      const titleY = -padding + Math.round(fontSize / 2);
       legendG
         .append('text')
         .attr('x', bgWidth / 2 - padding)
-        .attr('y', -5)
+        .attr('y', titleY)
         .attr('text-anchor', 'middle')
         .style('font-size', `${fontSize}px`)
         .style('font-weight', 'bold')
         .style('fill', '#333')
-        .text(titleText);
+        .text(legendTitle);
+
     } else {
-      // Categorical legend
-      const categories = this.currentLegendDomain as string[];
+      // Categorical legend for compare view
+      const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
       categories.sort();
       const legendX = -100;
       const legendY = 10;
@@ -1825,14 +2234,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
       const fontSize = 24;
       const titlePadding = 15;
 
-      // Create temporary text elements to measure actual width
-      const tempSvg = this.svg.append('g').style('opacity', 0);
-
-      // Measure title text
-      //const titleText = this.colorByProperty;
-      const titleText = this.translationService.translateSync(
-        this.colorByProperty,
-      );
+      // Measure using svg_compare
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
       const titleWidth =
         tempSvg
           .append('text')
@@ -1842,7 +2247,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .node()
           ?.getBBox().width || 0;
 
-      // Measure category text widths
       const textNodes = tempSvg
         .selectAll('text')
         .data(categories)
@@ -1851,39 +2255,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .text((d) => d)
         .style('font-size', `${fontSize}px`);
 
-      const maxTextWidth = Math.max(
-        ...textNodes
-          .nodes()
-          .map((node) => (node as SVGGraphicsElement).getBBox().width),
-      );
+      const maxTextWidth = categories.length
+        ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
+        : 0;
       tempSvg.remove();
 
       const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
+      const backgroundWidth = itemWidth + 20;
+      const titleHeight = fontSize * 1.2 + titlePadding;
 
-      const legendG = this.svg
+      const legendG = viewVariablesToUpdate.svg
         .append('g')
-        .attr('class', 'svg-legend')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      // Calculate title height and total background height
-      const titleHeight = fontSize + titlePadding;
-      const backgroundHeight =
-        categories.length * itemHeight + 20 + titleHeight;
-      const backgroundWidth = itemWidth + 20;
-
-      // Background - positioned to include title space
-      legendG
-        .append('rect')
-        .attr('x', -10)
-        .attr('y', -10)
-        .attr('width', backgroundWidth)
-        .attr('height', backgroundHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 5);
-
-      // Add title
+      // Title (categorical compare)
       legendG
         .append('text')
         .attr('x', backgroundWidth / 2 - 10)
@@ -1893,27 +2279,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         .style('font-size', `${fontSize}px`)
         .style('font-weight', 'bold')
         .style('fill', '#333')
-        .text(titleText);
+        .text(legendTitleCat);
 
       categories.forEach((cat, i) => {
         const yPosition = i * itemHeight + titleHeight;
-        const legendItem = legendG
-          .append('g')
-          .attr('transform', `translate(0, ${yPosition})`);
-
-        // Color rectangle - centered vertically within the item height
+        const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
         const rectY = (itemHeight - rectHeight) / 2;
         legendItem
           .append('rect')
           .attr('y', rectY)
           .attr('width', rectWidth)
           .attr('height', rectHeight)
-          .style('fill', this.colorScale(cat))
+          .style('fill', this.colorScaleCompare(cat))
           .attr('stroke', '#333')
           .attr('stroke-width', 0.5)
           .attr('rx', 2);
-
-        // Text - aligned with the center of the rectangle
         const textY = rectY + rectHeight / 2;
         legendItem
           .append('text')
@@ -1923,8 +2303,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
           .style('font-size', `${fontSize}px`)
           .style('fill', '#333')
           .text(cat);
-
-        // Add tooltip for full text
         legendItem.append('title').text(cat);
       });
     }
@@ -1978,4 +2356,8 @@ interface spongeRegGraphConnection {
   source: string;
   target: string;
   p_adjusted: number;
+}
+
+interface TableData {
+  [columnHeader: string]: { [rowHeader: string]: string | number };
 }

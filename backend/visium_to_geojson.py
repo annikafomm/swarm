@@ -1,6 +1,5 @@
 import argparse
 import os
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -116,6 +115,7 @@ class Hexagons:
         if expressions.size == 1:
             return dtype(expressions.flatten()[0])
 
+
     def to_geojson(self):
         hexagons = {"type": "FeatureCollection", "features": []}
 
@@ -168,13 +168,17 @@ class Hexagons:
                 self.centers[barcode] if barcode in self.centers else None
             )
 
+
             for score in genie3_score_names + sponge_score_names:
                 if score in self.anndata.obsm:
                     first_col = self.anndata.obsm[score].columns[0]
-                    property_dict["regulatory_scores"] = self.anndata.obsm[
+                    property_dict['regulatory_scores'] = self.anndata.obsm[
                         score
                     ].loc[barcode, first_col]
                     break
+
+
+
 
             score_mappings = {
                 "ligand_receptor_relationships": (
@@ -318,6 +322,12 @@ if __name__ == "__main__":
     for global_score in global_scores_sort_keys:
         if global_score in spatial_data.uns:
             meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
+        elif global_score in hexagons.global_scores:
+            meta_dict[global_score] = hexagons.global_scores[global_score]
+
+    meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
+    meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
+
 
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
