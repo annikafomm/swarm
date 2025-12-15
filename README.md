@@ -13,6 +13,10 @@ https://docs.google.com/spreadsheets/d/1RH_lB4OEUEgZMIYu59_RTwcPmkC-ciyApEnlhvPS
 
 ![Overview](overview.png)
 
+## Before Starting SWARM
+### Example Data
+Use the download_example_data.sh Script to autimatically download and move the example data to the right places.
+
 ## Backend
 
 Start the backend development server:
