@@ -24,7 +24,6 @@ export class FormPageComponent {
   spatialFile?: File;
   singleCellFile?: File;
   multiomeFile?: File;
-  multiomeFile?: File;
   // network scores uploads (shared)
   genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
   spongeNAFile?: File;           // SPONGE networkanalysis
@@ -67,12 +66,6 @@ export class FormPageComponent {
       //   normalizeSingleCell: [false],
       // }),
 
-      useTangramMultiome: [false],
-      // tangram: this.fb.group({
-      //   filterSingleCell: [false],
-      //   normalizeSingleCell: [false],
-      // }),
-
       // score toggles
       scores: this.fb.group({
         networkScores: [false],
@@ -81,15 +74,9 @@ export class FormPageComponent {
         chromVAR: [false],
         diffMotifActivity: [false],
         motifEnrichment: [false],
-        FootprintingBias: [false]
-        chromVAR: [false],
-        diffMotifActivity: [false],
-        motifEnrichment: [false],
-        FootprintingBias: [false]
+        FootprintingBias: [false],
       }),
       genome: ['hg38'],
-      genome: ['hg38'],
-
       // network scores options
       network: this.fb.group({
         algorithms: this.fb.group({
@@ -173,28 +160,6 @@ export class FormPageComponent {
           // add fields if needed
         //}),
       }),
-
-      // chromVAR options
-      chromVAR: this.fb.group({
-        methods: this.fb.group({
-          moranI: [false],
-          gearyC: [false],
-          differential_motif_activity: [false],
-        }),
-        moranI: this.fb.group({
-          nPerms: [1000],
-          tails: ['oneTailed'],
-          corrMethod: ['fdr_bh'],
-        }),
-        gearyC: this.fb.group({
-          nPerms: [1000],
-          tails: ['oneTailed'],
-          corrMethod: ['fdr_bh'],
-        }),
-        //differential_motif_activity: this.fb.group({
-          // add fields if needed
-        //}),
-      }),
     });
 
     // clear single-cell if Tangram toggled off
@@ -240,14 +205,8 @@ export class FormPageComponent {
   useTangramMultiomeChecked(): boolean {
     return !!this.form.get('useTangramMultiome')?.value;
   }
-  useTangramMultiomeChecked(): boolean {
-    return !!this.form.get('useTangramMultiome')?.value;
-  }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
-  }
-  chromVARMethodIs(m: string): boolean {
-    return this.form.get('chromVAR.method')?.value === m;
   }
   chromVARMethodIs(m: string): boolean {
     return this.form.get('chromVAR.method')?.value === m;
@@ -262,15 +221,13 @@ export class FormPageComponent {
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
       'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
-      'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
-    const input = evt.target as HTMLInputElement;
+    const input = evt.target as HTMLInputElement
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
 
     switch (type) {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
-      case 'multiome': this.multiomeFile = file; break;
       case 'multiome': this.multiomeFile = file; break;
       case 'genie3Net': this.genie3NetFile = file; break;
       case 'spongeNA': this.spongeNAFile = file; break;
@@ -304,9 +261,6 @@ export class FormPageComponent {
     const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
     const multiomeOK = !needsMultiome || !!this.multiomeFile;
 
-    const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
-    const multiomeOK = !needsMultiome || !!this.multiomeFile;
-
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
 
@@ -328,7 +282,6 @@ export class FormPageComponent {
     this.http.post<{ ok: boolean; json_url: string; json_filename: string; payload: any }>(
       '/api/upload',
       fd,
-      { observe: 'events', reportProgress: true, withCredentials: true }
       { observe: 'events', reportProgress: true, withCredentials: true }
     ).subscribe({
       next: (evt: HttpEvent<any>) => {
@@ -358,7 +311,7 @@ export class FormPageComponent {
             adataPath: body.output_files?.adataPath,
             genieFiltPath:  body.output_files?.genieFiltPath,
             spongeFiltPath: body.output_files?.spongeFiltPath,
-            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, 
+            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`,
           };
 
           console.log('New Paths', newPaths)
