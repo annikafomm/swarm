@@ -60,7 +60,7 @@ global_motif_analysis <- function(object, args, logfile) {
       stop("Unknown genome: ", args$genome, " (use hg38 or hg19/hg37)")
     }
     log_message("Adding Motifs ...", logfile, 2)
-    object <- add_jaspar2024_motifs(object, genome=genome)
+    object <- add_jaspar2024_motifs(object, out_path=outdir, genome=genome)
   }
 
   if (args$motif_enrichment){

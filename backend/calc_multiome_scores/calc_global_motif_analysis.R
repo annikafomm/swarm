@@ -28,14 +28,23 @@ library(ggplot2)
 #'   if they were not present already.
 add_jaspar2024_motifs <- function(
     object,
+    out_path,
     ATAC_assay = "peaks",
     species = "Homo sapiens",
-    genome = BSgenome.Hsapiens.UCSC.hg38){
+    genome = BSgenome.Hsapiens.UCSC.hg38
+    ){
     if (is.null(object[[ATAC_assay]]@motifs)){
         jaspar <- JASPAR2024()
         sq24 <- RSQLite::dbConnect(RSQLite::SQLite(), db(jaspar))
         pfm <- TFBSTools::getMatrixSet(sq24, list(species = species, collection = "CORE", all_versions = FALSE, matrixtype = "PFM"))
         object <- AddMotifs(object, genome = genome, pfm = pfm, assay=ATAC_assay)
+        motif_to_tf <- data.frame(
+          motif_id = vapply(pfm, TFBSTools::ID, character(1)),
+          TF       = vapply(pfm, TFBSTools::name, character(1)),
+          stringsAsFactors = FALSE
+        )
+        # save motif to tf data.frame
+        write.csv(motif_to_tf, file = file.path(out_path, "motif_to_tf.csv"), row.names = FALSE)
     }
     return(object)
 }
@@ -343,7 +352,7 @@ main <- function(in_path, out_path, add_motifs=TRUE){
     # add motifs
     # saved in object[["peaks"]]@motifs
     print("Adding motifs...")
-    object <- add_jaspar2024_motifs(object)
+    object <- add_jaspar2024_motifs(object, out_path)
 
     # find differentially accessible peaks for each ident
     idents <- levels(object)

@@ -23,6 +23,7 @@ sponge_score_names = [
 ]
 
 genewise_scores = ["moranI", "gearyC"]
+motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
 
 
 class Hexagons:
@@ -48,6 +49,7 @@ class Hexagons:
         self.scale = scale
         self.data_type = data_type
         self.motif_groups = motif_groups or {}
+        self.motif_names = list(anndata.uns["chromvar_motifs"])
         # mapping for case-insensitive gene lookups
         self.var_upper_to_name = {
             g.upper(): g for g in self.anndata.var_names
@@ -225,6 +227,16 @@ class Hexagons:
                     m.upper(): m for m in chromvar_df.columns
                 }
 
+                # total sum of all motifs
+                all_cols = [
+                    motif_upper_to_col.get(motif_name.upper())
+                    for motif_name in self.motif_names
+                ]
+                all_cols = [c for c in all_cols if c is not None]
+
+                total_sum = float(chromvar_df.loc[barcode, all_cols].sum()) if all_cols else 0.0
+                property_dict["chromvar_total_sum"] = total_sum
+
                 for group_name, motif_list in self.motif_groups.items():
                     cols_for_group = []
                     for motif_name in motif_list:
@@ -350,7 +362,6 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
-
     spatial_data = load_adata(args.adata)
 
     # Sort global liana scores by cosine similarity std
@@ -360,6 +371,8 @@ if __name__ == "__main__":
         "cell_comp_tf_activity_global_scores": "cosine_similarity_std",
         "moranI": "I",
         "gearyC": "C",
+        "chromvar_moranI": "I",
+        "chromvar_gearyC": "C",
     }
     for global_score, sort_key in global_scores_sort_keys.items():
         if global_score in spatial_data.uns:
@@ -398,6 +411,9 @@ if __name__ == "__main__":
         data_type=args.data_type,
         motif_groups=motif_groups,
     )
+
+    print("uns keys:", sorted([k for k in spatial_data.uns.keys()
+                          if "moran" in k.lower() or "geary" in k.lower()]))
 
     geojson_data = hexagons.to_geojson()
 

@@ -144,10 +144,10 @@
         <input type="checkbox" formControlName="chromVAR" />
         <span class="score-text">chromVAR</span>
       </label>
-      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+      <!-- <label *ngIf="useTangramMultiomeChecked()" class="score-option">
         <input type="checkbox" formControlName="diffMotifActivity" />
         <span class="score-text">differential chromVar motif Activity</span>
-      </label>
+      </label> -->
       <label *ngIf="useTangramMultiomeChecked()" class="score-option">
         <input type="checkbox" formControlName="motifEnrichment" />
         <span class="score-text">Motif Enrichment</span>
@@ -336,6 +336,89 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ChromVar — options (checkboxes) -->
+  <div *ngIf="form.get('scores.chromVAR')?.value" class="section" formGroupName="chromVAR">
+    <div class="section-title">ChromVAR — options</div>
+
+    <!-- Method checkboxes -->
+    <div class="checkbox-list" formGroupName="methods">
+      <label class="score-option">
+        <input type="checkbox" formControlName="moranI" />
+        <span class="score-text">MoranI</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="gearyC" />
+        <span class="score-text">GearyC</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="differential_motif_activity" />
+        <span class="score-text">Differential Motif Activity</span>
+      </label>
+
+    </div>
+
+    <!-- MoranI -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.moranI')?.value" formGroupName="moranI">
+      <h3> MoranI </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+      <label class="field-label">one-tailed or two-tailed</label>
+      <div class="select">
+        <select formControlName="tails">
+          <option value="oneTailed">one-tailed</option>
+          <option value="twoTailed">two-tailed</option>
+        </select>
+      </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
+    <!-- gearyC -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.gearyC')?.value" formGroupName="gearyC">
+      <h3> GearyC </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+      <label class="field-label">one-tailed or two-tailed</label>
+      <div class="select">
+        <select formControlName="tails">
+          <option value="oneTailed">one-tailed</option>
+          <option value="twoTailed">two-tailed</option>
+        </select>
+      </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
   </div>
 
   <!-- Squidpy — options (checkboxes, multiple methods) -->

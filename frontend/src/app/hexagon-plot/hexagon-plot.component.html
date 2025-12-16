@@ -507,6 +507,33 @@
           </div>
         </mat-tab>
 
+    <!-- BEGIN Add spatial correlation score table for chromvar scores -->
+    <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C">
+      <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+      <ng-template #moranI>
+        <h4>ChromVAR Moran's I</h4>
+        <app-table
+          [data]="this.meta['chromvar_moranI']"
+          [actionColumns]="['chromvar_total_sum']"
+          [features]="features"
+          [updateColumn]="'chromvar_total_sum'"
+          (featuresUpdated)="updateHexColors()">
+        </app-table>
+      </ng-template>
+
+      <ng-template #gearyC>
+        <h4>ChromVAR Geary's C</h4>
+        <app-table
+          [data]="this.meta['chromvar_gearyC']"
+          [actionColumns]="['chromvar_total_sum']"
+          [features]="features"
+          [updateColumn]="'chromvar_total_sum'"
+          (featuresUpdated)="updateHexColors()">
+        </app-table>
+      </ng-template>
+     </mat-tab>
+     <!-- END Add spatial correlation score table for chromvar scores -->
+
         <mat-tab label="Cell Composition TF Activity">
           <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
             <h4>Cell Composition TF Activity Global Scores</h4>
