@@ -138,6 +138,28 @@ export class FormPageComponent {
       liana: this.fb.group({
         compositionColumn: ['tangram_ct_pred'],
       }),
+
+      // chromVAR options
+      chromVAR: this.fb.group({
+        methods: this.fb.group({
+          moranI: [false],
+          gearyC: [false],
+          differential_motif_activity: [false],
+        }),
+        moranI: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        gearyC: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        //differential_motif_activity: this.fb.group({
+          // add fields if needed
+        //}),
+      }),
     });
 
     // clear single-cell if Tangram toggled off
@@ -185,6 +207,9 @@ export class FormPageComponent {
   }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
+  }
+  chromVARMethodIs(m: string): boolean {
+    return this.form.get('chromVAR.method')?.value === m;
   }
   hasTriadSelected(): boolean {
     const a = this.form.get('network.algorithms.aucell')?.value;
@@ -383,7 +408,7 @@ export class FormPageComponent {
         if (sq.moranI.nPerms !== null && sq.moranI.nPerms !== undefined && sq.moranI.nPerms !== '') {
           fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
         }
-        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
+        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {
@@ -391,7 +416,7 @@ export class FormPageComponent {
         if (sq.gearyC.nPerms !== null && sq.gearyC.nPerms !== undefined && sq.gearyC.nPerms !== '') {
           fd.append('squidpy_gearyC_n_perms', String(sq.gearyC.nPerms));
         }
-        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
+        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.tails));
         fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
       }
       if (m.centrality_score) {
@@ -421,6 +446,34 @@ export class FormPageComponent {
       if (this.lianaGenie3File)  fd.append('liana_genie3_network', this.lianaGenie3File);
       if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
     }
+
+    // --- chromVAR
+    if (scores.chromVAR) {
+      const cv = this.form.value.chromVAR;
+      const m = cv.methods;
+      if (m.moranI) {
+        fd.append('chromVar_moranI', 'true');
+        fd.append('chromVar_moranI_n_perms', String(cv.moranI.nPerms));
+        fd.append('chromVar_moranI_two_tailed', cv.moranI.tails ?? '');
+        fd.append('chromVar_moranI_corr_method', cv.moranI.corrMethod ?? '');
+      }
+      if (m.gearyC) {
+        fd.append('chromVar_gearyC', 'true');
+        fd.append('chromVar_gearyC_n_perms', String(cv.gearyC.nPerms));
+        fd.append('chromVar_gearyC_two_tailed', cv.gearyC.tails ?? '');
+        fd.append('chromVar_gearyC_corr_method', cv.gearyC.corrMethod ?? '');
+      }
+      if (m.differential_motif_activity) {
+        fd.append('chromVar_differential_motif_activity', 'true');
+        // add params if needed
+      }
+      // if (m.centrality_score) {
+      //   fd.append('squidpy_centrality_score', 'true');
+      //   fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
+      // }
+    }
+
+
 
     return fd;
   }

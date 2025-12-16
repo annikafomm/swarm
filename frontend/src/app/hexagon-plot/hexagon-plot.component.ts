@@ -276,12 +276,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy {
         // Group similar properties together
         const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
         const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
+        const chromvarKeys = ['chromvar_total_sum'];
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
           {
             key: 'Other', value: this.colorableProperties.filter(
-              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
             )
           },
         ];

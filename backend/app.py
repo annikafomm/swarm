@@ -85,9 +85,9 @@ def dict2params(param_dict):
                                 multiome_params_py.append("-chromvar")
                                 multiome_params_py.append("-moranI")
                                 multiome_params_py.append("-gearyC")
-                            case "differential_motif_activity":
-                                multiome_params.append("--differential_motif_activity")
-                                multiome_params_py.append("-differential_motif_activity")
+                            # case "differential_motif_activity":
+                            #     multiome_params.append("--differential_motif_activity")
+                            #     multiome_params_py.append("-differential_motif_activity")
                             case "motif_enrichment":
                                 multiome_params.append("--motif_enrichment")
                                 multiome_params_py.append("-motif_enrichment")
@@ -211,6 +211,38 @@ def dict2params(param_dict):
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_nhood")
                                         python_params.append(str(int(score_dict.get(param))))
+            case "chromVar":
+                for ckey in param_dict.get(key).keys():
+                    if (not ckey.endswith("_params")) and (param_dict.get(key).get(ckey)):
+                        match ckey:
+                            case "moranI":
+                                multiome_params_py.append("-moranI")
+                                score_dict = param_dict.get(key).get(f"{ckey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-n_perms_autocorr_mI")
+                                        multiome_params_py.append(str(int(score_dict.get(param))))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        multiome_params_py.append("-two_tailed_mI")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-corr_method_mI")
+                                        multiome_params_py.append(score_dict.get(param))
+                            case "gearyC":
+                                multiome_params_py.append("-gearyC")
+                                score_dict = param_dict.get(key).get(f"{ckey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-n_perms_autocorr_gC")
+                                        multiome_params_py.append(str(int(score_dict.get(param))))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        multiome_params_py.append("-two_tailed_gC")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-corr_method_gC")
+                                        multiome_params_py.append(score_dict.get(param))
+                            case "differential_motif_activity":
+                                multiome_params_py.append("-differential_motif_activity")
+                                multiome_params.append("--differential_motif_activity")
+
             case "liana":
                 for lkey in param_dict.get(key).keys():
                     if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
@@ -266,7 +298,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                             "-multiome"],
                             check=True)
 
-            subprocess.run(["python3", "../backend/calc_python_scores/calc_multiome_scores.py",
+            subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
                             "--dir", out_dir,
                             "--log", log_file] + multiome_params_py,
                             check=True)

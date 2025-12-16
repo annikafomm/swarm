@@ -376,7 +376,7 @@ async def upload(
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
     score_chromVar: bool = Form(False),
-    score_differential_motif_activity: bool = Form(False),
+    #score_differential_motif_activity: bool = Form(False),
     score_motif_enrichment: bool = Form(False),
     score_footprinting: bool = Form(False),
 
@@ -421,6 +421,19 @@ async def upload(
     squidpy_neighborhood_enrichment_cluster_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_library_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_n_perms: Optional[int] = Form(None),
+    # ChromVAR Flags + Params ---
+    chromVar_moranI: bool = Form(False),
+    chromVar_moranI_n_perms: Optional[int] = Form(None),
+    chromVar_moranI_two_tailed: Optional[str] = Form(None),   # "oneTailed" / "twoTailed"
+    chromVar_moranI_corr_method: Optional[str] = Form(None),
+
+    chromVar_gearyC: bool = Form(False),
+    chromVar_gearyC_n_perms: Optional[int] = Form(None),
+    chromVar_gearyC_two_tailed: Optional[str] = Form(None),
+    chromVar_gearyC_corr_method: Optional[str] = Form(None),
+
+    chromVar_differential_motif_activity: bool = Form(False),
+
     # LIANA
     liana_composition_column: Optional[str] = Form(None),
     liana_genie3_network: Optional[UploadFile] = File(None),
@@ -525,7 +538,7 @@ async def upload(
             "squidpy": score_squidpy,
             "liana_plus": score_liana_plus,
             "chromVar": score_chromVar,
-            "differential_motif_activity": score_differential_motif_activity,
+            #"differential_motif_activity": score_differential_motif_activity,
             "motif_enrichment": score_motif_enrichment,
             "footprinting": score_footprinting,
         },
@@ -581,6 +594,24 @@ async def upload(
                 "library_key": squidpy_neighborhood_enrichment_library_key,
                 "n_perms": squidpy_neighborhood_enrichment_n_perms,
             },
+        },
+        "chromVar": {
+            "moranI": chromVar_moranI,
+            "moranI_params": {
+                "n_perms": chromVar_moranI_n_perms,
+                # bool in downstream code if you like:
+                "two_tailed": (chromVar_moranI_two_tailed == "twoTailed"),
+                "tails": chromVar_moranI_two_tailed,  # keep raw if useful
+                "corr_method": chromVar_moranI_corr_method,
+            },
+            "gearyC": chromVar_gearyC,
+            "gearyC_params": {
+                "n_perms": chromVar_gearyC_n_perms,
+                "two_tailed": (chromVar_gearyC_two_tailed == "twoTailed"),
+                "tails": chromVar_gearyC_two_tailed,
+                "corr_method": chromVar_gearyC_corr_method,
+            },
+            "differential_motif_activity": chromVar_differential_motif_activity,
         },
         "liana": {
             "composition_column": liana_composition_column,
