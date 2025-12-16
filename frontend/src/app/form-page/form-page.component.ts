@@ -17,11 +17,13 @@ import { DEFAULT_PATHS } from '../constants';
 })
 export class FormPageComponent {
 
+
   form: FormGroup;
 
   // files
   spatialFile?: File;
   singleCellFile?: File;
+  multiomeFile?: File;
   multiomeFile?: File;
   // network scores uploads (shared)
   genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
@@ -65,6 +67,12 @@ export class FormPageComponent {
       //   normalizeSingleCell: [false],
       // }),
 
+      useTangramMultiome: [false],
+      // tangram: this.fb.group({
+      //   filterSingleCell: [false],
+      //   normalizeSingleCell: [false],
+      // }),
+
       // score toggles
       scores: this.fb.group({
         networkScores: [false],
@@ -74,7 +82,12 @@ export class FormPageComponent {
         diffMotifActivity: [false],
         motifEnrichment: [false],
         FootprintingBias: [false]
+        chromVAR: [false],
+        diffMotifActivity: [false],
+        motifEnrichment: [false],
+        FootprintingBias: [false]
       }),
+      genome: ['hg38'],
       genome: ['hg38'],
 
       // network scores options
@@ -160,6 +173,28 @@ export class FormPageComponent {
           // add fields if needed
         //}),
       }),
+
+      // chromVAR options
+      chromVAR: this.fb.group({
+        methods: this.fb.group({
+          moranI: [false],
+          gearyC: [false],
+          differential_motif_activity: [false],
+        }),
+        moranI: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        gearyC: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        //differential_motif_activity: this.fb.group({
+          // add fields if needed
+        //}),
+      }),
     });
 
     // clear single-cell if Tangram toggled off
@@ -205,8 +240,14 @@ export class FormPageComponent {
   useTangramMultiomeChecked(): boolean {
     return !!this.form.get('useTangramMultiome')?.value;
   }
+  useTangramMultiomeChecked(): boolean {
+    return !!this.form.get('useTangramMultiome')?.value;
+  }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
+  }
+  chromVARMethodIs(m: string): boolean {
+    return this.form.get('chromVAR.method')?.value === m;
   }
   chromVARMethodIs(m: string): boolean {
     return this.form.get('chromVAR.method')?.value === m;
@@ -221,6 +262,7 @@ export class FormPageComponent {
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
       'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
+      'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
     const input = evt.target as HTMLInputElement;
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
@@ -228,6 +270,7 @@ export class FormPageComponent {
     switch (type) {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
+      case 'multiome': this.multiomeFile = file; break;
       case 'multiome': this.multiomeFile = file; break;
       case 'genie3Net': this.genie3NetFile = file; break;
       case 'spongeNA': this.spongeNAFile = file; break;
@@ -261,6 +304,9 @@ export class FormPageComponent {
     const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
     const multiomeOK = !needsMultiome || !!this.multiomeFile;
 
+    const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
+    const multiomeOK = !needsMultiome || !!this.multiomeFile;
+
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
 
@@ -283,6 +329,7 @@ export class FormPageComponent {
       '/api/upload',
       fd,
       { observe: 'events', reportProgress: true, withCredentials: true }
+      { observe: 'events', reportProgress: true, withCredentials: true }
     ).subscribe({
       next: (evt: HttpEvent<any>) => {
         if (evt.type === HttpEventType.UploadProgress && evt.total) {
@@ -296,6 +343,7 @@ export class FormPageComponent {
           this.uploading = false;
 
           console.log('Upload finished, output_files', body.output_files)
+
 
           const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
           const parts = geojsonPath?.split('/');
@@ -333,6 +381,7 @@ export class FormPageComponent {
     fd.append('dataset', this.form.value.dataset);
 
 
+
     // --- spatial
     if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
     fd.append('spatial_normalization', String(this.form.value.spatialOptions.normalization));
@@ -352,11 +401,24 @@ export class FormPageComponent {
       fd.append('multiome_rds', this.multiomeFile);
     }
 
+     // --- multiome
+    fd.append('use_multiome', String(this.form.value.useTangramMultiome));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('multiome_rds', this.multiomeFile);
+    }
+
     // --- scores toggles
     const scores = this.form.value.scores;
     fd.append('score_network', String(scores.networkScores));
     fd.append('score_squidpy', String(scores.squidpy));
     fd.append('score_liana_plus', String(scores.lianaPlus));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('score_chromVar', String(scores.chromVAR));
+      fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
+      fd.append('score_motifEnrichment', String(scores.motifEnrichment));
+      fd.append('score_FootprintingBias', String(scores.FootprintingBias));
+      fd.append('genome', this.form.value.genome);
+    }
     if (this.form.value.useTangramMultiome && this.multiomeFile) {
       fd.append('score_chromVar', String(scores.chromVAR));
       fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
@@ -408,6 +470,7 @@ export class FormPageComponent {
           fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
         }
         fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
+        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {
@@ -415,6 +478,7 @@ export class FormPageComponent {
         if (sq.gearyC.nPerms !== null && sq.gearyC.nPerms !== undefined && sq.gearyC.nPerms !== '') {
           fd.append('squidpy_gearyC_n_perms', String(sq.gearyC.nPerms));
         }
+        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.tails));
         fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.tails));
         fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
       }
@@ -445,6 +509,34 @@ export class FormPageComponent {
       if (this.lianaGenie3File)  fd.append('liana_genie3_network', this.lianaGenie3File);
       if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
     }
+
+    // --- chromVAR
+    if (scores.chromVAR) {
+      const cv = this.form.value.chromVAR;
+      const m = cv.methods;
+      if (m.moranI) {
+        fd.append('chromVar_moranI', 'true');
+        fd.append('chromVar_moranI_n_perms', String(cv.moranI.nPerms));
+        fd.append('chromVar_moranI_two_tailed', cv.moranI.tails ?? '');
+        fd.append('chromVar_moranI_corr_method', cv.moranI.corrMethod ?? '');
+      }
+      if (m.gearyC) {
+        fd.append('chromVar_gearyC', 'true');
+        fd.append('chromVar_gearyC_n_perms', String(cv.gearyC.nPerms));
+        fd.append('chromVar_gearyC_two_tailed', cv.gearyC.tails ?? '');
+        fd.append('chromVar_gearyC_corr_method', cv.gearyC.corrMethod ?? '');
+      }
+      if (m.differential_motif_activity) {
+        fd.append('chromVar_differential_motif_activity', 'true');
+        // add params if needed
+      }
+      // if (m.centrality_score) {
+      //   fd.append('squidpy_centrality_score', 'true');
+      //   fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
+      // }
+    }
+
+
 
     // --- chromVAR
     if (scores.chromVAR) {
