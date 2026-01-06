@@ -11,7 +11,7 @@
       <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
       <div class="row-container">
-        <mat-form-field appearance="fill"> <mat-label>Color hexagons by</mat-label>
+        <mat-form-field appearance="fill" id="color-by-property"> <mat-label>Color hexagons by</mat-label>
           <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop">
@@ -667,7 +667,7 @@
           </mat-tab>
 
           <mat-tab label="Compare - Regulatory Scores">
-            <div *ngIf="colorByProperty === 'regulatory_scores'">
+            <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
               <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                 [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
@@ -678,7 +678,7 @@
                 (featuresUpdated)="updateHexColors()"></app-table>
             </div>
 
-            <div *ngIf="colorByProperty === 'regulatory_scores' && selectedCellCompare">
+            <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
             <h4> Cell Regulatory Scores</h4>
 
             <div class="cell-reg-scores">
@@ -707,19 +707,19 @@
           </mat-tab>
 
           <mat-tab label="Compare - Gene Expression">
-            <div *ngIf="colorByProperty === 'gene_expression'">
+            <div *ngIf="selectedCompareView === 'gene_expression'">
               <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
               <ng-template #moranI>
                 <h4>Moran's I</h4>
                 <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
 
               <ng-template #gearyC>
                 <h4>Geary's C</h4>
                 <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
             </div>
           </mat-tab>
@@ -818,14 +818,14 @@
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
 
               <ng-template #nmf_scores>
                 <h4>Ligand-Receptor NMF Scores</h4>
                 <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                   [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
             </div>
           </mat-tab>
@@ -837,7 +837,7 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
 
@@ -846,7 +846,7 @@
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.meta['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-                [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
 
@@ -856,7 +856,7 @@
               <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathwayActivity'" (featuresUpdated)="updateHexColors()"></app-table>
+        ]" [features]="features" [updateColumn]="'pathwayActivity'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
         </mat-tab-group>

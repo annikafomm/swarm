@@ -6,6 +6,7 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 import { PathsService } from './paths.service';
+import Shepherd from 'shepherd.js';
 
 @Component({
   selector: 'app-root',
@@ -25,7 +26,7 @@ export class AppComponent implements OnInit {
     private http: HttpClient,
     public sessionService: SessionService,
     private pathsService: PathsService,
-  ) {}
+  ) { }
 
   ngOnInit() {
     this.sessionService.initSession();
@@ -61,6 +62,90 @@ export class AppComponent implements OnInit {
 
   public openForm(): void {
     this.formsOpen = true;
+  }
+
+  public basicTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom',
+        scrollTo: true
+      }
+    });
+
+    tour.addStep({
+      id: 'hexagon-plot-intro',
+      text: 'Welcome to SWARM! In this tutorial, we will guide you through the main features of the tool.',
+      buttons: [
+        { text: 'Next', action: tour.next }
+      ]
+    });
+
+    tour.addStep({
+      id: 'main-view',
+      text:
+        'This is the main view visualizing the spatial transcriptomics data as a hexagon plot. It allows you to explore your data interactively.' +
+        ' Depending on the selected view, different properties of the cells are represented by the colors in the graph as also indicated by the legend in the top left corner.' +
+        ' You can click individual hexagons to get more information about the cells or spots they represent.' +
+        ' Additionally you can use the zoom and pan functionality to navigate through the plot.',
+      attachTo: { element: '#hexbin', on: 'bottom' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next }
+      ]
+    });
+
+    tour.addStep({
+      id: 'selectViews',
+      text:
+        'You can select different views to visualize various aspects of your data.' +
+        ' Use the tabs to switch between views such as gene expression, cell type, regulatory scores and LIANA+ scores.' +
+        ' Each view provides unique insights into the spatial organization and characteristics of your data.',
+      attachTo: {element: '.metadata-tables', on: 'left' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next }
+      ]
+    });
+
+    tour.addStep({
+      id: 'download-menu',
+      text:
+        'The download menu allows you to export the current visualization in various formats such as SVG, PNG, GeoJSON, and AnnData.' +
+        ' This enables you to save your results and share them with others or use them for further analysis.',
+      attachTo: { element: 'app-download-menu', on: 'left' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next }
+      ]
+    });
+
+    tour.addStep({
+      id: 'upload-data',
+      text:
+        'To upload new data, click on the "Upload data" button in the top navigation bar.' +
+        ' This will open a form where you can select and upload your spatial transcriptomics data files.' +
+        ' Follow the instructions in the form to ensure successful data upload and processing.',
+      attachTo: { element: '.top-bar button', on: 'bottom' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next }
+      ]
+    });
+
+    tour.addStep({
+      id: 'info-page',
+      text:
+        'For more information about SWARM, including documentation and support resources, click on the "Info" button in the top navigation bar.' +
+        ' This will take you to the info page where you can find helpful materials to assist you in using the tool effectively.',
+      attachTo: { element: '.top-bar .info-btn', on: 'bottom' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Done', action: tour.complete }
+      ]
+    });
+
+    tour.start();
   }
 
   @HostListener('window:beforeunload', ['$event'])
