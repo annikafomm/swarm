@@ -5,9 +5,11 @@ from scipy.stats import median_abs_deviation
 
 # filtering functions
 
-def small_filtering(adata, data_type):
+def small_filtering(adata, data_type, dataset):
     if data_type == "st":
-        adata = adata[adata.obs["in_tissue"] == True, :]
+        if dataset == "visium":
+            adata = adata[adata.obs["in_tissue"] == True, :]
+            print(f"Spots after removing off-tissue spots: {adata.n_obs}")
         mt_threshold = 20
         counts_threshold = 10 # AI: For spatial transcriptomics (like Xenium) typical values are 10–100.
     elif data_type == "sc":
@@ -26,9 +28,9 @@ def small_filtering(adata, data_type):
     sc.pp.filter_cells(adata, min_counts=counts_threshold)
 
 
-def normalize(adata, datatype):
+def normalize(adata, dataset):
     # TODO: normalize differently for Xenium
-    if datatype == "visium":
+    if dataset == "visium":
         sc.pp.normalize_total(adata, target_sum=1e4, inplace=True) # Normalize counts per cell
         sc.pp.log1p(adata) # Logarithmize
         sc.pp.pca(adata) # do principal component analysis

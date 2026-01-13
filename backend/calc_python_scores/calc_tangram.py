@@ -51,7 +51,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
 
 def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu'):
     adata_sp_copy = ad_sp.copy()
-    adata_sc_copy = ad_sc.copy()  
+    adata_sc_copy = ad_sc.copy()
 
     # Gene selection
     genes = select_genes(ad_sc, ad_sp, gene_selection_mode, cell_label)
@@ -68,19 +68,19 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
         ad_ge = tg.project_genes(ad_map, ad_sc)
     elif device_choice == "cpu":
         print("[mapping] Using CPU with mode='clusters' and no cluster_label.")
-        ad_map = tg.map_cells_to_space(ad_sc, ad_sp, mode="clusters", device="cpu", cluster_label=cell_label)
+        ad_map = tg.map_cells_to_space(ad_sc, ad_sp, mode="clusters", device="cpu", cluster_label=cell_label, num_epochs=200)
         ad_ge = tg.project_genes(ad_map, ad_sc, cluster_label=cell_label)
     else:
         raise ValueError("Invalid device choice. Use 'cpu' or 'gpu'.")
 
     # Project gene expression and cell annotations
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
-    
+
     ad_ge.obsm['spatial'] = adata_sp_copy.obsm['spatial']
     ad_ge.uns['spatial'] = adata_sp_copy.uns['spatial']
 
     if (ensembl_col != "" and feature_col != "") and (ensembl_col in adata_sc_copy.var.columns and feature_col in adata_sc_copy.var.columns):
-        
+
         # Create mapping dictionaries with uppercase gene names for case-insensitive matching
         ensembl_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[ensembl_col]))
         feature_map = dict(zip([x.upper() for x in adata_sc_copy.var_names], adata_sc_copy.var[feature_col]))
@@ -93,4 +93,41 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
     print(f"[done] using label '{cell_label}'.")
 
     return(ad_ge)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sc_path", required=True, help="Pfad zur Single-Cell h5ad")
+    parser.add_argument("--sp_path", required=True, help="Pfad zur Spatial h5ad")
+    parser.add_argument("--out_path", required=True, help="Pfad für Ausgabe-h5ad (Tangram)")
+    parser.add_argument("--gene_selection_mode", default=None, help="ctg/hvg/spapros/svg/None")
+    parser.add_argument("--cell_label", default="cell_type")
+    parser.add_argument("--ensembl_col", default="")
+    parser.add_argument("--feature_col", default="")
+    parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"])
+
+    args = parser.parse_args()
+
+    # Daten laden
+    print("[tangram_cli] Lade Single-Cell AnnData:", args.sc_path)
+    ad_sc = sc.read_h5ad(args.sc_path)
+
+    print("[tangram_cli] Lade Spatial AnnData:", args.sp_path)
+    ad_sp = sc.read_h5ad(args.sp_path)
+
+    # Tangram ausführen
+    ad_ge = run_tangram(
+        ad_sc,
+        ad_sp,
+        gene_selection_mode=args.gene_selection_mode,
+        cell_label=args.cell_label,
+        ensembl_col=args.ensembl_col,
+        feature_col=args.feature_col,
+        device_choice=args.device,
+    )
+
+    # Ergebnis speichern
+    print("[tangram_cli] Schreibe Ergebnis nach:", args.out_path)
+    ad_ge.write_h5ad(args.out_path)
+    print("[tangram_cli] Fertig.")
+
 

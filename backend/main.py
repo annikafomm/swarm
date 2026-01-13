@@ -77,6 +77,13 @@ class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+class GeneSelectionMode(str, Enum):
+    ctg = "ctg"
+    hvg = "hvg"
+    spapros = "spapros"
+    svg = "svg"
+    none = "None"
+
 
 class Method(str, Enum):
     Genie3 = "Genie3"
@@ -256,6 +263,29 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
             )
 
     return adata
+
+GRID_PREFIX = "grid_"
+
+def strip_grid_prefix_dict(d: dict, prefix: str = GRID_PREFIX) -> dict:
+    out = {}
+    for k, v in d.items():
+        if k.startswith(prefix):
+            out[k[len(prefix):]] = v
+        else:
+            out[k] = v
+    return out
+
+def prefer_unprefixed_then_grid(adata, key: str, prefix: str = GRID_PREFIX) -> str | None:
+    """
+    Return the key that exists: prefer key, else prefix+key, else None
+    """
+    if key in adata.obs.columns:
+        return key
+    k2 = f"{prefix}{key}"
+    if k2 in adata.obs.columns:
+        return k2
+    return None
+
 
 def _sanitize_filename(name: str) -> str:
     """
@@ -470,6 +500,7 @@ async def upload(
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
+    gene_selection_mode: Optional[GeneSelectionMode] = Form(None),
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
@@ -563,9 +594,11 @@ async def upload(
         "files": saved_files,
         "tangram": {
             "use": use_tangram,
-            # Dateien/Parameter nur füllen, wenn Tangram aktiv:
             "filtering": singlecell_filtering if use_tangram else None,
             "normalization": singlecell_normalization if use_tangram else None,
+            "gene_selection_mode": (
+                gene_selection_mode.value if (use_tangram and gene_selection_mode) else None
+            ),
         },
         "scores": {
             "network": score_network,
@@ -631,56 +664,57 @@ async def upload(
     # TODO call visium_to_geojson
     out_dir = await calculate_scores_helper(job_dir, payload)
 
-    adata_path = None
-    tangram_adata_path = None
     out_files = {}
+    adata_path = None
 
+    # 1. Wenn Scores da sind → st_scores.h5ad nutzen
     if out_dir is not None:
         print(f"Output directory: {out_dir}")
+        for filename in os.listdir(out_dir):
+            if filename.endswith("xenium_cells_with_grid_scores.h5ad"):
+                adata_path = os.path.join(out_dir, filename)
+                break
+            if filename.endswith("st_scores.h5ad"):
+                adata_path = os.path.join(out_dir, filename)
 
-        # Search for h5ad files recursively in case they're in subdirectories
-        for root, dirs, files in os.walk(out_dir):
-            for filename in files:
-                if filename.endswith("st_scores.h5ad"):
-                    adata_path = os.path.join(root, filename)
-                    print(f"Found adata: {adata_path}")
-                if filename.endswith("tg_scores.h5ad"):
-                    tangram_adata_path = os.path.join(root, filename)
-                    print(f"Found tangram adata: {tangram_adata_path}")
 
-        # Create geojson from adata if found
-        if adata_path is not None:
-            # Create hexagons.geojson in the job_dir (root), not in nested dir
-            hexagon_output = os.path.join(job_dir, "hexagons.geojson")
-            out_files["adataPath"] = adata_path
+    # 2. Wenn keine Scores → benutze das originale Upload-h5ad
+    if adata_path is None:
+        adata_path = saved_files.get("spatial_h5ad")
 
-            data_type = dataset.value.lower()
-            subprocess.run(
-                [
-                    "python",
-                    "../backend/visium_to_geojson.py",
-                    "--adata",
-                    adata_path,
-                    "--outpath",
-                    os.path.join(out_dir, "hexagons.geojson"),
-                    "--data_type",
-                    data_type,
-                ]
-            )
-            out_files["geojson_path"] = hexagon_output
-            print(f"Created geojson at: {hexagon_output}")
+    # 3. Falls out_dir None ist → benutze job_dir (kein neues Verzeichnis!)
+    if out_dir is None:
+        out_dir = job_dir
 
-        # Look for network files in both the output dir and subdirectories
-        for root, dirs, files in os.walk(out_dir):
-            for filename in files:
-                if filename == "genie_network_filtered_st.csv":
-                    out_files["genie_network_path"] = os.path.join(root, filename)
-                    print(f"Found genie network: {out_files['genie_network_path']}")
-                if filename == "sponge_network_filtered_st.csv":
-                    out_files["sponge_network_path"] = os.path.join(root, filename)
-                    print(f"Found sponge network: {out_files['sponge_network_path']}")
+    # 4. Jetzt GeoJSON erzeugen (immer!)
+    if adata_path is not None:
+        out_files["adataPath"] = adata_path
 
-        payload["output_files"] = out_files
+        data_type = dataset.value.lower()
+
+        subprocess.run(
+            [
+                "python",
+                "../backend/visium_to_geojson.py",
+                "--adata",
+                adata_path,
+                "--outpath",
+                os.path.join(out_dir, "hexagons.geojson"),
+                "--data_type",
+                data_type,
+            ]
+        )
+        out_files["geojsonPath"] = os.path.join(out_dir, "hexagons.geojson")
+
+    # zusätzliche Outputs (falls vorhanden)
+    if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
+        out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
+
+    if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
+        out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+
+    payload["output_files"] = out_files
+
 
         # Only register if we have an adata file
         if adata_path is not None:
@@ -794,7 +828,7 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     """
-    file_path = BASE_UPLOAD_DIR / Path(subdir) / filename
+    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / filename
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")

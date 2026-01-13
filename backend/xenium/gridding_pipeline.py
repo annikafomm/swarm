@@ -1,5 +1,3 @@
-# xenium/gridding_xenium.py
-
 from __future__ import annotations
 
 import os
@@ -80,7 +78,6 @@ def gridding_xenium(
     Macht aus Xenium-Zelldaten ein Spot-Level-Grid mit stlearn.
     """
     _set_seed(seed)
-    st.settings.set_figure_params(dpi=120)
 
     # Wenn kein Cluster-Label vorhanden: Louvain rechnen
     if cluster_key not in adata.obs:
@@ -92,8 +89,6 @@ def gridding_xenium(
             key_added=cluster_key,
         )
 
-    # Normalisierung
-    st.pp.normalize_total(adata, target_sum=target_sum)
 
     # Grid erzeugen
     grid = st.tl.cci.grid(

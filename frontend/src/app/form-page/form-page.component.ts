@@ -67,6 +67,7 @@ export class FormPageComponent {
       tangram: this.fb.group({
         filterSingleCell: [false],
         normalizeSingleCell: [false],
+        geneSelectionMode: ['None'],
       }),
 
       // score toggles
@@ -146,6 +147,7 @@ export class FormPageComponent {
         this.form.get('tangram')!.reset({
           filterSingleCell: false,
           normalizeSingleCell: false,
+          geneSelectionMode: 'None',
         });
       }
     });
@@ -272,9 +274,29 @@ export class FormPageComponent {
           this.uploading = false;
           this.resultJsonUrl = body.json_url || null;
           this.serverPayload = body.payload || null;
-
           this.dataSetService.loadAvailableDatasets();  // Refresh dataset list to include any new uploaded datasets
 
+          console.log('Upload finished, output_files', body.output_files)
+
+          const geojsonPath = body.output_files?.geojsonPath;
+          const parts = geojsonPath?.split('/');
+          const user = parts?.at(-3);
+          const subdir = parts?.at(-2);
+          const filename = parts?.at(-1);
+
+          console.log('filepath', geojsonPath)
+
+          // --- update paths here ---
+          const newPaths = {
+            adataPath: body.output_files?.adataPath,
+            genieFiltPath:  body.output_files?.genieFiltPath,
+            spongeFiltPath: body.output_files?.spongeFiltPath,
+            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`,
+          };
+
+          console.log('New Paths', newPaths)
+
+          this.pathsService.updatePaths(newPaths);
         }
       },
       error: (err) => {
@@ -302,6 +324,8 @@ export class FormPageComponent {
       fd.append('single_cell_h5ad', this.singleCellFile);
       fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
       fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+      const mode = this.form.value.tangram?.geneSelectionMode ?? 'None';
+      fd.append('gene_selection_mode', String(mode));
     }
 
     // --- scores toggles
@@ -402,7 +426,7 @@ export class FormPageComponent {
       dataset: 'Visium',
       spatialOptions: { normalization: false, filtering: false },
       useTangram: false,
-      tangram: { filterSingleCell: false, normalizeSingleCell: false },
+      tangram: { filterSingleCell: false, normalizeSingleCell: false, geneSelectionMode: 'None' },
       scores: { networkScores: false, squidpy: false, lianaPlus: false },
       network: {
         algorithms: { viper: false, aucell: false, gsva: false, ssgsea: false },

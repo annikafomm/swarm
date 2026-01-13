@@ -6,7 +6,7 @@
 
 <form [formGroup]="form" (ngSubmit)="onSubmit()" class="panel">
 
-  <!-- Email (required) -->
+  <!-- Email  -->
   <div class="section">
     <div class="field">
       <label class="field-label" for="email">
@@ -92,6 +92,19 @@
 
       <div class="hint" *ngIf="form.get('useTangram')?.value && !singleCellFile" style="margin-top:6px;">
         Please upload a single-cell file (required when Tangram is enabled).
+      </div>
+      
+      <div class="section" style="margin-top:10px;">
+        <label>Gene selection mode:</label>
+        <div class="select">
+          <select formControlName="geneSelectionMode">
+            <option value="None">None</option>
+            <option value="ctg">ctg</option>
+            <option value="hvg">hvg</option>
+            <option value="spapros">spapros</option>
+            <option value="svg">svg</option>
+          </select>
+        </div>
       </div>
     </div>
   </div>
