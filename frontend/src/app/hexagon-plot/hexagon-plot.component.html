@@ -66,6 +66,7 @@
           {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
         </button>
       </div>
+
     </div>
 
     <div class="metadata-tables-container">
@@ -512,9 +513,17 @@
       <div *ngIf="showMoranI; then moranI; else gearyC"></div>
       <ng-template #moranI>
         <h4>ChromVAR Moran's I</h4>
+        <!-- <div *ngIf="colorByProperty === 'chromvar_total_sum'">
+        <button type="button" class="basic-button"
+          (click)="showMoranI = showGearyC">
+          Show
+          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
+        </button>
+        </div> -->
+        <!-- [attr.aria-pressed]="showMoranI" -->
         <app-table
           [data]="this.meta['chromvar_moranI']"
-          [actionColumns]="['chromvar_total_sum']"
+          [actionColumns]="['chromvar_spot_scores']"
           [features]="features"
           [updateColumn]="'chromvar_total_sum'"
           (featuresUpdated)="updateHexColors()">
@@ -525,7 +534,7 @@
         <h4>ChromVAR Geary's C</h4>
         <app-table
           [data]="this.meta['chromvar_gearyC']"
-          [actionColumns]="['chromvar_total_sum']"
+          [actionColumns]="['chromvar_spot_scores']"
           [features]="features"
           [updateColumn]="'chromvar_total_sum'"
           (featuresUpdated)="updateHexColors()">

@@ -46,9 +46,14 @@
             {{ displayNumeric(row[col]) }}
           </td>
           <td *ngFor="let action of actionColumns" class="action-col">
-            <button class="btn btn-pill" (click)="fetchAndUpdate(action, row.index)">
+            <!-- <button class="btn btn-pill" (click)="fetchAndUpdate(action, row.index)">
               Show
-            </button>
+            </button> -->
+            <button
+            class="btn btn-pill"
+            (click)="fetchAndUpdate(action, action === 'chromvar_spot_scores' ? row.motif_id : row.index)">
+            Show
+          </button>
           </td>
         </tr>
       </tbody>

@@ -195,11 +195,58 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.sortAsc = ascending;
   }
 
+  // async fetchAndUpdate(columnName: string, index: string) {
+  //   let isGeneExpression = columnName === 'gene_expression';
+  //   let request = isGeneExpression
+  //     ? `${this.sessionService.apiUrl}/X/${index}`
+  //     : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+  //   this.sessionService
+  //     .callWithSession(() => this.http.get(request, { withCredentials: true }))
+  //     .subscribe({
+  //       next: (res) => {
+  //         const data = res as { [barcode: string]: any };
+
+  //         if (this.features) {
+  //           for (const feature of this.features) {
+  //             const barcode = feature.properties?.barcode;
+  //             if (barcode && data[barcode] !== undefined) {
+  //               feature.properties[this.updateColumn] = data[barcode];
+  //             }
+  //           }
+  //         }
+  //         if (isGeneExpression) {
+  //           console.log(`[Backend] Loaded adata[:, ${index}].X`);
+  //         } else {
+  //           console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+  //         }
+
+  //         this.featuresUpdated.emit();
+  //       },
+  //       error: (err) => {
+  //         if (isGeneExpression) {
+  //           console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+  //         } else {
+  //           console.error(
+  //             `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+  //             err,
+  //           );
+  //         }
+  //       },
+  //     });
+  // }
+
   async fetchAndUpdate(columnName: string, index: string) {
-    let isGeneExpression = columnName === 'gene_expression';
-    let request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${index}`
-      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+    const isGeneExpression = columnName === 'gene_expression';
+    const isChromvar = columnName === 'chromvar_spot_scores';
+
+    const safeIndex = encodeURIComponent(index);
+
+    const request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      : isChromvar
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
@@ -214,8 +261,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
               }
             }
           }
+
           if (isGeneExpression) {
             console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else if (isChromvar) {
+            console.log(`[Backend] Loaded ChromVAR score for motif '${index}'`);
           } else {
             console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
           }
@@ -225,15 +275,15 @@ export class FilterableTableComponent implements OnInit, OnChanges {
         error: (err) => {
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else if (isChromvar) {
+            console.error(`[Backend] Failed to load ChromVAR score for motif '${index}'`, err);
           } else {
-            console.error(
-              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
-              err,
-            );
+            console.error(`[Backend] Failed to load adata.obsm[${columnName}][${index}]`, err);
           }
         },
       });
   }
+
 
   /**
    * Retrieve the computed CSS variable value for --ftable-min-width

@@ -422,8 +422,7 @@ if __name__ == "__main__":
     for global_score in global_scores_sort_keys:
         if global_score in spatial_data.uns:
             meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
-        elif global_score in hexagons.global_scores:
-            meta_dict[global_score] = hexagons.global_scores[global_score]
+
 
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}

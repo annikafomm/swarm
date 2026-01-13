@@ -883,7 +883,19 @@ async def get_obsm_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
     """
-    return session_data.adata.obsm[table][column].to_dict()
+    obsm_data = session_data.adata.obsm[table]
+    
+    # Special handling for chromvar_spot_scores: convert to DataFrame with motif names
+    if table == "chromvar_spot_scores" and "chromvar_motifs" in session_data.adata.uns:
+        motif_names = list(session_data.adata.uns["chromvar_motifs"])
+        if not isinstance(obsm_data, pd.DataFrame):
+            obsm_data = pd.DataFrame(
+                obsm_data,
+                index=session_data.adata.obs_names,
+                columns=motif_names
+            )
+    
+    return obsm_data[column].to_dict()
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
