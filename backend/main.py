@@ -73,6 +73,13 @@ class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+class GeneSelectionMode(str, Enum):
+    ctg = "ctg"
+    hvg = "hvg"
+    spapros = "spapros"
+    svg = "svg"
+    none = "None"
+
 
 class Method(str, Enum):
     Genie3 = "Genie3"
@@ -178,6 +185,28 @@ verifier = BasicVerifier(
 # -----------------------------------------------------------------------------
 # Utility helpers
 # -----------------------------------------------------------------------------
+
+GRID_PREFIX = "grid_"
+
+def strip_grid_prefix_dict(d: dict, prefix: str = GRID_PREFIX) -> dict:
+    out = {}
+    for k, v in d.items():
+        if k.startswith(prefix):
+            out[k[len(prefix):]] = v
+        else:
+            out[k] = v
+    return out
+
+def prefer_unprefixed_then_grid(adata, key: str, prefix: str = GRID_PREFIX) -> str | None:
+    """
+    Return the key that exists: prefer key, else prefix+key, else None
+    """
+    if key in adata.obs.columns:
+        return key
+    k2 = f"{prefix}{key}"
+    if k2 in adata.obs.columns:
+        return k2
+    return None
 
 
 def _sanitize_filename(name: str) -> str:
@@ -349,7 +378,7 @@ def api_root():
 async def upload(
     # --- core ---
     email: Optional[str] = Form(None),
-    dataset: str = Form(...),
+    dataset: Dataset = Form(...),
     # Spatial
     spatial_h5ad: UploadFile = File(...),
     spatial_normalization: bool = Form(False),
@@ -359,6 +388,7 @@ async def upload(
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
+    gene_selection_mode: Optional[GeneSelectionMode] = Form(None),
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
@@ -452,9 +482,11 @@ async def upload(
         "files": saved_files,
         "tangram": {
             "use": use_tangram,
-            # Dateien/Parameter nur füllen, wenn Tangram aktiv:
             "filtering": singlecell_filtering if use_tangram else None,
             "normalization": singlecell_normalization if use_tangram else None,
+            "gene_selection_mode": (
+                gene_selection_mode.value if (use_tangram and gene_selection_mode) else None
+            ),
         },
         "scores": {
             "network": score_network,
@@ -519,50 +551,59 @@ async def upload(
 
     # TODO call visium_to_geojson
     out_dir = await calculate_scores_helper(job_dir, payload)
+
+    out_files = {}
+    adata_path = None
+
+    # 1. Wenn Scores da sind → st_scores.h5ad nutzen
     if out_dir is not None:
         print(out_dir)
 
-        adata_path = None
         for filename in os.listdir(out_dir):
+            if filename.endswith("xenium_cells_with_grid_scores.h5ad"):
+                adata_path = os.path.join(out_dir, filename)
+                break
             if filename.endswith("st_scores.h5ad"):
                 adata_path = os.path.join(out_dir, filename)
 
-        out_files = {}
-        if adata_path is not None:
-            out_files["adataPath"] = adata_path
 
-            data_type = dataset.value.lower()
+    # 2. Wenn keine Scores → benutze das originale Upload-h5ad
+    if adata_path is None:
+        adata_path = saved_files.get("spatial_h5ad")
 
-            subprocess.run(
-                [
-                    "python",
-                    "../backend/visium_to_geojson.py",
-                    "--adata",
-                    adata_path,
-                    "--outpath",
-                    os.path.join(out_dir, "hexagons.geojson"),
-                    "--data_type",
-                    data_type,
-                ]
-            )
-            out_files["geojsonPath"] = os.path.join(
-                out_dir, "hexagons.geojson"
-            )
+    # 3. Falls out_dir None ist → benutze job_dir (kein neues Verzeichnis!)
+    if out_dir is None:
+        out_dir = job_dir
 
-        if os.path.isfile(
-            os.path.join(out_dir, "genie_network_filtered_st.csv")
-        ):
-            out_files["genieFiltPath"] = os.path.join(
-                out_dir, "genie_network_filtered_st.csv"
-            )
-        if os.path.isfile(
-            os.path.join(out_dir, "sponge_network_filtered_st.csv")
-        ):
-            out_files["spongeFiltPath"] = os.path.join(
-                out_dir, "sponge_network_filtered_st.csv"
-            )
+    # 4. Jetzt GeoJSON erzeugen (immer!)
+    if adata_path is not None:
+        out_files["adataPath"] = adata_path
 
-        payload["output_files"] = out_files
+        data_type = dataset.value.lower()
+
+        subprocess.run(
+            [
+                "python",
+                "../backend/visium_to_geojson.py",
+                "--adata",
+                adata_path,
+                "--outpath",
+                os.path.join(out_dir, "hexagons.geojson"),
+                "--data_type",
+                data_type,
+            ]
+        )
+        out_files["geojsonPath"] = os.path.join(out_dir, "hexagons.geojson")
+
+    # zusätzliche Outputs (falls vorhanden)
+    if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
+        out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
+
+    if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
+        out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+
+    payload["output_files"] = out_files
+
 
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
@@ -580,7 +621,7 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     """
-    file_path = BASE_UPLOAD_DIR / Path(subdir) / filename
+    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / filename
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
