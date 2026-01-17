@@ -293,4 +293,72 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const minWidth = computedStyle.getPropertyValue('--ftable-min-width').trim();
     return minWidth || '0';
   }
+
+
+  // --- ChromVAR sum state ---
+  private chromvarBaseMotif: string | null = null;
+  private sumMotifs = new Set<string>();
+
+  private getMotifId(row: any): string {
+    return String(row?.motif_id ?? row?.['motif_id']);
+  }
+
+  isSumSelected(row: any): boolean {
+    const id = this.getMotifId(row);
+    return this.sumMotifs.has(id);
+  }
+
+  toggleSumMotif(row: any, checked: boolean): void {
+    const id = this.getMotifId(row);
+    if (!id) return;
+
+    if (checked) this.sumMotifs.add(id);
+    else this.sumMotifs.delete(id);
+
+    // If user already clicked "Show" for a base motif, update the displayed score immediately
+    this.updateChromvarCombinedIfReady();
+  }
+
+  onShowAction(action: string, row: any): void {
+    if (action === 'chromvar_spot_scores') {
+      // base motif comes from motif_id column
+      this.chromvarBaseMotif = this.getMotifId(row);
+      this.updateChromvarCombinedIfReady(true);
+      return;
+    }
+
+    // default behavior (non-chromvar actions)
+    this.fetchAndUpdate(action, String(row.index));
+  }
+
+  private updateChromvarCombinedIfReady(force = false): void {
+    if (!this.chromvarBaseMotif) {
+      // Nothing to show yet until user clicks "Show"
+      return;
+    }
+
+    // combined list = base motif + all checked motifs
+    const motifs = new Set<string>([this.chromvarBaseMotif, ...this.sumMotifs]);
+
+    // If you want "Show" to always hit backend even with no boxes ticked, keep force=true
+    if (!force && motifs.size === 0) return;
+
+    const index = Array.from(motifs).join(','); // backend will split and sum
+    this.fetchAndUpdate('chromvar_spot_scores', index);
+  }
+
+  get selectedSumCount(): number {
+    return this.sumMotifs.size;
+  }
+
+  showSumChromvar(): void {
+    const motifs = Array.from(this.sumMotifs);
+    if (!motifs.length) return;
+
+    //  sum-only (ignores base motif)
+    this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
+
+  }
+
+
 }

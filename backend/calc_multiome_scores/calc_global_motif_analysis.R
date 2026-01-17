@@ -331,6 +331,319 @@ get_motif_activity <- function(object, motif_name, chromvar_assay = "chromvar", 
     return(motif_activity)
 }
 
+#' Project dissociated-cell ATAC footprint profiles onto spatial spots
+#'
+#' This function projects transcription factor footprint position-enrichment
+#' profiles computed on dissociated scATAC / multiome data (via Signac's
+#' \code{Footprint()}) onto spatial transcriptomics spots using a Tangram
+#' cell-to-spot mapping matrix.
+#'
+#' The projection is performed as a weighted mean of per-cell footprint
+#' profiles, where the weights correspond to Tangram mapping probabilities.
+#' The resulting matrix has spatial spots as rows and footprint positions
+#' (e.g. -250 to +250 bp around motif centers) as columns, with the original
+#' \code{expected} and \code{motif} rows appended for compatibility with
+#' Signac's footprint plotting utilities.
+#'
+#' The returned footprint profiles represent *mixtures of
+#' dissociated-cell ATAC signals*. They are not footprints computed from
+#' true spatial ATAC fragments and should be interpreted accordingly.
+#'
+#' @param object_dissociated A \code{Seurat} object containing dissociated
+#'   scATAC-seq or multiome data with a \code{ChromatinAssay}. The assay must
+#'   already contain footprint position enrichment data computed using
+#'   \code{Signac::Footprint()}.
+#'
+#' @param footprint_key Character scalar. Name of the footprint entry stored
+#'   in \code{object_dissociated[[assay]]@positionEnrichment}, e.g.
+#'   \code{"footprint_MA0084.2"}.
+#'
+#' @param M A numeric matrix or sparse matrix of dimensions
+#'   \code{(n_cells × n_spots)} containing Tangram mapping probabilities.
+#'   Row names must correspond to dissociated cell barcodes (matching
+#'   \code{colnames(object_dissociated)}), and column names must correspond
+#'   to spatial spot identifiers.
+#'
+#' @param assay Character scalar. Name of the ChromatinAssay in
+#'   \code{object_dissociated} from which footprint data should be read.
+#'   Defaults to \code{"peaks"}.
+#'
+#' @return A \code{dgCMatrix} with dimensions
+#'   \code{(n_spots + 2) × n_positions}. Rows correspond to spatial spot IDs,
+#'   followed by the \code{"expected"} and \code{"motif"} rows copied from the
+#'   original footprint matrix. Columns correspond to positions relative to
+#'   the motif center.
+#'
+#' @details
+#' The projection is computed as:
+#' \deqn{
+#'   F_{spot} = D^{-1} (M^\top F_{cell})
+#' }
+#' where \eqn{F_{cell}} is the dissociated-cell footprint matrix,
+#' \eqn{M} is the Tangram mapping matrix, and \eqn{D} is a diagonal matrix
+#' of per-spot weight sums used for normalization.
+#'
+#' @seealso \code{\link[Signac]{Footprint}}, \code{\link[Signac]{PlotFootprint}}
+#'
+#' @examples
+#' \dontrun{
+#' fp_spatial <- footprints_dissociated2spatial(
+#'   object_dissociated = processed_data,
+#'   footprint_key = "footprint_7_vs_rest_MA0084.2",
+#'   M = tangram_map
+#' )
+#' }
+#' Construct a spatial Seurat object by projecting dissociated ATAC peak counts
+#'
+#' This function creates a new \code{Seurat} object whose "cells" correspond to
+#' spatial transcriptomics spots, by projecting dissociated scATAC-seq or multiome
+#' peak counts onto spatial spots using a Tangram cell-to-spot mapping matrix.
+#'
+#' Peak counts are projected as a weighted sum of dissociated-cell peak counts,
+#' where weights are given by Tangram mapping probabilities. The resulting object
+#' contains a \code{ChromatinAssay} with real genomic peak ranges but *projected*
+#' (non-integer) counts.
+#'
+#' The returned object does *not* contain spatial ATAC fragments.
+#' As a consequence, operations requiring fragment-level information (e.g.
+#' \code{Signac::Footprint()}, Tn5 insertion bias computation) are not valid on
+#' this object. The object is intended for visualization, aggregation, and
+#' downstream integration with precomputed footprint or motif data.
+#'
+#' @param object_dissociated A \code{Seurat} object containing dissociated
+#'   scATAC-seq or multiome data with a \code{ChromatinAssay}. The assay must
+#'   contain peak-level counts and genomic ranges.
+#'
+#' @param M A numeric matrix or sparse matrix of dimensions
+#'   \code{(n_cells × n_spots)} containing Tangram mapping probabilities.
+#'   Row names must correspond to dissociated cell barcodes (matching
+#'   \code{colnames(object_dissociated)}), and column names must correspond
+#'   to spatial spot identifiers.
+#'
+#' @param spot_meta A \code{data.frame} containing spatial spot metadata
+#'   (e.g. spatial clusters, tissue regions). Row names must exactly match
+#'   the spatial spot identifiers (column names of \code{M}).
+#'
+#' @param assay Character scalar. Name of the ChromatinAssay in
+#'   \code{object_dissociated} to project. Defaults to \code{"peaks"}.
+#'
+#' @param slot Character scalar. Slot of the ChromatinAssay to use as the
+#'   source of peak-level values. Defaults to \code{"counts"}.
+#'
+#' @return A \code{Seurat} object whose cells correspond to spatial spots and
+#'   whose default assay is a \code{ChromatinAssay} containing projected
+#'   peak counts and the original genomic peak ranges.
+#'
+#' @details
+#' The projection is computed as:
+#' \deqn{
+#'   C_{spot} = C_{cell} \times M
+#' }
+#' where \eqn{C_{cell}} is the peak-by-cell matrix from the dissociated object
+#' and \eqn{M} is the Tangram cell-to-spot mapping matrix.
+#'
+#' The resulting counts are continuous-valued and should not be interpreted
+#' as observed fragment counts.
+#'
+#' @seealso \code{\link[Signac]{CreateChromatinAssay}},
+#'   \code{\link[Seurat]{CreateSeuratObject}},
+#'   \code{\link[Signac]{Footprint}}
+#'
+#' @examples
+#' \dontrun{
+#' spot_obj <- seuratObj_dissociated2spatial(
+#'   object_dissociated = processed_data,
+#'   M = tangram_map,
+#'   spot_meta = spatial_metadata
+#' )
+#' }
+seuratObj_dissociated2spatial <- function(
+    object_dissociated,
+    M, # tangram map eg M = read.csv("../swarm/backend/uploads/job_1768478211396_76193c44-3781-4b8b-b9ef-fc7702b4a617/plasmidpoop/tangram_map.csv",row.names=1), adata_map.X
+    spot_meta, # <-read.csv("../swarm/backend/uploads/job_1768478211396_76193c44-3781-4b8b-b9ef-fc7702b4a617/plasmidpoop/meta_spatial.csv"), adata_map.var
+    assay = "peaks",
+    slot = "counts"
+){
+    C <- GetAssayData(processed_data, assay = assay, slot = slot)
+    # force to 2D numeric (and to sparse for speed)
+    M_sp <- Matrix(as.matrix(M), sparse = TRUE)
+
+    C_spot <- C %*% M_sp
+
+    ranges <- granges(processed_data[[assay]])  # peak GRanges from your multiome object
+
+    chrom_spot <- CreateChromatinAssay(
+        counts = C_spot,
+        ranges = ranges,
+        genome = genome(processed_data[[assay]]) # or "hg38"
+    )
+
+    spot_obj <- CreateSeuratObject(counts = chrom_spot, assay = assay)
+    DefaultAssay(spot_obj) <- assay
+
+    spot_obj <- AddMetaData(spot_obj, spot_meta) 
+    return(spot_obj)
+
+}
+
+footprints_dissociated2spatial <- function(
+    object_dissociated,
+    footprint_key,
+    M, # tangram map eg M = read.csv("../swarm/backend/uploads/job_1768478211396_76193c44-3781-4b8b-b9ef-fc7702b4a617/plasmidpoop/tangram_map.csv",row.names=1) 
+    assay = "peaks"
+    ){
+
+    # 1) get the footprint matrix (cells + expected + motif) x positions
+    fp_all <- object_dissociated[[assay]]@positionEnrichment[[footprint_key]]
+
+    # 2) remove motif data and bias
+    cells <- colnames(object_dissociated)
+    fp <- fp_all[intersect(rownames(fp_all), cells), , drop = FALSE]   # cells x positions
+    # Make sure ordering matches
+    fp <- fp[rownames(M), , drop = FALSE]
+    
+    # 4) weighted SUM to spots: (spots x cells) %*% (cells x positions) = spots x positions
+    M = Matrix(as.matrix(M), sparse = TRUE)
+    spot_sum <- t(M) %*% fp
+
+    # normalize
+    w_spot <- Matrix::rowSums(t(M))  # length = n_spots
+    spot_mean <- spot_sum
+    spot_mean <- Diagonal(x = 1 / pmax(w_spot, 1e-12)) %*% spot_sum
+    spot_mean_sp <- spot_mean
+    if (!inherits(spot_mean_sp, "dgCMatrix")) {
+        spot_mean_sp <- Matrix(as.matrix(spot_mean_sp), sparse = TRUE)
+    }
+    rownames(spot_mean_sp) <- rownames(spot_sum)
+
+    # 5 add bias and motif back
+    expected <- fp_all["expected", , drop = FALSE]
+    motif <- fp_all["motif", , drop = FALSE]
+    fp_spots_all <- rbind(spot_mean_sp, expected, motif)
+    return(fp_spots_all)
+    }
+
+
+#' Compute and plot spatially projected ATAC footprints for a single motif, and
+#' save updated Seurat objects to disk
+#'
+#' This function loads a dissociated (multiome/scATAC) Seurat object and a
+#' spot-level Seurat object from disk, computes a motif footprint in the
+#' dissociated object via \code{Signac::Footprint()}, projects the footprint to
+#' spatial spots using a Tangram cell-to-spot mapping matrix, stores the
+#' projected footprint matrix in the spot object, and returns a
+#' \code{Signac::PlotFootprint()} plot.
+#'
+#' Unlike the in-memory workflow, this path-based variant **persists changes**
+#' by writing the updated Seurat objects back to disk.
+#'
+#' The spatial footprints shown are **projected mixtures** of dissociated-cell
+#' ATAC footprints (weighted by Tangram probabilities). They do not represent
+#' footprints computed from true spatial ATAC fragments.
+#'
+#' @param object_dissociated_path Character scalar. Path to an RDS file
+#'   containing a \code{Seurat} object with dissociated scATAC-seq or multiome
+#'   data (must be compatible with \code{Signac::Footprint()}).
+#'
+#' @param M_path Character scalar. Path to a CSV file containing the Tangram
+#'   mapping matrix (\code{n_cells × n_spots}). Row names must match dissociated
+#'   cell barcodes; column names must match spatial spot IDs.
+#'
+#' @param spot_obj_path Character scalar. Path to an RDS file containing a
+#'   spot-level \code{Seurat} object (cells = spatial spots). Must contain an
+#'   assay named \code{assay} and a metadata column \code{clustering_var}.
+#'
+#' @param motif_name Character scalar. Motif identifier/name passed to
+#'   \code{Signac::Footprint(motif.name = ...)} (e.g. \code{"MA0645.2"}).
+#'
+#' @param assay Character scalar. Name of the \code{ChromatinAssay} used for
+#'   footprint computation and for storing projected footprints in the spot
+#'   object. Defaults to \code{"peaks"}.
+#'
+#' @param clustering_var Character scalar. Column name in
+#'   \code{spot_obj@meta.data} used to group spots in the plot. Defaults to
+#'   \code{"leiden"}.
+#'
+#' @param object_dissociated_out_path Character scalar. Output path for saving
+#'   the updated dissociated Seurat object. Defaults to
+#'   \code{object_dissociated_path} (overwrite).
+#'
+#' @param spot_obj_out_path Character scalar. Output path for saving the updated
+#'   spot-level Seurat object. Defaults to \code{spot_obj_path} (overwrite).
+#'
+#' @param overwrite Logical. Whether to overwrite existing output files.
+#'   Defaults to \code{TRUE}.
+#'
+#' @return A \code{ggplot} object returned by \code{Signac::PlotFootprint()}.
+#'
+#' @seealso \code{\link[Signac]{Footprint}}, \code{\link[Signac]{PlotFootprint}},
+#'   \code{footprints_dissociated2spatial}
+plot_footprint_for_motif <- function(
+  object_dissociated_path,
+  M_path, # eg adata_map.X.csv
+  spot_obj_path,
+  motif_name,
+  assay = "peaks",
+  clustering_var = "leiden",
+  object_dissociated_out_path = object_dissociated_path,
+  spot_obj_out_path = spot_obj_path,
+  overwrite = TRUE
+) {
+
+  # Safety checks for overwrite behavior
+  if (!overwrite) {
+    if (file.exists(object_dissociated_out_path)) {
+      stop("Refusing to overwrite existing file: ", object_dissociated_out_path)
+    }
+    if (file.exists(spot_obj_out_path)) {
+      stop("Refusing to overwrite existing file: ", spot_obj_out_path)
+    }
+  }
+
+  object_dissociated <- readRDS(object_dissociated_path)
+  M <- read.csv(M_path, row.names = 1, check.names = FALSE)
+  spot_obj <- readRDS(spot_obj_path)
+
+  key <- sprintf("footprint_%s", paste(motif_name))
+
+  # Compute footprint in dissociated object
+  object_dissociated <- Signac::Footprint(
+    object = object_dissociated,
+    motif.name = motif_name,
+    genome = BSgenome.Hsapiens.UCSC.hg38,
+    in.peaks = TRUE,
+    key = key
+  )
+
+  # Project dissociated footprint to spots
+  fp_spots_all <- footprints_dissociated2spatial(
+    object_dissociated = object_dissociated,
+    footprint_key = key,
+    M = M,
+    assay = assay
+  )
+
+  # Store in spot object
+  spot_obj[[assay]]@positionEnrichment[[key]] <- fp_spots_all
+  Seurat::Idents(spot_obj) <- clustering_var
+
+  # Persist updated objects to disk
+  saveRDS(object_dissociated, file = object_dissociated_out_path)
+  saveRDS(spot_obj, file = spot_obj_out_path)
+
+  # Plot
+  p <- Signac::PlotFootprint(
+    object = spot_obj,
+    features = key,
+    group.by = clustering_var,
+    show.expected = TRUE,
+    normalization = "subtract"
+  )
+
+  return(p)
+}
+
+
 
 #' Run global motif analysis pipeline
 #'

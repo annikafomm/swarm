@@ -295,6 +295,10 @@ def main():
                     adata_tangram, adata_map = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'gpu')
                     filename = os.path.basename(args.input).replace(".h5ad", f"_map.h5ad")
                     adata_map.write(os.path.join(args.outdir, filename))
+                    # wtite also X as csv and var/obs as csv
+                    adata_map.X.to_csv(os.path.join(args.outdir, "adata_map.X.csv"))
+                    adata_map.var.to_csv(os.path.join(args.outdir, "adata_map.var.csv"))
+                    adata_map.obs.to_csv(os.path.join(args.outdir, "adata_map.obs.csv"))
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)
 
                     compute_spatial_scores(adata_tangram, "tg", args, logfile)

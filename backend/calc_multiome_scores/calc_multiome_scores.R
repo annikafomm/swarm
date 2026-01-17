@@ -107,10 +107,23 @@ global_motif_analysis <- function(object, args, logfile) {
       # compute Tn5 insertion bias for footprinting, is saved in object[["peaks"]]@bias
       log_message("Computing Tn5 insertion bias...", logfile, 2)
       object <- compute_Tn5_insertion_Bias(object, genome = genome, assay = "peaks")
+      # create spatial seurat object 
+      M <- read.csv(file.path(args$outdir, "adata_map.X.csv"))
+      spot_meta <- read.csv(file.path(args$outdir, "adata_map.var.csv"))
+      spot_obj <- seuratObj_dissociated2spatial(
+          object_dissociated= object,
+          M=M, 
+          spot_meta=spot_meta, 
+          assay = "peaks",
+          slot = "counts")
+      out_path <- file.path(args$outdir, "spot_obj.rds")
+      saveRDS(spot_obj, out_path)
     }
   }
   return(object)
 }
+
+
 
 
 main <- function() {

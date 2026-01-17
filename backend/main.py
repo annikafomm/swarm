@@ -876,25 +876,81 @@ async def get_var_column(
     return session_data.adata.var[column].to_dict()
 
 
+# @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
+# async def get_obsm_column(
+#     table: str, column: str, session_data: SessionData = Depends(verifier)
+# ):
+#     """
+#     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
+#     """
+#     obsm_data = session_data.adata.obsm[table]
+
+#     # Special handling for chromvar_spot_scores: convert to DataFrame with motif names
+#     if table == "chromvar_spot_scores" and "chromvar_motifs" in session_data.adata.uns:
+#         motif_names = list(session_data.adata.uns["chromvar_motifs"])
+#         if not isinstance(obsm_data, pd.DataFrame):
+#             obsm_data = pd.DataFrame(
+#                 obsm_data,
+#                 index=session_data.adata.obs_names,
+#                 columns=motif_names
+#             )
+
+#     return obsm_data[column].to_dict()
+
 @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
-async def get_obsm_column(
-    table: str, column: str, session_data: SessionData = Depends(verifier)
-):
-    """
-    Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
-    """
+async def get_obsm_column(table: str, column: str, session_data: SessionData = Depends(verifier)):
+    print(f"[DEBUG] Endpoint called: table={table}, column={column}")
+    print(f"[DEBUG] Session username: {session_data.username}")
+    print(f"[DEBUG] Has adata: {session_data.adata is not None}")
+
+    # --- ChromVAR special case: column is motif name OR comma-separated motif names ---
+    if table == "chromvar_spot_scores":
+        try:
+            if session_data.adata is None:
+                raise HTTPException(status_code=500, detail="No adata loaded in session")
+
+            if "chromvar_motifs" not in session_data.adata.uns:
+                print(f"[DEBUG] Available uns keys: {list(session_data.adata.uns.keys())}")
+                raise HTTPException(status_code=500, detail="adata.uns['chromvar_motifs'] missing")
+
+            chromvar_motifs = np.asarray(session_data.adata.uns["chromvar_motifs"])
+            print(f"[DEBUG] chromvar_motifs shape: {chromvar_motifs.shape}, dtype: {chromvar_motifs.dtype}")
+            print(f"[DEBUG] First 5 motifs: {chromvar_motifs[:5]}")
+
+            motif_list = column.split(",")  # supports "MA1,MA2,MA3"
+            print(f"[DEBUG] Requested motifs: {motif_list}")
+
+            idx = np.where(np.isin(chromvar_motifs, motif_list))[0]
+            print(f"[DEBUG] Found indices: {idx}, size: {idx.size}")
+
+            if idx.size == 0:
+                raise HTTPException(status_code=404, detail=f"No motifs found from: {motif_list}")
+
+            if "chromvar_spot_scores" not in session_data.adata.obsm:
+                print(f"[DEBUG] Available obsm keys: {list(session_data.adata.obsm.keys())}")
+                raise HTTPException(status_code=500, detail="chromvar_spot_scores not in adata.obsm")
+
+            X = session_data.adata.obsm["chromvar_spot_scores"]
+            print(f"[DEBUG] chromvar_spot_scores type: {type(X)}, shape: {X.shape if hasattr(X, 'shape') else 'no shape'}")
+
+            # sum scores across selected motifs
+            scores = np.asarray(X[:, idx].sum(axis=1)).ravel()
+            print(f"[DEBUG] scores shape: {scores.shape}, dtype: {scores.dtype}")
+
+            return {bc: float(s) for bc, s in zip(session_data.adata.obs_names, scores)}
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[ERROR] chromvar_spot_scores endpoint failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"ChromVAR processing failed: {str(e)}")
+
+    # --- default behavior unchanged ---
     obsm_data = session_data.adata.obsm[table]
-    
-    # Special handling for chromvar_spot_scores: convert to DataFrame with motif names
-    if table == "chromvar_spot_scores" and "chromvar_motifs" in session_data.adata.uns:
-        motif_names = list(session_data.adata.uns["chromvar_motifs"])
-        if not isinstance(obsm_data, pd.DataFrame):
-            obsm_data = pd.DataFrame(
-                obsm_data,
-                index=session_data.adata.obs_names,
-                columns=motif_names
-            )
-    
+    if not isinstance(obsm_data, pd.DataFrame):
+        obsm_data = pd.DataFrame(obsm_data, index=session_data.adata.obs_names)
+
     return obsm_data[column].to_dict()
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])

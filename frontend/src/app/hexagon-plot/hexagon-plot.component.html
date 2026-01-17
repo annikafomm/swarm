@@ -521,13 +521,20 @@
         </button>
         </div> -->
         <!-- [attr.aria-pressed]="showMoranI" -->
-        <app-table
+        <!-- <app-table
           [data]="this.meta['chromvar_moranI']"
           [actionColumns]="['chromvar_spot_scores']"
           [features]="features"
           [updateColumn]="'chromvar_total_sum'"
           (featuresUpdated)="updateHexColors()">
-        </app-table>
+        </app-table> -->
+        <app-table
+        [data]="this.meta['chromvar_moranI']"
+        [actionColumns]="['chromvar_spot_scores', 'Sum_chromvar_spot_scores']"
+        [features]="features"
+        [updateColumn]="'chromvar_total_sum'"
+        (featuresUpdated)="updateHexColors()">
+      </app-table>
       </ng-template>
 
       <ng-template #gearyC>

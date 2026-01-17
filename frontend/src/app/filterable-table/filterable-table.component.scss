@@ -126,7 +126,7 @@
       bottom: -1px;
       background: var(--bg-soft);
     }
-    
+
     tbody tr:first-child td {
       border-top: 0;
     }
@@ -183,8 +183,13 @@
 
     }
 
+    // .action-col {
+    //   flex: 0 0 80px;
+    //   font-size: 0.8em;
+    //   white-space: nowrap;
+    // }
     .action-col {
-      flex: 0 0 80px;
+      flex: 0 0 140px;
       font-size: 0.8em;
       white-space: nowrap;
     }

@@ -83,6 +83,14 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
             adata.obsm["chromvar_spot_scores"] = spot_chromvar
             adata.uns["chromvar_motifs"] = list(motif_names)
 
+        # differential motif activity
+        if filename=="differential_motif_activity.json":
+            file_path = os.path.join(scores_path, filename)
+            with open(file_path, "r") as f:
+                data_dict = json.load(f)
+
+            adata.uns["differential_motif_activity"] = data_dict
+
 
     log_message(f"R score files loaded and added to the AnnData object in {format_runtime(t0)}", logfile, 2)
 
