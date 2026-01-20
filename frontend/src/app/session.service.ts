@@ -8,11 +8,13 @@ export class SessionService {
   // localhost you need to change this here as well.
   public apiUrl = 'http://localhost:3000';
   private sessionReady$ = new ReplaySubject<void>(1);
+  public sessionId: string | null = null;
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
   initSession(): void {
     const sessionId = crypto.randomUUID();
+    this.sessionId = sessionId;
     this.http
       .post(
         `${this.apiUrl}/create_session/${sessionId}`,

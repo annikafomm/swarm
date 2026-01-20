@@ -150,19 +150,13 @@ export class AppComponent implements OnInit {
 
   @HostListener('window:beforeunload', ['$event'])
   beforeUnloadHandler(_event: Event) {
-    // Could add a notification that the current session is being deleted
-    this.sessionService
-      .callWithSession(() =>
-        this.http.post(
-          `${this.sessionService.apiUrl}/delete_session`,
-          {},
-          { withCredentials: true },
-        ),
-      )
-      .subscribe({
-        next: (res) => console.log('[Backend] Deleted session', res),
-        error: (err) =>
-          console.error('[Backend] Failed to delete session', err),
-      });
+    // Use sendBeacon for reliable delivery during page unload
+    // It works even if the page is being closed/refreshed
+    const sessionId = this.sessionService.sessionId;
+    if (sessionId) {
+      const url = `${this.sessionService.apiUrl}/delete_session`;
+      navigator.sendBeacon(url, JSON.stringify({ session_id: sessionId }));
+      console.log('[Frontend] Sent delete_session beacon');
+    }
   }
 }

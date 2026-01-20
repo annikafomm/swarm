@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import time
+from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -44,6 +45,8 @@ from fastapi_sessions.session_verifier import SessionVerifier
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import EmailStr
 from starlette.responses import RedirectResponse
+from datetime import datetime, timedelta
+import asyncio
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -86,9 +89,14 @@ class BaseModel(PydanticBaseModel):
 class SessionData(BaseModel):
     username: str
     adata_path: str = None
-    adata: sc.AnnData | None = None
     genie_network_path: str | None = None
     sponge_network_path: str | None = None
+    created_at: datetime = None
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        if self.created_at is None:
+            self.created_at = datetime.utcnow()
 
 
 
@@ -142,8 +150,17 @@ class GenieNetworkPath(BaseModel):
 # -----------------------------------------------------------------------------
 # Application
 # -----------------------------------------------------------------------------
+# Lifespan event handler
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    asyncio.create_task(cleanup_expired_sessions())
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS: allow only expected frontend origins (configurable).
 app.add_middleware(
@@ -179,6 +196,9 @@ verifier = BasicVerifier(
 # Utility helpers
 # -----------------------------------------------------------------------------
 
+def _load_adata_cached(file_path: str) -> sc.AnnData:
+    """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
+    return sc.read_h5ad(file_path)
 
 def _sanitize_filename(name: str) -> str:
     """
@@ -309,6 +329,40 @@ def get_subnetwork_data(file_path, gene_set, network_type):
 # -----------------------------------------------------------------------------
 # Convenience endpoints
 # -----------------------------------------------------------------------------
+
+async def cleanup_expired_sessions():
+     while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            current_time = datetime.now()
+            expired_sessions = []
+
+            # Iterate through all sessions
+            for session_id, session_data in backend._data.items():
+                age = current_time - session_data.created_at
+                if age > timedelta(hours=1):  # Sessions expire after 1 hour
+                    expired_sessions.append(session_id)
+
+            # Delete expired sessions
+            for session_id in expired_sessions:
+                await backend.delete(session_id)
+                print(f"Cleaned up expired session: {session_id}")
+        except Exception as e:
+            print(f"Error in cleanup task: {e}")
+
+
+
+@app.post("/reset_session")
+async def reset_session(session_id: UUID = Depends(cookie)):
+    """Call this on page reload to clear old data"""
+    session_data = await backend.read(session_id)
+    # Reset all data except username
+    session_data.adata_path = None
+    session_data.genie_network_path = None
+    session_data.sponge_network_path = None
+    session_data.created_at = datetime.now()  # Reset timestamp
+    await backend.update(session_id, session_data)
+    return {"status": "session reset"}
 
 
 # Simple health check used by load balancers, monitors, or quick manual checks.
@@ -628,26 +682,8 @@ async def read_adata(
     """
     session_data = await backend.read(session_id)
 
-    adata = sc.read_h5ad(adata_path.path)
-
-    reconstruct_obsm_cols = {
-        "ligand_receptor_cosine_similarity": "ligand_receptor",
-        "ligand_receptor_p_value": "ligand_receptor",
-        "ligand_receptor_category": "ligand_receptor",
-        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
-        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
-    }
-
-    for obsm_key, col_names in reconstruct_obsm_cols.items():
-        if obsm_key in adata.obsm:
-            adata.obsm[obsm_key] = pd.DataFrame(
-                adata.obsm[obsm_key],
-                columns=adata.uns["liana_columns"][col_names],
-                index=adata.obs_names,
-            )
-
     session_data.adata_path = adata_path.path
-    session_data.adata = adata
+
     await backend.update(session_id, session_data)
     return {"status": "ok"}
 
@@ -716,7 +752,8 @@ async def get_geneset_connections(
     """
 
     # Get the geneset from the name
-    gene_set = session_data.adata.uns["genie_genesets"].get(
+    adata = _load_adata_cached(session_data.adata_path)
+    gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )
     gene_set = list(gene_set) + [gene_set_name]
@@ -740,7 +777,8 @@ async def get_geneset_connections(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
     # Get the geneset from the name
-    gene_set = session_data.adata.uns["sponge_genesets"].get(
+    adata = _load_adata_cached(session_data.adata_path)
+    gene_set = adata.uns["sponge_genesets"].get(
         gene_set_name, None
     )
     gene_set = list(gene_set) + [gene_set_name]
@@ -761,7 +799,8 @@ async def get_obs_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type`
     """
-    return session_data.adata.obs[column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.obs[column].to_dict()
 
 
 
@@ -772,7 +811,8 @@ async def get_var_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells`
     """
-    return session_data.adata.var[column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.var[column].to_dict()
 
 
 @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
@@ -782,7 +822,8 @@ async def get_obsm_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
     """
-    return session_data.adata.obsm[table][column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.obsm[table][column].to_dict()
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
@@ -797,15 +838,16 @@ async def get_obsm_row(
     'spongeeffects_GSVA_scores',
     'viper_scores',
     ]
-    available_scores = session_data.adata.obsm.keys()
+    adata = _load_adata_cached(session_data.adata_path)
+    available_scores = adata.obsm.keys()
     available_scores = [score for score in available_scores if score.endswith("_genie3") or score.endswith("_sponge")]
 
     row_data = {}
     for score in available_scores:
-        obsm_data = session_data.adata.obsm[score]
+        obsm_data = adata.obsm[score]
         if not isinstance(obsm_data, pd.DataFrame):
             obsm_data = pd.DataFrame(
-                obsm_data, index=session_data.adata.obs_names
+                obsm_data, index=adata.obs_names
             )
         row_data[score] = obsm_data.loc[barcode].to_dict()
     return row_data
@@ -818,8 +860,9 @@ async def get_X_by_gene(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860`
     """
-    expressions = session_data.adata[:, gene].X.toarray().flatten().tolist()
-    barcodes = session_data.adata.obs.index
+    adata = _load_adata_cached(session_data.adata_path)
+    expressions = adata[:, gene].X.toarray().flatten().tolist()
+    barcodes = adata.obs.index
     return {
         barcode: expression
         for barcode, expression in zip(barcodes, expressions)
