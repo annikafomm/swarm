@@ -24,6 +24,9 @@ export class FormPageComponent {
   spatialFile?: File;
   singleCellFile?: File;
   multiomeFile?: File;
+  // Needed for Footprinting
+  fragmentsFile?: File;
+  fragmentsTabixFile?: File;
   // network scores uploads (shared)
   genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
   spongeNAFile?: File;           // SPONGE networkanalysis
@@ -44,6 +47,7 @@ export class FormPageComponent {
 
 
   constructor(private fb: FormBuilder, private http: HttpClient, private pathsService: PathsService) {
+    //console.log('in FormPageComponent constructor');
     this.form = this.fb.group({
 
       email: [''],
@@ -61,10 +65,6 @@ export class FormPageComponent {
       }),
 
       useTangramMultiome: [false],
-      // tangram: this.fb.group({
-      //   filterSingleCell: [false],
-      //   normalizeSingleCell: [false],
-      // }),
 
       // score toggles
       scores: this.fb.group({
@@ -156,9 +156,9 @@ export class FormPageComponent {
           tails: ['oneTailed'],
           corrMethod: ['fdr_bh'],
         }),
-        //differential_motif_activity: this.fb.group({
-          // add fields if needed
-        //}),
+        // differential_motif_activity: this.fb.group({
+        //   add fields if needed
+        // }),
       }),
     });
 
@@ -184,6 +184,14 @@ export class FormPageComponent {
         this.spongeNIFile = undefined;
       }
     });
+
+    // handle fragment files reset
+    this.form.get('scores.FootprintingBias')!.valueChanges.subscribe(on => {
+      if (!on) {
+        this.fragmentsFile = undefined;
+        this.fragmentsTabixFile = undefined;
+      }
+    });
   }
 
   // ---------- getters for template type-safety ----------
@@ -205,6 +213,9 @@ export class FormPageComponent {
   useTangramMultiomeChecked(): boolean {
     return !!this.form.get('useTangramMultiome')?.value;
   }
+  needFragmentFiles(): boolean {
+    return !!this.form.get('scores.FootprintingBias')?.value;
+  }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
   }
@@ -220,7 +231,7 @@ export class FormPageComponent {
 
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
-      'spatial' | 'singleCell' | 'multiome' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
+      'spatial' | 'singleCell' | 'multiome' | 'fragments' | 'fragmentsTabix' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
     const input = evt.target as HTMLInputElement
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
@@ -229,6 +240,8 @@ export class FormPageComponent {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
       case 'multiome': this.multiomeFile = file; break;
+      case 'fragments': this.fragmentsFile = file; break;
+      case 'fragmentsTabix': this.fragmentsTabixFile = file; break;
       case 'genie3Net': this.genie3NetFile = file; break;
       case 'spongeNA': this.spongeNAFile = file; break;
       case 'spongeNI': this.spongeNIFile = file; break;
@@ -253,6 +266,7 @@ export class FormPageComponent {
   }
 
   canSubmit(): boolean {
+    // console.log('Checking if form can be submitted'); constantly printed
     const spatialOk = !!this.spatialFile;
 
     const needsSingleCell = !!this.form.get('useTangram')!.value;
@@ -260,6 +274,11 @@ export class FormPageComponent {
 
     const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
     const multiomeOK = !needsMultiome || !!this.multiomeFile;
+
+    const needFragmentFiles = !!this.form.get('scores.FootprintingBias')!.value;
+    // this.needFragmentFiles();
+    const fragmentsOk = !needFragmentFiles || (!!this.fragmentsFile && !!this.fragmentsTabixFile);
+    if (!fragmentsOk) return false;
 
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
@@ -269,7 +288,11 @@ export class FormPageComponent {
 
   // ---------- submit ----------
   async onSubmit() {
+    //console.log('submitting form...');
+
     if (!this.canSubmit()) return;
+
+    //console.log('can submit, building FormData');
 
     this.errorMsg = '';
     this.resultJsonUrl = null;
@@ -277,8 +300,10 @@ export class FormPageComponent {
     this.uploading = true;
     this.uploadProgress = 0;
 
+    //console.log('built FormData, starting upload...');
     const fd = this.buildFormData();
-
+    //console.log('FormData built:', fd);
+    //console.log('FormData ready, sending POST request...');
     this.http.post<{ ok: boolean; json_url: string; json_filename: string; payload: any }>(
       '/api/upload',
       fd,
@@ -295,7 +320,7 @@ export class FormPageComponent {
           this.uploadProgress = 100;
           this.uploading = false;
 
-          console.log('Upload finished, output_files', body.output_files)
+          // console.log('Upload finished, output_files', body.output_files)
 
 
           const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
@@ -327,13 +352,14 @@ export class FormPageComponent {
   }
 
   private buildFormData(): FormData {
+    //console.log('in buildFormData for submission...');
     const fd = new FormData();
 
     // --- core
     fd.append('email', this.form.value.email);
     fd.append('dataset', this.form.value.dataset);
 
-
+    //console.log('Appending core form data');
 
     // --- spatial
     if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
@@ -354,24 +380,28 @@ export class FormPageComponent {
       fd.append('multiome_rds', this.multiomeFile);
     }
 
-     // --- multiome
-    fd.append('use_multiome', String(this.form.value.useTangramMultiome));
-    if (this.form.value.useTangramMultiome && this.multiomeFile) {
-      fd.append('multiome_rds', this.multiomeFile);
+    // Send fragment files ONLY if footprinting bias is checked
+    if (this.form.value.scores.FootprintingBias) {
+      if (this.fragmentsFile) {
+        fd.append('fragments_tsv_gz', this.fragmentsFile);
+      }
+      if (this.fragmentsTabixFile) {
+        fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
+      }
     }
+
+
+    //  // --- multiome
+    // fd.append('use_multiome', String(this.form.value.useTangramMultiome));
+    // if (this.form.value.useTangramMultiome && this.multiomeFile) {
+    //   fd.append('multiome_rds', this.multiomeFile);
+    // }
 
     // --- scores toggles
     const scores = this.form.value.scores;
     fd.append('score_network', String(scores.networkScores));
     fd.append('score_squidpy', String(scores.squidpy));
     fd.append('score_liana_plus', String(scores.lianaPlus));
-    if (this.form.value.useTangramMultiome && this.multiomeFile) {
-      fd.append('score_chromVar', String(scores.chromVAR));
-      fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
-      fd.append('score_motifEnrichment', String(scores.motifEnrichment));
-      fd.append('score_FootprintingBias', String(scores.FootprintingBias));
-      fd.append('genome', this.form.value.genome);
-    }
     if (this.form.value.useTangramMultiome && this.multiomeFile) {
       fd.append('score_chromVar', String(scores.chromVAR));
       fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
@@ -463,7 +493,7 @@ export class FormPageComponent {
       if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
     }
 
-    // --- chromVAR
+    // --- chromVAR parameters
     if (scores.chromVAR) {
       const cv = this.form.value.chromVAR;
       const m = cv.methods;
@@ -489,36 +519,16 @@ export class FormPageComponent {
       // }
     }
 
-
-
-    // --- chromVAR
-    if (scores.chromVAR) {
-      const cv = this.form.value.chromVAR;
-      const m = cv.methods;
-      if (m.moranI) {
-        fd.append('chromVar_moranI', 'true');
-        fd.append('chromVar_moranI_n_perms', String(cv.moranI.nPerms));
-        fd.append('chromVar_moranI_two_tailed', cv.moranI.tails ?? '');
-        fd.append('chromVar_moranI_corr_method', cv.moranI.corrMethod ?? '');
+    // --- Footprinting --- Send fragment files ONLY if footprinting bias is checked
+    // console.log('FootprintingBias score selected:', scores.FootprintingBias);
+    if (scores.FootprintingBias) {
+      if (!this.fragmentsFile || !this.fragmentsTabixFile) {
+        throw new Error('Fragment files are required for Footprinting Bias score.');
       }
-      if (m.gearyC) {
-        fd.append('chromVar_gearyC', 'true');
-        fd.append('chromVar_gearyC_n_perms', String(cv.gearyC.nPerms));
-        fd.append('chromVar_gearyC_two_tailed', cv.gearyC.tails ?? '');
-        fd.append('chromVar_gearyC_corr_method', cv.gearyC.corrMethod ?? '');
-      }
-      if (m.differential_motif_activity) {
-        fd.append('chromVar_differential_motif_activity', 'true');
-        // add params if needed
-      }
-      // if (m.centrality_score) {
-      //   fd.append('squidpy_centrality_score', 'true');
-      //   fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
-      // }
+      fd.append('fragments_tsv_gz', this.fragmentsFile);
+      fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
     }
-
-
-
+    // console.log('returning FormData for submission');
     return fd;
   }
 
@@ -560,6 +570,17 @@ export class FormPageComponent {
       },
 
       liana: { compositionColumn: 'tangram_ct_pred' },
+      genome: 'hg38',
+      chromVAR: {
+        methods: {
+          moranI: false,
+          gearyC: false,
+          differential_motif_activity: false,
+        },
+        moranI: { nPerms: 1000, tails: 'oneTailed', corrMethod: 'fdr_bh' },
+        gearyC: { nPerms: 1000, tails: 'oneTailed', corrMethod: 'fdr_bh' },
+      },
+      FootprintingBias: false
     });
 
     // clear files
@@ -570,6 +591,9 @@ export class FormPageComponent {
     this.spongeNIFile = undefined;
     this.lianaGenie3File = undefined;
     this.lianaPathwayFile = undefined;
+    this.multiomeFile = undefined;
+    this.fragmentsFile = undefined;
+    this.fragmentsTabixFile = undefined;
 
 
     this.errorMsg = '';

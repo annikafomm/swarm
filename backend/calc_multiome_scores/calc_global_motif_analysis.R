@@ -481,7 +481,7 @@ seuratObj_dissociated2spatial <- function(
     spot_obj <- CreateSeuratObject(counts = chrom_spot, assay = assay)
     DefaultAssay(spot_obj) <- assay
 
-    spot_obj <- AddMetaData(spot_obj, spot_meta) 
+    spot_obj <- AddMetaData(spot_obj, spot_meta)
     return(spot_obj)
 
 }
@@ -489,7 +489,7 @@ seuratObj_dissociated2spatial <- function(
 footprints_dissociated2spatial <- function(
     object_dissociated,
     footprint_key,
-    M, # tangram map eg M = read.csv("../swarm/backend/uploads/job_1768478211396_76193c44-3781-4b8b-b9ef-fc7702b4a617/plasmidpoop/tangram_map.csv",row.names=1) 
+    M, # tangram map eg M = read.csv("../swarm/backend/uploads/job_1768478211396_76193c44-3781-4b8b-b9ef-fc7702b4a617/plasmidpoop/tangram_map.csv",row.names=1)
     assay = "peaks"
     ){
 
@@ -501,7 +501,7 @@ footprints_dissociated2spatial <- function(
     fp <- fp_all[intersect(rownames(fp_all), cells), , drop = FALSE]   # cells x positions
     # Make sure ordering matches
     fp <- fp[rownames(M), , drop = FALSE]
-    
+
     # 4) weighted SUM to spots: (spots x cells) %*% (cells x positions) = spots x positions
     M = Matrix(as.matrix(M), sparse = TRUE)
     spot_sum <- t(M) %*% fp
@@ -579,14 +579,16 @@ footprints_dissociated2spatial <- function(
 #' @seealso \code{\link[Signac]{Footprint}}, \code{\link[Signac]{PlotFootprint}},
 #'   \code{footprints_dissociated2spatial}
 plot_footprint_for_motif <- function(
-  object_dissociated_path,
   M_path, # eg adata_map.X.csv
   spot_obj_path,
   motif_name,
+  object_dissociated = NULL,
+  object_dissociated_path = NULL,
   assay = "peaks",
   clustering_var = "leiden",
   object_dissociated_out_path = object_dissociated_path,
   spot_obj_out_path = spot_obj_path,
+  plot_out_path = NULL,
   overwrite = TRUE
 ) {
 
@@ -599,8 +601,12 @@ plot_footprint_for_motif <- function(
       stop("Refusing to overwrite existing file: ", spot_obj_out_path)
     }
   }
-
-  object_dissociated <- readRDS(object_dissociated_path)
+  if (is.null(object_dissociated)) {
+    if (is.null(object_dissociated_path)) {
+      stop("Either object_dissociated or object_dissociated_path must be provided.")
+    }
+    object_dissociated <- readRDS(object_dissociated_path)
+  }
   M <- read.csv(M_path, row.names = 1, check.names = FALSE)
   spot_obj <- readRDS(spot_obj_path)
 
@@ -639,6 +645,12 @@ plot_footprint_for_motif <- function(
     show.expected = TRUE,
     normalization = "subtract"
   )
+  if (!is.null(plot_out_path)) {
+    ggsave(filename = plot_out_path, plot = p, width = 6, height = 4)
+  }else{
+    plot_out_path <- file.path(dirname(spot_obj_out_path),paste0("footprint_", motif_name, ".pdf"))
+    ggsave(filename = plot_out_path, plot = p, width = 6, height = 4)
+  }
 
   return(p)
 }

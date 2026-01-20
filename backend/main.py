@@ -33,11 +33,13 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     Response,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
 from fastapi_sessions.frontends.implementations import (
     CookieParameters,
@@ -228,7 +230,9 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
     if not upload:
         return None
 
+    print(f"Saving uploaded file: {upload.filename}")
     _ensure_under_max_size(upload)
+    print(f"ensured under max size: {upload.filename}")
 
     job_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _sanitize_filename(upload.filename or "upload.bin")
@@ -370,14 +374,18 @@ async def upload(
     use_multiome: bool = Form(False),
     multiome_rds: Optional[UploadFile] = File(None),
 
+    # need_multiome_fragments: bool = Form(False),
+    fragments_tsv_gz: Optional[UploadFile] = File(None),
+    fragments_tsv_gz_tbi: Optional[UploadFile] = File(None),
+
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
     score_chromVar: bool = Form(False),
-    #score_differential_motif_activity: bool = Form(False),
+    score_differential_motif_activity: bool = Form(False),
     score_motif_enrichment: bool = Form(False),
-    score_footprinting: bool = Form(False),
+    score_FootprintingBias: bool = Form(False),
 
     genome: str = Form(...),
 
@@ -467,6 +475,8 @@ async def upload(
         "spatial_h5ad": save_file(spatial_h5ad, job_dir),
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
         "multiome_rds": save_file(multiome_rds, job_dir),
+        "fragments_tsv_gz": save_file(fragments_tsv_gz, job_dir),
+        "fragments_tsv_gz_tbi": save_file(fragments_tsv_gz_tbi, job_dir),
         "genie3_network": save_file(genie3_network, job_dir),
         "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
         "sponge_networkinteractions": save_file(
@@ -537,9 +547,9 @@ async def upload(
             "squidpy": score_squidpy,
             "liana_plus": score_liana_plus,
             "chromVar": score_chromVar,
-            #"differential_motif_activity": score_differential_motif_activity,
+            "differential_motif_activity": score_differential_motif_activity,
             "motif_enrichment": score_motif_enrichment,
-            "footprinting": score_footprinting,
+            "footprinting": score_FootprintingBias,
         },
         "genome": genome,
 

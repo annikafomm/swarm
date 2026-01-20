@@ -36,6 +36,12 @@ def dict2params(param_dict):
                             case "multiome_rds":
                                 multiome_params.append("--multiome_rds")
                                 multiome_params.append(param_dict.get(key).get(fkey))
+                            case "fragments_tsv_gz":
+                                multiome_params.append("--fragments_tsv_gz")
+                                multiome_params.append(param_dict.get(key).get(fkey))
+                            case "fragments_tsv_gz_tbi":
+                                multiome_params.append("--fragments_tsv_gz_tbi")
+                                multiome_params.append(param_dict.get(key).get(fkey))
                             case "genie3_network":
                                 network_params.append("--genie_network")
                                 network_params.append(param_dict.get(key).get(fkey))

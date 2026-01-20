@@ -42,7 +42,14 @@ format_runtime <- function(t0) {
 }
 
 global_motif_analysis <- function(object, args, logfile) {
+
   print("Running global motif analysis...")
+
+  print("checking frag path")
+  fr <- Fragments(object[["peaks"]])
+  # what Signac thinks the fragments file is
+  old_path <- fr[[1]]@path
+  print(old_path)
 
   outdir <- args$outdir
   print("args$chromvar:")
@@ -103,22 +110,51 @@ global_motif_analysis <- function(object, args, logfile) {
       }
     }
 
-    if (args$footprinting) {
-      # compute Tn5 insertion bias for footprinting, is saved in object[["peaks"]]@bias
-      log_message("Computing Tn5 insertion bias...", logfile, 2)
-      object <- compute_Tn5_insertion_Bias(object, genome = genome, assay = "peaks")
-      # create spatial seurat object 
-      M <- read.csv(file.path(args$outdir, "adata_map.X.csv"))
-      spot_meta <- read.csv(file.path(args$outdir, "adata_map.var.csv"))
-      spot_obj <- seuratObj_dissociated2spatial(
-          object_dissociated= object,
-          M=M, 
-          spot_meta=spot_meta, 
-          assay = "peaks",
-          slot = "counts")
-      out_path <- file.path(args$outdir, "spot_obj.rds")
-      saveRDS(spot_obj, out_path)
-    }
+  }
+
+  if (args$footprinting) {
+    log_message("Running footprinting analysis...", logfile, 2)
+
+    log_message("setting fragment path...", logfile, 2)
+    frag_obj <- CreateFragmentObject(
+      path  = args$fragments_tsv_gz,
+      cells = colnames(object)   # restrict to cells in this object
+    )
+    object[["peaks"]]@fragments <- list(frag_obj)
+    log_message(Fragments(object[["peaks"]])[[1]]@path, logfile, 2)
+
+    # compute Tn5 insertion bias for footprinting, is saved in object[["peaks"]]@bias
+    log_message("Computing Tn5 insertion bias...", logfile, 2)
+    object <- compute_Tn5_insertion_Bias(object, genome = genome, assay = "peaks")
+    # create spatial seurat object
+    M_path <- file.path(args$outdir, "adata_map.X.csv")
+    M <- read.csv(M_path, row.names = 1)
+    spot_meta <- read.csv(file.path(args$outdir, "adata_map.var.csv"))
+    spot_obj <- seuratObj_dissociated2spatial(
+        object_dissociated= object,
+        M=M,
+        spot_meta=spot_meta,
+        assay = "peaks",
+        slot = "counts")
+    spot_obj_out_path <- file.path(args$outdir, "spot_obj.rds")
+    saveRDS(spot_obj, spot_obj_out_path)
+
+    # plot footprint for top motifs
+    log_message("Plotting footprints for top motifs...", logfile, 2)
+    object_dissociated_path <- args$multiome_rds
+    motif_name <- "MA0084.2"
+    plot_footprint_for_motif(
+        M_path = M_path, # eg adata_map.X.csv
+        spot_obj_path = spot_obj_out_path,
+        motif_name = motif_name,
+        object_dissociated = multiome_data,
+        object_dissociated_path = object_dissociated_path, # wont be used since object_dissociated is provided
+        assay = "peaks",
+        clustering_var = "leiden",
+        object_dissociated_out_path = object_dissociated_path,
+        spot_obj_out_path = spot_obj_out_path,
+        plot_out_path = NULL,
+        overwrite = TRUE)
   }
   return(object)
 }
@@ -132,12 +168,16 @@ main <- function() {
     make_option("--multiome_rds", type="character", help="Path to multiome RDS file", metavar="file"),
     make_option("--outdir", type="character", help="Dir containing output files"),
     make_option("--log", type="character", help="Path to the log file", metavar="file"),
+    make_option("--fragments_tsv_gz", type="character", help="Path to fragments TSV.GZ file for footprinting", metavar="file"),
+    make_option("--fragments_tsv_gz_tbi", type="character", help="Path to fragments TSV.GZ.TBI file for footprinting", metavar="file"),
+
 
     # score flags
     make_option("--chromvar", action="store_true", default=FALSE, help="Calculate chromVAR score"),
     make_option("--differential_motif_activity", action="store_true", default=FALSE, help="Calculate differential motif activity"),
     make_option("--motif_enrichment", action="store_true", default=FALSE, help="Calculate motif enrichment for idents"),
     make_option("--footprinting", action="store_true", default=FALSE, help="Calculate footprinting Tn5 insertion bias"),
+
     # score flags
     make_option("--multiome", action="store_true", default=FALSE, help="Calculate for multiome"),
 
@@ -163,7 +203,10 @@ main <- function() {
   logfile <- args$log
   print("logfile")
   print(logfile)
+
   log_message(paste0("R Multiome Pipeline started at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S")), logfile)
+  print("multiome params:")
+  print(args)
 
   # Load multiome RDS
   log_message("Loading multiome RDS file ...", logfile, 2)

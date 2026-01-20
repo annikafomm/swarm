@@ -9,6 +9,7 @@ import squidpy as sq
 from scipy import io, sparse
 import pandas as pd
 import time
+from scipy.io import mmwrite
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -296,7 +297,13 @@ def main():
                     filename = os.path.basename(args.input).replace(".h5ad", f"_map.h5ad")
                     adata_map.write(os.path.join(args.outdir, filename))
                     # wtite also X as csv and var/obs as csv
-                    adata_map.X.to_csv(os.path.join(args.outdir, "adata_map.X.csv"))
+
+                    df_adata_map = pd.DataFrame(
+                        adata_map.X,  # convert sparse to dense
+                        index=adata_map.obs_names,
+                        columns=adata_map.var_names)
+                    df_adata_map.to_csv(os.path.join(args.outdir, "adata_map.X.csv"))
+                    #mmwrite(os.path.join(args.outdir, "adata_map.X.mtx"), adata_map.X)
                     adata_map.var.to_csv(os.path.join(args.outdir, "adata_map.var.csv"))
                     adata_map.obs.to_csv(os.path.join(args.outdir, "adata_map.obs.csv"))
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)

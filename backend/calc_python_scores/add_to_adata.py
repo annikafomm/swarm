@@ -57,14 +57,16 @@ def combine_files(filename, description, args, logfile):
 
 
 def combine_files_multiome(filename, args, logfile, adata_map_path):
+    scores_path = os.path.join(args.indir, "multiome")
+    if not os.path.isdir(scores_path):
+        log_message(f"Scores directory not found: {scores_path}", logfile, 1)
+        return
     t0 = time.time()
     adata_path = os.path.join(args.indir, filename)
     adata = sc.read_h5ad(adata_path)
     adata_map = sc.read_h5ad(adata_map_path)
     log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 2)
-
     t0 = time.time()
-    scores_path = os.path.join(args.indir, "multiome")
 
     for filename in os.listdir(scores_path):
         if filename=="chromvar_scores.csv":

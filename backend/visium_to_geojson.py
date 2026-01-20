@@ -49,7 +49,7 @@ class Hexagons:
         self.scale = scale
         self.data_type = data_type
         self.motif_groups = motif_groups or {}
-        self.motif_names = list(anndata.uns["chromvar_motifs"])
+        self.motif_names = list(anndata.uns["chromvar_motifs"]) if "chromvar_motifs" in anndata.uns else []
         # mapping for case-insensitive gene lookups
         self.var_upper_to_name = {
             g.upper(): g for g in self.anndata.var_names

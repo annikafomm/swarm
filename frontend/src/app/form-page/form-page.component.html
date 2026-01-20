@@ -10,7 +10,7 @@
   <div class="section">
     <div class="field">
       <label class="field-label" for="email">
-        Contact Email 
+        Contact Email
       </label>
       <input id="email" type="email" formControlName="email" placeholder="e.g. name@domain.tld" autocomplete="email"
         inputmode="email" />
@@ -155,6 +155,31 @@
       <label *ngIf="useTangramMultiomeChecked()" class="score-option">
         <input type="checkbox" formControlName="FootprintingBias" />
         <span class="score-text">Footprinting Bias</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- if footprint bias is checked, fragment file + tbi is needed -->
+  <div *ngIf="needFragmentFiles()" class="section"> <!-- [formGroup]="tangramGroup">-->
+    <label>Upload Fragment file for rds file (.tsv.gz)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragments" type="file" (change)="onFileSelected($event, 'fragments')" accept=".gz">
+      <label for="fragments" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsFile?.name || 'No file selected'">
+          {{ fragmentsFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+
+    <label>Upload Fragment tabix file (.tsv.gz.tbi)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragmentsTabix" type="file" (change)="onFileSelected($event, 'fragmentsTabix')" accept=".tbi">
+      <label for="fragmentsTabix" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsTabixFile?.name || 'No file selected'">
+          {{ fragmentsTabixFile?.name || 'No file selected' }}
+        </span>
       </label>
     </div>
   </div>
