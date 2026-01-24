@@ -16,6 +16,7 @@ backend/calc_R_scores/.RData*
 
 backend/results/*
 
+backend/uploads/
 backend/uploads/*
 
 .Rproj.user
