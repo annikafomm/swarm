@@ -49,6 +49,11 @@ export class AppComponent implements OnInit {
       if (paths.adataPath) loadPath('read_adata', paths.adataPath, 'adata');
       if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
       if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
+      // for multiome data
+      // if (paths.fragmentsFilePath && paths.fragmentsIndexPath) {
+      //   loadPath('read_fragments', paths.fragmentsFilePath, 'fragments');
+      //   loadPath('read_fragments_index', paths.fragmentsIndexPath, 'fragments_index');
+      // }
     });
   }
 

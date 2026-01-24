@@ -464,26 +464,35 @@ seuratObj_dissociated2spatial <- function(
     assay = "peaks",
     slot = "counts"
 ){
-    C <- GetAssayData(processed_data, assay = assay, slot = slot)
+    C <- GetAssayData(object_dissociated, assay = assay, slot = slot)
     # force to 2D numeric (and to sparse for speed)
-    M_sp <- Matrix(as.matrix(M), sparse = TRUE)
+    M_sp <- Matrix::Matrix(as.matrix(M), sparse = TRUE)
 
     C_spot <- C %*% M_sp
 
-    ranges <- granges(processed_data[[assay]])  # peak GRanges from your multiome object
+    ranges <- granges(object_dissociated[[assay]])  # peak GRanges from your multiome object
 
     chrom_spot <- CreateChromatinAssay(
         counts = C_spot,
         ranges = ranges,
-        genome = genome(processed_data[[assay]]) # or "hg38"
+        genome = genome(object_dissociated[[assay]]) # or "hg38"
     )
 
     spot_obj <- CreateSeuratObject(counts = chrom_spot, assay = assay)
     DefaultAssay(spot_obj) <- assay
 
     spot_obj <- AddMetaData(spot_obj, spot_meta)
+    fix_barcode <- function(x) sub("\\.(\\d+)$", "-\\1", x)
+    # 1) fix spot IDs consistently
+    colnames(spot_obj) <- fix_barcode(colnames(spot_obj))
     return(spot_obj)
 
+}
+
+to_dgC <- function(x) {
+  if (inherits(x, "dgCMatrix")) return(x)
+  # works for data.frame / matrix / dense Matrix
+  Matrix::Matrix(as.matrix(x), sparse = TRUE)
 }
 
 footprints_dissociated2spatial <- function(
@@ -503,7 +512,7 @@ footprints_dissociated2spatial <- function(
     fp <- fp[rownames(M), , drop = FALSE]
 
     # 4) weighted SUM to spots: (spots x cells) %*% (cells x positions) = spots x positions
-    M = Matrix(as.matrix(M), sparse = TRUE)
+    M = Matrix::Matrix(as.matrix(M), sparse = TRUE)
     spot_sum <- t(M) %*% fp
 
     # normalize
@@ -512,7 +521,7 @@ footprints_dissociated2spatial <- function(
     spot_mean <- Diagonal(x = 1 / pmax(w_spot, 1e-12)) %*% spot_sum
     spot_mean_sp <- spot_mean
     if (!inherits(spot_mean_sp, "dgCMatrix")) {
-        spot_mean_sp <- Matrix(as.matrix(spot_mean_sp), sparse = TRUE)
+        spot_mean_sp <- Matrix::Matrix(as.matrix(spot_mean_sp), sparse = TRUE)
     }
     rownames(spot_mean_sp) <- rownames(spot_sum)
 

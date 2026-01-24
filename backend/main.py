@@ -50,12 +50,14 @@ from pydantic import BaseModel as PydanticBaseModel
 from pydantic import EmailStr
 from starlette.responses import RedirectResponse
 
+
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 
 # Base folder for all uploads (created on startup).
-BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
+# Use path relative to this file to avoid depending on current working dir.
+BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Allow configuring CORS origins via environment variable (comma-separated).
@@ -211,6 +213,7 @@ def _ensure_under_max_size(upload: UploadFile) -> None:
     size_bytes = stream.tell()
     stream.seek(pos, 0)  # restore
     size_mb = size_bytes / (1024 * 1024)
+    print(f"MAX_FILE_MB: {MAX_FILE_MB}, size_mb: {size_mb}")
     if size_mb > MAX_FILE_MB:
         raise HTTPException(
             status_code=413,
@@ -351,7 +354,10 @@ def api_root():
 # -----------------------------------------------------------------------------
 # Upload endpoint
 # -----------------------------------------------------------------------------
-
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"[REQ] {request.method} {request.url} content-length={request.headers.get('content-length')}")
+    return await call_next(request)
 
 # Main endpoint for receiving form fields and files (multipart/form-data).
 # It creates a dedicated job directory, saves all provided files there,
@@ -989,6 +995,20 @@ async def get_obsm_row(
         row_data[score] = obsm_data.loc[barcode].to_dict()
     return row_data
 
+
+
+@app.get("/api/download/{file_path:path}", dependencies=[Depends(cookie)])
+async def download_file(file_path: str):
+    full_path = (BASE_UPLOAD_DIR / file_path).resolve()
+
+    # Prevent path traversal outside uploads dir
+    if BASE_UPLOAD_DIR not in full_path.parents:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+    return FileResponse(str(full_path))
 
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])
 async def get_X_by_gene(

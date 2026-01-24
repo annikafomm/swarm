@@ -117,7 +117,9 @@ global_motif_analysis <- function(object, args, logfile) {
 
     log_message("setting fragment path...", logfile, 2)
     frag_obj <- CreateFragmentObject(
-      path  = args$fragments_tsv_gz,
+      #TODO: use provided fragment path, currently upload not working
+      #path  = args$fragments_tsv_gz,
+      path = "../backend/data/multiome_data/GSM7821196_KTBpool6_Ashkenazi_jew_atac_fragments.tsv.gz",
       cells = colnames(object)   # restrict to cells in this object
     )
     object[["peaks"]]@fragments <- list(frag_obj)
@@ -147,7 +149,7 @@ global_motif_analysis <- function(object, args, logfile) {
         M_path = M_path, # eg adata_map.X.csv
         spot_obj_path = spot_obj_out_path,
         motif_name = motif_name,
-        object_dissociated = multiome_data,
+        object_dissociated = object,
         object_dissociated_path = object_dissociated_path, # wont be used since object_dissociated is provided
         assay = "peaks",
         clustering_var = "leiden",

@@ -30,6 +30,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 
 @Component({
@@ -45,6 +46,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
   private _resizeHandler: any = null;
   private sub!: Subscription;
+  footprintPlotUrl?: SafeResourceUrl;
 
   constructor(
     private router: Router,
@@ -53,8 +55,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     private geoDataService: GeoDataService,
     private translationService: TranslationService,
     private pathsService: PathsService,
+    private sanitizer: DomSanitizer,
   ) { }
-
 
   // Define to use Math functions in the html template
   public Math = Math;
@@ -1516,6 +1518,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
+      setTimeout(() => this.renderFootprintPlot(), 100);
+      // setTimeout(() => this.renderFootprintPlot(), 0);
     }
   }
 
@@ -1711,6 +1715,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.g
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
+  }
+
+  private renderFootprintPlot(): void {
+    if (!this.selectedCluster) return;
+
+    const jobDir = 'job_1769110250766_f3d02da9-8553-49f3-a977-85d6c90c82cd/kackhaufen1';
+    const plotFileName = 'footprint_MA0084.2.pdf';
+
+    this.footprintPlotUrl = this.sanitizer.bypassSecurityTrustResourceUrl(
+      //  /workspaces/swarm/backend/uploads/job_1769110250766_f3d02da9-8553-49f3-a977-85d6c90c82cd/kackhaufen1/footprint_MA0084.2.pdf
+      `/api/download/${jobDir}/${plotFileName}`
+      // `/workspaces/swarm/backend/uploads/${jobDir}/${plotFileName}`
+    );
   }
 
   private renderNhoodHeatmap(): void {
@@ -2314,6 +2331,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 }
+
+
+
 
 interface CellGeometry {
   type: 'Polygon';

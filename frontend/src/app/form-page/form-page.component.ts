@@ -381,14 +381,14 @@ export class FormPageComponent {
     }
 
     // Send fragment files ONLY if footprinting bias is checked
-    if (this.form.value.scores.FootprintingBias) {
-      if (this.fragmentsFile) {
-        fd.append('fragments_tsv_gz', this.fragmentsFile);
-      }
-      if (this.fragmentsTabixFile) {
-        fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
-      }
-    }
+    // if (this.form.value.scores.FootprintingBias) {
+    //   if (this.fragmentsFile) {
+    //     fd.append('fragments_tsv_gz', this.fragmentsFile);
+    //   }
+    //   if (this.fragmentsTabixFile) {
+    //     fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
+    //   }
+    // }
 
 
     //  // --- multiome
