@@ -15,7 +15,8 @@ warnings.filterwarnings("ignore")
 
 def _set_seed(seed: int = 0) -> None:
     """
-    Setzt Zufallssamen für NumPy, random und PYTHONHASHSEED.
+    Set random seeds for NumPy, Python's random module, and PYTHONHASHSEED
+    to ensure reproducible grid construction and clustering.
     """
     np.random.seed(seed)
     random.seed(seed)
@@ -30,17 +31,29 @@ def _run_louvain_clustering(
     key_added: str = "louvain",
 ) -> None:
     """
-    Führt PCA, Nachbarn und Louvain-Clustering mit stlearn aus.
-    """
-    adata.raw = adata
+    Run PCA, compute a kNN graph, and perform Louvain clustering using stlearn.
 
+    This function adds the following to 'adata':
+    - adata.raw: snapshot of the input expression matrix
+    - adata.obsm["X_pca"]: PCA embedding
+    - adata.obsp["connectivities"] / ["distances"]: neighbor graph
+    - adata.obs[key_added]: cluster labels
+    """
+    # Keep a snapshot of the original data
+    adata.raw = adata.copy()
+
+    # Dimensionality reduction
     st.em.run_pca(adata, n_comps=n_comps, random_state=random_state)
+
+    # Build neighborhood graph on PCA representation
     st.pp.neighbors(
         adata,
         n_neighbors=n_neighbors,
         use_rep="X_pca",
         random_state=random_state,
     )
+
+    # Community detection with Louvain
     st.tl.clustering.louvain(
         adata,
         random_state=random_state,
@@ -55,13 +68,18 @@ def choose_grid_n(
     max_n: int = 180,
 ) -> int:
     """
-    Wählt eine Grid-Kantenlänge n (n x n),
-    so dass ~target_cells_per_spot Zellen pro Spot liegen.
+    Choose a grid side length 'n' (resulting in an n x n grid)
+    such that each spot contains approximately
+    'target_cells_per_spot' cells on average.
+
+    The value is clamped between 'min_n' and 'max_n' to avoid
+    extremely coarse or extremely fine grids.
     """
     n_cells = adata.n_obs
     n_spots = n_cells / float(target_cells_per_spot)
     n_side = int(np.sqrt(n_spots))
 
+    # Clamp to allowed range
     n_side = max(min_n, n_side)
     n_side = min(max_n, n_side)
     return n_side
@@ -75,11 +93,19 @@ def gridding_xenium(
     target_sum: float = 1e4,
 ) -> sc.AnnData:
     """
-    Macht aus Xenium-Zelldaten ein Spot-Level-Grid mit stlearn.
+    Convert Xenium single-cell AnnData into a spot-level grid AnnData using stlearn.
+
+    Design:
+    - Input 'adata' contains true single-cell coordinates and expression.
+    - A regular spatial grid is constructed over the tissue.
+    - Each grid spot aggregates nearby cells and uses their cluster labels
+      to form a spot-level representation.
+    - The returned AnnData represents the grid and is used for all
+      downstream spatial scoring (Squidpy, LIANA, etc.).
     """
     _set_seed(seed)
 
-    # Wenn kein Cluster-Label vorhanden: Louvain rechnen
+    # If no cluster labels exist, run Louvain clustering
     if cluster_key not in adata.obs:
         _run_louvain_clustering(
             adata,
@@ -90,7 +116,7 @@ def gridding_xenium(
         )
 
 
-    # Grid erzeugen
+    # Build the spatial grid
     grid = st.tl.cci.grid(
         adata,
         n_row=n_spots_side,

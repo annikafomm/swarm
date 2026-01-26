@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import simplejson as json
+from scipy import sparse
 
 grn_score_names = (
     "aucell_scores",
@@ -36,6 +37,7 @@ class Hexagons:
         radius=5,
         scale=0.1,
         data_type="visium",
+
     ):
 
         self.anndata = anndata
@@ -44,6 +46,9 @@ class Hexagons:
         self.geometry_type = "Polygon"
         self.scale = scale
         self.data_type = data_type
+
+        self.global_scores = {}
+
         self.coordinates, self.centers = self.parse_coordinates()
         self.obs = self.parse_obs()
 
@@ -80,14 +85,18 @@ class Hexagons:
                 coords.append([int(x) * self.scale, int(y) * self.scale])
             barcodes = self.anndata.obs.index
 
+        # Xenium mode:
+        # Render each cell as a small hexagon instead of a large spot.
+        # Grid-level scores are already broadcasted into obs/obsm and will be attached
+        # to each cell feature for visualization.
+
         elif self.data_type == "xenium":
             small_r = getattr(self, "cell_radius", None)
             if small_r is None:
-                small_r = self.radius * 0.2  # Default 20% vom Visium-Radius
+                small_r = self.radius * 0.2
 
             for coord_tuple in anndata_spatial_coordinates:
                 x, y = coord_tuple
-                # keine int-Casts -> Präzision behalten
                 hexagon = self.hexagon_points(x=x, y=y, radius=small_r)
                 hex_coords.append(hexagon)
                 coords.append([float(x) * self.scale, float(y) * self.scale])
@@ -107,7 +116,7 @@ class Hexagons:
 
     def get_obsm(self, key, barcode, col=None, dtype=float):
         """
-        Return `adata.obsm[key].loc[barcode, col]` where col defaults to the
+        Return 'adata.obsm[key].loc[barcode, col]' where col defaults to the
         first column of the dataframe.
         """
         if col is None:
@@ -116,13 +125,21 @@ class Hexagons:
 
     def get_X(self, barcode, gene=None, dtype=float):
         """
-        Return `adata[barcode, gene].X.toarray()` where gene defaults to the
+        Return 'adata[barcode, gene].X.toarray()' where gene defaults to the
         first gene in var.index. If the result is a single number, return as
         dtype.
         """
         if gene is None:
             gene = self.anndata.var.index[0]
-        expressions = self.anndata[barcode, gene].X.toarray()
+
+        X = self.anndata[barcode, gene].X
+
+        # Handle both sparse and dense matrices
+        if sparse.issparse(X):
+            expressions = X.toarray()
+        else:
+            expressions = np.asarray(X)
+
         if expressions.size == 1:
             return dtype(expressions.flatten()[0])
 
@@ -242,6 +259,11 @@ class Hexagons:
 
 
 def load_adata(path: str) -> sc.AnnData:
+    # NOTE (Xenium):
+    # This script expects CELL-LEVEL AnnData with broadcasted grid scores
+    # (e.g. xenium_cells_with_grid_scores.h5ad).
+    # Passing a grid-level AnnData (st_grid.h5ad) will make Xenium look like Visium.
+
     spatial_data = sc.read_h5ad(path)
 
     # Reconstruct liana columns for placeholder fields in the geojson
@@ -330,11 +352,13 @@ if __name__ == "__main__":
 
     # Add meta information like ligand receptor pair names for api fetching
     meta_dict = {}
-    for global_score in global_scores_sort_keys:
-        if global_score in spatial_data.uns:
-            meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
-        elif global_score in hexagons.global_scores:
-            meta_dict[global_score] = hexagons.global_scores[global_score]
+
+    if any(gs in spatial_data.uns for gs in global_scores_sort_keys):
+        for global_score in global_scores_sort_keys:
+            if global_score in spatial_data.uns:
+                meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
+
+
 
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
