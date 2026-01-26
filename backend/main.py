@@ -684,6 +684,29 @@ async def read_adata(
 
     session_data.adata_path = adata_path.path
 
+    adata = sc.read_h5ad(adata_path.path)
+
+    reconstruct_obsm_cols = {
+        "ligand_receptor_cosine_similarity": "ligand_receptor",
+        "ligand_receptor_p_value": "ligand_receptor",
+        "ligand_receptor_category": "ligand_receptor",
+        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
+        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
+    }
+
+    for obsm_key, col_names in reconstruct_obsm_cols.items():
+        if obsm_key in adata.obsm:
+            adata.obsm[obsm_key] = pd.DataFrame(
+                adata.obsm[obsm_key],
+                columns=adata.uns["liana_columns"][col_names],
+                index=adata.obs_names,
+            )
+
+    # Clear adata from memory
+    del adata
+
+    print(f"Setting adata path to: {adata_path.path}")
+
     await backend.update(session_id, session_data)
     return {"status": "ok"}
 
