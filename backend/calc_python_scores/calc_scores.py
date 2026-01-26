@@ -1,3 +1,12 @@
+# Pipeline overview:
+# 1) Load spatial AnnData (Visium or Xenium).
+# 2) Optional preprocessing (filter / normalize).
+# 3) If Xenium: build a grid-level AnnData for scoring + keep cell-level AnnData for visualization.
+# 4) Optional Tangram -> compute scores on Tangram output.
+# 5) Compute scores on spatial data (Visium: original; Xenium: grid-level).
+# 6) If Xenium: broadcast grid-level scores back to cells and write cell-level output.
+
+
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="xarray_schema")
@@ -241,6 +250,17 @@ def main():
         adata = sc.read_h5ad(args.input)
         log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 2)
 
+        # Data objects:
+        # - adata: original spatial AnnData (Visium spots OR Xenium cells)
+        # - adata_work: the object we compute scores on (Visium: adata, Xenium: grid-level)
+        # - adata_cells: Xenium-only, cell-level object kept for visualization + final output
+        # - adata_grid: Xenium-only, grid-level object used for scoring
+
+        adata_cells = None          # will only be used for xenium
+        adata_grid = None           # will only be used for xenium
+        adata_work = adata          # this is what we compute scores on
+
+
         st_preprocessed = args.input
         # Preprocessing
         if args.filter_st:
@@ -265,13 +285,13 @@ def main():
             st_preprocessed = os.path.join(args.outdir, "st_for_scores.h5ad")
             adata.write(st_preprocessed)
 
-        # wenn xenium --> gridding durchführen
+        # If Xenium: create grid-level representation for scoring
         if args.dataset == "xenium":
             log_message("Performing gridding for Xenium data ...", logfile)
             t0 = time.time()
             from xenium.gridding_pipeline import choose_grid_n, gridding_xenium
 
-            # 1) Save cell-level AnnData for visualization
+            # 1) Keep cell-level AnnData (visualization + final output later)
             adata_cells = adata.copy()
             cell_file = os.path.basename(args.input).replace(
                 ".h5ad",
@@ -281,21 +301,23 @@ def main():
             adata_cells.write(cell_path)
             log_message(f"Cell-level Xenium AnnData written to {cell_path}", logfile, 2)
 
-            # 2) Generate spot-level AnnData (grid) for score calculation
+            # 2) Create grid-level for scoring
             n_ = choose_grid_n(adata, target_cells_per_spot=20)
             log_message(f"Chosen grid size: {n_} x {n_} spots", logfile, 2)
 
             adata_grid = gridding_xenium(adata, n_spots_side=n_)
             log_message(f"Gridding performed in {format_runtime(t0)}", logfile, 2)
 
+            adata_work = adata_grid
+
+            # 3) Create mapping: each cell -> nearest grid spot
             adata_cells = map_cells_to_grid(
                 adata_cells=adata_cells,
                 adata_grid=adata_grid,
             )
-            # 3) Proceed with all further analyses at the spot level
-            adata = adata_grid
+            # 4) Proceed with all further analyses at the spot level
             st_grid = os.path.join(args.outdir, "st_grid.h5ad")
-            adata.write(st_grid)
+            adata_work.write(st_grid)
 
             st_preprocessed = st_grid
 
@@ -375,24 +397,31 @@ def main():
                             logfile,
                             2,
                         )
+        compute_spatial_scores(adata_work, "st", args, logfile)
 
-    compute_spatial_scores(adata, "st", args, logfile)
-    if args.dataset == "xenium":
-        adata_cells = broadcast_grid_to_cells(
-            adata_cells=adata_cells,
-            adata_grid=adata,
-            prefix="",
-            copy_obs=True,
-            copy_obsm=True,
-            overwrite=True,
-        )
+        if args.dataset == "xenium":
 
-        adata_cells.write(
-            os.path.join(args.outdir, "xenium_cells_with_grid_scores.h5ad")
-        )
+            # Xenium only: scores were computed on the grid-level (adata_work),
+            # so we broadcast grid-level obs/obsm back to each cell using the stored mapping.
 
 
-    log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
+            adata_cells = broadcast_grid_to_cells(
+                adata_cells=adata_cells,
+                adata_grid=adata_work,
+                prefix="grid_",
+                copy_obs=True,
+                copy_obsm=True,
+                copy_uns=True,
+                copy_varm=True,
+                overwrite=False,
+            )
+
+            adata_cells.write(
+                os.path.join(args.outdir, "xenium_cells_with_grid_scores.h5ad")
+            )
+
+
+        log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
 
 
 if __name__ == "__main__":

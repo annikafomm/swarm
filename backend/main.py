@@ -664,34 +664,64 @@ async def upload(
     # TODO call visium_to_geojson
     out_dir = await calculate_scores_helper(job_dir, payload)
 
-    out_files = {}
-    adata_path = None
+    # Xenium: scores are computed on a grid/spot representation, then broadcast back to cells.
+    # For the web app we prefer the *cell-level* AnnData (xenium_cells_with_grid_scores.h5ad).
+    # If not available, we fall back to spot-level (st_scores.h5ad) or the original upload.
 
-    # 1. Wenn Scores da sind → st_scores.h5ad nutzen
+
+    print("\n=== DEBUG upload() ===")
+    print("dataset:", dataset.value)
+    print("job_dir:", job_dir)
+    print("out_dir:", out_dir)
+
     if out_dir is not None:
-        print(f"Output directory: {out_dir}")
+        print("files in out_dir:", sorted(os.listdir(out_dir)))
+    else:
+        print("out_dir is None (pipeline returned None)")
+
+    adata_path = None
+    selected_reason = None
+    out_files = {}
+
+    if out_dir is not None:
         for filename in os.listdir(out_dir):
-            if filename.endswith("xenium_cells_with_grid_scores.h5ad"):
+            if filename.endswith("xenium_cells_with_grid_scores.h5ad") and dataset == Dataset.Xenium:
                 adata_path = os.path.join(out_dir, filename)
+                selected_reason = "Found xenium cell-level output"
                 break
-            if filename.endswith("st_scores.h5ad"):
-                adata_path = os.path.join(out_dir, filename)
+
+        if adata_path is None:
+            for filename in os.listdir(out_dir):
+                if filename.endswith("st_scores.h5ad"):
+                    adata_path = os.path.join(out_dir, filename)
+                    selected_reason = "Fallback to grid-level st_scores (cell-level missing)"
+                    break
+
+        print("selected adata_path:", adata_path)
+        print("selection reason:", selected_reason)
 
 
-    # 2. Wenn keine Scores → benutze das originale Upload-h5ad
+
+
     if adata_path is None:
         adata_path = saved_files.get("spatial_h5ad")
+        selected_reason = "Fallback to uploaded spatial_h5ad (no pipeline output found)"
+        print("WARNING:", selected_reason)
 
-    # 3. Falls out_dir None ist → benutze job_dir (kein neues Verzeichnis!)
     if out_dir is None:
         out_dir = job_dir
 
-    # 4. Jetzt GeoJSON erzeugen (immer!)
     if adata_path is not None:
         out_files["adataPath"] = adata_path
 
         data_type = dataset.value.lower()
 
+        geojson_out = os.path.join(out_dir, "hexagons.geojson")
+        print("geojson_out:", geojson_out)
+        print("geojson input adata:", adata_path)
+        print("geojson data_type:", dataset.value.lower())
+
+        # Convert selected AnnData to GeoJSON for map rendering.
         subprocess.run(
             [
                 "python",
@@ -705,8 +735,8 @@ async def upload(
             ]
         )
         out_files["geojsonPath"] = os.path.join(out_dir, "hexagons.geojson")
+        print("geojson exists after run?:", os.path.isfile(geojson_out))
 
-    # zusätzliche Outputs (falls vorhanden)
     if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
         out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
 

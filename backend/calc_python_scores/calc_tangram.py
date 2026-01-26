@@ -19,7 +19,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
     Select genes according to the requested strategy. Falls back to overlapping genes
     when no selection is provided.
     """
-    if not selection_mode is None:
+    if selection_mode is not None:
         selection_mode = selection_mode.lower()
 
     if selection_mode == "ctg":
@@ -37,19 +37,20 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         genes = gene_selection.svg(ad_sp)
         print("[gene_selection] svg")
     else:
-        print("No gene selection performed. All overlapping genes will be used.")
         genes = None
-        print("none")
+        print("[gene_selection] Using all overlapping genes (no selection mode)")
 
-    if not genes is None:
-        genes = list(genes)
-        print(f"[gene_selection] Selected n={len(genes)} genes")
-    else:
-        print(f"[gene_selection] Selected n=0 genes")
+    if genes is None:
+        return None
+
+    genes = list(genes)
+    print(f"[gene_selection] Selected n={len(genes)} genes")
     return genes
 
 
 def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu'):
+    # Tangram preprocessing mutates ad_sc/ad_sp in-place.
+    # We keep copies only to restore spatial metadata + map var annotations later.
     adata_sp_copy = ad_sp.copy()
     adata_sc_copy = ad_sc.copy()
 
@@ -67,7 +68,7 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
         ad_map = tg.map_cells_to_space(ad_sc, ad_sp, device="cuda:0")
         ad_ge = tg.project_genes(ad_map, ad_sc)
     elif device_choice == "cpu":
-        print("[mapping] Using CPU with mode='clusters' and no cluster_label.")
+        print("[mapping] Using CPU with mode='clusters' and with cluster_label.")
         ad_map = tg.map_cells_to_space(ad_sc, ad_sp, mode="clusters", device="cpu", cluster_label=cell_label, num_epochs=200)
         ad_ge = tg.project_genes(ad_map, ad_sc, cluster_label=cell_label)
     else:
