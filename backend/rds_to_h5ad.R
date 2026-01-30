@@ -8,8 +8,8 @@ suppressPackageStartupMessages({
   library(optparse)
 })
 
-main <- function() {
 
+main <- function() {
 
   # # ---- Set up logging ----
   # log_dir  <- "log"
@@ -34,7 +34,6 @@ main <- function() {
   #   try(close(err_con), silent = TRUE)
   # }, add = TRUE)
 
-
   option_list <- list(
     make_option(
       c("--rds_path"),
@@ -57,6 +56,22 @@ main <- function() {
 
   opt_parser <- OptionParser(option_list = option_list)
   opt <- parse_args(opt_parser)
+
+  cat("Package versions:\n")
+  cat("  SeuratObject:", as.character(packageVersion("SeuratObject")), "\n")
+  cat("  Seurat:", as.character(packageVersion("Seurat")), "\n")
+  cat("  SeuratDisk:", as.character(packageVersion("SeuratDisk")), "\n")
+  cat("  Signac:", as.character(packageVersion("Signac")), "\n")
+
+  cat("SeuratObject built:", packageDescription("SeuratObject")$Built, "\n")
+  cat("SeuratObject:", as.character(packageVersion("SeuratObject")), "\n")
+  cat("SeuratObject path:", find.package("SeuratObject"), "\n")
+  cat("Seurat:", as.character(packageVersion("Seurat")), "\n")
+  cat("Seurat path:", find.package("Seurat"), "\n")
+
+  cat("SeuratDisk path:", find.package("SeuratDisk"), "\n")
+  cat("Signac path:", find.package("Signac"), "\n")
+
 
   # ---- Basic argument checks ----
   if (is.null(opt$rds_path)) {
@@ -93,9 +108,26 @@ main <- function() {
   cat("h5Seurat file will be:", h5seurat_file, "\n")
   cat("h5ad file will be:    ", h5ad_file, "\n")
 
-  # ---- Ensure assay is standard Assay class ----
-  cat("Coercing assay", assay_name, "to 'Assay' class if needed...\n")
-  data_seurat[[assay_name]] <- as(object = data_seurat[[assay_name]], Class = "Assay")
+  # # ---- Ensure assay is standard Assay class ----
+  # cat("Coercing assay", assay_name, "to 'Assay' class if needed...\n")
+  # data_seurat[[assay_name]] <- as(object = data_seurat[[assay_name]], Class = "Assay")
+  # ---- Convert assay to V3/4 Assay structure using scCustomize ----
+  cat("Converting assay", assay_name, "to V3/4 Assay structure via scCustomize::Convert_Assay()...\n")
+
+  if (!requireNamespace("scCustomize", quietly = TRUE)) {
+    stop("Package 'scCustomize' is required for option 2. Install with: install.packages('scCustomize')", call. = FALSE)
+  }
+
+  # Convert only the assay you plan to export
+  data_seurat <- scCustomize::Convert_Assay(
+    seurat_object = data_seurat,
+    assay         = assay_name,
+    convert_to    = "V3"   # accepted: "V3"/"Assay"/"v3"/"assay"
+  )
+
+  # (Optional but often helpful) set the default assay explicitly
+  Seurat::DefaultAssay(data_seurat) <- assay_name
+
 
   # ---- Save to .h5Seurat ----
   cat("Saving Seurat object as .h5Seurat...\n")
