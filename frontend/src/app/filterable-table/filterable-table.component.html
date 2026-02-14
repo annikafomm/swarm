@@ -1,26 +1,30 @@
 <div class="table-container upload-style">
   <div class="table-scroll">
+
     <table class="ftable">
       <thead>
         <tr>
           <th class="index-col">
             <div class="th-top">
-              <span style="display: inline-block; white-space: nowrap;">Index</span>
+              <div style="display: flex; align-items: center; flex-direction: column; gap: 2px;">
+              <span style="display: inline-block; overflow-wrap: break-word; word-break: normal; min-width: 100px; hyphens: none;">Index</span>
+              <input class="input" [(ngModel)]="filters['index']" placeholder="Type to filter..." />
+              </div>
               <span class="sort-icons">
-                <button class="btn-ghost icon" (click)="setSort('index', true)" aria-label="aufsteigend sortieren">
+                <button class="btn-ghost icon" (click)="setSort('index', true)" aria-label="sort ascending">
                   ▲
                 </button>
-                <button class="btn-ghost icon" (click)="setSort('index', false)" aria-label="absteigend sortieren">
+                <button class="btn-ghost icon" (click)="setSort('index', false)" aria-label="sort descending">
                   ▼
                 </button>
               </span>
-              <input class="input" [(ngModel)]="filters['index']" placeholder="Type to filter..." />
             </div>
+
           </th>
 
           <th *ngFor="let col of columns" class="other-col">
             <div class="th-top">
-              <span style="display: inline-block; white-space: nowrap;">{{ col | translate | async }}</span>
+              <span style="display: inline-block; overflow-wrap: break-word; word-break: normal; hyphens: none;">{{ col | translate | async }}</span>
               <span class="sort-icons">
                 <button class="btn-ghost icon" (click)="setSort(col, true)">
                   ▲
@@ -56,6 +60,7 @@
   </div>
 </div>
 <br />
+
 <!-- Pagination controls -->
 <div class="pagination">
   <button class="btn btn-pill" (click)="setPage(currentPage - 1)" [disabled]="currentPage === 1">

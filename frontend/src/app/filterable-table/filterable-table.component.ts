@@ -38,7 +38,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   sortAsc: boolean = true;
 
   // Pagination
-  pageSize = 50; // number of rows per page
+  pageSize = 6; // number of rows per page
   currentPage = 1;
 
   ngOnInit() {
