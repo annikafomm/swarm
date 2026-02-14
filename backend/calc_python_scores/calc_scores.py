@@ -48,15 +48,17 @@ def compute_spatial_scores(adata, description, args, logfile):
         if args.liana:
             if description == "tg":
                 cell_prop_key = "tangram_ct_pred"
-            elif description == "st":
+            elif description == "st" and args.cell_comp_key:
                 cell_prop_key = args.cell_comp_key
+
+            
 
             if not (args.grn is None or os.path.exists(args.grn)):
                 log_message(f"The GRN file {args.grn} does not exist.", logfile)
             elif not (args.pathway_net is None or os.path.exists(args.pathway_net)):
                 log_message(f"The pathway net file {args.pathway_net} does not exist.", logfile)
             else:
-                if cell_prop_key not in adata.obsm.keys():
+                if not cell_prop_key and cell_prop_key not in adata.obsm.keys():
                     log_message(f"'{cell_prop_key}' is not a column in adata.obsm. Please provide a valid cell composition key.", logfile)
             
                 t0 = time.time()

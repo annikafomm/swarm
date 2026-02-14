@@ -209,7 +209,7 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
     }
 
     for obsm_key, col_names in reconstruct_obsm_cols.items():
-        if obsm_key in adata.obsm:
+        if obsm_key in adata.obsm and 'liana_columns' in adata.uns and col_names in adata.uns["liana_columns"]:
             adata.obsm[obsm_key] = pd.DataFrame(
                 adata.obsm[obsm_key],
                 columns=adata.uns["liana_columns"][col_names],

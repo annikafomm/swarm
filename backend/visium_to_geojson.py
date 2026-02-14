@@ -242,6 +242,7 @@ def load_adata(path: str) -> sc.AnnData:
         if (
             obsm_key in spatial_data.obsm
             and "liana_columns" in spatial_data.uns
+            and col_names_key in spatial_data.uns["liana_columns"]
         ):
             spatial_data.obsm[obsm_key] = pd.DataFrame(
                 spatial_data.obsm[obsm_key],
