@@ -254,107 +254,112 @@
 
         <mat-tab label="Regulatory Scores">
           <div *ngIf="colorByProperty === 'regulatory_scores'">
+            <mat-expansion-panel expanded="true">
+              <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
+              <div class="gene-set-top">
+                <h4>Aggregated Regulatory Scores</h4>
+                <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
+                  [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                  [updateColumn]="'regulatory_scores'" (featuresUpdated)="updateHexColors()"></app-table>
+                <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  (featuresUpdated)="updateHexColors()"></app-table>
+              </div>
+            </mat-expansion-panel>
 
-            <div class="gene-set-top">
-              <h4>Aggregated Regulatory Scores</h4>
-              <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
-                [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                [updateColumn]="'regulatory_scores'" (featuresUpdated)="updateHexColors()"></app-table>
-              <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                (featuresUpdated)="updateHexColors()"></app-table>
-            </div>
+            <mat-expansion-panel>
+              <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
 
-            <mat-divider style="margin: 10px 0;"></mat-divider>
+              <div class="gene-set-body">
+                <section class="graph-block genie3-block">
+                  <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
 
-            <div class="gene-set-body">
-              <section class="graph-block genie3-block">
-                <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
-
-                <div *ngIf="genie3SliderData" class="genie3-controls">
-                  <div class="control-row">
-                    <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
-                    <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
-                      [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
-                      [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
-                      [(ngModel)]="genie3WeightCutoff" />
-                    <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                  <div *ngIf="genie3SliderData" class="genie3-controls">
+                    <div class="control-row">
+                      <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+                      <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
+                        [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
+                        [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
+                        [(ngModel)]="genie3WeightCutoff" />
+                      <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="control-row">
-                    <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
-                    <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
-                      (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
-                    <div class="helper small">1 ←→ 50</div>
-                  </div>
-                </div>
-
-
-
-                <div *ngIf="isLoadingGenie3" class="loading-container">
-                  <div class="loading-spinner"></div>
-                  <div class="loading-text">Loading Genie3 network...</div>
-                </div>
-
-                <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
-
-                <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
-                  <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                    [disabled]="!selectedGeneSetGenie3">
-                    🧬 Analyze All Genie3 Genes in gProfiler
-                  </button>
-                </div>
-
-                <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
-                  Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{ genie3MinEdges
-                  }}
-                </div>
-              </section>
-
-              <section class="graph-block sponge-block">
-                <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
-
-                <div *ngIf="spongeSliderData" class="sponge-controls">
-                  <div class="control-row">
-                    <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
-                    <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
-                      [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
-                      [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
-                      (input)="onSliderChangeSponge()" />
-                    <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                    <div class="control-row">
+                      <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                      <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
+                        (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
+                      <div class="helper small">1 ←→ 50</div>
                     </div>
                   </div>
 
 
-                  <div class="control-row">
-                    <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
-                    <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
-                      (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
-                    <div class="helper small">1 ←→ 50</div>
+
+                  <div *ngIf="isLoadingGenie3" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading Genie3 network...</div>
                   </div>
-                </div>
 
-                <div *ngIf="isLoadingSponge" class="loading-container">
-                  <div class="loading-spinner"></div>
-                  <div class="loading-text">Loading Sponge network...</div>
-                </div>
+                  <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
-                <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+                  <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
+                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                      [disabled]="!selectedGeneSetGenie3">
+                      🧬 Analyze All Genie3 Genes in gProfiler
+                    </button>
+                  </div>
 
-                <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
-                  <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                    [disabled]="!selectedGeneSetSponge">
-                    🧬 Analyze All Sponge Genes in gProfiler
-                  </button>
-                </div>
+                  <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
+                    Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{
+                    genie3MinEdges
+                    }}
+                  </div>
+                </section>
 
-                <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
-                  P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
-                </div>
-              </section>
-            </div>
+                <section class="graph-block sponge-block">
+                  <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+
+                  <div *ngIf="spongeSliderData" class="sponge-controls">
+                    <div class="control-row">
+                      <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+                      <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
+                        [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
+                        [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
+                        (input)="onSliderChangeSponge()" />
+                      <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                      </div>
+                    </div>
+
+
+                    <div class="control-row">
+                      <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+                      <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
+                        (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
+                      <div class="helper small">1 ←→ 50</div>
+                    </div>
+                  </div>
+
+                  <div *ngIf="isLoadingSponge" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading Sponge network...</div>
+                  </div>
+
+                  <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+
+                  <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
+                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                      [disabled]="!selectedGeneSetSponge">
+                      🧬 Analyze All Sponge Genes in gProfiler
+                    </button>
+                  </div>
+
+                  <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
+                    P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
+                  </div>
+                </section>
+              </div>
+            </mat-expansion-panel>
           </div>
 
           <div *ngIf="colorByProperty === 'regulatory_scores' && selectedCell">
@@ -679,31 +684,31 @@
             </div>
 
             <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
-            <h4> Cell Regulatory Scores</h4>
+              <h4> Cell Regulatory Scores</h4>
 
-            <div class="cell-reg-scores">
-              <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
+              <div class="cell-reg-scores">
+                <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
 
-              <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
-              <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                (featuresUpdated)="updateHexColors()">
-              </app-table>
+                <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
+                <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                  (featuresUpdated)="updateHexColors()">
+                </app-table>
 
 
-              <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-              <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                (featuresUpdated)="updateHexColors()">
-              </app-table>
+                <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
+                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  (featuresUpdated)="updateHexColors()">
+                </app-table>
 
-              <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
-                No regulatory scores available or still loading.
+                <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
+                  No regulatory scores available or still loading.
+                </div>
               </div>
             </div>
-          </div>
           </mat-tab>
 
           <mat-tab label="Compare - Gene Expression">
@@ -856,7 +861,8 @@
               <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathwayActivity'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+        ]" [features]="features" [updateColumn]="'pathwayActivity'"
+                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
         </mat-tab-group>
