@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import time
+from dataset_management import DatasetRegistry
 from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
@@ -155,6 +156,27 @@ class GenieNetworkPath(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    global dataset_registry
+    dataset_registry = DatasetRegistry()
+
+    # Register builtin datasets from backend/data
+    builtin_adata = Path("./data/adata.h5ad")
+    if builtin_adata.exists():
+        dataset_registry.register_builtin_dataset(
+            dataset_id="builtin_main",
+            alias="Default Dataset (Visium)",
+            adata_path=str(builtin_adata),
+            description="Pre-configured spatial transcriptomics dataset"
+        )
+
+    builtin_geojson = Path("./data/hexagons.geojson")
+    if builtin_geojson.exists():
+        # Update the registered dataset with geojson path
+        dataset = dataset_registry.get_dataset_by_id("builtin_main")
+        if dataset:
+            dataset["geojson_path"] = str(builtin_geojson)
+            dataset_registry._save_registry()
+
     asyncio.create_task(cleanup_expired_sessions())
     yield
     # Shutdown
@@ -631,6 +653,30 @@ async def upload(
 
         payload["output_files"] = out_files
 
+        dataset_id = f"{user_safe}_{job_id}"
+
+        email_prefix = str(email.split("@")[0]) if email else "unknown"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+
+        dataset_registry.register_uploaded_dataset(
+            dataset_id=dataset_id,
+            alias=dataset_alias,
+            adata_path=adata_path,
+            tangram_adata_path=saved_files.get("single_cell_h5ad") if use_tangram else None,
+            genie_network_path=out_files.get("genieFiltPath"),
+            sponge_network_path=out_files.get("spongeFiltPath"),
+            geojson_path=out_files.get("geojsonPath"),
+            user=user_safe,
+            dataset_type=dataset,
+            use_tangram=use_tangram,
+            created_at=datetime.now().isoformat(),
+        )
+
+        # Include dataset_id in response
+        payload["dataset_id"] = dataset_id
+
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
@@ -638,6 +684,28 @@ async def upload(
 
     # 6) Return a clean JSON response the frontend can consume
     return payload
+
+
+
+@app.get("/api/datasets", dependencies=[Depends(cookie)])
+async def get_datasets(session_data: SessionData = Depends(verifier)):
+    """
+    Return all available datasets for the current user + builtin datasets.
+    Filters out datasets with missing files.
+    """
+    all_datasets = dataset_registry.get_all_datasets()
+    user_datasets = dataset_registry.get_user_datasets(session_data.username)
+
+    # Verify files exist before returning
+    valid_user_datasets = {}
+    for dataset_id, info in user_datasets.items():
+        if Path(info["adata_path"]).exists():
+            valid_user_datasets[dataset_id] = info
+
+    return {
+        "builtin": all_datasets.get("builtin", {}),
+        "uploaded": valid_user_datasets
+    }
 
 
 @app.get("/api/hexagon/{user}/{subdir}/{filename}")

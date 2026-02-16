@@ -11,7 +11,8 @@
       <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
       <div class="row-container">
-        <mat-form-field appearance="fill" id="color-by-property"> <mat-label>Color hexagons by</mat-label>
+        <mat-form-field appearance="fill" id="color-by-property">
+          <mat-label>Color hexagons by</mat-label>
           <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop">
@@ -25,6 +26,22 @@
           (click)="openInfoPage('views-section')">
           <mat-icon>help_outline</mat-icon>
         </button>
+
+        <mat-form-field appearance="fill" class="dataset-dropdown">
+          <mat-label>Select Dataset</mat-label>
+          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)">
+            <mat-optgroup label="Built-in Datasets">
+              <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Your Uploads">
+              <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
       </div>
 
       <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view">
@@ -38,16 +55,36 @@
 
       <div id="hexbin-compare" [class.hidden]="isLoadingCompare || !compareMode"></div>
 
-      <mat-form-field appearance="fill" *ngIf="compareMode">
-        <mat-label>Compare hexagons by</mat-label>
-        <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
-          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-            <mat-option *ngFor="let prop of group.value" [value]="prop">
-              {{ prop | translate | async }}
-            </mat-option>
-          </mat-optgroup>
-        </mat-select>
-      </mat-form-field>
+      <div class="row-container" *ngIf="compareMode">
+        <mat-form-field appearance="fill" *ngIf="compareMode">
+          <mat-label>Compare hexagons by</mat-label>
+          <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
+            <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+              <mat-option *ngFor="let prop of group.value" [value]="prop">
+                {{ prop | translate | async }}
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="dataset-dropdown">
+          <mat-label>Compare with Dataset</mat-label>
+          <mat-select [(ngModel)]="selectedDatasetCompare"
+            (selectionChange)="onDatasetCompareSelected($event.value)">
+            <mat-option [value]="null">None</mat-option>
+            <mat-optgroup label="Built-in Datasets">
+              <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Your Uploads">
+              <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
+      </div>
 
       <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
         <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"

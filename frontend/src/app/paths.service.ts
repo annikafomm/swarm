@@ -1,23 +1,31 @@
-// paths.service.ts
 import { Injectable } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
-import { DEFAULT_PATHS } from './constants';
+import { BehaviorSubject, Observable } from 'rxjs';
+
+export interface Paths {
+  adataMainPath?: string;
+  adataComparePath?: string;
+  genieFiltPath?: string;
+  spongeFiltPath?: string;
+  hexagonPath?: string;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class PathsService {
-  // BehaviorSubject so components can subscribe & update immediately
-  private pathsSource = new BehaviorSubject(DEFAULT_PATHS);
-  paths$ = this.pathsSource.asObservable();
+  private paths = new BehaviorSubject<Paths>({});
+  public paths$ = this.paths.asObservable();
 
-  // get current snapshot
-  get currentPaths() {
-    return this.pathsSource.value;
+  constructor() {}
+
+  updatePaths(newPaths: Partial<Paths>): void {
+    this.paths.next({
+      ...this.paths.value,
+      ...newPaths
+    });
   }
 
-  // update paths (e.g. after upload)
-  updatePaths(newPaths: typeof DEFAULT_PATHS) {
-    this.pathsSource.next(newPaths);
+  getPaths(): Paths {
+    return this.paths.value;
   }
 }

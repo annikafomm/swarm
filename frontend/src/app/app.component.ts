@@ -47,7 +47,7 @@ export class AppComponent implements OnInit {
         });
       };
 
-      if (paths.adataPath) loadPath('read_adata', paths.adataPath, 'adata');
+      if (paths.adataMainPath) loadPath('read_adata', paths.adataMainPath, 'adata');
       if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
       if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
     });
@@ -101,7 +101,7 @@ export class AppComponent implements OnInit {
         'You can select different views to visualize various aspects of your data.' +
         ' Use the tabs to switch between views such as gene expression, cell type, regulatory scores and LIANA+ scores.' +
         ' Each view provides unique insights into the spatial organization and characteristics of your data.',
-      attachTo: {element: '.metadata-tables', on: 'left' },
+      attachTo: { element: '.metadata-tables', on: 'left' },
       buttons: [
         { text: 'Back', action: tour.back },
         { text: 'Next', action: tour.next }

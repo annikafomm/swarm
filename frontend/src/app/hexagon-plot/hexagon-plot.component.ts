@@ -1,21 +1,27 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { KeyValue } from '@angular/common';
+import { Data, Router } from '@angular/router';
+import { map, Observable, Subject, Subscription, takeUntil } from 'rxjs';
+
+// Visualizations
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
-import { HttpClient } from '@angular/common/http';
+
+// Services
+import { DatasetService } from '../datasets.service';
+import { Dataset } from '../datasets.service';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
-import { KeyValue } from '@angular/common';
 import { TranslationService } from '../translation.service';
 import { TranslatePipe } from '../translate.pipe';
-import { Router } from '@angular/router';
-
-import { DEFAULT_PATHS } from '../constants';
-import { Subscription } from 'rxjs';
 import { PathsService } from '../paths.service';
+import { DEFAULT_PATHS } from '../constants';
 
+// Material
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -32,6 +38,7 @@ import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 
 
+
 @Component({
   selector: 'app-hexagon-plot',
   imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
@@ -46,14 +53,36 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private _resizeHandler: any = null;
   private sub!: Subscription;
 
+  builtinDatasets$: Observable<Dataset[]>;
+  uploadedDatasets$: Observable<Dataset[]>;
+  selectedDataset: Dataset | null = null;
+  selectedDatasetCompare: Dataset | null = null;
+
+  compareMode: boolean = false;;
+
+  // Track component destruction to avoid setting state on an unmounted component
+  private destroy$ = new Subject<void>();
+
   constructor(
     private router: Router,
     private http: HttpClient,
     private sessionService: SessionService,
     private geoDataService: GeoDataService,
     private translationService: TranslationService,
+    private datasetService: DatasetService,
     private pathsService: PathsService,
-  ) { }
+  ) {
+
+    // Setup dataset observables
+    this.builtinDatasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'builtin'))
+    );
+    this.uploadedDatasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'uploaded'))
+    );
+
+  }
+
 
 
   // Define to use Math functions in the html template
@@ -77,8 +106,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
-
-
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
@@ -191,13 +218,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
   // Comparison
-  public compareMode: boolean = false;
   public selectedCompareView: string = 'regulatory_scores';
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
+
+    this.datasetService.selectedDataset$
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(dataset => {
+      this.selectedDataset = dataset;
+      if (dataset) {
+        this.updatePathsFromDataset(dataset);
+      }
+    });
+
+  this.datasetService.selectedDatasetCompare$
+    .pipe(takeUntil(this.destroy$))
+    .subscribe(dataset => {
+      this.selectedDatasetCompare = dataset;
+      if (dataset && this.compareMode) {
+        this.reloadComparisonView();
+      }
+    });
 
     this.isLoadingHexagons = true;
     // Subscribe to path changes
@@ -222,6 +266,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   ngOnDestroy(): void {
+
+    this.destroy$.next();
+    this.destroy$.complete();
+
     if (this.sub) {
       this.sub.unsubscribe();
     }
@@ -241,10 +289,57 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     window.addEventListener('resize', this._resizeHandler);
   }
 
-  /**
-   * Call into Angular Material's private header pagination update.
-   * We wrap in try/catch to be safe if internals change.
-   */
+  onDatasetSelected(dataset: Dataset | null): void {
+  if (!dataset) return;
+
+  this.selectedDataset = dataset;
+  this.datasetService.selectDataset(dataset);
+  this.updatePathsFromDataset(dataset);
+  this.reloadHexagons();
+}
+
+  onDatasetCompareSelected(dataset: Dataset | null): void {
+    if (!dataset) return;
+    this.selectedDatasetCompare = dataset;
+    this.datasetService.selectDatasetCompare(dataset);
+    if (dataset) {
+      this.reloadComparisonView();
+    }
+  }
+
+  reloadHexagons(): void {
+    if (this.dataPath) {
+      this.isLoadingHexagons = true;
+      // Clear existing hexagons
+      d3.select('#hexbin').selectAll('svg').remove();
+      // Load and render new data
+      this.createHexagonPlot();
+      this.loadAndRenderData(this.dataPath);
+    }
+  }
+
+  reloadComparisonView(): void {
+    if (this.selectedDatasetCompare && this.compareMode) {
+      this.isLoadingCompare = true;
+      // Clear existing compare hexagons
+      d3.select('#hexbin-compare').selectAll('svg').remove();
+      // Load and render new compare data
+      this.initCompareHexagonPlot();
+    }
+  }
+
+  private updatePathsFromDataset(dataset: Dataset): void {
+    this.pathsService.updatePaths({
+      adataMainPath: dataset.adata_path,
+      adataComparePath: dataset.adata_path,
+      genieFiltPath: dataset.genie_network_path,
+      spongeFiltPath: dataset.sponge_network_path,
+      hexagonPath: dataset.geojson_path,
+    });
+  }
+
+
+  // Track Tab pagination state to change to view accordingly
   private updateTabPagination(): void {
     try {
       if (this.tabGroup && (this.tabGroup as any)._header && typeof (this.tabGroup as any)._header.updatePagination === 'function') {
@@ -253,8 +348,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         (this.tabGroup as any)._updatePagination();
       }
     } catch (e) {
-      // silently ignore if Material internals differ
-      // console.debug('updateTabPagination failed', e);
+      // ignore
     }
   }
 
