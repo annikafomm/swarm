@@ -159,23 +159,33 @@ async def lifespan(app: FastAPI):
     global dataset_registry
     dataset_registry = DatasetRegistry()
 
-    # Register builtin datasets from backend/data
-    builtin_adata = Path("./data/adata.h5ad")
+    # Register builtin datasets from backend/data (use absolute paths)
+    base_path = Path(__file__).parent  # backend/ directory
+    builtin_adata = base_path / "data" / "adata.h5ad"
+    builtin_geojson = base_path.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+    builtin_genie = base_path / "data" / "genie_network_filt.csv"
+    builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
+
+    print(f"Base path: {base_path}")
+    print(f"Adata exists: {builtin_adata.exists()} at {builtin_adata}")
+
     if builtin_adata.exists():
         dataset_registry.register_builtin_dataset(
             dataset_id="builtin_main",
-            alias="Default Dataset (Visium)",
+            alias="Default Dataset (Visium, BRCA)",
             adata_path=str(builtin_adata),
+            geojson_path="/api/geojson/builtin_main",  # Use API URL for consistency
+            genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
+            sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
             description="Pre-configured spatial transcriptomics dataset"
         )
-
-    builtin_geojson = Path("./data/hexagons.geojson")
-    if builtin_geojson.exists():
-        # Update the registered dataset with geojson path
-        dataset = dataset_registry.get_dataset_by_id("builtin_main")
-        if dataset:
-            dataset["geojson_path"] = str(builtin_geojson)
-            dataset_registry._save_registry()
+        print(f"✓ Registered builtin dataset with paths:")
+        print(f"  - adata: {builtin_adata}")
+        print(f"  - geojson: /api/geojson/builtin_main")
+        print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
+        print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
+    else:
+        print(f"✗ Builtin adata not found at {builtin_adata}")
 
     asyncio.create_task(cleanup_expired_sessions())
     yield
@@ -613,17 +623,30 @@ async def upload(
 
     # TODO call visium_to_geojson
     out_dir = await calculate_scores_helper(job_dir, payload)
+
+    adata_path = None
+    tangram_adata_path = None
+    out_files = {}
+
     if out_dir is not None:
-        print(out_dir)
+        print(f"Output directory: {out_dir}")
 
-        adata_path = None
-        for filename in os.listdir(out_dir):
-            if filename.endswith("st_scores.h5ad"):
-                adata_path = os.path.join(out_dir, filename)
+        # Search for h5ad files recursively in case they're in subdirectories
+        for root, dirs, files in os.walk(out_dir):
+            for filename in files:
+                if filename.endswith("st_scores.h5ad"):
+                    adata_path = os.path.join(root, filename)
+                    print(f"Found adata: {adata_path}")
+                if filename.endswith("tg_scores.h5ad"):
+                    tangram_adata_path = os.path.join(root, filename)
+                    print(f"Found tangram adata: {tangram_adata_path}")
 
-        out_files = {}
+        # Create geojson from adata if found
         if adata_path is not None:
-            out_files["adataPath"] = adata_path
+            out_files["adata_path"] = adata_path
+
+            # Create hexagons.geojson in the job_dir (root), not in nested dir
+            hexagon_output = os.path.join(job_dir, "hexagons.geojson")
             subprocess.run(
                 [
                     "python",
@@ -631,51 +654,51 @@ async def upload(
                     "--adata",
                     adata_path,
                     "--outpath",
-                    os.path.join(out_dir, "hexagons.geojson"),
+                    hexagon_output,
                 ]
             )
-            out_files["geojsonPath"] = os.path.join(
-                out_dir, "hexagons.geojson"
-            )
+            out_files["geojson_path"] = hexagon_output
+            print(f"Created geojson at: {hexagon_output}")
 
-        if os.path.isfile(
-            os.path.join(out_dir, "genie_network_filtered_st.csv")
-        ):
-            out_files["genieFiltPath"] = os.path.join(
-                out_dir, "genie_network_filtered_st.csv"
-            )
-        if os.path.isfile(
-            os.path.join(out_dir, "sponge_network_filtered_st.csv")
-        ):
-            out_files["spongeFiltPath"] = os.path.join(
-                out_dir, "sponge_network_filtered_st.csv"
-            )
+        # Look for network files in both the output dir and subdirectories
+        for root, dirs, files in os.walk(out_dir):
+            for filename in files:
+                if filename == "genie_network_filtered_st.csv":
+                    out_files["genie_network_path"] = os.path.join(root, filename)
+                    print(f"Found genie network: {out_files['genie_network_path']}")
+                if filename == "sponge_network_filtered_st.csv":
+                    out_files["sponge_network_path"] = os.path.join(root, filename)
+                    print(f"Found sponge network: {out_files['sponge_network_path']}")
 
         payload["output_files"] = out_files
 
-        dataset_id = f"{user_safe}_{job_id}"
+        # Only register if we have an adata file
+        if adata_path is not None:
+            dataset_id = f"{job_id}_{user_safe}"
 
-        email_prefix = str(email.split("@")[0]) if email else "unknown"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            email_prefix = str(email.split("@")[0]) if email else "unknown"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+            dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
 
-        dataset_registry.register_uploaded_dataset(
-            dataset_id=dataset_id,
-            alias=dataset_alias,
-            adata_path=adata_path,
-            tangram_adata_path=saved_files.get("single_cell_h5ad") if use_tangram else None,
-            genie_network_path=out_files.get("genieFiltPath"),
-            sponge_network_path=out_files.get("spongeFiltPath"),
-            geojson_path=out_files.get("geojsonPath"),
-            user=user_safe,
-            dataset_type=dataset,
-            use_tangram=use_tangram,
-            created_at=datetime.now().isoformat(),
-        )
+            dataset_registry.register_uploaded_dataset(
+                dataset_id=dataset_id,
+                alias=dataset_alias,
+                adata_path=adata_path,
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                genie_network_path=out_files.get("genie_network_path"),
+                sponge_network_path=out_files.get("sponge_network_path"),
+                geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
+                user=user_safe,
+                dataset_type=dataset,
+                use_tangram=use_tangram,
+                created_at=datetime.now().isoformat(),
+            )
 
-        # Include dataset_id in response
-        payload["dataset_id"] = dataset_id
+            # Include dataset_id in response
+            payload["dataset_id"] = dataset_id
+        else:
+            print("No adata file found in output, skipping dataset registration")
 
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
@@ -693,22 +716,68 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
     Return all available datasets for the current user + builtin datasets.
     Filters out datasets with missing files.
     """
-    all_datasets = dataset_registry.get_all_datasets()
-    user_datasets = dataset_registry.get_user_datasets(session_data.username)
+    try:
+        all_datasets = dataset_registry.get_all_datasets()
+        print(f"All datasets: {all_datasets}")
+        user_datasets = dataset_registry.get_user_datasets(session_data.username)
+        print(f"User datasets for {session_data.username}: {user_datasets}")
 
-    # Verify files exist before returning
-    valid_user_datasets = {}
-    for dataset_id, info in user_datasets.items():
-        if Path(info["adata_path"]).exists():
-            valid_user_datasets[dataset_id] = info
+        # Verify files exist before returning
+        valid_user_datasets = {}
+        for dataset_id, info in user_datasets.items():
+            if Path(info["adata_path"]).exists():
+                valid_user_datasets[dataset_id] = info
 
-    return {
-        "builtin": all_datasets.get("builtin", {}),
-        "uploaded": valid_user_datasets
-    }
+        datasets_json = {
+            "builtin": all_datasets.get("builtin", {}),
+            "uploaded": valid_user_datasets
+        }
+
+        print(f"Returning datasets: {datasets_json}")
+        return datasets_json
+    except Exception as e:
+        print(f"✗ Error in get_datasets: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
-@app.get("/api/hexagon/{user}/{subdir}/{filename}")
+@app.get("/api/geojson/{dataset_id}", dependencies=[Depends(cookie)])
+async def get_geojson(dataset_id: str):
+    """Serve GeoJSON files for datasets"""
+    try:
+        # Construct path from dataset_id - uploaded datasets have format: {job_id}_{user_safe}
+        # Builtin datasets have format: builtin_{name}
+
+        if dataset_id.startswith("builtin_"):
+            # Builtin dataset - located in frontend/public/assets/
+            geojson_path = Path(__file__).parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+            print(f"[DEBUG] Looking for builtin geojson at: {geojson_path}")
+        else:
+            # Uploaded dataset - extract job_id from dataset_id format: job_TIMESTAMP_USER
+            # The directory is created as: job_TIMESTAMP_USER
+            geojson_path = BASE_UPLOAD_DIR / dataset_id / "hexagons.geojson"
+            print(f"[DEBUG] Looking for uploaded geojson at: {geojson_path}")
+
+        print(f"[DEBUG] File exists: {geojson_path.exists()}")
+
+        if not geojson_path.exists():
+            print(f"[ERROR] GeoJSON file not found at {geojson_path}")
+            raise HTTPException(status_code=404, detail=f"GeoJSON file not found: {geojson_path}")
+
+        print(f"[DEBUG] Serving geojson from: {geojson_path}")
+        return FileResponse(
+            geojson_path,
+            media_type="application/geo+json",
+            filename=f"{dataset_id}.geojson"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Exception in get_geojson: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 async def get_hexagon(user: str, subdir: str, filename: str):
     """
     file_path = Path("./uploads") / filename
@@ -748,7 +817,11 @@ async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     """
     Example: `curl -b cookies.txt -X POST http://127.0.0.1:3000/delete_session`
     """
-    await backend.delete(session_id)
+    try:
+        await backend.delete(session_id)
+    except KeyError:
+        pass
+
     cookie.delete_from_response(response)
     return "deleted session"
 
@@ -839,6 +912,10 @@ async def get_geneset_connections(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
 
+    if not session_data.genie_network_path:
+        return {"connections": [], "slider_data": {}}
+
+
     # Get the geneset from the name
     adata = _load_adata_cached(session_data.adata_path)
     gene_set = adata.uns["genie_genesets"].get(
@@ -865,6 +942,9 @@ async def get_geneset_connections(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
     # Get the geneset from the name
+    if not session_data.sponge_network_path:
+        return {"connections": [], "slider_data": {}}
+
     adata = _load_adata_cached(session_data.adata_path)
     gene_set = adata.uns["sponge_genesets"].get(
         gene_set_name, None

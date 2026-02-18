@@ -55,6 +55,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
+  tangram_Datasets$: Observable<Dataset[]>;
   selectedDataset: Dataset | null = null;
   selectedDatasetCompare: Dataset | null = null;
 
@@ -80,6 +81,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.uploadedDatasets$ = this.datasetService.availableDatasets$.pipe(
       map(datasets => datasets.filter(d => d.type === 'uploaded'))
     );
+    this.tangram_Datasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.tangram_adata_path))
+    );
 
   }
 
@@ -98,6 +102,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private g!: d3.Selection<SVGGElement, any, any, any>;
   private g_compare!: d3.Selection<SVGGElement, any, any, any>;
   private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
+
+  // Nested g elements that contain the actual paths
+  private g_paths!: d3.Selection<SVGGElement, any, any, any>;
+  private g_paths_compare!: d3.Selection<SVGGElement, any, any, any>;
 
   public selectedCell: CellFeature | null = null;
   public selectedCellCompare: CellFeature | null = null;
@@ -224,34 +232,51 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
+    // Initialize with default builtin dataset if no dataset is selected
+    this.datasetService.availableDatasets$
+      .pipe(
+        takeUntil(this.destroy$)
+      )
+      .subscribe(datasets => {
+        console.log('Available datasets:', datasets);
+        // Auto-select the first builtin dataset if none selected
+        if (datasets.length > 0 && !this.selectedDataset) {
+          const builtinDataset = datasets.find(d => d.type === 'builtin');
+          if (builtinDataset) {
+            this.selectedDataset = builtinDataset;
+            this.datasetService.selectDataset(builtinDataset);
+          }
+        }
+      });
 
     this.datasetService.selectedDataset$
-    .pipe(takeUntil(this.destroy$))
-    .subscribe(dataset => {
-      this.selectedDataset = dataset;
-      if (dataset) {
-        this.updatePathsFromDataset(dataset);
-      }
-    });
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(dataset => {
+        this.selectedDataset = dataset;
+        if (dataset) {
+          this.updatePathsFromDataset(dataset);
+        }
+      });
 
-  this.datasetService.selectedDatasetCompare$
-    .pipe(takeUntil(this.destroy$))
-    .subscribe(dataset => {
-      this.selectedDatasetCompare = dataset;
-      if (dataset && this.compareMode) {
-        this.reloadComparisonView();
-      }
-    });
+    this.datasetService.selectedDatasetCompare$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(dataset => {
+        this.selectedDatasetCompare = dataset;
+        if (dataset && this.compareMode) {
+          this.reloadComparisonView();
+        }
+      });
 
     this.isLoadingHexagons = true;
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
-      console.log("init hexagon plot")
-      if (paths.hexagonPath) {
+      console.log("Paths updated:", paths)
+      const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
+      if (hexagonPath) {
         // Update the component's dataPath
-        this.dataPath = paths.hexagonPath;
-        console.log('Loading hexagon data from', this.dataPath);
+        this.dataPath = hexagonPath;
+        console.log('✓ Loading hexagon data from', this.dataPath);
 
         // Clear hexagon-plot container
         d3.select('#hexbin').selectAll('svg').remove();
@@ -260,6 +285,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
+      } else {
+        console.warn('✗ No hexagon path available');
       }
 
     });
@@ -290,18 +317,33 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onDatasetSelected(dataset: Dataset | null): void {
-  if (!dataset) return;
+    if (!dataset) return;
 
-  this.selectedDataset = dataset;
-  this.datasetService.selectDataset(dataset);
-  this.updatePathsFromDataset(dataset);
-  this.reloadHexagons();
-}
+    this.selectedDataset = dataset;
+    this.datasetService.selectDataset(dataset);  // Networks load automatically
+    this.updatePathsFromDataset(dataset);
+    this.reloadHexagons();
+  }
+
+  // Handle tangram dataset selection - use tangram_adata_path if available
+  onDatasetTangramSelected(dataset: Dataset | null): void {
+    if (!dataset || !dataset.tangram_adata_path) return;
+
+    // Create a modified dataset with tangram path
+    const tangramDataset: Dataset = {
+      ...dataset,
+      adata_path: dataset.tangram_adata_path
+    };
+
+    this.selectedDataset = tangramDataset;
+    this.datasetService.selectDataset(tangramDataset);
+    this.updatePathsFromDataset(tangramDataset);
+    this.reloadHexagons();
+  }
 
   onDatasetCompareSelected(dataset: Dataset | null): void {
-    if (!dataset) return;
     this.selectedDatasetCompare = dataset;
-    this.datasetService.selectDatasetCompare(dataset);
+    this.datasetService.selectDatasetCompare(dataset);  // Networks load automatically
     if (dataset) {
       this.reloadComparisonView();
     }
@@ -536,7 +578,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     // draw using the intended feature set (featuresToDraw)
-    this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer')
+    this.g_paths_compare = this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer') as any;
+
+    this.g_paths_compare
       .selectAll('path')
       .data(featuresToDraw)
       .join('path')
@@ -604,10 +648,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private loadAndRenderData(dataPath: string): void {
-    // Load GeoJSON data
-    d3.json<GeoJsonData>(dataPath)
-      .then((data) => {
-        console.log('Data loaded:', data);
+    // Load GeoJSON data - prepend base URL if it starts with /api/
+    const fullUrl = dataPath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${dataPath}`
+      : dataPath;
+
+    // Use fetch instead of d3.json to handle credentials properly
+    fetch(fullUrl, { credentials: 'include' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data: GeoJsonData) => {
+        console.log('Data loaded from:', fullUrl, data);
 
         if (!data) {
           throw new Error('Failed to load GeoJSON data');
@@ -684,9 +739,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
         // Draw the map inside the zoomable group
-        this.g
-          .style('cursor', 'pointer')
-          .append('g')
+        this.g.style('cursor', 'pointer');
+
+        // Create and store reference to nested g that will hold the paths
+        this.g_paths = this.g
+          .selectAll<SVGGElement, number>('g.paths-group')
+          .data([0])
+          .join('g')
+          .attr('class', 'paths-group') as any;
+
+        this.g_paths
           .selectAll('path')
           .data(data.features)
           .join('path')
@@ -716,6 +778,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
+        this.isLoadingHexagons = false;
       });
   }
 
@@ -730,6 +793,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onColorbyPropertyChange(): void {
+    console.log('[onColorbyPropertyChange] colorByProperty changed to:', this.colorByProperty);
+
     if (this.colorByProperty === 'regulatory_scores') {
       if (
         this.selectedRegulatoryScore?.endsWith('genie3') &&
@@ -756,8 +821,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     if (this.compareMode) {
+      console.log('[onColorbyPropertyChange] Updating compare hexagons');
       this.updateHexColors('#hexbin-compare');
     }
+    console.log('[onColorbyPropertyChange] Updating main hexagons');
     this.updateHexColors();
   }
 
@@ -797,6 +864,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const viewToUpdate = isMainView ? this.colorByProperty : this.selectedCompareView;
     const featuresToUpdate = isMainView ? this.features : (this.dataCompare?.features || []);
     const gToUpdate = isMainView ? this.g : this.g_compare;
+    const gPathsToUpdate = isMainView ? this.g_paths : this.g_paths_compare;
     const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
     const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
     const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate);
@@ -808,6 +876,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       svg: isMainView ? this.svg : this.svg_compare,
       features: featuresToUpdate,
       g: gToUpdate,
+      g_paths: gPathsToUpdate,
       ordinal: ordinalScaleToUpdate,
       continuous: continuousScaleToUpdate,
       isContinuous,
@@ -833,6 +902,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
 
+    // Debug: check if the view property exists in features
+    if (viewVariablesToUpdate.features.length > 0) {
+      const firstFeature = viewVariablesToUpdate.features[0];
+      const hasProperty = viewVariablesToUpdate.view in (firstFeature.properties || {});
+      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
+      console.log('[updateHexColors] Looking for property:', viewVariablesToUpdate.view, '- Exists:', hasProperty);
+      if (!hasProperty) {
+        console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+      }
+    }
+
     this.resetClusterExtension();
 
     if (this.selectedCell && this.selectedCluster) {
@@ -847,7 +927,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    sel = viewVariablesToUpdate.g
+    sel = viewVariablesToUpdate.g_paths
       .selectAll<SVGPathElement, CellFeature>('path')
       .data(viewVariablesToUpdate.features);
 
@@ -2384,7 +2464,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           .attr('y', rectY)
           .attr('width', rectWidth)
           .attr('height', rectHeight)
-          .style('fill', this.colorScaleCompare(cat))
+          .style('fill', viewVariablesToUpdate.ordinal(cat))
           .attr('stroke', '#333')
           .attr('stroke-width', 0.5)
           .attr('rx', 2);

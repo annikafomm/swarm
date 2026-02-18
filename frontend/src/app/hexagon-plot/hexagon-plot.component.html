@@ -6,11 +6,12 @@
       <div *ngIf="isLoadingHexagons" class="loading-container">
         <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading hexagon plot">
         </mat-progress-spinner>
+
       </div>
 
       <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
-      <div class="row-container">
+      <div class="centered-row-container" style="width: 100%;">
         <mat-form-field appearance="fill" id="color-by-property">
           <mat-label>Color hexagons by</mat-label>
           <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
@@ -38,6 +39,12 @@
             <mat-optgroup label="Your Uploads">
               <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
                 {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Tangram" *ngIf="(tangram_Datasets$ | async)?.length">
+              <mat-option *ngFor="let ds of (tangram_Datasets$ | async)" [value]="ds"
+                (onSelectionChange)="onDatasetTangramSelected(ds)">
+                {{ ds.alias }} (Tangram)
               </mat-option>
             </mat-optgroup>
           </mat-select>
@@ -69,8 +76,7 @@
 
         <mat-form-field appearance="fill" class="dataset-dropdown">
           <mat-label>Compare with Dataset</mat-label>
-          <mat-select [(ngModel)]="selectedDatasetCompare"
-            (selectionChange)="onDatasetCompareSelected($event.value)">
+          <mat-select [(ngModel)]="selectedDatasetCompare" (selectionChange)="onDatasetCompareSelected($event.value)">
             <mat-option [value]="null">None</mat-option>
             <mat-optgroup label="Built-in Datasets">
               <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">

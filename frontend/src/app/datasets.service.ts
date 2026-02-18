@@ -1,6 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
+import { SessionService } from './session.service';
 
 export interface Dataset {
   id: string;
@@ -29,12 +30,12 @@ export class DatasetService {
   private selectedDatasetCompare = new BehaviorSubject<Dataset | null>(null);
   public selectedDatasetCompare$ = this.selectedDatasetCompare.asObservable();
 
-  constructor(private http: HttpClient) {
-    this.loadAvailableDatasets();
+  constructor(private http: HttpClient, private injector: Injector) {
+    // Datasets will be loaded after session is initialized
   }
 
   loadAvailableDatasets(): void {
-    this.http.get<any>('/api/datasets').subscribe({
+    this.http.get<any>('/api/datasets', { withCredentials: true }).subscribe({
       next: (response) => {
         const datasets = this.flattenDatasets(response);
         this.availableDatasets.next(datasets);
@@ -64,8 +65,11 @@ export class DatasetService {
   }
 
   // Main dataset selection
-  selectDataset(dataset: Dataset): void {
+  selectDataset(dataset: Dataset | null): void {
     this.selectedDataset.next(dataset);
+    if (dataset) {
+      this.loadNetworksForDataset(dataset);
+    }
   }
 
   getSelectedDataset(): Dataset | null {
@@ -75,9 +79,39 @@ export class DatasetService {
   // Comparison dataset selection
   selectDatasetCompare(dataset: Dataset | null): void {
     this.selectedDatasetCompare.next(dataset);
+    if (dataset) {
+      this.loadNetworksForDataset(dataset);
+    }
   }
 
   getSelectedDatasetCompare(): Dataset | null {
     return this.selectedDatasetCompare.value;
+  }
+
+  private loadNetworksForDataset(dataset: Dataset): void {
+    // Lazy-inject SessionService to avoid circular dependency
+    const sessionService = this.injector.get(SessionService);
+
+    if (dataset.genie_network_path) {
+      this.http.post(
+        `${sessionService.apiUrl}/read_network_genie`,
+        { path: dataset.genie_network_path },
+        { withCredentials: true }
+      ).subscribe({
+        next: () => console.log('✓ Loaded Genie3 network'),
+        error: (err) => console.error('✗ Failed to load Genie3 network:', err)
+      });
+    }
+
+    if (dataset.sponge_network_path) {
+      this.http.post(
+        `${sessionService.apiUrl}/read_network_sponge`,
+        { path: dataset.sponge_network_path },
+        { withCredentials: true }
+      ).subscribe({
+        next: () => console.log('✓ Loaded SPONGE network'),
+        error: (err) => console.error('✗ Failed to load SPONGE network:', err)
+      });
+    }
   }
 }

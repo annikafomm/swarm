@@ -10,9 +10,14 @@ class DatasetRegistry:
     Stores metadata about uploaded and built-in datasets.
     """
 
-    def __init__(self, registry_file: Path = Path("./uploads/dataset_registry.json")):
+    def __init__(self, registry_file: Path = None):
+        if registry_file is None:
+            # Use absolute path based on script location
+            base_path = Path(__file__).parent
+            registry_file = base_path / "uploads" / "dataset_registry.json"
         self.registry_file = registry_file
         self.registry_file.parent.mkdir(parents=True, exist_ok=True)
+        print(f"Dataset registry path: {self.registry_file}")
         self.datasets = self._load_registry()
 
     def _load_registry(self) -> Dict:
@@ -20,16 +25,28 @@ class DatasetRegistry:
         if self.registry_file.exists():
             try:
                 with open(self.registry_file, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # On startup, keep only builtin datasets, clear uploaded ones
+                    # (they'll be re-registered if needed)
+                    return {
+                        "builtin": data.get("builtin", {}),
+                        "uploaded": {},
+                        "tangram_mapped": {}
+                    }
             except Exception as e:
                 print(f"Error loading registry: {e}")
-                return {"builtin": {}, "uploaded": {}}
-        return {"builtin": {}, "uploaded": {}}
+                return {"builtin": {}, "uploaded": {}, "tangram_mapped": {}}
+        return {"builtin": {}, "uploaded": {}, "tangram_mapped": {}}
 
     def _save_registry(self):
         """Persist registry to disk"""
-        with open(self.registry_file, 'w') as f:
-            json.dump(self.datasets, indent=2, fp=f)
+        try:
+            with open(self.registry_file, 'w') as f:
+                json.dump(self.datasets, indent=2, fp=f)
+            print(f"✓ Registry saved to {self.registry_file}")
+        except Exception as e:
+            print(f"✗ Error saving registry: {e}")
+            raise
 
     def register_uploaded_dataset(
         self,
@@ -37,6 +54,7 @@ class DatasetRegistry:
         alias: str,
         adata_path: str,
         tangram_adata_path: Optional[str] = None,
+        geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
         user: str = "anonymous",
@@ -51,19 +69,25 @@ class DatasetRegistry:
             "alias": alias,
             "adata_path": adata_path,
             "tangram_adata_path": tangram_adata_path,
+            "geojson_path": geojson_path,
             "genie_network_path": genie_network_path,
             "sponge_network_path": sponge_network_path,
             "user": user,
             "created_at": datetime.now().isoformat(),
             **metadata
         }
+        print(f"Saving registry to {self.registry_file}")
         self._save_registry()
+        print(f"✓ Registered dataset {dataset_id}")
 
     def register_builtin_dataset(
         self,
         dataset_id: str,
         alias: str,
         adata_path: str,
+        geojson_path: Optional[str] = None,
+        genie_network_path: Optional[str] = None,
+        sponge_network_path: Optional[str] = None,
         **metadata
     ) -> None:
         """Register a built-in dataset (from backend/data)"""
@@ -74,6 +98,9 @@ class DatasetRegistry:
         self.datasets["builtin"][dataset_id] = {
             "alias": alias,
             "adata_path": adata_path,
+            "geojson_path": geojson_path,
+            "genie_network_path": genie_network_path,
+            "sponge_network_path": sponge_network_path,
             "created_at": datetime.now().isoformat(),
             **metadata
         }
