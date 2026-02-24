@@ -431,6 +431,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     switch (event.tab.textLabel) {
       case 'Regulatory Scores':
+        // Check if regulatory scores data is available
+        if (!this.hasRegulatoryScoresData()) {
+          console.warn('[Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
+          return;
+        }
         newView = 'regulatory_scores';
         break;
       case 'Co-occurence':
@@ -470,6 +475,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
       switch (viewName) {
         case 'regulatory_scores':
+          // Check if regulatory scores data is available
+          if (!this.hasRegulatoryScoresData()) {
+            console.warn('[Compare Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
+            return;
+          }
           newView = 'regulatory_scores';
           break;
         case 'gene_expression':
@@ -490,6 +500,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCompareView = newView;
       this.onColorbyPropertyChange();
     }
+  }
+
+  /**
+   * Check if regulatory scores data is available
+   */
+  private hasRegulatoryScoresData(): boolean {
+    if (!this.meta) return false;
+
+    const hasGenie3 = this.meta['global_regulatory_scores_genie3'] &&
+      Object.keys(this.meta['global_regulatory_scores_genie3']).length > 0;
+    const hasSponge = this.meta['global_regulatory_scores_sponge'] &&
+      Object.keys(this.meta['global_regulatory_scores_sponge']).length > 0;
+
+    return hasGenie3 || hasSponge;
+  }
+
+  /**
+   * Public method to check if regulatory scores data is available (for template binding)
+   */
+  public canViewRegulatoryScores(): boolean {
+    return this.hasRegulatoryScoresData();
   }
 
   private createHexagonPlot(containerName?: string): void {

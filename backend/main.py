@@ -231,7 +231,14 @@ verifier = BasicVerifier(
 def _load_adata_cached(file_path: str) -> sc.AnnData:
     """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
 
-    adata = sc.read_h5ad(file_path)
+    if file_path is None:
+        # Fall back to builtin dataset if none is set
+        base_path = Path(__file__).parent
+        file_path = base_path / "data" / "adata.h5ad"
+        if not file_path.exists():
+            raise ValueError("No adata file has been loaded. Please call /read_adata first.")
+
+    adata = sc.read_h5ad(str(file_path))
     reconstruct_obsm_cols = {
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "ligand_receptor_p_value": "ligand_receptor",

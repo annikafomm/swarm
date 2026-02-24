@@ -160,6 +160,20 @@ select {
   gap: 18px;
 }
 
+.network-message {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .gene-set-top {
   display: flex;
   flex-direction: column;

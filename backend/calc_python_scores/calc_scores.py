@@ -34,7 +34,7 @@ def format_runtime(t0):
 def compute_spatial_scores(adata, description, args, logfile):
     # Calculate spatial scores
     if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
-        
+
         if description == "tg":
             log_message("Preparing score calculation for the Tangram output ...", logfile)
         elif description == "st":
@@ -51,7 +51,7 @@ def compute_spatial_scores(adata, description, args, logfile):
             elif description == "st" and args.cell_comp_key:
                 cell_prop_key = args.cell_comp_key
 
-            
+
 
             if not (args.grn is None or os.path.exists(args.grn)):
                 log_message(f"The GRN file {args.grn} does not exist.", logfile)
@@ -60,23 +60,23 @@ def compute_spatial_scores(adata, description, args, logfile):
             else:
                 if not cell_prop_key and cell_prop_key not in adata.obsm.keys():
                     log_message(f"'{cell_prop_key}' is not a column in adata.obsm. Please provide a valid cell composition key.", logfile)
-            
+
                 t0 = time.time()
                 run_liana(adata, args.grn, args.pathway_net, cell_prop_key)
                 log_message(f"LIANA+ scores calculated in {format_runtime(t0)}", logfile, 2)
 
         # squidpy
-        
+
         # TODO: Grenze für n_perms
 
         # check if the cluster key exists in adata.obs if needed
         if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
-            if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" | args.cluster_co == "leiden" | args.cluster_nhood == "leiden"):
+            if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" or args.cluster_co == "leiden" or args.cluster_nhood == "leiden"):
                 t0 = time.time()
                 # neighbors, umap, leiden
                 clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided
                 log_message(f"Clusters calculated in {format_runtime(t0)}", logfile, 2)
-        
+
         # Compute centrality scores
         if args.centrality_scores:
             if args.cluster_cs not in adata.obs.keys():
@@ -85,7 +85,7 @@ def compute_spatial_scores(adata, description, args, logfile):
                 t0 = time.time()
                 sq.gr.centrality_scores(adata, cluster_key=args.cluster_cs, show_progress_bar=True)
                 log_message(f"Centrality scores for cluster {args.cluster_cs} calculated in {format_runtime(t0)}", logfile, 2)
-        
+
         # Compute co-occurrence probability
         if args.co_occurrence:
             if args.cluster_co not in adata.obs.keys():
@@ -117,19 +117,19 @@ def compute_spatial_scores(adata, description, args, logfile):
             t0 = time.time()
             sq.gr.spatial_autocorr(adata, mode="geary", seed=42, n_perms=args.n_perms_autocorr_gC, transformation=args.n_perms_autocorr_gC is None, two_tailed = args.two_tailed_gC, corr_method = args.corr_method_gC, show_progress_bar=True)
             log_message(f"Geary's C scores calculated in {format_runtime(t0)}", logfile, 2)
-        
+
         # save AnnData object in file
         log_message("Saving calculations ...", logfile, 2)
 
     #  TODO: tidy up andata --> delete entries, that are not used further
-    
+
     t0 = time.time()
     filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
     adata.write(os.path.join(args.outdir, filename))
     log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 4)
 
     # R scores should be calculated
-    if args.R_scores: 
+    if args.R_scores:
         folder_path = os.path.join(args.outdir, f"expr_info_{description}")
         t0 = time.time()
 
@@ -203,14 +203,14 @@ def main():
 
 
     parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
-    
-    
+
+
     args = parser.parse_args()
 
     # Prepare log file
     logfile = args.log
     log_message(f"Python score pipeline started at {time.strftime('%Y-%m-%d %H:%M:%S')}", logfile)
-    
+
 
     # Load the data
 

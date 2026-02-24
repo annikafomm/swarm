@@ -56,6 +56,19 @@
   min-width: 0;
   min-height: 0;
 
+  .empty-message {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    min-height: var(--ftable-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-soft);
+  }
+
   .table-scroll {
     position: relative;
     height: var(--ftable-height);
@@ -151,7 +164,7 @@
 
     .index-col {
       font-size: 0.9em;
-      flex : 1 1 25%;
+      flex: 1 1 25%;
       white-space: normal;
       word-break: break-word;
     }

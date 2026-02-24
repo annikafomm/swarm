@@ -23,6 +23,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
   @Input() updateColumn!: string;
+  @Input() emptyMessage: string = '';
   @Output() featuresUpdated = new EventEmitter<void>();
 
   constructor(
@@ -36,6 +37,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   filters: { [col: string]: string } = {};
   sortColumn: string | null = null;
   sortAsc: boolean = true;
+  availableActionColumns: string[] = [];
 
   // Pagination
   pageSize = 6; // number of rows per page
@@ -78,6 +80,37 @@ export class FilterableTableComponent implements OnInit, OnChanges {
         return row;
       });
     }
+
+    // Filter action columns to only show those that are available in the data
+    this.filterAvailableActionColumns();
+  }
+
+  filterAvailableActionColumns() {
+    if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
+      this.availableActionColumns = [];
+      return;
+    }
+
+    // Check if action columns exist in the actual data
+    if (!Array.isArray(this.data)) {
+      const tableData = this.data as {
+        [col: string]: { [index: string]: string | number };
+      };
+      this.availableActionColumns = this.actionColumns.filter(
+        (col) => col in tableData
+      );
+    } else {
+      this.availableActionColumns = this.actionColumns;
+    }
+  }
+
+  hasData(): boolean {
+    if (!this.data) return false;
+    if (Array.isArray(this.data)) return this.data.length > 0;
+    const tableData = this.data as {
+      [col: string]: { [index: string]: string | number };
+    };
+    return Object.keys(tableData).length > 0;
   }
 
   displayColumnName(col: string): string {

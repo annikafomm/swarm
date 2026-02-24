@@ -24,19 +24,19 @@ class DatasetRegistry:
         """Load existing registry or create new one"""
         if self.registry_file.exists():
             try:
+                # Delete data of old uploaded datasets
                 with open(self.registry_file, 'r') as f:
                     data = json.load(f)
                     # On startup, keep only builtin datasets, clear uploaded ones
-                    # (they'll be re-registered if needed)
                     return {
                         "builtin": data.get("builtin", {}),
-                        "uploaded": {},
-                        "tangram_mapped": {}
+                        "uploaded": {}
                     }
+
             except Exception as e:
                 print(f"Error loading registry: {e}")
-                return {"builtin": {}, "uploaded": {}, "tangram_mapped": {}}
-        return {"builtin": {}, "uploaded": {}, "tangram_mapped": {}}
+                return {"builtin": {}, "uploaded": {}}
+        return {"builtin": {}, "uploaded": {}}
 
     def _save_registry(self):
         """Persist registry to disk"""

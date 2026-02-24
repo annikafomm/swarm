@@ -295,7 +295,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Regulatory Scores">
+        <mat-tab label="Regulatory Scores" [disabled]="!canViewRegulatoryScores()">
           <div *ngIf="colorByProperty === 'regulatory_scores'">
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
@@ -303,10 +303,12 @@
                 <h4>Aggregated Regulatory Scores</h4>
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                  [updateColumn]="'regulatory_scores'" (featuresUpdated)="updateHexColors()"></app-table>
+                  [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
+                  (featuresUpdated)="updateHexColors()"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  [emptyMessage]="'No Sponge global regulatory scores loaded'"
                   (featuresUpdated)="updateHexColors()"></app-table>
               </div>
             </mat-expansion-panel>
@@ -316,9 +318,12 @@
 
               <div class="gene-set-body">
                 <section class="graph-block genie3-block">
-                  <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+                  <h3 *ngIf="selectedGeneSetGenie3">Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+                  <div *ngIf="!selectedGeneSetGenie3" class="network-message">
+                    No Genie3 network uploaded
+                  </div>
 
-                  <div *ngIf="genie3SliderData" class="genie3-controls">
+                  <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
                     <div class="control-row">
                       <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
                       <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
@@ -361,9 +366,12 @@
                 </section>
 
                 <section class="graph-block sponge-block">
-                  <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+                  <h3 *ngIf="selectedGeneSetSponge">Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+                  <div *ngIf="!selectedGeneSetSponge" class="network-message">
+                    No Sponge network uploaded
+                  </div>
 
-                  <div *ngIf="spongeSliderData" class="sponge-controls">
+                  <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
                     <div class="control-row">
                       <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
                       <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
@@ -526,6 +534,7 @@
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+                [emptyMessage]="'No ligand-receptor global scores loaded'"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
@@ -533,6 +542,7 @@
               <h4>Ligand-Receptor NMF Scores</h4>
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+                [emptyMessage]="'No ligand-receptor NMF factors loaded'"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
@@ -544,13 +554,15 @@
             <ng-template #moranI>
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
+                (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
             <ng-template #gearyC>
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
+                (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
         </mat-tab>
@@ -562,6 +574,7 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
+              [emptyMessage]="'No cell composition TF activity scores loaded'"
               (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
@@ -571,7 +584,9 @@
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-              [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+              [updateColumn]="'tf_activity'"
+              [emptyMessage]="'No TF activity scores loaded'"
+              (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
 
@@ -581,7 +596,9 @@
             <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathway_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+        ]" [features]="features" [updateColumn]="'pathway_activity'"
+              [emptyMessage]="'No pathway activity scores loaded'"
+              (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
       </mat-tab-group>
@@ -714,7 +731,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Regulatory Scores">
+          <mat-tab label="Compare - Regulatory Scores" [disabled]="!canViewRegulatoryScores()">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
               <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
