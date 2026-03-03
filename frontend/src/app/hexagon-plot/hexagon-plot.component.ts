@@ -31,6 +31,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 
+type IndexedCell = { x: number; y: number; f: CellFeature; path: string };
 
 @Component({
     selector: 'app-hexagon-plot',
@@ -82,6 +83,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     private detailSize = 80;
     // =======================================
+
+    // --- Xenium spatial index---
+    private xeniumIndex: d3.Quadtree<IndexedCell> | null = null;
+    private xeniumCentroidsReady = false;
 
 
     public selectedCell: CellFeature | null = null;
@@ -669,6 +674,26 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 // Create a geoPath generator with the projection
                 this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
                 const pathGenerator = this.currentPathGenerator;
+
+                // Xenium: calculate centroids once + Quadtree building for fast lookup during detail hover
+                if (this.isXenium && this.fullFeatures?.length) {
+                  const pts: IndexedCell[] = [];
+
+                  for (const f of this.fullFeatures) {
+                    const c = this.currentPathGenerator.centroid(f as any);
+                    if (c && c.length === 2 && Number.isFinite(c[0]) && Number.isFinite(c[1])) {
+                      const path = this.currentPathGenerator(f as any) || '';
+                      pts.push({ x: c[0], y: c[1], f, path });
+                    }
+                  }
+
+                  this.xeniumIndex = d3.quadtree<IndexedCell>()
+                    .x(d => d.x)
+                    .y(d => d.y)
+                    .addAll(pts);
+
+                  this.xeniumCentroidsReady = true;
+                }
 
                 // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
                 const drawLayer = (this.isXenium ? this.baseLayer : this.g) as unknown as d3.Selection<SVGGElement, any, any, any>;
@@ -2399,19 +2424,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         const half = this.detailSize / 2;
 
-        const x0s = screenX - half;
-        const x1s = screenX + half;
-        const y0s = screenY - half;
-        const y1s = screenY + half;
+        // Mausposition in Datenkoordinaten
+        const [targetX, targetY] = this.currentTransform.invert([screenX, screenY]);
 
-        // Screen → projizierte Koordinaten (gleiches System wie geoPath)
-        const [x0d, y0d] = this.currentTransform.invert([x0s, y0s]);
-        const [x1d, y1d] = this.currentTransform.invert([x1s, y1s]);
+        // 🔥 Clamp gegen Zoom-out: wenn k < 1, soll das Datenfenster NICHT größer werden
+        const k = this.currentTransform.k || 1;
+        const clampFactor = Math.min(1, k);        // k<1 => clampFactor=k
+        const worldHalf = (half * clampFactor) / k; // k<1 => worldHalf ~ half (konstant)
+
+        // Daten-Rechteck fürs Quadtree-Query (klein halten!)
+        const x0d = targetX - worldHalf;
+        const x1d = targetX + worldHalf;
+        const y0d = targetY - worldHalf;
+        const y1d = targetY + worldHalf;
 
         const centerX = (x0d + x1d) / 2;
         const centerY = (y0d + y1d) / 2;
-
-        const [targetX, targetY] = this.currentTransform.invert([screenX, screenY]);
 
         const localScale = 6;
 
@@ -2420,38 +2448,60 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
         );
 
-        // ⬇️ WICHTIG: wieder geoPath.centroid verwenden, nicht properties.centroid
-        const subset = this.fullFeatures.filter((f) => {
-            const c = this.currentPathGenerator!.centroid(f as any);
-            if (!c || c.length < 2) return false;
+        if (!this.xeniumIndex || !this.xeniumCentroidsReady) return;
 
-            const [x, y] = c as [number, number];  // hier der kleine Type-Cast
-            return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
-        });
+          const subset: IndexedCell[] = [];
+
+          this.xeniumIndex.visit((node, x0, y0, x1, y1) => {
+            if (x1 < x0d || x0 > x1d || y1 < y0d || y0 > y1d) return true;
+
+            if (!node.length) {
+              let n: any = node;
+              do {
+                const d = n.data as IndexedCell;
+                if (d.x >= x0d && d.x <= x1d && d.y >= y0d && d.y <= y1d) {
+                  subset.push(d);
+                }
+                n = n.next;
+              } while (n);
+            }
+            return false;
+          });
+
+          const MAX_DETAIL = 300; 
+          if (subset.length > MAX_DETAIL) {
+            const step = Math.ceil(subset.length / MAX_DETAIL);
+            const reduced: IndexedCell[] = [];
+            for (let i = 0; i < subset.length; i += step) reduced.push(subset[i]);
+            subset.splice(0, subset.length, ...reduced);
+          }
 
         this.detailLayer
-            .style('cursor', 'pointer')
-            .selectAll<SVGPathElement, CellFeature>('path')
-            .data(subset)
-            .join('path')
-            .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
-            .attr('fill', (d: CellFeature) => {
-                const value = d.properties?.[this.colorByProperty];
-                if (this.currentLegendType === 'categorical') {
-                    return this.colorScale(String(value));
-                } else {
-                    const num = this.toNumber(value);
-                    return Number.isFinite(num)
-                        ? this.continuousColorScale(num)
-                        : '#ccc';
-                }
-            })
-            .attr('stroke', '#fff')
-            .attr('stroke-width', 0.4)
-            .style('opacity', 1)
-            .on('mouseover', (event, d) => this.mouseOver(event, d))
-            .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-            .on('click', (event, d) => this.openSidenav(event, d));
+          .style('cursor', 'pointer')
+          .selectAll<SVGPathElement, IndexedCell>('path')
+          .data(subset, (d: any) => d.f.properties?.barcode ?? d.f.properties?.cell_id ?? d)
+          .join(
+            enter => enter
+              .append('path')
+              .attr('stroke', '#fff')
+              .attr('stroke-width', 0.4)
+              .style('opacity', 1)
+              .on('mouseover', (event, d) => this.mouseOver(event, d.f))
+              .on('mouseleave', (event, d) => this.mouseLeave(event, d.f))
+              .on('click', (event, d) => this.openSidenav(event, d.f)),
+            update => update,
+            exit => exit.remove()
+          )
+          .attr('d', (d) => d.path)
+          .attr('fill', (d) => {
+            const value = d.f.properties?.[this.colorByProperty];
+            if (this.currentLegendType === 'categorical') {
+              return this.colorScale(String(value));
+            } else {
+              const num = this.toNumber(value);
+              return Number.isFinite(num) ? this.continuousColorScale(num) : '#ccc';
+            }
+          });
     }
 
 
