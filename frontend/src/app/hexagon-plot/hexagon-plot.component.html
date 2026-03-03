@@ -67,7 +67,7 @@
           <mat-label>Compare hexagons by</mat-label>
           <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-              <mat-option *ngFor="let prop of group.value" [value]="prop">
+              <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!propertyAvailable(prop)">
                 {{ prop | translate | async }}
               </mat-option>
             </mat-optgroup>
@@ -295,7 +295,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Regulatory Scores" [disabled]="!canViewRegulatoryScores()">
+        <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
           <div *ngIf="colorByProperty === 'regulatory_scores'">
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
@@ -441,7 +441,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Co-occurence">
+        <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('leiden_co_occurrence')">
           <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
             <div class="co-occurrence-controls">
               <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
@@ -519,7 +519,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Ligand-Receptor Relationships">
+        <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
           <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
             <div *ngIf="
           showGlobalLigandReceptorScores;
@@ -548,7 +548,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Gene Expression">
+        <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
           <div *ngIf="colorByProperty === 'gene_expression'">
             <div *ngIf="showMoranI; then moranI; else gearyC"></div>
             <ng-template #moranI>
@@ -567,7 +567,8 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Cell Composition TF Activity">
+        <mat-tab label="Cell Composition TF Activity"
+          [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
           <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
             <h4>Cell Composition TF Activity Global Scores</h4>
             <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
@@ -579,26 +580,24 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="TF Activity">
+        <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
           <div *ngIf="colorByProperty === 'tf_activity'">
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-              [updateColumn]="'tf_activity'"
-              [emptyMessage]="'No TF activity scores loaded'"
+              [updateColumn]="'tf_activity'" [emptyMessage]="'No TF activity scores loaded'"
               (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
 
-        <mat-tab label="Pathway Activity">
+        <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
           <div *ngIf="colorByProperty === 'pathway_activity'">
             <h4>Pathway Activity</h4>
             <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="features" [updateColumn]="'pathway_activity'"
-              [emptyMessage]="'No pathway activity scores loaded'"
-              (featuresUpdated)="updateHexColors()"></app-table>
+              [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
       </mat-tab-group>
@@ -731,7 +730,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Regulatory Scores" [disabled]="!canViewRegulatoryScores()">
+          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
               <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
@@ -771,7 +770,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Gene Expression">
+          <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
             <div *ngIf="selectedCompareView === 'gene_expression'">
               <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
@@ -789,7 +788,8 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Co-occurence" *ngIf="selectedCluster !== null">
+          <mat-tab label="Compare - Co-occurence" *ngIf="selectedCluster !== null"
+            [disabled]="!propertyAvailable('leiden_co_occurrence')">
             <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
               <div class="co-occurrence-controls">
                 <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
@@ -868,7 +868,8 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Ligand-Receptor Relationships">
+          <mat-tab label="Compare - Ligand-Receptor Relationships"
+            [disabled]="!propertyAvailable('ligand_receptor_relationships')">
             <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
               <div *ngIf="
           showGlobalLigandReceptorScores;
@@ -895,7 +896,8 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Cell Composition TF Activity">
+          <mat-tab label="Compare - Cell Composition TF Activity"
+            [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
             <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
               <h4>Cell Composition TF Activity Global Scores</h4>
               <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
@@ -906,7 +908,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell">
+          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell" [disabled]="!propertyAvailable('tf_activity')">
             <div *ngIf="colorByProperty === 'tf_activity'">
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.meta['tf_names']"
@@ -915,7 +917,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Pathway Activity">
+          <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
             <div *ngIf="colorByProperty === 'pathway_activity'">
               <h4>Pathway Activity Comparison</h4>
               <app-table [data]="this.meta['pathway_names']" [actionColumns]="[

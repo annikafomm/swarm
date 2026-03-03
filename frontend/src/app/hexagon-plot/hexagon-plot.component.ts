@@ -178,13 +178,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
-  public colorableProperties = [
+  public colorableProperties: string[] = [
     'cell_type',
     'leiden',
     'degree_centrality',
     'average_clustering',
     'closeness_centrality',
   ];
+
+  // keep track of which properties actually have any data available; used to
+  // disable/grey‑out menu items and tabs instead of hiding them abruptly.
+  public propertyAvailability: { [prop: string]: boolean } = {};
 
   public leidenCentralityProps = [
     'degree_centrality',
@@ -517,10 +521,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * Public method to check if regulatory scores data is available (for template binding)
+   * Returns true if any data exists for the given property/column.  This is used
+   * by the template to disable tabs and dropdown options when information
+   * hasn't been computed or loaded yet.
+   */
+  public propertyAvailable(prop: string): boolean {
+    return !!this.propertyAvailability[prop];
+  }
+
+  /**
+   * Compatibility wrapper for the existing regulatory scores tab.  Left in place
+   * simply so that the template change is minimal; it now defers to the generic
+   * availability check.
    */
   public canViewRegulatoryScores(): boolean {
-    return this.hasRegulatoryScoresData();
+    return this.propertyAvailable('regulatory_scores');
   }
 
   private createHexagonPlot(containerName?: string): void {
@@ -722,36 +737,90 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         let firstProps = this.features[0]?.properties || {};
 
-        this.colorableProperties = Object.keys(firstProps).filter((k) => {
-          const val = firstProps[k];
-          return typeof val === 'string' || typeof val === 'number';
-        });
+        // start with whatever is available on the first feature, but also make
+        // sure that the set contains the "known" columns we care about so that
+        // they are present (albeit disabled) until the corresponding data
+        // arrives.  This mirrors the behaviour you wanted for regulatory scores
+        // without hardcoding a single property.
+        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+        const lianaKeys = [
+          'ligand_receptor_relationships',
+          'cell_comp_tf_activity_similarity',
+          'tf_activity',
+          'pathway_activity',
+        ];
 
-        console.log('Initial colorable properties:', this.colorableProperties);
+        const allKeys = new Set<string>(
+          Object.keys(firstProps).filter((k) => {
+            const val = firstProps[k];
+            return typeof val === 'string' || typeof val === 'number';
+          })
+        );
+        scoreKeys.forEach((k) => allKeys.add(k));
+        lianaKeys.forEach((k) => allKeys.add(k));
 
+        this.colorableProperties = Array.from(allKeys);
+        console.log('Initial colourable properties (including potential ones):',
+          this.colorableProperties);
 
         // Alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         // Group similar properties together
-        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
-        const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
           {
             key: 'Other', value: this.colorableProperties.filter(
               (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
-            )
+            ),
           },
         ];
 
-        if (this.colorableProperties.includes('regulatory_scores')) {
+        // compute availability for everything we've decided to show
+        const candidates = new Set(this.colorableProperties);
+        // ensure some non-colorable but still important keys are included
+        candidates.add('regulatory_scores');
+        candidates.add('leiden_co_occurrence');
+        this.propertyAvailability = {};
+        candidates.forEach((prop) => {
+          if (prop === 'regulatory_scores') {
+            this.propertyAvailability[prop] = this.hasRegulatoryScoresData();
+          } else {
+            this.propertyAvailability[prop] = this.features.some((f) => {
+              const val = f.properties ? f.properties[prop] : undefined;
+              return val !== undefined && val !== null && val !== '';
+            });
+          }
+        });
+        console.log('Property availability map:', this.propertyAvailability);
+
+        // remove unavailable properties from the dropdown entirely so the user
+        // cannot select them and they don't appear as the default
+        this.colorableProperties = this.colorableProperties.filter((p) =>
+          this.propertyAvailability[p]
+        );
+        console.log('Filtered colourableProperties:', this.colorableProperties);
+
+        // rebuild grouped properties after filtering to exclude unavailable items
+        this.groupedProperties = [
+          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          {
+            key: 'Other', value: this.colorableProperties.filter(
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+            ),
+          },
+        ];
+
+        if (this.propertyAvailable('regulatory_scores')) {
           this.colorByProperty = 'regulatory_scores';
-        } else if (this.colorableProperties.includes('cell_type')) {
+        } else if (this.propertyAvailable('cell_type')) {
           this.colorByProperty = 'cell_type';
         } else {
-          this.colorByProperty = this.colorableProperties[0];
+          // just pick the first remaining option (already filtered to available
+          // ones).  any value here is acceptable as 'random' default.
+          this.colorByProperty = this.colorableProperties[0] || '';
         }
 
         this.currentLegendType = this.isContinuousScale() ? 'continuous' : 'categorical';

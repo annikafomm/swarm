@@ -5,8 +5,6 @@ import anndata as ad
 import scanpy as sc
 import argparse
 
-pd.options.mode.string_storage = "python"
-ad.settings.allow_write_nullable_strings = True
 
 parser = argparse.ArgumentParser(description="Convert 10x Visium data to AnnData format")
 parser.add_argument("--input_dir", type=str, required=True, help="Path to the 10x Visium data directory")
