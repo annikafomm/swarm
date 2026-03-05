@@ -10,6 +10,7 @@ import { map, Observable, Subject, Subscription, takeUntil } from 'rxjs';
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
+import Shepherd from 'shepherd.js';
 
 // Services
 import { DatasetService } from '../datasets.service';
@@ -36,7 +37,6 @@ import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
-
 
 
 @Component({
@@ -204,28 +204,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([
-      '#FF7373',
-      '#66cdaa',
-      '#088da5',
-      '#F0E442',
-      '#0072B2',
-      '#ffc3a0',
-      '#CC79A7',
-      '#E15759',
+      '#ff9800',
+      '#1976d2',
+      '#ff6f00',
+      '#00bcd4',
+      '#ffa726',
+      '#9c27b0',
+      '#ff8a65',
+      '#4caf50',
     ]);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateBlues);
+  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
-    '#FF7373',
-    '#66cdaa',
-    '#088da5',
-    '#F0E442',
-    '#0072B2',
-    '#ffc3a0',
-    '#CC79A7',
-    '#E15759',
+    '#ff9800',
+    '#1976d2',
+    '#ff6f00',
+    '#00bcd4',
+    '#ffa726',
+    '#9c27b0',
+    '#ff8a65',
+    '#4caf50',
   ]);
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateBlues);
+  // Yellow continuous color palette
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
@@ -1787,6 +1788,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  public selectCluster(clusterId: number): void {
+    this.selectedCluster = clusterId;
+    this.clusterCells = this.features.filter(
+      (cell) => cell.properties.leiden === clusterId,
+    );
+    this.calculateClusterStats();
+    this.updateCoOccurrenceTable();
+
+    if (this.clusterCells.length > 0) {
+      this.selectedCell = this.clusterCells[0];
+      setTimeout(() => this.renderNhoodHeatmap(), 100);
+      setTimeout(() => this.updateSubgraphGenie3(), 100);
+    }
+  }
+
   public onGeneSetChange(): void {
     if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
       this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
@@ -2038,20 +2054,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public updateCoOccurrenceTable(): void {
-    if (this.features.length === 0 || this.selectedCluster === null) {
+    if (this.clusterCells.length === 0 || this.selectedCluster === null) {
       this.coOccurrenceData = [];
       return;
     }
 
-    // Get co-occurrence data from the first cell
-    const firstCell = this.features[0];
-    if (!firstCell?.properties?.leiden_co_occurrence) {
+    // Get co-occurrence data from a cell in the selected cluster
+    const clusterCell = this.clusterCells[0];
+    if (!clusterCell?.properties?.leiden_co_occurrence) {
       console.warn('No leiden_co_occurrence data found');
       this.coOccurrenceData = [];
       return;
     }
 
-    const coOccurrenceMatrix = firstCell.properties.leiden_co_occurrence;
+    const coOccurrenceMatrix = clusterCell.properties.leiden_co_occurrence as any;
 
     if (!Array.isArray(coOccurrenceMatrix)) {
       console.error(
@@ -2063,11 +2079,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     this.coOccurrenceData = [];
-    console.log(coOccurrenceMatrix[1][this.selectedInterval]);
+    console.log('Selected Cluster:', this.selectedCluster, 'Interval:', this.selectedInterval);
+    console.log('Matrix structure:', coOccurrenceMatrix);
     try {
       for (let j = 0; j < this.clusterCount; j++) {
         if (
-          Array.isArray(coOccurrenceMatrix[j]) &&
           Array.isArray(coOccurrenceMatrix[j]) &&
           typeof coOccurrenceMatrix[j][this.selectedInterval] === 'number'
         ) {
@@ -2108,14 +2124,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public getCoOccurrenceColor(value: number): string {
     if (value === 0) return '#f8f9fa';
 
-    // Create a color scale from light to dark based on value
-    const maxValue = Math.max(...this.coOccurrenceData.flat());
+    // Use the same color scale as hexagons for consistency
+    // Exclude the same cluster (diagonal) from max calculation to better scale other values
+    const coOccurrenceWithoutSameCluster = this.coOccurrenceData.filter(
+      (_, index) => index !== this.selectedCluster,
+    );
+    const maxValue = Math.max(...coOccurrenceWithoutSameCluster);
     const intensity = Math.min(value / maxValue, 1);
-
-    // Use a blue color scale
-    const blue = Math.floor(255 - intensity * 200);
-    const green = Math.floor(255 - intensity * 150);
-    return `rgb(${blue}, ${green}, 255)`;
+    return this.continuousColorScale(intensity);
   }
 
   public getIntervalStats(): { min: number; max: number; avg: number } {
@@ -2355,6 +2371,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   dictId(propLabel: string): string {
     return `DICT::${propLabel}`;
+  }
+
+  public selectViewTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'info-btn-dropdown',
+      attachTo: { element: '#color-by-property', on: 'left' },
+      text: 'This button allows you to select the view you want to access. You can choose different regulatory scores, LIANA+ scores, Leiden Clustering and more. You can color by your obs columns in the view',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
   }
 
 

@@ -1,4 +1,4 @@
-<h2>Upload your own data</h2>
+<h2 style="margin: 0; text-align: center;"> Data Upload</h2>
 
 <div *ngIf="errorMsg" class="error">
   <pre style="margin:0; white-space:pre-wrap;">{{ errorMsg }}</pre>
@@ -10,7 +10,7 @@
   <div class="section">
     <div class="field">
       <label class="field-label" for="email">
-        Contact Email 
+        Contact Email
       </label>
       <input id="email" type="email" formControlName="email" placeholder="e.g. name@domain.tld" autocomplete="email"
         inputmode="email" />
@@ -98,15 +98,15 @@
 
   <!-- Scores master switches -->
   <div class="section">
-    <div class="section-title">Select Scores</div>
+    <div class="section-title">Select Gene-Regulatory Scores</div>
     <div class="checkbox-list" formGroupName="scores">
       <label class="score-option">
         <input type="checkbox" formControlName="networkScores" />
-        <span class="score-text">network scores</span>
+        <span class="score-text">Network Scores </span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="squidpy" />
-        <span class="score-text">squidpy</span>
+        <span class="score-text">Squidpy</span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="lianaPlus" />
@@ -289,23 +289,23 @@
     <div class="checkbox-list" formGroupName="methods">
       <label class="score-option">
         <input type="checkbox" formControlName="moranI" />
-        <span class="score-text">MoranI</span>
+        <span class="score-text">Moran's I</span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="gearyC" />
-        <span class="score-text">gearyC</span>
+        <span class="score-text">Geary's C</span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="centrality_score" />
-        <span class="score-text">centrality_score</span>
+        <span class="score-text">Centrality Score</span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="co_occurrence" />
-        <span class="score-text">co occurrence</span>
+        <span class="score-text">Co-occurrence</span>
       </label>
       <label class="score-option">
         <input type="checkbox" formControlName="neighborhood_enrichment" />
-        <span class="score-text">neighborhood enrichment</span>
+        <span class="score-text">Neighborhood Enrichment</span>
       </label>
     </div>
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener } from '@angular/core';
+import { Component, OnInit, HostListener, HostBinding } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormPageComponent } from './form-page/form-page.component';
@@ -55,6 +55,11 @@ export class AppComponent implements OnInit {
 
   title = 'frontend';
   public formsOpen = false;
+
+  @HostBinding('class.modal-open')
+  get modalOpen(): boolean {
+    return this.formsOpen;
+  }
 
   public closeSidenavForms(): void {
     this.formsOpen = false;

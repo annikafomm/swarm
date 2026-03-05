@@ -23,8 +23,8 @@
           </mat-select>
         </mat-form-field>
 
-        <button mat-icon-button class="info-btn" matTooltip="This dropdown switches the view...Click for more info."
-          (click)="openInfoPage('views-section')">
+        <button mat-icon-button class="info-btn"
+          (click)="selectViewTutorial()">
           <mat-icon>help_outline</mat-icon>
         </button>
 
@@ -52,7 +52,7 @@
       </div>
 
       <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view">
-        <mat-icon>compare_arrows</mat-icon>
+        <mat-icon style="color: black;">compare_arrows</mat-icon>
       </button>
 
       <div *ngIf="compareMode && isLoadingCompare" class="loading-container">
@@ -118,11 +118,12 @@
         <mat-tab label="Cell Information" *ngIf="selectedCell">
           <div *ngIf="selectedCell && colorByProperty !== 'leiden'">
             <h2>Cell Details</h2>
-            <div>
+            <div class="cell-details-container">
               <div *ngIf="selectedCell as cell">
                 <ng-container *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
-                  <p *ngIf="shouldShowProperty(kv.key)">
-                    <strong>{{ label(kv.key) }}:</strong>
+                  <div *ngIf="shouldShowProperty(kv.key)" class="property-item">
+                    <div class="property-label">{{ label(kv.key) }}</div>
+                    <div class="property-content">
 
                     <ng-container *ngIf="isArray(kv.value); else notArray">
 
@@ -238,7 +239,8 @@
                         </ng-template>
                       </ng-template>
                     </ng-template>
-                  </p>
+                    </div>
+                  </div>
                 </ng-container>
               </div>
             </div>
@@ -450,7 +452,7 @@
                   <label for="interval-select">Interval:</label>
                   <select id="interval-select" [(ngModel)]="selectedInterval" (change)="updateCoOccurrenceTable()">
                     <option *ngFor="
-                  let i of [].constructor(maxInterval + 1);
+                  let i of [].constructor(maxInterval);
                   let idx = index
                 " [ngValue]="idx">
                       Interval {{ idx }}
@@ -480,7 +482,7 @@
                 <tbody>
                   <tr>
                     <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-                    <td *ngFor="let value of coOccurrenceData; let j = index"
+                    <td *ngFor="let value of coOccurrenceData; let j = index" (click)="selectCluster(j)"
                       [class.high-cooccurrence]="value > coOccurrenceThreshold" [class.diagonal]="selectedCluster === j"
                       [style.background-color]="getCoOccurrenceColor(value)" [title]="
                   'Cluster ' +
@@ -488,8 +490,8 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value
-                ">
+                  value + ' (Click to select)'"
+                      style="cursor: pointer;">
                       {{ value | number: "1.0-3" }}
                     </td>
                   </tr>
@@ -508,9 +510,9 @@
           " [disabled]="selectedInterval === 0">
                 ← Previous
               </button>
-              <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval }}</span>
+              <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval-1 }}</span>
               <button class="nav-btn" (click)="
-            selectedInterval = Math.min(maxInterval, selectedInterval + 1);
+            selectedInterval = Math.min(maxInterval-1, selectedInterval + 1);
             updateCoOccurrenceTable()
           " [disabled]="selectedInterval === maxInterval">
                 Next →
@@ -828,7 +830,7 @@
                   <tbody>
                     <tr>
                       <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-                      <td *ngFor="let value of coOccurrenceData; let j = index"
+                      <td *ngFor="let value of coOccurrenceData; let j = index" (click)="selectCluster(j)"
                         [class.high-cooccurrence]="value > coOccurrenceThreshold"
                         [class.diagonal]="selectedCluster === j" [style.background-color]="getCoOccurrenceColor(value)"
                         [title]="
@@ -837,8 +839,8 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value
-                ">
+                  value + ' (Click to select)'"
+                        style="cursor: pointer;">
                         {{ value | number: "1.0-3" }}
                       </td>
                     </tr>
