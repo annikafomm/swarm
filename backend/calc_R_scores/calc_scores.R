@@ -39,7 +39,7 @@ compute_network_scores <- function(description, args, logfile) {
   } else if (description == "st") {
     log_message("Preparing score calculation for the Spatial data ...", logfile)
   }
-  
+
   # expression matrix
   log_message("Loading expression matrix (and additional files) ...", logfile, 2)
   t0 <- Sys.time()
@@ -75,19 +75,21 @@ compute_network_scores <- function(description, args, logfile) {
       if (!(right_order | wrong_order)) {
         log_message("At least one of the sponge network files has an unsupported file format.", logfile)
       } else if (! args$ensembl_col %in% colnames(var_df)){
+        print(colnames(var_df))
         log_message(paste0("'", args$ensembl_col, "' is not a column in adata.vars. Please provide a valid ensembl column."), logfile)
       } else if (! args$feature_col %in% colnames(var_df)){
+        print
         log_message(paste0("'", args$feature_col, "' is not a column in adata.vars. Please provide a valid feature column."), logfile)
-        # TODO: check RNAs
+
       } else {
         if (wrong_order) {
           centralities <- ceRNA_centralities
           ceRNA_centralities <- ceRNA_interactions
           ceRNA_interactions <- centralities
         }
-        
+
         ids <- var_df[, get(args$ensembl_col)]
-        
+
         # 1. Drop NA rownames
         valid_idx <- !is.na(ids) & ids != ""
         expr_sp <- expr[valid_idx, ]
@@ -95,7 +97,7 @@ compute_network_scores <- function(description, args, logfile) {
 
         rownames(expr_sp) <- ids[!is.na(ids)]
 
-        
+
         t0 <- Sys.time()
         sponge_modules <- create_Sponge_modules(var_df, ceRNA_interactions, ceRNA_centralities, mscor=args$mscor, padj=args$padj,
                                           feature_col=args$feature_col, RNAs=args$RNA_types, ensembl_col=args$ensembl_col, max_modules=args$max_modules, n_cores=args$n_cores)
@@ -142,7 +144,7 @@ compute_network_scores <- function(description, args, logfile) {
             t0 <- Sys.time()
             ssgsea_scores <- calc_spongeffects_ssgsea(expr_sp, sponge_modules, n_cores=args$n_cores)
             log_message(sprintf("SPONGeffects-ssGSEA scores computed in %s", format_runtime(t0)), logfile, 4)
-            
+
             t0 <- Sys.time()
             write.csv(ssgsea_scores, file = file.path(outdir_scores, "spongeffects_ssGSEA_scores_sponge.csv"), row.names = TRUE)
             log_message(sprintf("SPONGeffects-ssGSEA scores written in %s", format_runtime(t0)), logfile, 4)
@@ -153,11 +155,11 @@ compute_network_scores <- function(description, args, logfile) {
             t0 <- Sys.time()
             aucell_scores <- calc_aucell_score(expr_sp, sponge_modules, args$n_cores)
             log_message(sprintf("AUCell scores computed in %s", format_runtime(t0)), logfile, 4)
-            
+
             t0 <- Sys.time()
             write.csv(aucell_scores, file = file.path(outdir_scores, "aucell_scores_sponge.csv"), row.names = TRUE)
             log_message(sprintf("AUCell scores written in %s", format_runtime(t0)), logfile, 4)
-          } 
+          }
         }
       }
     }
@@ -182,7 +184,7 @@ compute_network_scores <- function(description, args, logfile) {
       if (!dir.exists(outdir_scores)) {
         dir.create(outdir_scores, recursive = TRUE, showWarnings = FALSE)
       }
-      
+
       t0 <- Sys.time()
       vregulons <- create_Genie_modules(regulon_df, expr=expr, top=args$top_n, dir=outdir_scores, args$k_reg_genes, args$n_regulons)
       regulons <- lapply(vregulons, function(vr) names(vr$tfmode))
@@ -194,7 +196,7 @@ compute_network_scores <- function(description, args, logfile) {
         t0 <- Sys.time()
         write_json(regulons, path = file.path(outdir_scores, "genie_genesets.json"), pretty = TRUE, auto_unbox = TRUE)
         log_message(sprintf("GENIE3 regulons written in %s", format_runtime(t0)), logfile, 4)
-        
+
         t0 <- Sys.time()
         filt_genie_network <- filter_network(regulon_df, regulons, "Genie")
         fwrite(filt_genie_network, file.path(args$dir, paste0("genie_network_filtered_", description, ".csv")))
@@ -208,7 +210,7 @@ compute_network_scores <- function(description, args, logfile) {
           t0 <- Sys.time()
           gsva_scores <- calc_spongeffects_gsva(expr, regulons, n_cores=args$n_cores)
           log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 4)
-          
+
           t0 <- Sys.time()
           write.csv(gsva_scores, file = file.path(outdir_scores, "spongeffects_GSVA_scores_genie3.csv"), row.names = TRUE)
           log_message(sprintf("SPONGeffects-GSVA scores written in %s", format_runtime(t0)), logfile, 4)
@@ -218,7 +220,7 @@ compute_network_scores <- function(description, args, logfile) {
           t0 <- Sys.time()
           ssgsea_scores <- calc_spongeffects_ssgsea(expr, regulons, n_cores=args$n_cores)
           log_message(sprintf("SPONGeffects-ssGSEA scores computed in %s", format_runtime(t0)), logfile, 4)
-          
+
           t0 <- Sys.time()
           write.csv(ssgsea_scores, file = file.path(outdir_scores, "spongeffects_ssGSEA_scores_genie3.csv"), row.names = TRUE)
           log_message(sprintf("SPONGeffects-ssGSEA scores written in %s", format_runtime(t0)), logfile, 4)
@@ -229,7 +231,7 @@ compute_network_scores <- function(description, args, logfile) {
           t0 <- Sys.time()
           aucell_scores <- calc_aucell_score(expr, regulons, args$n_cores)
           log_message(sprintf("AUCell scores computed in %s", format_runtime(t0)), logfile, 4)
-          
+
           t0 <- Sys.time()
           write.csv(aucell_scores, file = file.path(outdir_scores, "aucell_scores_genie3.csv"), row.names = TRUE)
           log_message(sprintf("AUCell scores written in %s", format_runtime(t0)), logfile, 4)
@@ -240,7 +242,7 @@ compute_network_scores <- function(description, args, logfile) {
           t0 <- Sys.time()
           vpres <- as.data.frame(viper(expr, vregulons, verbose = FALSE))
           log_message(sprintf("VIPER scores computed in %s", format_runtime(t0)), logfile, 4)
-          
+
           t0 <- Sys.time()
           write.csv(vpres, file = file.path(outdir_scores, "viper_scores_genie3.csv"), row.names = TRUE)
           log_message(sprintf("VIPER scores written in %s", format_runtime(t0)), logfile, 4)
@@ -316,7 +318,7 @@ main <- function() {
     compute_network_scores("tg", args, logfile)
   }
   compute_network_scores("st", args, logfile)
-  
+
   log_message(paste0("R score pipeline finished at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n"), logfile)
 }
 

@@ -7,6 +7,11 @@ import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 
 import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
+import { MatTabBodyPortal } from '@angular/material/tabs';
+import { DatasetService } from '../datasets.service';
+import { Dataset } from '../datasets.service';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 
 @Component({
   selector: 'app-form-page',
@@ -26,7 +31,6 @@ export class FormPageComponent {
   spongeNAFile?: File;           // SPONGE networkanalysis
   spongeNIFile?: File;           // SPONGE networkinteractions
   // LIANA+
-  // LIANA+
   lianaGenie3File?: File;
   lianaPathwayFile?: File;
 
@@ -36,11 +40,19 @@ export class FormPageComponent {
   uploadProgress = 0;
   errorMsg = '';
 
-  resultJsonUrl: string | null = null;   // vom Server: Download-URL zur erzeugten JSON
-  serverPayload: any = null;             // vom Server zurückgegebenes Payload-Objekt
+  resultJsonUrl: string | null = null;   // Download URL for results JSON, returned by server after upload
+  serverPayload: any = null;             // Raw payload from server (for debugging/demo), returned after upload
 
+  builtinDatasets$: Observable<Dataset[]>;
+  uploadedDatasets$: Observable<Dataset[]>;
+  selectedDataset$: Dataset | null = null;
 
-  constructor(private fb: FormBuilder, private http: HttpClient, private pathsService: PathsService) {
+  constructor(
+    private fb: FormBuilder,
+    private http: HttpClient,
+    private pathsService: PathsService,
+    private dataSetService: DatasetService,
+  ) {
     this.form = this.fb.group({
 
       email: [''],
@@ -138,7 +150,7 @@ export class FormPageComponent {
       }
     });
 
-    // if network scores toggled off → reset inner state
+    // if network scores toggled off, reset inner state
     this.form.get('scores.networkScores')!.valueChanges.subscribe(on => {
       if (!on) {
         this.form.get('network.algorithms')!.reset({
@@ -149,6 +161,15 @@ export class FormPageComponent {
         this.spongeNIFile = undefined;
       }
     });
+
+    // Setup dataset observables
+    this.builtinDatasets$ = this.dataSetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'builtin'))
+    );
+    this.uploadedDatasets$ = this.dataSetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'uploaded'))
+    );
+
   }
 
   // ---------- getters for template type-safety ----------
@@ -249,28 +270,11 @@ export class FormPageComponent {
           this.serverPayload = body.payload || null;
           this.uploadProgress = 100;
           this.uploading = false;
+          this.resultJsonUrl = body.json_url || null;
+          this.serverPayload = body.payload || null;
 
-          console.log('Upload finished, output_files', body.output_files)
-          
-          const geojsonPath = body.output_files?.geojsonPath; 
-          const parts = geojsonPath?.split('/');
-          const user = parts?.at(-3);
-          const subdir = parts?.at(-2);
-          const filename = parts?.at(-1);
+          this.dataSetService.loadAvailableDatasets();  // Refresh dataset list to include any new uploaded datasets
 
-          console.log('filepath', geojsonPath)
-
-          // --- update paths here ---
-          const newPaths = {
-            adataPath: body.output_files?.adataPath,
-            genieFiltPath:  body.output_files?.genieFiltPath,
-            spongeFiltPath: body.output_files?.spongeFiltPath,
-            hexagonPath: `/api/hexagon/${user}/${subdir}/${filename}`, 
-          };
-
-          console.log('New Paths', newPaths)
-
-          this.pathsService.updatePaths(newPaths);
         }
       },
       error: (err) => {
@@ -429,6 +433,7 @@ export class FormPageComponent {
 
       liana: { compositionColumn: 'tangram_ct_pred' },
     });
+
 
     // clear files
     this.spatialFile = undefined;

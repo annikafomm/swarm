@@ -225,7 +225,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                         "-log", log_file] + python_params,
                         check=True)
         
-        if R_params:
+        if [p for p in R_params if p != "--tangram"]:
             subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
                             "--dir", out_dir,
                             "--log", log_file] + R_params,

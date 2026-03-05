@@ -31,43 +31,11 @@
 
 // This container holds the mat-tab-group - it likes to ignore min-width = 0 and flex-shrink and just grow beyond the container so keep this configuration
 .metadata-tables-container {
-  flex: 1 1 auto !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
   margin: 20px;
   overflow-y: auto;
-  overflow-x: hidden;
   max-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0;
-}
-
-.metadata-tables-compare {
-  height: auto;
-  flex: 0 0 auto;
-  margin-top: 20px;
-  border-top: 1px solid #e0e0e0;
-  padding-top: 20px;
-  display: block !important;
-  visibility: visible !important;
-  background: #fff;
-
-  ::ng-deep .mat-tab-label {
-    min-width: 120px;
-    height: 48px;
-    font-size: 12px;
-  }
-
-  ::ng-deep .mat-tab-header {
-    display: flex !important;
-    visibility: visible !important;
-  }
-
-  ::ng-deep .mat-tab-body-wrapper {
-    max-height: 600px;
-    overflow-y: auto;
-  }
 }
 
 .view-indicator {
@@ -90,16 +58,21 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  max-width: 500px;
   height: 400px;
-  min-width: 0;
+  width: 500px;
   min-height: 0;
 }
 
 #comparison-box #hexbin.hidden,
 #comparison-box #hexbin-compare.hidden {
   visibility: hidden;
+  display: none;
+  height: 0;
+  width: 0;
+  padding: 0;
 }
+
+
 
 .basic-button {
   margin: 0.5rem;
@@ -185,6 +158,20 @@ select {
   justify-content: center;
   flex-direction: column;
   gap: 18px;
+}
+
+.network-message {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .gene-set-top {

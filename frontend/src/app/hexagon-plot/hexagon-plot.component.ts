@@ -1,21 +1,27 @@
 import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
+import { KeyValue } from '@angular/common';
+import { Data, Router } from '@angular/router';
+import { map, Observable, Subject, Subscription, takeUntil } from 'rxjs';
+
+// Visualizations
 import * as d3 from 'd3';
 import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
-import { HttpClient } from '@angular/common/http';
+
+// Services
+import { DatasetService } from '../datasets.service';
+import { Dataset } from '../datasets.service';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
-import { KeyValue } from '@angular/common';
 import { TranslationService } from '../translation.service';
 import { TranslatePipe } from '../translate.pipe';
-import { Router } from '@angular/router';
-
-import { DEFAULT_PATHS } from '../constants';
-import { Subscription } from 'rxjs';
 import { PathsService } from '../paths.service';
+import { DEFAULT_PATHS } from '../constants';
 
+// Material
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -32,6 +38,7 @@ import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 
 
+
 @Component({
   selector: 'app-hexagon-plot',
   imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
@@ -46,14 +53,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private _resizeHandler: any = null;
   private sub!: Subscription;
 
+  builtinDatasets$: Observable<Dataset[]>;
+  uploadedDatasets$: Observable<Dataset[]>;
+  tangram_Datasets$: Observable<Dataset[]>;
+  selectedDataset: Dataset | null = null;
+  selectedDatasetCompare: Dataset | null = null;
+
+  compareMode: boolean = false;;
+
+  // Track component destruction to avoid setting state on an unmounted component
+  private destroy$ = new Subject<void>();
+
   constructor(
     private router: Router,
     private http: HttpClient,
     private sessionService: SessionService,
     private geoDataService: GeoDataService,
     private translationService: TranslationService,
+    private datasetService: DatasetService,
     private pathsService: PathsService,
-  ) { }
+  ) {
+
+    // Setup dataset observables
+    this.builtinDatasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'builtin'))
+    );
+    this.uploadedDatasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.type === 'uploaded'))
+    );
+    this.tangram_Datasets$ = this.datasetService.availableDatasets$.pipe(
+      map(datasets => datasets.filter(d => d.tangram_adata_path))
+    );
+
+  }
+
 
 
   // Define to use Math functions in the html template
@@ -70,6 +103,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private g_compare!: d3.Selection<SVGGElement, any, any, any>;
   private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
+  // Nested g elements that contain the actual paths
+  private g_paths!: d3.Selection<SVGGElement, any, any, any>;
+  private g_paths_compare!: d3.Selection<SVGGElement, any, any, any>;
+
   public selectedCell: CellFeature | null = null;
   public selectedCellCompare: CellFeature | null = null;
   public selectedCluster: number | null = null;
@@ -77,8 +114,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
-
-
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
@@ -143,13 +178,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
-  public colorableProperties = [
+  public colorableProperties: string[] = [
     'cell_type',
     'leiden',
     'degree_centrality',
     'average_clustering',
     'closeness_centrality',
   ];
+
+  // keep track of which properties actually have any data available; used to
+  // disable/grey‑out menu items and tabs instead of hiding them abruptly.
+  public propertyAvailability: { [prop: string]: boolean } = {};
 
   public leidenCentralityProps = [
     'degree_centrality',
@@ -191,23 +230,57 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
   // Comparison
-  public compareMode: boolean = false;
   public selectedCompareView: string = 'regulatory_scores';
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
 
   ngOnInit(): void {
+    // Initialize with default builtin dataset if no dataset is selected
+    this.datasetService.availableDatasets$
+      .pipe(
+        takeUntil(this.destroy$)
+      )
+      .subscribe(datasets => {
+        console.log('Available datasets:', datasets);
+        // Auto-select the first builtin dataset if none selected
+        if (datasets.length > 0 && !this.selectedDataset) {
+          const builtinDataset = datasets.find(d => d.type === 'builtin');
+          if (builtinDataset) {
+            this.selectedDataset = builtinDataset;
+            this.datasetService.selectDataset(builtinDataset);
+          }
+        }
+      });
+
+    this.datasetService.selectedDataset$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(dataset => {
+        this.selectedDataset = dataset;
+        if (dataset) {
+          this.updatePathsFromDataset(dataset);
+        }
+      });
+
+    this.datasetService.selectedDatasetCompare$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(dataset => {
+        this.selectedDatasetCompare = dataset;
+        if (dataset && this.compareMode) {
+          this.reloadComparisonView();
+        }
+      });
 
     this.isLoadingHexagons = true;
     // Subscribe to path changes
     this.sub = this.pathsService.paths$.subscribe(paths => {
-      console.log("init hexagon plot")
-      if (paths.hexagonPath) {
+      console.log("Paths updated:", paths)
+      const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
+      if (hexagonPath) {
         // Update the component's dataPath
-        this.dataPath = paths.hexagonPath;
-        console.log('Loading hexagon data from', this.dataPath);
+        this.dataPath = hexagonPath;
+        console.log('✓ Loading hexagon data from', this.dataPath);
 
         // Clear hexagon-plot container
         d3.select('#hexbin').selectAll('svg').remove();
@@ -216,12 +289,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
+      } else {
+        console.warn('✗ No hexagon path available');
       }
 
     });
   }
 
   ngOnDestroy(): void {
+
+    this.destroy$.next();
+    this.destroy$.complete();
+
     if (this.sub) {
       this.sub.unsubscribe();
     }
@@ -241,10 +320,72 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     window.addEventListener('resize', this._resizeHandler);
   }
 
-  /**
-   * Call into Angular Material's private header pagination update.
-   * We wrap in try/catch to be safe if internals change.
-   */
+  onDatasetSelected(dataset: Dataset | null): void {
+    if (!dataset) return;
+
+    this.selectedDataset = dataset;
+    this.datasetService.selectDataset(dataset);  // Networks load automatically
+    this.updatePathsFromDataset(dataset);
+    this.reloadHexagons();
+  }
+
+  // Handle tangram dataset selection - use tangram_adata_path if available
+  onDatasetTangramSelected(dataset: Dataset | null): void {
+    if (!dataset || !dataset.tangram_adata_path) return;
+
+    // Create a modified dataset with tangram path
+    const tangramDataset: Dataset = {
+      ...dataset,
+      adata_path: dataset.tangram_adata_path
+    };
+
+    this.selectedDataset = tangramDataset;
+    this.datasetService.selectDataset(tangramDataset);
+    this.updatePathsFromDataset(tangramDataset);
+    this.reloadHexagons();
+  }
+
+  onDatasetCompareSelected(dataset: Dataset | null): void {
+    this.selectedDatasetCompare = dataset;
+    this.datasetService.selectDatasetCompare(dataset);  // Networks load automatically
+    if (dataset) {
+      this.reloadComparisonView();
+    }
+  }
+
+  reloadHexagons(): void {
+    if (this.dataPath) {
+      this.isLoadingHexagons = true;
+      // Clear existing hexagons
+      d3.select('#hexbin').selectAll('svg').remove();
+      // Load and render new data
+      this.createHexagonPlot();
+      this.loadAndRenderData(this.dataPath);
+    }
+  }
+
+  reloadComparisonView(): void {
+    if (this.selectedDatasetCompare && this.compareMode) {
+      this.isLoadingCompare = true;
+      // Clear existing compare hexagons
+      d3.select('#hexbin-compare').selectAll('svg').remove();
+      // Load and render new compare data
+      this.initCompareHexagonPlot();
+    }
+  }
+
+  private updatePathsFromDataset(dataset: Dataset): void {
+    this.pathsService.updatePaths({
+      adataMainPath: dataset.adata_path,
+      adataComparePath: dataset.adata_path,
+      genieFiltPath: dataset.genie_network_path,
+      spongeFiltPath: dataset.sponge_network_path,
+      hexagonPath: dataset.geojson_path,
+    });
+  }
+
+
+  // Track Tab pagination state to change to view accordingly
   private updateTabPagination(): void {
     try {
       if (this.tabGroup && (this.tabGroup as any)._header && typeof (this.tabGroup as any)._header.updatePagination === 'function') {
@@ -253,8 +394,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         (this.tabGroup as any)._updatePagination();
       }
     } catch (e) {
-      // silently ignore if Material internals differ
-      // console.debug('updateTabPagination failed', e);
+      // ignore
     }
   }
 
@@ -295,6 +435,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     switch (event.tab.textLabel) {
       case 'Regulatory Scores':
+        // Check if regulatory scores data is available
+        if (!this.hasRegulatoryScoresData()) {
+          console.warn('[Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
+          return;
+        }
         newView = 'regulatory_scores';
         break;
       case 'Co-occurence':
@@ -334,6 +479,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
       switch (viewName) {
         case 'regulatory_scores':
+          // Check if regulatory scores data is available
+          if (!this.hasRegulatoryScoresData()) {
+            console.warn('[Compare Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
+            return;
+          }
           newView = 'regulatory_scores';
           break;
         case 'gene_expression':
@@ -354,6 +504,38 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCompareView = newView;
       this.onColorbyPropertyChange();
     }
+  }
+
+  /**
+   * Check if regulatory scores data is available
+   */
+  private hasRegulatoryScoresData(): boolean {
+    if (!this.meta) return false;
+
+    const hasGenie3 = this.meta['global_regulatory_scores_genie3'] &&
+      Object.keys(this.meta['global_regulatory_scores_genie3']).length > 0;
+    const hasSponge = this.meta['global_regulatory_scores_sponge'] &&
+      Object.keys(this.meta['global_regulatory_scores_sponge']).length > 0;
+
+    return hasGenie3 || hasSponge;
+  }
+
+  /**
+   * Returns true if any data exists for the given property/column.  This is used
+   * by the template to disable tabs and dropdown options when information
+   * hasn't been computed or loaded yet.
+   */
+  public propertyAvailable(prop: string): boolean {
+    return !!this.propertyAvailability[prop];
+  }
+
+  /**
+   * Compatibility wrapper for the existing regulatory scores tab.  Left in place
+   * simply so that the template change is minimal; it now defers to the generic
+   * availability check.
+   */
+  public canViewRegulatoryScores(): boolean {
+    return this.propertyAvailable('regulatory_scores');
   }
 
   private createHexagonPlot(containerName?: string): void {
@@ -442,7 +624,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     // draw using the intended feature set (featuresToDraw)
-    this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer')
+    this.g_paths_compare = this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer') as any;
+
+    this.g_paths_compare
       .selectAll('path')
       .data(featuresToDraw)
       .join('path')
@@ -510,10 +694,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private loadAndRenderData(dataPath: string): void {
-    // Load GeoJSON data
-    d3.json<GeoJsonData>(dataPath)
-      .then((data) => {
-        console.log('Data loaded:', data);
+    // Load GeoJSON data - prepend base URL if it starts with /api/
+    const fullUrl = dataPath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${dataPath}`
+      : dataPath;
+
+    // Use fetch instead of d3.json to handle credentials properly
+    fetch(fullUrl, { credentials: 'include' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data: GeoJsonData) => {
+        console.log('Data loaded from:', fullUrl, data);
 
         if (!data) {
           throw new Error('Failed to load GeoJSON data');
@@ -542,36 +737,90 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         let firstProps = this.features[0]?.properties || {};
 
-        this.colorableProperties = Object.keys(firstProps).filter((k) => {
-          const val = firstProps[k];
-          return typeof val === 'string' || typeof val === 'number';
-        });
+        // start with whatever is available on the first feature, but also make
+        // sure that the set contains the "known" columns we care about so that
+        // they are present (albeit disabled) until the corresponding data
+        // arrives.  This mirrors the behaviour you wanted for regulatory scores
+        // without hardcoding a single property.
+        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+        const lianaKeys = [
+          'ligand_receptor_relationships',
+          'cell_comp_tf_activity_similarity',
+          'tf_activity',
+          'pathway_activity',
+        ];
 
-        console.log('Initial colorable properties:', this.colorableProperties);
+        const allKeys = new Set<string>(
+          Object.keys(firstProps).filter((k) => {
+            const val = firstProps[k];
+            return typeof val === 'string' || typeof val === 'number';
+          })
+        );
+        scoreKeys.forEach((k) => allKeys.add(k));
+        lianaKeys.forEach((k) => allKeys.add(k));
 
+        this.colorableProperties = Array.from(allKeys);
+        console.log('Initial colourable properties (including potential ones):',
+          this.colorableProperties);
 
         // Alphabetical order
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         // Group similar properties together
-        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
-        const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
           {
             key: 'Other', value: this.colorableProperties.filter(
               (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
-            )
+            ),
           },
         ];
 
-        if (this.colorableProperties.includes('regulatory_scores')) {
+        // compute availability for everything we've decided to show
+        const candidates = new Set(this.colorableProperties);
+        // ensure some non-colorable but still important keys are included
+        candidates.add('regulatory_scores');
+        candidates.add('leiden_co_occurrence');
+        this.propertyAvailability = {};
+        candidates.forEach((prop) => {
+          if (prop === 'regulatory_scores') {
+            this.propertyAvailability[prop] = this.hasRegulatoryScoresData();
+          } else {
+            this.propertyAvailability[prop] = this.features.some((f) => {
+              const val = f.properties ? f.properties[prop] : undefined;
+              return val !== undefined && val !== null && val !== '';
+            });
+          }
+        });
+        console.log('Property availability map:', this.propertyAvailability);
+
+        // remove unavailable properties from the dropdown entirely so the user
+        // cannot select them and they don't appear as the default
+        this.colorableProperties = this.colorableProperties.filter((p) =>
+          this.propertyAvailability[p]
+        );
+        console.log('Filtered colourableProperties:', this.colorableProperties);
+
+        // rebuild grouped properties after filtering to exclude unavailable items
+        this.groupedProperties = [
+          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          {
+            key: 'Other', value: this.colorableProperties.filter(
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+            ),
+          },
+        ];
+
+        if (this.propertyAvailable('regulatory_scores')) {
           this.colorByProperty = 'regulatory_scores';
-        } else if (this.colorableProperties.includes('cell_type')) {
+        } else if (this.propertyAvailable('cell_type')) {
           this.colorByProperty = 'cell_type';
         } else {
-          this.colorByProperty = this.colorableProperties[0];
+          // just pick the first remaining option (already filtered to available
+          // ones).  any value here is acceptable as 'random' default.
+          this.colorByProperty = this.colorableProperties[0] || '';
         }
 
         this.currentLegendType = this.isContinuousScale() ? 'continuous' : 'categorical';
@@ -590,9 +839,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
         // Draw the map inside the zoomable group
-        this.g
-          .style('cursor', 'pointer')
-          .append('g')
+        this.g.style('cursor', 'pointer');
+
+        // Create and store reference to nested g that will hold the paths
+        this.g_paths = this.g
+          .selectAll<SVGGElement, number>('g.paths-group')
+          .data([0])
+          .join('g')
+          .attr('class', 'paths-group') as any;
+
+        this.g_paths
           .selectAll('path')
           .data(data.features)
           .join('path')
@@ -622,6 +878,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
+        this.isLoadingHexagons = false;
       });
   }
 
@@ -636,6 +893,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onColorbyPropertyChange(): void {
+    console.log('[onColorbyPropertyChange] colorByProperty changed to:', this.colorByProperty);
+
     if (this.colorByProperty === 'regulatory_scores') {
       if (
         this.selectedRegulatoryScore?.endsWith('genie3') &&
@@ -662,8 +921,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
     if (this.compareMode) {
+      console.log('[onColorbyPropertyChange] Updating compare hexagons');
       this.updateHexColors('#hexbin-compare');
     }
+    console.log('[onColorbyPropertyChange] Updating main hexagons');
     this.updateHexColors();
   }
 
@@ -703,6 +964,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const viewToUpdate = isMainView ? this.colorByProperty : this.selectedCompareView;
     const featuresToUpdate = isMainView ? this.features : (this.dataCompare?.features || []);
     const gToUpdate = isMainView ? this.g : this.g_compare;
+    const gPathsToUpdate = isMainView ? this.g_paths : this.g_paths_compare;
     const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
     const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
     const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate);
@@ -714,6 +976,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       svg: isMainView ? this.svg : this.svg_compare,
       features: featuresToUpdate,
       g: gToUpdate,
+      g_paths: gPathsToUpdate,
       ordinal: ordinalScaleToUpdate,
       continuous: continuousScaleToUpdate,
       isContinuous,
@@ -739,6 +1002,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
 
+    // Debug: check if the view property exists in features
+    if (viewVariablesToUpdate.features.length > 0) {
+      const firstFeature = viewVariablesToUpdate.features[0];
+      const hasProperty = viewVariablesToUpdate.view in (firstFeature.properties || {});
+      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
+      console.log('[updateHexColors] Looking for property:', viewVariablesToUpdate.view, '- Exists:', hasProperty);
+      if (!hasProperty) {
+        console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+      }
+    }
+
     this.resetClusterExtension();
 
     if (this.selectedCell && this.selectedCluster) {
@@ -753,7 +1027,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-    sel = viewVariablesToUpdate.g
+    sel = viewVariablesToUpdate.g_paths
       .selectAll<SVGPathElement, CellFeature>('path')
       .data(viewVariablesToUpdate.features);
 
@@ -2290,7 +2564,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           .attr('y', rectY)
           .attr('width', rectWidth)
           .attr('height', rectHeight)
-          .style('fill', this.colorScaleCompare(cat))
+          .style('fill', viewVariablesToUpdate.ordinal(cat))
           .attr('stroke', '#333')
           .attr('stroke-width', 0.5)
           .attr('rx', 2);

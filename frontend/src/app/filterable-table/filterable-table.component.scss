@@ -1,13 +1,6 @@
-/* ===============================
-   Filterable Table – fixed height, vertical scroll
-   Upload-Form Look + Sticky-Header FIX (keine Bleed-Throughs)
-   =============================== */
-
 :host {
   --ftable-min-width: 0;
-  /* customize per instance: app-table { --ftable-min-width: 300px; } */
   --ftable-height: 420px;
-  /* Höhe der scrollbaren Tabelle */
   --radius: 16px;
   --radius-pill: 9999px;
   --border-color: #e5e7eb;
@@ -18,62 +11,63 @@
   --muted: #6b7280;
   --focus: #93c5fd;
   --focus-ring: rgba(59, 130, 246, 0.25);
-  /* flex layout support */
   display: flex;
   flex-direction: column;
   min-width: var(--ftable-min-width);
   min-height: 0;
-  min-height: 0;
 }
 
-/* Headerzellen dürfen Inhalt überstehen lassen */
 .ftable thead th,
 .ftable thead .th-filter {
   overflow: visible;
-  /* wichtig: nicht hidden */
 }
-
 
 
 .ftable thead .th-filter .input {
   height: 28px;
-  /* kleiner als die Zellenhöhe */
   padding: 0 12px;
   border-radius: 9999px;
-  /* rund */
   box-sizing: border-box;
   border: 1px solid #d0d7de;
   font-size: 0.875rem;
-  /* smaller font for filter inputs */
 }
 
 .ftable thead .th-top .input {
-  height: 24px;
+  height: 8px;
   padding: 0 8px;
   border-radius: 9999px;
   box-sizing: border-box;
   border: 1px solid #d0d7de;
-  font-size: 0.75rem;
+  font-size: 0.5rem;
   flex-shrink: 1;
-  min-width: 80px;
-  flex: 1 1 100px;
+  min-width: 50px;
+  flex: 1 1 30px;
 }
 
 .table-container.upload-style {
   background: var(--bg-card);
   border-radius: var(--radius);
   outline: 1px solid var(--border-color);
-  // outline-offset: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   flex: 1;
-  /* take available space in flex containers */
   min-width: 0;
-  /* allow shrinking below content size */
   min-height: 0;
-  /* allow shrinking vertically */
+
+  .empty-message {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    min-height: var(--ftable-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-soft);
+  }
 
   .table-scroll {
     position: relative;
@@ -85,12 +79,9 @@
     scrollbar-gutter: stable; //both-edges;
     overscroll-behavior: contain;
     background: #fff;
-    /* verhindert Durchscheinen */
     transform: translateZ(0);
     flex: 1;
-    /* take available space */
     min-width: 0;
-    /* allow shrinking */
   }
 
   table.ftable {
@@ -103,16 +94,17 @@
     background: transparent;
     min-width: 0;
 
+
     thead th {
       position: sticky;
       top: 0;
       z-index: 5;
-      /* über Body-Zellen */
       background: var(--bg-soft);
       border-bottom: 1px solid var(--border-color);
       padding: 14px 16px;
       vertical-align: bottom;
       background-clip: padding-box;
+
     }
 
 
@@ -126,7 +118,7 @@
       bottom: -1px;
       background: var(--bg-soft);
     }
-    
+
     tbody tr:first-child td {
       border-top: 0;
     }
@@ -171,16 +163,18 @@
     }
 
     .index-col {
-      flex: 1 1 25%;
-      max-width: 250px;
       font-size: 0.9em;
+      flex: 1 1 25%;
+      white-space: normal;
+      word-break: break-word;
     }
 
     .other-col {
+      min-width: 0;
       flex: 1 1 auto;
       font-size: 0.85em;
       padding: 8px 10px;
-
+      overflow-wrap: break-word;
     }
 
     .action-col {
@@ -189,7 +183,6 @@
       white-space: nowrap;
     }
 
-    /* Inputs im Upload-Form-Look */
     .input {
       width: 100%;
       padding: 10px 12px;
@@ -222,7 +215,6 @@
       font-size: 14px;
     }
 
-    /* keine Ellipsis/Abschneiden im Header, damit nichts „durchschimmert“ */
     th,
     td {
       overflow: visible;
@@ -237,7 +229,6 @@
   }
 }
 
-/* Buttons (z. B. "Show") */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -294,6 +285,15 @@
   &:active {
     transform: translateY(1px);
   }
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  margin-top: 16px;
 }
 
 span {

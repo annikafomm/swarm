@@ -10,6 +10,8 @@ import os
 import shutil
 import subprocess
 import time
+from dataset_management import DatasetRegistry
+from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -44,6 +46,8 @@ from fastapi_sessions.session_verifier import SessionVerifier
 from pydantic import BaseModel as PydanticBaseModel
 from pydantic import EmailStr
 from starlette.responses import RedirectResponse
+from datetime import datetime, timedelta
+import asyncio
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -86,9 +90,14 @@ class BaseModel(PydanticBaseModel):
 class SessionData(BaseModel):
     username: str
     adata_path: str = None
-    adata: sc.AnnData | None = None
     genie_network_path: str | None = None
     sponge_network_path: str | None = None
+    created_at: datetime = None
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        if self.created_at is None:
+            self.created_at = datetime.utcnow()
 
 
 
@@ -142,8 +151,48 @@ class GenieNetworkPath(BaseModel):
 # -----------------------------------------------------------------------------
 # Application
 # -----------------------------------------------------------------------------
+# Lifespan event handler
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global dataset_registry
+    dataset_registry = DatasetRegistry()
+
+    # Register builtin datasets from backend/data (use absolute paths)
+    base_path = Path(__file__).parent  # backend/ directory
+    builtin_adata = base_path / "data" / "adata.h5ad"
+    builtin_geojson = base_path.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+    builtin_genie = base_path / "data" / "genie_network_filt.csv"
+    builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
+
+    print(f"Base path: {base_path}")
+    print(f"Adata exists: {builtin_adata.exists()} at {builtin_adata}")
+
+    if builtin_adata.exists():
+        dataset_registry.register_builtin_dataset(
+            dataset_id="builtin_main",
+            alias="Default Dataset (Visium, BRCA)",
+            adata_path=str(builtin_adata),
+            geojson_path="/api/geojson/builtin_main",  # Use API URL for consistency
+            genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
+            sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
+            description="Pre-configured spatial transcriptomics dataset"
+        )
+        print(f"✓ Registered builtin dataset with paths:")
+        print(f"  - adata: {builtin_adata}")
+        print(f"  - geojson: /api/geojson/builtin_main")
+        print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
+        print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
+    else:
+        print(f"✗ Builtin adata not found at {builtin_adata}")
+
+    asyncio.create_task(cleanup_expired_sessions())
+    yield
+    # Shutdown
+    pass
+
+app = FastAPI(lifespan=lifespan)
 
 # CORS: allow only expected frontend origins (configurable).
 app.add_middleware(
@@ -179,6 +228,34 @@ verifier = BasicVerifier(
 # Utility helpers
 # -----------------------------------------------------------------------------
 
+def _load_adata_cached(file_path: str) -> sc.AnnData:
+    """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
+
+    if file_path is None:
+        # Fall back to builtin dataset if none is set
+        base_path = Path(__file__).parent
+        file_path = base_path / "data" / "adata.h5ad"
+        if not file_path.exists():
+            raise ValueError("No adata file has been loaded. Please call /read_adata first.")
+
+    adata = sc.read_h5ad(str(file_path))
+    reconstruct_obsm_cols = {
+        "ligand_receptor_cosine_similarity": "ligand_receptor",
+        "ligand_receptor_p_value": "ligand_receptor",
+        "ligand_receptor_category": "ligand_receptor",
+        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
+        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
+    }
+
+    for obsm_key, col_names in reconstruct_obsm_cols.items():
+        if obsm_key in adata.obsm and 'liana_columns' in adata.uns and col_names in adata.uns["liana_columns"]:
+            adata.obsm[obsm_key] = pd.DataFrame(
+                adata.obsm[obsm_key],
+                columns=adata.uns["liana_columns"][col_names],
+                index=adata.obs_names,
+            )
+
+    return adata
 
 def _sanitize_filename(name: str) -> str:
     """
@@ -309,6 +386,40 @@ def get_subnetwork_data(file_path, gene_set, network_type):
 # -----------------------------------------------------------------------------
 # Convenience endpoints
 # -----------------------------------------------------------------------------
+
+async def cleanup_expired_sessions():
+     while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            current_time = datetime.now()
+            expired_sessions = []
+
+            # Iterate through all sessions
+            for session_id, session_data in backend._data.items():
+                age = current_time - session_data.created_at
+                if age > timedelta(hours=1):  # Sessions expire after 1 hour
+                    expired_sessions.append(session_id)
+
+            # Delete expired sessions
+            for session_id in expired_sessions:
+                await backend.delete(session_id)
+                print(f"Cleaned up expired session: {session_id}")
+        except Exception as e:
+            print(f"Error in cleanup task: {e}")
+
+
+
+@app.post("/reset_session")
+async def reset_session(session_id: UUID = Depends(cookie)):
+    """Call this on page reload to clear old data"""
+    session_data = await backend.read(session_id)
+    # Reset all data except username
+    session_data.adata_path = None
+    session_data.genie_network_path = None
+    session_data.sponge_network_path = None
+    session_data.created_at = datetime.now()  # Reset timestamp
+    await backend.update(session_id, session_data)
+    return {"status": "session reset"}
 
 
 # Simple health check used by load balancers, monitors, or quick manual checks.
@@ -519,17 +630,30 @@ async def upload(
 
     # TODO call visium_to_geojson
     out_dir = await calculate_scores_helper(job_dir, payload)
+
+    adata_path = None
+    tangram_adata_path = None
+    out_files = {}
+
     if out_dir is not None:
-        print(out_dir)
+        print(f"Output directory: {out_dir}")
 
-        adata_path = None
-        for filename in os.listdir(out_dir):
-            if filename.endswith("st_scores.h5ad"):
-                adata_path = os.path.join(out_dir, filename)
+        # Search for h5ad files recursively in case they're in subdirectories
+        for root, dirs, files in os.walk(out_dir):
+            for filename in files:
+                if filename.endswith("st_scores.h5ad"):
+                    adata_path = os.path.join(root, filename)
+                    print(f"Found adata: {adata_path}")
+                if filename.endswith("tg_scores.h5ad"):
+                    tangram_adata_path = os.path.join(root, filename)
+                    print(f"Found tangram adata: {tangram_adata_path}")
 
-        out_files = {}
+        # Create geojson from adata if found
         if adata_path is not None:
-            out_files["adataPath"] = adata_path
+            out_files["adata_path"] = adata_path
+
+            # Create hexagons.geojson in the job_dir (root), not in nested dir
+            hexagon_output = os.path.join(job_dir, "hexagons.geojson")
             subprocess.run(
                 [
                     "python",
@@ -537,27 +661,51 @@ async def upload(
                     "--adata",
                     adata_path,
                     "--outpath",
-                    os.path.join(out_dir, "hexagons.geojson"),
+                    hexagon_output,
                 ]
             )
-            out_files["geojsonPath"] = os.path.join(
-                out_dir, "hexagons.geojson"
-            )
+            out_files["geojson_path"] = hexagon_output
+            print(f"Created geojson at: {hexagon_output}")
 
-        if os.path.isfile(
-            os.path.join(out_dir, "genie_network_filtered_st.csv")
-        ):
-            out_files["genieFiltPath"] = os.path.join(
-                out_dir, "genie_network_filtered_st.csv"
-            )
-        if os.path.isfile(
-            os.path.join(out_dir, "sponge_network_filtered_st.csv")
-        ):
-            out_files["spongeFiltPath"] = os.path.join(
-                out_dir, "sponge_network_filtered_st.csv"
-            )
+        # Look for network files in both the output dir and subdirectories
+        for root, dirs, files in os.walk(out_dir):
+            for filename in files:
+                if filename == "genie_network_filtered_st.csv":
+                    out_files["genie_network_path"] = os.path.join(root, filename)
+                    print(f"Found genie network: {out_files['genie_network_path']}")
+                if filename == "sponge_network_filtered_st.csv":
+                    out_files["sponge_network_path"] = os.path.join(root, filename)
+                    print(f"Found sponge network: {out_files['sponge_network_path']}")
 
         payload["output_files"] = out_files
+
+        # Only register if we have an adata file
+        if adata_path is not None:
+            dataset_id = f"{job_id}_{user_safe}"
+
+            email_prefix = str(email.split("@")[0]) if email else "unknown"
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+            dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+
+            dataset_registry.register_uploaded_dataset(
+                dataset_id=dataset_id,
+                alias=dataset_alias,
+                adata_path=adata_path,
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                genie_network_path=out_files.get("genie_network_path"),
+                sponge_network_path=out_files.get("sponge_network_path"),
+                geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
+                user=user_safe,
+                dataset_type=dataset,
+                use_tangram=use_tangram,
+                created_at=datetime.now().isoformat(),
+            )
+
+            # Include dataset_id in response
+            payload["dataset_id"] = dataset_id
+        else:
+            print("No adata file found in output, skipping dataset registration")
 
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
@@ -568,7 +716,75 @@ async def upload(
     return payload
 
 
-@app.get("/api/hexagon/{user}/{subdir}/{filename}")
+
+@app.get("/api/datasets", dependencies=[Depends(cookie)])
+async def get_datasets(session_data: SessionData = Depends(verifier)):
+    """
+    Return all available datasets for the current user + builtin datasets.
+    Filters out datasets with missing files.
+    """
+    try:
+        all_datasets = dataset_registry.get_all_datasets()
+        print(f"All datasets: {all_datasets}")
+        user_datasets = dataset_registry.get_user_datasets(session_data.username)
+        print(f"User datasets for {session_data.username}: {user_datasets}")
+
+        # Verify files exist before returning
+        valid_user_datasets = {}
+        for dataset_id, info in user_datasets.items():
+            if Path(info["adata_path"]).exists():
+                valid_user_datasets[dataset_id] = info
+
+        datasets_json = {
+            "builtin": all_datasets.get("builtin", {}),
+            "uploaded": valid_user_datasets
+        }
+
+        print(f"Returning datasets: {datasets_json}")
+        return datasets_json
+    except Exception as e:
+        print(f"✗ Error in get_datasets: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
+@app.get("/api/geojson/{dataset_id}", dependencies=[Depends(cookie)])
+async def get_geojson(dataset_id: str):
+    """Serve GeoJSON files for datasets"""
+    try:
+        # Construct path from dataset_id - uploaded datasets have format: {job_id}_{user_safe}
+        # Builtin datasets have format: builtin_{name}
+
+        if dataset_id.startswith("builtin_"):
+            # Builtin dataset - located in frontend/public/assets/
+            geojson_path = Path(__file__).parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+            print(f"[DEBUG] Looking for builtin geojson at: {geojson_path}")
+        else:
+            # Uploaded dataset - extract job_id from dataset_id format: job_TIMESTAMP_USER
+            # The directory is created as: job_TIMESTAMP_USER
+            geojson_path = BASE_UPLOAD_DIR / dataset_id / "hexagons.geojson"
+            print(f"[DEBUG] Looking for uploaded geojson at: {geojson_path}")
+
+        print(f"[DEBUG] File exists: {geojson_path.exists()}")
+
+        if not geojson_path.exists():
+            print(f"[ERROR] GeoJSON file not found at {geojson_path}")
+            raise HTTPException(status_code=404, detail=f"GeoJSON file not found: {geojson_path}")
+
+        print(f"[DEBUG] Serving geojson from: {geojson_path}")
+        return FileResponse(
+            geojson_path,
+            media_type="application/geo+json",
+            filename=f"{dataset_id}.geojson"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Exception in get_geojson: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 async def get_hexagon(user: str, subdir: str, filename: str):
     """
     file_path = Path("./uploads") / filename
@@ -608,7 +824,11 @@ async def del_session(response: Response, session_id: UUID = Depends(cookie)):
     """
     Example: `curl -b cookies.txt -X POST http://127.0.0.1:3000/delete_session`
     """
-    await backend.delete(session_id)
+    try:
+        await backend.delete(session_id)
+    except KeyError:
+        pass
+
     cookie.delete_from_response(response)
     return "deleted session"
 
@@ -628,26 +848,10 @@ async def read_adata(
     """
     session_data = await backend.read(session_id)
 
-    adata = sc.read_h5ad(adata_path.path)
-
-    reconstruct_obsm_cols = {
-        "ligand_receptor_cosine_similarity": "ligand_receptor",
-        "ligand_receptor_p_value": "ligand_receptor",
-        "ligand_receptor_category": "ligand_receptor",
-        "cell_comp_tf_activity_cosine_similarity": "cell_comp_tf_activity",
-        "cell_comp_tf_activity_category": "cell_comp_tf_activity",
-    }
-
-    for obsm_key, col_names in reconstruct_obsm_cols.items():
-        if obsm_key in adata.obsm:
-            adata.obsm[obsm_key] = pd.DataFrame(
-                adata.obsm[obsm_key],
-                columns=adata.uns["liana_columns"][col_names],
-                index=adata.obs_names,
-            )
-
     session_data.adata_path = adata_path.path
-    session_data.adata = adata
+
+    print(f"Setting adata path to: {adata_path.path}")
+
     await backend.update(session_id, session_data)
     return {"status": "ok"}
 
@@ -715,8 +919,13 @@ async def get_geneset_connections(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
 
+    if not session_data.genie_network_path:
+        return {"connections": [], "slider_data": {}}
+
+
     # Get the geneset from the name
-    gene_set = session_data.adata.uns["genie_genesets"].get(
+    adata = _load_adata_cached(session_data.adata_path)
+    gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )
     gene_set = list(gene_set) + [gene_set_name]
@@ -740,7 +949,11 @@ async def get_geneset_connections(
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
     # Get the geneset from the name
-    gene_set = session_data.adata.uns["sponge_genesets"].get(
+    if not session_data.sponge_network_path:
+        return {"connections": [], "slider_data": {}}
+
+    adata = _load_adata_cached(session_data.adata_path)
+    gene_set = adata.uns["sponge_genesets"].get(
         gene_set_name, None
     )
     gene_set = list(gene_set) + [gene_set_name]
@@ -761,7 +974,8 @@ async def get_obs_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type`
     """
-    return session_data.adata.obs[column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.obs[column].to_dict()
 
 
 
@@ -772,7 +986,8 @@ async def get_var_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells`
     """
-    return session_data.adata.var[column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.var[column].to_dict()
 
 
 @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
@@ -782,7 +997,8 @@ async def get_obsm_column(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
     """
-    return session_data.adata.obsm[table][column].to_dict()
+    adata = _load_adata_cached(session_data.adata_path)
+    return adata.obsm[table][column].to_dict()
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
@@ -797,15 +1013,16 @@ async def get_obsm_row(
     'spongeeffects_GSVA_scores',
     'viper_scores',
     ]
-    available_scores = session_data.adata.obsm.keys()
+    adata = _load_adata_cached(session_data.adata_path)
+    available_scores = adata.obsm.keys()
     available_scores = [score for score in available_scores if score.endswith("_genie3") or score.endswith("_sponge")]
 
     row_data = {}
     for score in available_scores:
-        obsm_data = session_data.adata.obsm[score]
+        obsm_data = adata.obsm[score]
         if not isinstance(obsm_data, pd.DataFrame):
             obsm_data = pd.DataFrame(
-                obsm_data, index=session_data.adata.obs_names
+                obsm_data, index=adata.obs_names
             )
         row_data[score] = obsm_data.loc[barcode].to_dict()
     return row_data
@@ -818,8 +1035,9 @@ async def get_X_by_gene(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860`
     """
-    expressions = session_data.adata[:, gene].X.toarray().flatten().tolist()
-    barcodes = session_data.adata.obs.index
+    adata = _load_adata_cached(session_data.adata_path)
+    expressions = adata[:, gene].X.toarray().flatten().tolist()
+    barcodes = adata.obs.index
     return {
         barcode: expression
         for barcode, expression in zip(barcodes, expressions)
