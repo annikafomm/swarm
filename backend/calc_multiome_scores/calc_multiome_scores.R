@@ -99,7 +99,7 @@ global_motif_analysis <- function(object, args, logfile) {
             dir.create(outdir_multiome, recursive = TRUE, showWarnings = FALSE)
           }
     write.csv(chromvar_scores, file = file.path(outdir_multiome, "chromvar_scores.csv"))
-
+    
     if (args$differential_motif_activity) {
       # find differential motif activity for each cluster
       print("Finding differential motif activity...")
@@ -124,7 +124,6 @@ global_motif_analysis <- function(object, args, logfile) {
     )
     object[["peaks"]]@fragments <- list(frag_obj)
     log_message(Fragments(object[["peaks"]])[[1]]@path, logfile, 2)
-
     # compute Tn5 insertion bias for footprinting, is saved in object[["peaks"]]@bias
     log_message("Computing Tn5 insertion bias...", logfile, 2)
     object <- compute_Tn5_insertion_Bias(object, genome = genome, assay = "peaks")
@@ -140,7 +139,6 @@ global_motif_analysis <- function(object, args, logfile) {
         slot = "counts")
     spot_obj_out_path <- file.path(args$outdir, "spot_obj.rds")
     saveRDS(spot_obj, spot_obj_out_path)
-
     # plot footprint for top motifs
     log_message("Plotting footprints for top motifs...", logfile, 2)
     object_dissociated_path <- args$multiome_rds

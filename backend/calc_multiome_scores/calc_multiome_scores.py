@@ -11,6 +11,9 @@ import pandas as pd
 import time
 import anndata as ad
 
+# Allow writing nullable strings in anndata
+ad.settings.allow_write_nullable_strings = True
+
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 

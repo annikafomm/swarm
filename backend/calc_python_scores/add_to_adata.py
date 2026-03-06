@@ -9,6 +9,10 @@ import pandas as pd
 import numpy as np
 import json
 import time
+import anndata as ad
+
+# Allow writing nullable strings in anndata
+ad.settings.allow_write_nullable_strings = True
 
 from calc_scores import log_message, format_runtime
 
@@ -61,6 +65,11 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
     if not os.path.isdir(scores_path):
         log_message(f"Scores directory not found: {scores_path}", logfile, 1)
         return
+
+    if not os.path.isfile(adata_map_path):
+        log_message(f"Mapping file not found: {adata_map_path}. Skipping multiome score mapping.", logfile, 1)
+        return
+
     t0 = time.time()
     adata_path = os.path.join(args.indir, filename)
     adata = sc.read_h5ad(adata_path)
@@ -68,8 +77,12 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
     log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 2)
     t0 = time.time()
 
-    for filename in os.listdir(scores_path):
-        if filename=="chromvar_scores.csv":
+    chromvar_found = False
+    files_in_dir = os.listdir(scores_path)
+    log_message(f"Files in multiome directory: {files_in_dir}", logfile, 2)
+
+    for filename in files_in_dir:
+        if filename.lower() == "chromvar_scores.csv":
             file_path = os.path.join(scores_path, filename)
             chromvar_scores = pd.read_csv(file_path, index_col=0)
             # adata is the AnnData object containing the mapping to spatial data (probabilities)
@@ -84,15 +97,20 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
 
             adata.obsm["chromvar_spot_scores"] = spot_chromvar
             adata.uns["chromvar_motifs"] = list(motif_names)
+            chromvar_found = True
+            log_message(f"chromvar_spot_scores added to adata.obsm", logfile, 2)
 
         # differential motif activity
-        if filename=="differential_motif_activity.json":
+        if filename.lower() == "differential_motif_activity.json":
             file_path = os.path.join(scores_path, filename)
             with open(file_path, "r") as f:
                 data_dict = json.load(f)
 
             adata.uns["differential_motif_activity"] = data_dict
+            log_message(f"differential_motif_activity added to adata.uns", logfile, 2)
 
+    if not chromvar_found:
+        log_message(f"Warning: chromvar_scores.csv not found in {scores_path}", logfile, 1)
 
     log_message(f"R score files loaded and added to the AnnData object in {format_runtime(t0)}", logfile, 2)
 

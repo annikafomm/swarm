@@ -11,29 +11,6 @@ suppressPackageStartupMessages({
 
 main <- function() {
 
-  # # ---- Set up logging ----
-  # log_dir  <- "log"
-  # dir.create(log_dir, showWarnings = FALSE, recursive = TRUE)
-
-  # log_file <- file.path(log_dir, "rds_to_h5ad.log")
-  # err_file <- file.path(log_dir, "rds_to_h5ad.err")
-
-  # log_con <- file(log_file, open = "wt")
-  # err_con <- file(err_file, open = "wt")
-
-  # # Redirect stdout and stderr
-  # sink(log_con, type = "output")
-  # sink(err_con, type = "message")
-
-  # # Make sure we restore on exit (even if an error occurs)
-  # on.exit({
-  #   # Safely try to revert sinks and close connections
-  #   try(sink(type = "output"), silent = TRUE)
-  #   try(sink(type = "message"), silent = TRUE)
-  #   try(close(log_con), silent = TRUE)
-  #   try(close(err_con), silent = TRUE)
-  # }, add = TRUE)
-
   option_list <- list(
     make_option(
       c("--rds_path"),

@@ -199,6 +199,90 @@ peak_names_to_GRanges <- function(peak_names){
 }
 
 
+#' Project chromVAR motif deviation scores from dissociated cells onto spatial spots
+#'
+#' ChromVAR deviation scores computed per dissociated cell are projected onto
+#' spatial spots via a weighted mean using the Tangram mapping matrix.
+#' The resulting spot-level scores are stored as a new \code{chromvar} assay
+#' inside \code{spot_obj} and active idents are set to \code{clustering_var}.
+#'
+#' @param object_dissociated A Seurat object with a chromVAR assay
+#'   (motifs \eqn{\times} cells deviation scores).
+#' @param spot_obj A spot-level Seurat object created with
+#'   \code{seuratObj_dissociated2spatial()}. Its column names must correspond to
+#'   spatial spot IDs.
+#' @param M A numeric matrix or data.frame of dimensions
+#'   \code{(n_cells \times n_spots)} containing Tangram mapping probabilities.
+#'   Row names must match \code{colnames(object_dissociated)}.
+#' @param chromvar_assay Name of the chromVAR assay in \code{object_dissociated}
+#'   (default: \code{"chromvar"}).
+#' @param clustering_var Column in \code{spot_obj@meta.data} that carries
+#'   spatial cluster labels; set as active idents after projection
+#'   (default: \code{"leiden"}).
+#'
+#' @return \code{spot_obj} with a new \code{chromvar} assay containing the
+#'   projected deviation scores and active idents set to \code{clustering_var}.
+project_chromvar_to_spots <- function(
+    object_dissociated,
+    spot_obj,
+    M,
+    chromvar_assay = "chromvar",
+    clustering_var = "leiden"
+) {
+    # Both spot_obj and the Tangram M columns may use different barcode
+    # suffixes (".1" vs "-1" is common in read.csv output vs 10x format).
+    # Normalise all barcodes to the "-N" form before any matching.
+    fix_barcode <- function(x) sub("\\.(\\d+)$", "-\\1", x)
+
+    # motifs × cells deviation matrix
+    cv_mat      <- GetAssayData(object_dissociated, assay = chromvar_assay, layer = "data")
+
+    # align cells between cv_mat and M
+    shared_cells <- intersect(colnames(cv_mat), rownames(M))
+    if (length(shared_cells) == 0L)
+        stop("project_chromvar_to_spots: no shared cell barcodes between chromVAR assay and Tangram M matrix.")
+    cv_mat <- cv_mat[, shared_cells, drop = FALSE]
+    M_mat  <- as.matrix(M[shared_cells, , drop = FALSE])
+
+    # Normalise M column names (spots)
+    colnames(M_mat) <- fix_barcode(colnames(M_mat))
+
+    # weighted mean: (motifs × cells) %*% (cells × spots) then normalise
+    M_sp      <- Matrix::Matrix(M_mat, sparse = TRUE)
+    spot_sum  <- cv_mat %*% M_sp                               # motifs × spots
+    w_spot    <- Matrix::colSums(M_sp)
+    spot_mean <- spot_sum %*% Matrix::Diagonal(x = 1 / pmax(w_spot, 1e-12))
+    colnames(spot_mean) <- colnames(M_sp)                      # already fixed
+
+    # Normalise spot_obj barcodes for matching (Seurat may ignore colnames<-)
+    spot_obj_cells_raw   <- colnames(spot_obj)                 # original names
+    spot_obj_cells_fixed <- fix_barcode(spot_obj_cells_raw)
+
+    common_fixed <- intersect(colnames(spot_mean), spot_obj_cells_fixed)
+    if (length(common_fixed) == 0L) {
+        message("spot_mean columns (first 5): ", paste(head(colnames(spot_mean), 5), collapse = ", "))
+        message("spot_obj cells (first 5):    ", paste(head(spot_obj_cells_fixed, 5), collapse = ", "))
+        stop("project_chromvar_to_spots: no overlapping spot barcodes between projected scores and spot_obj.")
+    }
+
+    # Subset spot_mean to common spots
+    spot_mean <- spot_mean[, common_fixed, drop = FALSE]
+
+    # Subset spot_obj using the ORIGINAL (un-fixed) names that Seurat knows
+    orig_idx   <- match(common_fixed, spot_obj_cells_fixed)
+    spot_obj   <- spot_obj[, spot_obj_cells_raw[orig_idx]]
+
+    # Rename spot_mean columns to match whatever Seurat stored
+    colnames(spot_mean) <- colnames(spot_obj)
+
+    # store projected scores as a chromvar assay in spot_obj
+    spot_obj[[chromvar_assay]] <- CreateAssayObject(data = spot_mean)
+
+    Seurat::Idents(spot_obj) <- clustering_var
+    return(spot_obj)
+}
+
+
 #' Get genomic positions of a motif within differentially accessible peaks
 #'
 #' For a given motif and cluster comparison, this function intersects motif
@@ -518,7 +602,7 @@ footprints_dissociated2spatial <- function(
     # normalize
     w_spot <- Matrix::rowSums(t(M))  # length = n_spots
     spot_mean <- spot_sum
-    spot_mean <- Diagonal(x = 1 / pmax(w_spot, 1e-12)) %*% spot_sum
+    spot_mean <- Matrix::Diagonal(x = 1 / pmax(w_spot, 1e-12)) %*% spot_sum
     spot_mean_sp <- spot_mean
     if (!inherits(spot_mean_sp, "dgCMatrix")) {
         spot_mean_sp <- Matrix::Matrix(as.matrix(spot_mean_sp), sparse = TRUE)
