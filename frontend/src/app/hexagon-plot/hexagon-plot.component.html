@@ -6,12 +6,14 @@
       <div *ngIf="isLoadingHexagons" class="loading-container">
         <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading hexagon plot">
         </mat-progress-spinner>
+
       </div>
 
       <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
-      <div class="row-container">
-        <mat-form-field appearance="fill"> <mat-label>Color hexagons by</mat-label>
+      <div class="centered-row-container" style="width: 100%;">
+        <mat-form-field appearance="fill" id="color-by-property">
+          <mat-label>Color hexagons by</mat-label>
           <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop">
@@ -21,14 +23,36 @@
           </mat-select>
         </mat-form-field>
 
-        <button mat-icon-button class="info-btn" matTooltip="This dropdown switches the view...Click for more info."
-          (click)="openInfoPage('views-section')">
+        <button mat-icon-button class="info-btn"
+          (click)="selectViewTutorial()">
           <mat-icon>help_outline</mat-icon>
         </button>
+
+        <mat-form-field appearance="fill" class="dataset-dropdown">
+          <mat-label>Select Dataset</mat-label>
+          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)">
+            <mat-optgroup label="Built-in Datasets">
+              <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Your Uploads">
+              <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Tangram" *ngIf="(tangram_Datasets$ | async)?.length">
+              <mat-option *ngFor="let ds of (tangram_Datasets$ | async)" [value]="ds"
+                (onSelectionChange)="onDatasetTangramSelected(ds)">
+                {{ ds.alias }} (Tangram)
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
       </div>
 
       <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view">
-        <mat-icon>compare_arrows</mat-icon>
+        <mat-icon style="color: black;">compare_arrows</mat-icon>
       </button>
 
       <div *ngIf="compareMode && isLoadingCompare" class="loading-container">
@@ -38,16 +62,35 @@
 
       <div id="hexbin-compare" [class.hidden]="isLoadingCompare || !compareMode"></div>
 
-      <mat-form-field appearance="fill" *ngIf="compareMode">
-        <mat-label>Compare hexagons by</mat-label>
-        <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
-          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-            <mat-option *ngFor="let prop of group.value" [value]="prop">
-              {{ prop | translate | async }}
-            </mat-option>
-          </mat-optgroup>
-        </mat-select>
-      </mat-form-field>
+      <div class="row-container" *ngIf="compareMode">
+        <mat-form-field appearance="fill" *ngIf="compareMode">
+          <mat-label>Compare hexagons by</mat-label>
+          <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
+            <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+              <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!propertyAvailable(prop)">
+                {{ prop | translate | async }}
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill" class="dataset-dropdown">
+          <mat-label>Compare with Dataset</mat-label>
+          <mat-select [(ngModel)]="selectedDatasetCompare" (selectionChange)="onDatasetCompareSelected($event.value)">
+            <mat-option [value]="null">None</mat-option>
+            <mat-optgroup label="Built-in Datasets">
+              <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+            <mat-optgroup label="Your Uploads">
+              <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+                {{ ds.alias }}
+              </mat-option>
+            </mat-optgroup>
+          </mat-select>
+        </mat-form-field>
+      </div>
 
       <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
         <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
@@ -76,11 +119,12 @@
         <mat-tab label="Cell Information" *ngIf="selectedCell">
           <div *ngIf="selectedCell && colorByProperty !== 'leiden'">
             <h2>Cell Details</h2>
-            <div>
+            <div class="cell-details-container">
               <div *ngIf="selectedCell as cell">
                 <ng-container *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
-                  <p *ngIf="shouldShowProperty(kv.key)">
-                    <strong>{{ label(kv.key) }}:</strong>
+                  <div *ngIf="shouldShowProperty(kv.key)" class="property-item">
+                    <div class="property-label">{{ label(kv.key) }}</div>
+                    <div class="property-content">
 
                     <ng-container *ngIf="isArray(kv.value); else notArray">
 
@@ -196,7 +240,8 @@
                         </ng-template>
                       </ng-template>
                     </ng-template>
-                  </p>
+                    </div>
+                  </div>
                 </ng-container>
               </div>
             </div>
@@ -291,109 +336,122 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Regulatory Scores">
+        <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
           <div *ngIf="colorByProperty === 'regulatory_scores'">
+            <mat-expansion-panel expanded="true">
+              <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
+              <div class="gene-set-top">
+                <h4>Aggregated Regulatory Scores</h4>
+                <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
+                  [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                  [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
+                  (featuresUpdated)="updateHexColors()"></app-table>
+                <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  [emptyMessage]="'No Sponge global regulatory scores loaded'"
+                  (featuresUpdated)="updateHexColors()"></app-table>
+              </div>
+            </mat-expansion-panel>
 
-            <div class="gene-set-top">
-              <h4>Aggregated Regulatory Scores</h4>
-              <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
-                [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                [updateColumn]="'regulatory_scores'" (featuresUpdated)="updateHexColors()"></app-table>
-              <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                (featuresUpdated)="updateHexColors()"></app-table>
-            </div>
+            <mat-expansion-panel>
+              <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
 
-            <mat-divider style="margin: 10px 0;"></mat-divider>
+              <div class="gene-set-body">
+                <section class="graph-block genie3-block">
+                  <h3 *ngIf="selectedGeneSetGenie3">Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+                  <div *ngIf="!selectedGeneSetGenie3" class="network-message">
+                    No Genie3 network uploaded
+                  </div>
 
-            <div class="gene-set-body">
-              <section class="graph-block genie3-block">
-                <h3>Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
-
-                <div *ngIf="genie3SliderData" class="genie3-controls">
-                  <div class="control-row">
-                    <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
-                    <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
-                      [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
-                      [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
-                      [(ngModel)]="genie3WeightCutoff" />
-                    <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                  <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
+                    <div class="control-row">
+                      <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+                      <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
+                        [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
+                        [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
+                        [(ngModel)]="genie3WeightCutoff" />
+                      <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                      </div>
                     </div>
-                  </div>
 
-                  <div class="control-row">
-                    <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
-                    <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
-                      (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
-                    <div class="helper small">1 ←→ 50</div>
-                  </div>
-                </div>
-
-
-
-                <div *ngIf="isLoadingGenie3" class="loading-container">
-                  <div class="loading-spinner"></div>
-                  <div class="loading-text">Loading Genie3 network...</div>
-                </div>
-
-                <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
-
-                <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
-                  <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                    [disabled]="!selectedGeneSetGenie3">
-                    🧬 Analyze All Genie3 Genes in gProfiler
-                  </button>
-                </div>
-
-                <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
-                  Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{ genie3MinEdges
-                  }}
-                </div>
-              </section>
-
-              <section class="graph-block sponge-block">
-                <h3>Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
-
-                <div *ngIf="spongeSliderData" class="sponge-controls">
-                  <div class="control-row">
-                    <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
-                    <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
-                      [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
-                      [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
-                      (input)="onSliderChangeSponge()" />
-                    <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                    <div class="control-row">
+                      <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                      <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
+                        (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
+                      <div class="helper small">1 ←→ 50</div>
                     </div>
                   </div>
 
 
-                  <div class="control-row">
-                    <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
-                    <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
-                      (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
-                    <div class="helper small">1 ←→ 50</div>
+
+                  <div *ngIf="isLoadingGenie3" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading Genie3 network...</div>
                   </div>
-                </div>
 
-                <div *ngIf="isLoadingSponge" class="loading-container">
-                  <div class="loading-spinner"></div>
-                  <div class="loading-text">Loading Sponge network...</div>
-                </div>
+                  <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
-                <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+                  <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
+                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                      [disabled]="!selectedGeneSetGenie3">
+                      🧬 Analyze All Genie3 Genes in gProfiler
+                    </button>
+                  </div>
 
-                <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
-                  <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                    [disabled]="!selectedGeneSetSponge">
-                    🧬 Analyze All Sponge Genes in gProfiler
-                  </button>
-                </div>
+                  <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
+                    Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{
+                    genie3MinEdges
+                    }}
+                  </div>
+                </section>
 
-                <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
-                  P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
-                </div>
-              </section>
-            </div>
+                <section class="graph-block sponge-block">
+                  <h3 *ngIf="selectedGeneSetSponge">Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+                  <div *ngIf="!selectedGeneSetSponge" class="network-message">
+                    No Sponge network uploaded
+                  </div>
+
+                  <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
+                    <div class="control-row">
+                      <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+                      <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
+                        [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
+                        [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
+                        (input)="onSliderChangeSponge()" />
+                      <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                      </div>
+                    </div>
+
+
+                    <div class="control-row">
+                      <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+                      <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
+                        (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
+                      <div class="helper small">1 ←→ 50</div>
+                    </div>
+                  </div>
+
+                  <div *ngIf="isLoadingSponge" class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <div class="loading-text">Loading Sponge network...</div>
+                  </div>
+
+                  <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+
+                  <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
+                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                      [disabled]="!selectedGeneSetSponge">
+                      🧬 Analyze All Sponge Genes in gProfiler
+                    </button>
+                  </div>
+
+                  <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
+                    P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
+                  </div>
+                </section>
+              </div>
+            </mat-expansion-panel>
           </div>
 
           <div *ngIf="colorByProperty === 'regulatory_scores' && selectedCell">
@@ -424,7 +482,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Co-occurence">
+        <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('leiden_co_occurrence')">
           <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
             <div class="co-occurrence-controls">
               <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
@@ -433,7 +491,7 @@
                   <label for="interval-select">Interval:</label>
                   <select id="interval-select" [(ngModel)]="selectedInterval" (change)="updateCoOccurrenceTable()">
                     <option *ngFor="
-                  let i of [].constructor(maxInterval + 1);
+                  let i of [].constructor(maxInterval);
                   let idx = index
                 " [ngValue]="idx">
                       Interval {{ idx }}
@@ -463,7 +521,7 @@
                 <tbody>
                   <tr>
                     <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-                    <td *ngFor="let value of coOccurrenceData; let j = index"
+                    <td *ngFor="let value of coOccurrenceData; let j = index" (click)="selectCluster(j)"
                       [class.high-cooccurrence]="value > coOccurrenceThreshold" [class.diagonal]="selectedCluster === j"
                       [style.background-color]="getCoOccurrenceColor(value)" [title]="
                   'Cluster ' +
@@ -471,8 +529,8 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value
-                ">
+                  value + ' (Click to select)'"
+                      style="cursor: pointer;">
                       {{ value | number: "1.0-3" }}
                     </td>
                   </tr>
@@ -491,9 +549,9 @@
           " [disabled]="selectedInterval === 0">
                 ← Previous
               </button>
-              <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval }}</span>
+              <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval-1 }}</span>
               <button class="nav-btn" (click)="
-            selectedInterval = Math.min(maxInterval, selectedInterval + 1);
+            selectedInterval = Math.min(maxInterval-1, selectedInterval + 1);
             updateCoOccurrenceTable()
           " [disabled]="selectedInterval === maxInterval">
                 Next →
@@ -502,7 +560,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Ligand-Receptor Relationships">
+        <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
           <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
             <div *ngIf="
           showGlobalLigandReceptorScores;
@@ -517,6 +575,7 @@
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+                [emptyMessage]="'No ligand-receptor global scores loaded'"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
@@ -524,24 +583,27 @@
               <h4>Ligand-Receptor NMF Scores</h4>
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
+                [emptyMessage]="'No ligand-receptor NMF factors loaded'"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
         </mat-tab>
 
-        <mat-tab label="Gene Expression">
+        <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
           <div *ngIf="colorByProperty === 'gene_expression'">
             <div *ngIf="showMoranI; then moranI; else gearyC"></div>
             <ng-template #moranI>
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
+                (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
             <ng-template #gearyC>
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
+                (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
         </mat-tab>
@@ -598,33 +660,89 @@
         </div>
       </mat-tab>
 
-        <mat-tab label="Cell Composition TF Activity">
+    <!-- BEGIN Add spatial correlation score table for chromvar scores -->
+    <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C">
+      <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+      <ng-template #moranI>
+        <h4>ChromVAR Moran's I</h4>
+        <!-- <div *ngIf="colorByProperty === 'chromvar_total_sum'">
+        <button type="button" class="basic-button"
+          (click)="showMoranI = showGearyC">
+          Show
+          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
+        </button>
+        </div> -->
+        <!-- [attr.aria-pressed]="showMoranI" -->
+        <!-- <app-table
+          [data]="this.meta['chromvar_moranI']"
+          [actionColumns]="['chromvar_spot_scores']"
+          [features]="features"
+          [updateColumn]="'chromvar_total_sum'"
+          (featuresUpdated)="updateHexColors()">
+        </app-table> -->
+        <app-table
+        [data]="this.meta['chromvar_moranI']"
+        [actionColumns]="['chromvar_spot_scores', 'Sum_chromvar_spot_scores']"
+        [features]="features"
+        [updateColumn]="'chromvar_total_sum'"
+        (featuresUpdated)="updateHexColors()">
+      </app-table>
+      </ng-template>
+
+      <ng-template #gearyC>
+        <h4>ChromVAR Geary's C</h4>
+        <app-table
+          [data]="this.meta['chromvar_gearyC']"
+          [actionColumns]="['chromvar_spot_scores']"
+          [features]="features"
+          [updateColumn]="'chromvar_total_sum'"
+          (featuresUpdated)="updateHexColors()">
+        </app-table>
+      </ng-template>
+    </mat-tab>
+     <!-- END Add spatial correlation score table for chromvar scores -->
+
+     <mat-tab label="Differential Motif Activity" *ngIf="this.meta['diff_motif_activity_top_motifs']">
+        <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
+          <h4>{{ comparison.key }}</h4>
+
+          <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
+
+          <br />
+        </div>
+      </mat-tab>
+
+        <mat-tab label="Cell Composition TF Activity"
+          [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
           <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
             <h4>Cell Composition TF Activity Global Scores</h4>
             <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
+              [emptyMessage]="'No cell composition TF activity scores loaded'"
               (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
 
-        <mat-tab label="TF Activity">
+        <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
           <div *ngIf="colorByProperty === 'tf_activity'">
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-              [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+              [updateColumn]="'tf_activity'" [emptyMessage]="'No TF activity scores loaded'"
+              (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
 
-        <mat-tab label="Pathway Activity">
+        <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
           <div *ngIf="colorByProperty === 'pathway_activity'">
             <h4>Pathway Activity</h4>
             <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathway_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+        ]" [features]="features" [updateColumn]="'pathway_activity'"
+              [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
       </mat-tab-group>
@@ -757,8 +875,8 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Regulatory Scores">
-            <div *ngIf="colorByProperty === 'regulatory_scores'">
+          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
+            <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
               <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                 [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
@@ -769,53 +887,54 @@
                 (featuresUpdated)="updateHexColors()"></app-table>
             </div>
 
-            <div *ngIf="colorByProperty === 'regulatory_scores' && selectedCellCompare">
-            <h4> Cell Regulatory Scores</h4>
+            <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
+              <h4> Cell Regulatory Scores</h4>
 
-            <div class="cell-reg-scores">
-              <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
+              <div class="cell-reg-scores">
+                <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
 
-              <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
-              <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                (featuresUpdated)="updateHexColors()">
-              </app-table>
+                <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
+                <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                  (featuresUpdated)="updateHexColors()">
+                </app-table>
 
 
-              <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-              <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                (featuresUpdated)="updateHexColors()">
-              </app-table>
+                <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
+                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  (featuresUpdated)="updateHexColors()">
+                </app-table>
 
-              <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
-                No regulatory scores available or still loading.
+                <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
+                  No regulatory scores available or still loading.
+                </div>
               </div>
             </div>
-          </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Gene Expression">
-            <div *ngIf="colorByProperty === 'gene_expression'">
+          <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
+            <div *ngIf="selectedCompareView === 'gene_expression'">
               <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
               <ng-template #moranI>
                 <h4>Moran's I</h4>
                 <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
 
               <ng-template #gearyC>
                 <h4>Geary's C</h4>
                 <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors()"></app-table>
+                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Co-occurence" *ngIf="selectedCluster !== null">
+          <mat-tab label="Compare - Co-occurence" *ngIf="selectedCluster !== null"
+            [disabled]="!propertyAvailable('leiden_co_occurrence')">
             <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
               <div class="co-occurrence-controls">
                 <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
@@ -854,7 +973,7 @@
                   <tbody>
                     <tr>
                       <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-                      <td *ngFor="let value of coOccurrenceData; let j = index"
+                      <td *ngFor="let value of coOccurrenceData; let j = index" (click)="selectCluster(j)"
                         [class.high-cooccurrence]="value > coOccurrenceThreshold"
                         [class.diagonal]="selectedCluster === j" [style.background-color]="getCoOccurrenceColor(value)"
                         [title]="
@@ -863,8 +982,8 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value
-                ">
+                  value + ' (Click to select)'"
+                        style="cursor: pointer;">
                         {{ value | number: "1.0-3" }}
                       </td>
                     </tr>
@@ -894,7 +1013,8 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Ligand-Receptor Relationships">
+          <mat-tab label="Compare - Ligand-Receptor Relationships"
+            [disabled]="!propertyAvailable('ligand_receptor_relationships')">
             <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
               <div *ngIf="
           showGlobalLigandReceptorScores;
@@ -909,45 +1029,47 @@
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
 
               <ng-template #nmf_scores>
                 <h4>Ligand-Receptor NMF Scores</h4>
                 <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                   [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
               </ng-template>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Cell Composition TF Activity">
+          <mat-tab label="Compare - Cell Composition TF Activity"
+            [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
             <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
               <h4>Cell Composition TF Activity Global Scores</h4>
               <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell">
+          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell" [disabled]="!propertyAvailable('tf_activity')">
             <div *ngIf="colorByProperty === 'tf_activity'">
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.meta['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-                [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors()"></app-table>
+                [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Pathway Activity">
+          <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
             <div *ngIf="colorByProperty === 'pathway_activity'">
               <h4>Pathway Activity Comparison</h4>
               <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathwayActivity'" (featuresUpdated)="updateHexColors()"></app-table>
+        ]" [features]="features" [updateColumn]="'pathwayActivity'"
+                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
             </div>
           </mat-tab>
         </mat-tab-group>

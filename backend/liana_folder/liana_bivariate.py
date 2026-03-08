@@ -5,6 +5,8 @@ import liana as li
 import pandas as pd
 import scanpy as sc
 from mudata import MuData
+import matplotlib
+matplotlib.use('Agg')
 
 CAT_REMAP = {-1: "high-low / low-high", 0: "low-low", 1: "high-high"}
 

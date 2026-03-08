@@ -1,12 +1,13 @@
 <div class="app-shell">
   <nav class="top-bar">
-    <img src="logo.png" alt="App Logo" class="app-logo" onclick="window.location.href='/'"/>
+    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" onclick="window.location.href='/'"/>
 
     <div class="nav-buttons">
       <button type="button" (click)="openForm()">Upload data</button>
       <app-download-menu></app-download-menu>
       <span class="spacer"></span>
       <button type="button" class="info-btn" routerLink="/info">ℹ️ Info</button>
+      <button type="button" class="info-btn" (click)="basicTutorial()">❓ Tutorial</button>
     </div>
   </nav>
 
@@ -22,17 +23,12 @@
     <app-form-page (close)="closeSidenavForms()"></app-form-page>
     <button
       (click)="closeSidenavForms()"
-      style="
-        position: absolute;
-        top: 10px;
-        right: 20px;
-        font-size: 2rem;
-        background: none;
-        border: none;
-        cursor: pointer;
-      "
+      class="sidenav-close-btn"
     >
-      ×
+      ✕
     </button>
   </div>
+
+  <!-- Backdrop overlay for sidenav -->
+  <div class="sidenav-backdrop" *ngIf="formsOpen" (click)="closeSidenavForms()"></div>
 </div>

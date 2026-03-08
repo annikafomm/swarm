@@ -75,10 +75,12 @@ compute_network_scores <- function(description, args, logfile) {
       if (!(right_order | wrong_order)) {
         log_message("At least one of the sponge network files has an unsupported file format.", logfile)
       } else if (! args$ensembl_col %in% colnames(var_df)){
+        print(colnames(var_df))
         log_message(paste0("'", args$ensembl_col, "' is not a column in adata.vars. Please provide a valid ensembl column."), logfile)
       } else if (! args$feature_col %in% colnames(var_df)){
+        print
         log_message(paste0("'", args$feature_col, "' is not a column in adata.vars. Please provide a valid feature column."), logfile)
-        # TODO: check RNAs
+
       } else {
         if (wrong_order) {
           centralities <- ceRNA_centralities

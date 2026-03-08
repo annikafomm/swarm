@@ -25,6 +25,7 @@ dependencies:
   - bioconda::bioconductor-viper
   - bioconda::bioconductor-gsva
   - conda-forge::r-optparse
+  - conda-forge::kneed
   - python
   - numpy
   - pandas

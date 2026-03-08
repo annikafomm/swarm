@@ -39,6 +39,7 @@ def compute_spatial_scores(adata, description, args, logfile):
     # Calculate spatial scores
     if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
 
+
         if description == "tg":
             log_message("Preparing score calculation for the Tangram output ...", logfile)
         elif description == "st":
@@ -52,15 +53,17 @@ def compute_spatial_scores(adata, description, args, logfile):
         if args.liana:
             if description == "tg":
                 cell_prop_key = "tangram_ct_pred"
-            elif description == "st":
+            elif description == "st" and args.cell_comp_key:
                 cell_prop_key = args.cell_comp_key
+
+
 
             if not (args.grn is None or os.path.exists(args.grn)):
                 log_message(f"The GRN file {args.grn} does not exist.", logfile)
             elif not (args.pathway_net is None or os.path.exists(args.pathway_net)):
                 log_message(f"The pathway net file {args.pathway_net} does not exist.", logfile)
             else:
-                if cell_prop_key not in adata.obsm.keys():
+                if not cell_prop_key and cell_prop_key not in adata.obsm.keys():
                     log_message(f"'{cell_prop_key}' is not a column in adata.obsm. Please provide a valid cell composition key.", logfile)
 
                 t0 = time.time()
@@ -73,7 +76,7 @@ def compute_spatial_scores(adata, description, args, logfile):
 
         # check if the cluster key exists in adata.obs if needed
         if args.centrality_scores or args.co_occurrence or args.nhood_enrichment:
-            if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" | args.cluster_co == "leiden" | args.cluster_nhood == "leiden"):
+            if "leiden" not in adata.obs.keys() and (args.cluster_cs == "leiden" or args.cluster_co == "leiden" or args.cluster_nhood == "leiden"):
                 t0 = time.time()
                 # neighbors, umap, leiden
                 clustering(adata)  # not user configurable, because makeshift solution for when no cluster key is provided

@@ -4,18 +4,34 @@
   color: #222;
   --topbar-h: 100px;
   min-height: calc(100vh - 100px);
+  display: block;
+}
+
+:host.modal-open {
+  overflow: hidden !important;
+  height: 100vh !important;
 }
 
 .app-shell {
-
   position: relative;
   min-height: 100svh;
 }
+
+.app-shell:has(.sidenav) {
+  overflow: hidden;
+}
+
+
 
 .main {
   display: flex;
   justify-content: center;
   padding: 1rem;
+}
+
+.app-shell:has(.sidenav) .main {
+  overflow: hidden;
+  height: 100vh;
 }
 
 .content {
@@ -33,8 +49,7 @@
 .top-bar {
   width: 100%;
   height: var(--topbar-h);
-  background: linear-gradient(90deg, #e0e7ef 0%, #c9d6ff 100%);
-  color: #23272f;
+  background: linear-gradient(90deg, #fff4b7 0%, #f5d0ad 100%);
   display: flex;
   align-items: center;
   padding: 0 1rem;
@@ -72,41 +87,103 @@
   background: #dde6f7;
 }
 
+.top-bar button {
+  background-color: transparent;
+  color: #23272f;
+  font-weight: 600;
+  padding: 0.5rem 1.2rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.top-bar button:hover {
+  background-color: rgba(255, 152, 0, 0.1);
+}
+
+.top-bar button:active {
+  background-color: rgba(255, 152, 0, 0.2);
+}
+
 .sidenav {
-  position: absolute;
+  position: fixed;
   background: #F8F8FF;
-  box-shadow: -2px 0 12px rgba(44, 62, 80, 0.13);
-  padding: 1.5rem 1.5rem 1.5rem 1.5rem;
+  box-shadow: 2px 0 24px rgba(44, 62, 80, 0.25);
+  padding: 2rem 1.5rem 1.5rem 1.5rem;
   border-top-right-radius: 18px;
   border-bottom-right-radius: 18px;
   overflow-y: auto;
-  top: 70px;
+  top: var(--topbar-h);
   left: 0;
   width: 375px;
   bottom: 0;
-  z-index: 1000;
+  z-index: 2001;
+
+  /* Animation for smooth slide-in */
+  animation: slideInLeft 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Backdrop overlay for sidenav */
+.sidenav-backdrop {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 375px;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+  z-index: 2000;
+  animation: fadeIn 0.35s ease-out;
+}
+
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .sidenav button {
   position: absolute;
-  color: #ff5e57;
+  color: #ff9800;
   font-weight: bold;
-  transition: color 0.2s;
-}
-.sidenav button:hover {
-  color: #d7263d;
+  transition: all 0.2s ease;
+  top: 15px;
+  right: 15px;
+  font-size: 1.8rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 2002;
+  padding: 5px 10px;
 }
 
-.top-bar button {
-  color: #000000;
-  background-color: #c9d6ff;
-  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
-  border: #000000;
-  border-radius: 8px;
-  padding: 0.5rem 1rem;
-  font-size: 1rem;
-  transition: color 0.2s;
-  cursor: pointer;
+.sidenav-close-btn:hover {
+  color: #f57c00;
+  transform: scale(1.2) rotate(90deg);
+}
+
+.sidenav-close-btn:active {
+  color: #e65100;
+  transform: scale(1.1);
 }
 
 .app-logo {

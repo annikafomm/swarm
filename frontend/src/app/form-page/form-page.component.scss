@@ -1,19 +1,20 @@
 :host {
-  --bg: #F8F8FF;
-  --text: #1f2937;
-  --muted: #6b7280;
-  --primary: #4f46e5;
-  --border: #e5e7eb;
-  --surface: #f8fafc;
+  --bg: #f8f8ff;
+  --text: #1a1a1a;
+  --muted: #666666;
+  --primary: #ff9800;
+  --accent: #ffe082;
+  --border: #ffe082;
+  --surface: #fff;
   --danger: #ef4444;
   color: var(--text);
 }
 
 /* Panel / Karte */
 .panel {
-  --accent: #5b61ff;
-  --border: #e6e8ef;
-  --muted:  #6b7280;
+  --accent: #ffe082;
+  --border: #ffe082;
+  --muted: #666666;
   --input-bg: #fff;
   --input-bg-disabled: #f6f7fb;
   --input-radius: 12px;
@@ -27,16 +28,45 @@
 }
 
 /* Überschrift & Sections */
-h2 { font-size: 2rem; margin: 0 0 10px; }
-.section { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border); }
-.section-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 10px; }
-.section label, .section .section-title { word-break: break-word; }
+h2 {
+  font-size: 2rem;
+  margin: 0 0 10px;
+  color: #1a1a1a;
+}
+.section {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 3px solid var(--accent);
+}
+.section-title {
+  font-weight: 700;
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+  color: #1a1a1a;
+}
+.section label, .section .section-title {
+  word-break: break-word;
+  color: #1a1a1a;
+}
 
 /* Feld-Layout */
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field-label { font-weight: 700; color: #111827; letter-spacing: .2px; }
-.panel .field > label { margin: 0 0 6px; font-weight: 600; }
-.panel small { display: block; margin-top: 6px; color: var(--muted); font-size: 0.86rem; }
+.field-label {
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: .2px;
+}
+.panel .field > label {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+.panel small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
 
 /* Grid für optionale Parametergroups (z.B. Genie3) */
 .field-grid {
@@ -68,16 +98,18 @@ h2 { font-size: 2rem; margin: 0 0 10px; }
 
 .panel input::placeholder,
 .panel textarea::placeholder { color: var(--muted); opacity: .8; }
-.panel input:hover, .panel select:hover, .panel textarea:hover { border-color: #d6d9e4; }
+.panel input:hover, .panel select:hover, .panel textarea:hover { border-color: #ffe082; }
 .panel input:focus, .panel select:focus, .panel textarea:focus {
-  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(91,97,255,.15);
+  outline: none;
+  border-color: #ffe082;
+  box-shadow: 0 0 0 3px rgba(255, 224, 130, 0.2);
 }
 
 
 /* Nur das Label des Spatial-Upload-Blocks fett setzen */
 .section:has(#spatial) > label {
   font-weight: 700;   /* bold */
-  color: #0f172a;     /* optional: etwas dunkler */
+  color: #1a1a1a;     /* black */
 }
 
 
@@ -91,12 +123,14 @@ h2 { font-size: 2rem; margin: 0 0 10px; }
 .panel input.ng-invalid.ng-touched,
 .panel select.ng-invalid.ng-touched,
 .panel textarea.ng-invalid.ng-touched {
-  border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+  border-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
 }
 .panel input.ng-valid.ng-touched,
 .panel select.ng-valid.ng-touched,
 .panel textarea.ng-valid.ng-touched {
-  border-color: #22c55e33;
+  border-color: #ffe082;
+  box-shadow: 0 0 0 3px rgba(255, 224, 130, 0.15);
 }
 
 /* Number-Spinner entfernen */
@@ -107,10 +141,12 @@ h2 { font-size: 2rem; margin: 0 0 10px; }
 /* ----- Custom Select (Gradient-Chevron, kein Doppelpfeil) ----- */
 .panel .select { position: relative; box-shadow: none; }
 .panel .select select {
-  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
   background-image:
-    linear-gradient(45deg, transparent 50%, currentColor 50%),
-    linear-gradient(135deg, currentColor 50%, transparent 50%),
+    linear-gradient(45deg, transparent 50%, #ff9800 50%),
+    linear-gradient(135deg, #ff9800 50%, transparent 50%),
     linear-gradient(to right, transparent, transparent);
   background-position:
     calc(100% - 18px) calc(50% - 3px),
@@ -131,11 +167,22 @@ h2 { font-size: 2rem; margin: 0 0 10px; }
   transition: border-color .2s ease, box-shadow .2s ease; cursor: pointer;
 }
 .file-control:hover { border-color: rgba(15,23,42,.22); box-shadow: 0 4px 14px rgba(2,6,23,.08); }
-.file-control:focus-visible { outline: 3px solid rgba(59,130,246,.3); outline-offset: 2px; }
+.file-control:focus-visible { outline: 3px solid rgba(255, 224, 130, .3); outline-offset: 2px; }
 .file .btn {
-  padding: 10px 16px; border-radius: 999px; font-weight: 600; white-space: nowrap;
-  background: #f3f4f6; border: 1px solid rgba(15,23,42,.08);
-  box-shadow: 0 1px 0 rgba(255,255,255,.9) inset;
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #ff9800;
+  color: black;
+  border: none;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.file .btn:hover {
+  background: #fb8c00;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
 }
 .file .file-name { flex: 1 1 auto; min-width: 0; font-weight: 600; color: #334155; }
 @media (max-width: 520px) {
@@ -161,15 +208,40 @@ h2 { font-size: 2rem; margin: 0 0 10px; }
 /* Sonstiges */
 .required { color: red; margin-left: 2px; }
 .error {
-  margin: 12px 0; padding: 10px 12px; border-radius: 12px;
-  background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
 }
-.progress { margin-top: 10px; height: 8px; background: #eef2f7; border-radius: 999px; overflow: hidden; }
-.progress .bar { height: 100%; width: 0%; background: var(--primary); transition: width .3s ease; }
+.progress {
+  margin-top: 10px;
+  height: 8px;
+  background: #eef2f7;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress .bar {
+  height: 100%;
+  width: 0%;
+  background: #ff9800;
+  transition: width .3s ease;
+}
 .actions { display: flex; gap: 12px; margin-top: 20px; }
 button[type="submit"], button[type="reset"] {
-  padding: 10px 16px; border-radius: 12px; border: none;
-  background: var(--primary); color: #fff; font-weight: 700; cursor: pointer;
-  box-shadow: 0 6px 16px rgba(79,70,229,.25);
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: none;
+  background: #ff9800;
+  color: black;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.2);
+  transition: all 0.2s ease;
+}
+button[type="submit"]:hover {
+  background: #fb8c00;
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
 }
 button[disabled] { opacity: .55; cursor: not-allowed; box-shadow: none; }
