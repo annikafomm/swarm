@@ -19,6 +19,9 @@ from preprocessing.preprocessing_functions import *
 from calc_liana import run_liana
 from calc_tangram import run_tangram
 
+import anndata as ad
+ad.settings.allow_write_nullable_strings = True
+
 def log_message(msg, logfile, indent=0):
     prefix = " " * indent
     line = f"{prefix}{msg}"
@@ -131,6 +134,11 @@ def compute_spatial_scores(adata, description, args, logfile):
     t0 = time.time()
     filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
     adata.write(os.path.join(args.outdir, filename))
+    # Also save with fixed name for downstream multiome processing
+    if description == "tg":
+        adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
+    elif description == "st":
+        adata.write(os.path.join(args.outdir, "adata_st_scores.h5ad"))
     log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 4)
     log_message(f"R scores params {args.R_scores}", logfile, 4)
 
@@ -171,7 +179,7 @@ def main():
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
-    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
+    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default='ctg', help="Gene selection strategy. Default: use all overlapping genes.")
     #parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
@@ -293,9 +301,8 @@ def main():
 
                     log_message("Running Tangram script ...", logfile, 2)
                     t0 = time.time()
-                    adata_tangram, adata_map = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'gpu')
-                    filename = os.path.basename(args.input).replace(".h5ad", f"_map.h5ad")
-                    adata_map.write(os.path.join(args.outdir, filename))
+                    adata_tangram, adata_map = run_tangram(adata_sc, adata, args.gene_selection, "cells", args.cell_label, args.ensembl_col, args.feature_col, 'gpu')
+                    adata_map.write(os.path.join(args.outdir, "adata_map.h5ad"))
                     # wtite also X as csv and var/obs as csv
 
                     df_adata_map = pd.DataFrame(

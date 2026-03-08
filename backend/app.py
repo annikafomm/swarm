@@ -294,7 +294,11 @@ async def calculate_scores_helper(job_dir, json_dict):
                             check=True)
 
         if multiome_params:
-            subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",
+            print("RUNNING CALCULATION OF MULTIOME SCORES")
+            print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
+                            "--outdir", {out_dir},\
+                            "--log", {log_file} + {multiome_params}"')
+            subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
                             "--outdir", out_dir,
                             "--log", log_file] + multiome_params,
                             check=True)

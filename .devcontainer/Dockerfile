@@ -43,6 +43,7 @@ RUN micromamba run -n base R -q -e "\
     install.packages('scCustomize', repos = 'https://cloud.r-project.org'); \
   remotes::install_github('mojaveazure/seurat-disk')"
 
+#  aparently the wrong versions get installed, so here we install them correctly..
 RUN rm -rf /opt/conda/lib/R/library/Seurat \
            /opt/conda/lib/R/library/SeuratObject && \
     micromamba install -n base -y -c conda-forge --force-reinstall \
@@ -59,7 +60,7 @@ ENV PATH="/opt/conda/bin:$PATH" \
     CONDA_EXE="/opt/conda/bin/micromamba" \
     CONDA_PYTHON_EXE="/opt/conda/bin/python"
 
-# aparently the wrong versions get installed, so here we install them correctly..
+
 RUN apt-get update && apt-get install -y --no-install-recommends git curl \
     && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
