@@ -47,6 +47,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private _resizeHandler: any = null;
   private sub!: Subscription;
   footprintPlotUrl?: SafeResourceUrl;
+  footprintPlotUrls: SafeResourceUrl[] = [];
 
   constructor(
     private router: Router,
@@ -199,6 +200,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
 
+  // allow nested tables like for differential motif activity view
+  public asTableData(value: unknown): {
+    [col: string]: { [index: string]: string | number } } | string[] {
+    return value as { [col: string]: { [index: string]: string | number } } | string[];
+    }
+
   ngOnInit(): void {
 
     this.isLoadingHexagons = true;
@@ -215,9 +222,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         d3.select('#hexbin').selectAll('svg').remove();
         d3.select('#hexbin-compare').selectAll('svg').remove();
 
+        this.footprintPlotUrls = [];
+
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
+
+        this.renderFootprintPlots();
       }
 
     });
@@ -319,6 +330,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         break;
       case "ChromVar spatial correlation : Moran's I / Geary's C":
         newView = 'chromvar_total_sum';
+        break;
+      case 'Differential Motif Activity':
+        // view should be cell type
+        newView = 'cell_type';
         break;
     }
 
@@ -1518,8 +1533,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlot(), 100);
-      // setTimeout(() => this.renderFootprintPlot(), 0);
+      setTimeout(() => this.renderFootprintPlots(), 100);
+      // setTimeout(() => this.renderFootprintPlots(), 0);
     }
   }
 
@@ -1716,18 +1731,64 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
+  private extractJobDirFromDataPath(dataPath: string): string | null {
+    try {
 
-  private renderFootprintPlot(): void {
-    if (!this.selectedCluster) return;
+      const url = new URL(dataPath, window.location.origin);
+      const parts = url.pathname.split('/').filter(Boolean);
 
-    const jobDir = 'job_1769110250766_f3d02da9-8553-49f3-a977-85d6c90c82cd/kackhaufen1';
-    const plotFileName = 'footprint_MA0084.2.pdf';
+      // case 1: .../uploads/job_xxx/subdir/hexagons.geojson
+      const uploadsIndex = parts.indexOf('uploads');
+      if (uploadsIndex !== -1 && uploadsIndex < parts.length - 2) {
+        return parts.slice(uploadsIndex + 1, parts.length - 1).join('/');
+      }
 
-    this.footprintPlotUrl = this.sanitizer.bypassSecurityTrustResourceUrl(
-      //  /workspaces/swarm/backend/uploads/job_1769110250766_f3d02da9-8553-49f3-a977-85d6c90c82cd/kackhaufen1/footprint_MA0084.2.pdf
-      `/api/download/${jobDir}/${plotFileName}`
-      // `/workspaces/swarm/backend/uploads/${jobDir}/${plotFileName}`
-    );
+      // case 2: .../api/hexagon/job_xxx/subdir/hexagons.geojson
+      const apiIndex = parts.indexOf('api');
+      const hexagonIndex = parts.indexOf('hexagon');
+
+      if (
+        apiIndex !== -1 &&
+        hexagonIndex === apiIndex + 1 &&
+        parts.length >= hexagonIndex + 4
+      ) {
+        // /api/hexagon/{user}/{subdir}/{filename}
+        return parts.slice(hexagonIndex + 1, hexagonIndex + 3).join('/');
+      }
+    } catch (e) {
+      console.warn('Failed to parse dataPath:', dataPath, e);
+    }
+
+    return null;
+  }
+
+  private renderFootprintPlots(): void {
+    const jobDir = this.extractJobDirFromDataPath(this.dataPath);
+
+    if (!jobDir) {
+      console.warn('Could not extract jobDir from dataPath:', this.dataPath);
+      this.footprintPlotUrls = [];
+      return;
+    }
+
+    this.sessionService.callWithSession(() =>
+      this.http.get<string[]>(
+        `${this.sessionService.apiUrl}/api/footprints/${jobDir}`,
+        { withCredentials: true }
+      )
+    ).subscribe({
+      next: (files) => {
+        this.footprintPlotUrls = files.map(fileName =>
+          this.sanitizer.bypassSecurityTrustResourceUrl(
+            `${this.sessionService.apiUrl}/api/footprints/${jobDir}/${encodeURIComponent(fileName)}`
+          )
+        );
+      },
+      error: (err) => {
+        console.warn('Could not load footprint plots:', err);
+        this.footprintPlotUrls = [];
+      }
+    });
   }
 
   private renderNhoodHeatmap(): void {

@@ -28,6 +28,7 @@ dependencies:
   - python
   - numpy
   - pandas
+  #- anndata>=0.12.0
   - scipy=1.10.*
   - squidpy
   - pytorch-cuda

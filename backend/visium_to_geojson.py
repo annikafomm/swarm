@@ -24,7 +24,7 @@ sponge_score_names = [
 
 genewise_scores = ["moranI", "gearyC"]
 motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
-
+cluster_wise_scores = ["diff_motif_activity_top_motifs"]
 
 class Hexagons:
     """
@@ -471,6 +471,18 @@ if __name__ == "__main__":
         meta_dict["interval"] = spatial_data.uns["leiden_co_occurrence"][
             "interval"
         ].tolist()
+
+    # Add differential motif activity top-motif tables
+    if "diff_motif_activity_top_motifs" in spatial_data.uns:
+        meta_dict["diff_motif_activity_top_motifs"] = {}
+
+        for comparison, df in spatial_data.uns["diff_motif_activity_top_motifs"].items():
+            # If stored as DataFrame, convert to table-friendly dict
+            if isinstance(df, pd.DataFrame):
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = df.to_dict()
+            else:
+                # fallback in case it already came in as a plain dict-like object
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = pd.DataFrame(df).to_dict()
 
     geojson_data["meta"] = meta_dict
 

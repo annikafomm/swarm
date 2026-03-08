@@ -57,7 +57,8 @@ from starlette.responses import RedirectResponse
 
 # Base folder for all uploads (created on startup).
 # Use path relative to this file to avoid depending on current working dir.
-BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+#BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
 BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # Allow configuring CORS origins via environment variable (comma-separated).
@@ -499,18 +500,11 @@ async def upload(
         rds_path = saved_files["multiome_rds"]
         assay_name = "RNA"
         h5ad_path = re.sub(r"\.rds$", f".h5ad", rds_path)
-        # subprocess.run(["Rscript",
-        #             "../backend/rds_to_h5ad.R",
-        #             "--rds_path", rds_path,
-        #             "--assay", assay_name,
-        #             "--h5ad_path", h5ad_path
-        #             ],check=True,)
-
+        print(f"Running file conversion in multiome env ...")
         log_path = Path(h5ad_path).with_suffix(".log")
         with log_path.open("w") as log_file:
             result = subprocess.run(
-                [
-                    "Rscript",
+                [   "Rscript",
                     "../backend/rds_to_h5ad.R",
                     "--rds_path", rds_path,
                     "--assay", assay_name,
@@ -521,6 +515,7 @@ async def upload(
                 text=True,
                 check=False,
             )
+
         use_tangram = True
         single_cell_h5ad = h5ad_path
         print(single_cell_h5ad)
@@ -1001,14 +996,47 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
+    # TODO: remove this. just so that hardcodded footprint plot can be used
     # Prevent path traversal outside uploads dir
-    if BASE_UPLOAD_DIR not in full_path.parents:
-        raise HTTPException(status_code=403, detail="Forbidden")
+    # if BASE_UPLOAD_DIR not in full_path.parents:
+    #     raise HTTPException(status_code=403, detail="Forbidden")
 
     if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
     return FileResponse(str(full_path))
+
+
+@app.get("/api/footprints/{user}/{subdir}")
+async def list_footprints(user: str, subdir: str):
+    job_dir = BASE_UPLOAD_DIR / Path(user) / Path(subdir)
+
+    if not job_dir.exists() or not job_dir.is_dir():
+        raise HTTPException(status_code=404, detail="Directory not found")
+
+    files = sorted(
+        f.name for f in job_dir.glob("footprint_*.pdf") if f.is_file()
+    )
+    return files
+
+
+@app.get("/api/footprints/{user}/{subdir}/{filename}")
+async def get_footprint(user: str, subdir: str, filename: str):
+    # nur footprint PDFs zulassen
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    if not safe_name.startswith("footprint_") or not safe_name.endswith(".pdf"):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / safe_name
+
+    if file_path.exists() and file_path.is_file():
+        return FileResponse(str(file_path), media_type="application/pdf")
+
+    raise HTTPException(status_code=404, detail="File not found")
+
 
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])
 async def get_X_by_gene(

@@ -109,6 +109,35 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
             adata.uns["differential_motif_activity"] = data_dict
             log_message(f"differential_motif_activity added to adata.uns", logfile, 2)
 
+    
+        if filename.lower().startswith("diff_motif_activity_top_motifs_") and filename.lower().endswith(".csv"):
+            file_path = os.path.join(scores_path, filename)
+            df = pd.read_csv(file_path)
+
+            desired_cols = ["motif", "p_val", "avg_diff", "pct.1", "pct.2", "p_val_adj"]
+            existing_cols = [col for col in desired_cols if col in df.columns]
+            remaining_cols = [col for col in df.columns if col not in existing_cols]
+            df = df[existing_cols + remaining_cols]
+
+            comparison = filename.replace(".csv", "").replace("diff_motif_activity_top_motifs_", "")
+
+            if "diff_motif_activity_top_motifs" not in adata.uns:
+                adata.uns["diff_motif_activity_top_motifs"] = {}
+
+            if comparison in adata.uns["diff_motif_activity_top_motifs"]:
+                log_message(
+                    f"The comparison {comparison} in adata.uns['diff_motif_activity_top_motifs'] is overwritten.",
+                    logfile,
+                    2
+                )
+
+            adata.uns["diff_motif_activity_top_motifs"][comparison] = df
+            log_message(
+                f"{comparison} added to adata.uns['diff_motif_activity_top_motifs']",
+                logfile,
+                2
+            )
+
     if not chromvar_found:
         log_message(f"Warning: chromvar_scores.csv not found in {scores_path}", logfile, 1)
 
