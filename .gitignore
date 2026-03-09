@@ -1,3 +1,9 @@
+# Ignore session cookies
+cookies.txt
+
+# Ignore local proxy config
+frontend/proxy.conf.json
+
 # Ignore all h5ad files
 *.h5ad
 *.parquet
