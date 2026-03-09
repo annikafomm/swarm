@@ -183,8 +183,8 @@ def main():
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
     parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default='ctg', help="Gene selection strategy. Default: use all overlapping genes.")
-    #parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
-    parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
     parser.add_argument('-feature_col', type=str, default='', help="Column in adata.var with type of gene")
 
