@@ -789,8 +789,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         // Group similar properties together
-        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
-        const lianaKeys = ['ligand_receptor_relationships', 'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity'];
         const chromvarKeys = ['chromvar_total_sum'];
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
@@ -1829,22 +1827,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       setTimeout(() => this.updateSubgraphGenie3(), 100);
       setTimeout(() => this.renderFootprintPlots(), 100);
       // setTimeout(() => this.renderFootprintPlots(), 0);
-    }
-  }
-
-  public selectCluster(clusterId: number): void {
-    this.selectedCluster = clusterId;
-    this.clusterCells = this.features.filter(
-      (cell) => cell.properties.leiden === clusterId,
-    );
-    this.calculateClusterStats();
-    this.updateCoOccurrenceTable();
-
-    if (this.clusterCells.length > 0) {
-      this.selectedCell = this.clusterCells[0];
-      setTimeout(() => this.renderNhoodHeatmap(), 100);
-      setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(), 100);
     }
   }
 
