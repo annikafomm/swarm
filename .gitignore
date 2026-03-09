@@ -1,8 +1,13 @@
 # Ignore session cookies
 cookies.txt
 
+# Ignore notebooks folder
+notebooks/
+
 # Ignore local proxy config
 frontend/proxy.conf.json
+frontend/package.json
+frontend/package-lock.json
 
 # Ignore all h5ad files
 *.h5ad
