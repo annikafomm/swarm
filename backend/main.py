@@ -720,7 +720,7 @@ async def upload(
 @app.get("/api/datasets", dependencies=[Depends(cookie)])
 async def get_datasets(session_data: SessionData = Depends(verifier)):
     """
-    Return all available datasets for the current user + builtin datasets.
+    Return all available datasets for the current user + builtin datasets + shared datasets.
     Filters out datasets with missing files.
     """
     try:
@@ -735,9 +735,16 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
             if Path(info["adata_path"]).exists():
                 valid_user_datasets[dataset_id] = info
 
+        # Also include shared datasets (marked with user="__shared__")
+        shared_datasets = {}
+        if "uploaded" in all_datasets:
+            for dataset_id, info in all_datasets["uploaded"].items():
+                if info.get("user") == "__shared__" and Path(info["adata_path"]).exists():
+                    shared_datasets[dataset_id] = info
+
         datasets_json = {
             "builtin": all_datasets.get("builtin", {}),
-            "uploaded": valid_user_datasets
+            "uploaded": {**valid_user_datasets, **shared_datasets}
         }
 
         print(f"Returning datasets: {datasets_json}")
@@ -795,6 +802,82 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
+
+
+# ============================================================================
+# DEBUG / TESTING ENDPOINTS (Backend-only, not exposed to frontend)
+# ============================================================================
+
+@app.post("/debug/rescan_uploads")
+async def debug_rescan_uploads():
+    """
+    TESTING ONLY: Re-scan the uploads folder and re-register existing datasets.
+    Useful when you've run the pipeline and want to reload without restarting the server.
+
+    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads`
+
+    Note: This endpoint is intentionally backend-only and not exposed in the frontend.
+    """
+    try:
+        # Rescan the uploads folder
+        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
+
+        # Reload datasets into memory
+        # Re-load to get the latest from disk
+        dataset_registry.datasets = dataset_registry._load_registry()
+
+        return {
+            "status": "success",
+            "message": "Rescanned uploads folder and reregistered datasets",
+            "results": results,
+            "total_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
+        }
+    except Exception as e:
+        print(f"Error in debug rescan: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/debug/rescan_uploads_shared")
+async def debug_rescan_uploads_shared():
+    """
+    TESTING ONLY: Rescan uploads folder and register ALL datasets as shared.
+    Datasets marked as shared will appear in the dropdown for all users.
+
+    This is useful for testing when you want datasets to be accessible without
+    worrying about session/user filtering.
+
+    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads_shared`
+    """
+    try:
+        # Rescan the uploads folder
+        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
+
+        # Now convert all newly registered datasets to "shared"
+        all_datasets = dataset_registry.get_all_datasets()
+        if "uploaded" in all_datasets:
+            for dataset_id, info in all_datasets["uploaded"].items():
+                # Change user to __shared__ so it appears for everyone
+                info["user"] = "__shared__"
+
+        # Save the updated registry
+        dataset_registry._save_registry()
+
+        # Reload datasets into memory without clearing shared datasets
+        dataset_registry.datasets = dataset_registry._load_registry(clear_uploads=False)
+
+        return {
+            "status": "success",
+            "message": "Rescanned uploads and marked all datasets as SHARED (visible to all users)",
+            "results": results,
+            "total_shared_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
+        }
+    except Exception as e:
+        print(f"Error in debug rescan shared: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/create_session/{name}")
@@ -925,6 +1008,11 @@ async def get_geneset_connections(
 
     # Get the geneset from the name
     adata = _load_adata_cached(session_data.adata_path)
+    
+    # Check if genie_genesets exists in adata.uns
+    if "genie_genesets" not in adata.uns:
+        return {"connections": [], "slider_data": {}}
+    
     gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )

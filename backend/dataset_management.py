@@ -20,18 +20,26 @@ class DatasetRegistry:
         print(f"Dataset registry path: {self.registry_file}")
         self.datasets = self._load_registry()
 
-    def _load_registry(self) -> Dict:
-        """Load existing registry or create new one"""
+    def _load_registry(self, clear_uploads: bool = True) -> Dict:
+        """Load existing registry or create new one.
+
+        Args:
+            clear_uploads: If True (on startup), clear uploaded datasets.
+                          If False (runtime), preserve existing uploads.
+        """
         if self.registry_file.exists():
             try:
-                # Delete data of old uploaded datasets
                 with open(self.registry_file, 'r') as f:
                     data = json.load(f)
-                    # On startup, keep only builtin datasets, clear uploaded ones
-                    return {
-                        "builtin": data.get("builtin", {}),
-                        "uploaded": {}
-                    }
+                    if clear_uploads:
+                        # On startup, keep only builtin datasets, clear uploaded ones
+                        return {
+                            "builtin": data.get("builtin", {}),
+                            "uploaded": {}
+                        }
+                    else:
+                        # At runtime, preserve everything
+                        return data
 
             except Exception as e:
                 print(f"Error loading registry: {e}")
@@ -147,3 +155,86 @@ class DatasetRegistry:
             self._save_registry()
             return True
         return False
+
+    def rescan_uploads_folder(self, uploads_dir: Path) -> Dict[str, str]:
+        """
+        TESTING ONLY: Scan the uploads folder and re-register datasets found there.
+        Looks for *_st_scores.h5ad files and attempts to reconstruct metadata.
+        Returns a dict with results: {dataset_id: status_message}
+        """
+        if not uploads_dir.exists():
+            return {"error": f"Uploads directory not found: {uploads_dir}"}
+
+        results = {}
+        uploads_dir = Path(uploads_dir)
+
+        # Find all h5ad files
+        for h5ad_file in uploads_dir.rglob("*_st_scores.h5ad"):
+            try:
+                # Extract dataset_id from parent directory name
+                # Format: job_TIMESTAMP_USER/...filename
+                job_dir = h5ad_file.parent.parent
+                dataset_id = job_dir.name  # e.g., "job_123456_user"
+
+                if dataset_id in self.datasets.get("uploaded", {}):
+                    results[dataset_id] = "already registered"
+                    continue
+
+                # Try to load corresponding config file
+                config_file = job_dir / f"{dataset_id}_config.json"
+                metadata = {}
+                geojson_path = None
+                genie_network_path = None
+                sponge_network_path = None
+
+                if config_file.exists():
+                    try:
+                        with open(config_file, 'r') as f:
+                            config = json.load(f)
+                            metadata = {
+                                "dataset_type": config.get("dataset", "Unknown"),
+                                "use_tangram": config.get("tangram", {}).get("use", False),
+                            }
+                            if "output_files" in config:
+                                genie_network_path = config["output_files"].get("genie_network_path")
+                                sponge_network_path = config["output_files"].get("sponge_network_path")
+                    except Exception as e:
+                        print(f"  ⚠ Could not parse config for {dataset_id}: {e}")
+
+                # Look for geojson in multiple locations
+                # First in h5ad's direct directory, then in parent directories up to job_dir
+                geojson_candidates = []
+                search_dir = h5ad_file.parent
+                max_depth = 5  # Limit how far up we search
+                for _ in range(max_depth):
+                    candidates = list(search_dir.glob("hexagons.geojson"))
+                    if candidates:
+                        geojson_candidates = candidates
+                        geojson_path = f"/api/geojson/{dataset_id}"
+                        break
+                    # Stop if we've reached or passed the job_dir
+                    if search_dir <= job_dir:
+                        break
+                    # Move up one directory level
+                    search_dir = search_dir.parent
+
+                # Extract user from directory name (job_TIMESTAMP_USER format)
+                user_part = dataset_id.split("_", 2)[-1] if "_" in dataset_id else "unknown"
+
+                # Register the dataset
+                self.register_uploaded_dataset(
+                    dataset_id=dataset_id,
+                    alias=f"[RESCANNED] {dataset_id}",
+                    adata_path=str(h5ad_file),
+                    geojson_path=geojson_path,
+                    genie_network_path=genie_network_path,
+                    sponge_network_path=sponge_network_path,
+                    user=user_part,
+                    **metadata
+                )
+                results[dataset_id] = "registered"
+
+            except Exception as e:
+                results[str(h5ad_file)] = f"error: {e}"
+
+        return results
