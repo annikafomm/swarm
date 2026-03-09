@@ -799,6 +799,7 @@ async def upload(
 
             dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
 
+            footprint_list = [f for f in os.listdir(out_dir) if f.startswith("footprint") and f.endswith(".pdf")]
             dataset_registry.register_uploaded_dataset(
                 dataset_id=dataset_id,
                 alias=dataset_alias,
@@ -811,6 +812,8 @@ async def upload(
                 dataset_type=dataset,
                 use_tangram=use_tangram,
                 created_at=datetime.now().isoformat(),
+                footprint_list=footprint_list,
+                # TODO Add paths for multiome
             )
 
             # Include dataset_id in response
@@ -1223,35 +1226,37 @@ async def download_file(file_path: str):
     return FileResponse(str(full_path))
 
 
-@app.get("/api/footprints/{user}/{subdir}")
-async def list_footprints(user: str, subdir: str):
-    job_dir = BASE_UPLOAD_DIR / Path(user) / Path(subdir)
-
-    if not job_dir.exists() or not job_dir.is_dir():
-        raise HTTPException(status_code=404, detail="Directory not found")
-
-    files = sorted(
-        f.name for f in job_dir.glob("footprint_*.pdf") if f.is_file()
-    )
-    return files
 
 
-@app.get("/api/footprints/{user}/{subdir}/{filename}")
-async def get_footprint(user: str, subdir: str, filename: str):
-    # nur footprint PDFs zulassen
-    safe_name = Path(filename).name
-    if safe_name != filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+# @app.get("/api/footprints/{user}/{subdir}")
+# async def list_footprints(user: str, subdir: str):
+#     job_dir = BASE_UPLOAD_DIR / Path(user) / Path(subdir)
 
-    if not safe_name.startswith("footprint_") or not safe_name.endswith(".pdf"):
-        raise HTTPException(status_code=404, detail="File not found")
+#     if not job_dir.exists() or not job_dir.is_dir():
+#         raise HTTPException(status_code=404, detail="Directory not found")
 
-    file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / safe_name
+#     files = sorted(
+#         f.name for f in job_dir.glob("footprint_*.pdf") if f.is_file()
+#     )
+#     return files
 
-    if file_path.exists() and file_path.is_file():
-        return FileResponse(str(file_path), media_type="application/pdf")
 
-    raise HTTPException(status_code=404, detail="File not found")
+# @app.get("/api/footprints/{user}/{subdir}/{filename}")
+# async def get_footprint(user: str, subdir: str, filename: str):
+
+#     safe_name = Path(filename).name
+#     if safe_name != filename:
+#         raise HTTPException(status_code=400, detail="Invalid filename")
+
+#     if not safe_name.startswith("footprint_") or not safe_name.endswith(".pdf"):
+#         raise HTTPException(status_code=404, detail="File not found")
+
+#     file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / safe_name
+
+#     if file_path.exists() and file_path.is_file():
+#         return FileResponse(str(file_path), media_type="application/pdf")
+
+#     raise HTTPException(status_code=404, detail="File not found")
 
 
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])

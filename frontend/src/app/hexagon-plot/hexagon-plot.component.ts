@@ -53,7 +53,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
   private _resizeHandler: any = null;
   private sub!: Subscription;
-  footprintPlotUrl?: SafeResourceUrl;
   footprintPlotUrls: SafeResourceUrl[] = [];
 
   builtinDatasets$: Observable<Dataset[]>;
@@ -302,7 +301,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
 
-        this.renderFootprintPlots();
+        this.renderFootprintPlots(this.selectedDataset);
       } else {
         console.warn('✗ No hexagon path available');
       }
@@ -1808,7 +1807,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
       // setTimeout(() => this.renderFootprintPlots(), 0);
     }
   }
@@ -1825,7 +1824,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
       // setTimeout(() => this.renderFootprintPlots(), 0);
     }
   }
@@ -2054,33 +2053,36 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return null;
   }
 
-  private renderFootprintPlots(): void {
-    const jobDir = this.extractJobDirFromDataPath(this.dataPath);
+  private renderFootprintPlots(dataset: Dataset | null): void {
+    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(url =>
+      this.sanitizer.bypassSecurityTrustResourceUrl(url)
+    );
+    // const jobDir = this.extractJobDirFromDataPath(this.dataPath);
 
-    if (!jobDir) {
-      console.warn('Could not extract jobDir from dataPath:', this.dataPath);
-      this.footprintPlotUrls = [];
-      return;
-    }
+    // if (!jobDir) {
+    //   console.warn('Could not extract jobDir from dataPath:', this.dataPath);
+    //   this.footprintPlotUrls = [];
+    //   return;
+    // }
 
-    this.sessionService.callWithSession(() =>
-      this.http.get<string[]>(
-        `${this.sessionService.apiUrl}/api/footprints/${jobDir}`,
-        { withCredentials: true }
-      )
-    ).subscribe({
-      next: (files) => {
-        this.footprintPlotUrls = files.map(fileName =>
-          this.sanitizer.bypassSecurityTrustResourceUrl(
-            `${this.sessionService.apiUrl}/api/footprints/${jobDir}/${encodeURIComponent(fileName)}`
-          )
-        );
-      },
-      error: (err) => {
-        console.warn('Could not load footprint plots:', err);
-        this.footprintPlotUrls = [];
-      }
-    });
+    // this.sessionService.callWithSession(() =>
+    //   this.http.get<string[]>(
+    //     `${this.sessionService.apiUrl}/api/footprints/${jobDir}`,
+    //     { withCredentials: true }
+    //   )
+    // ).subscribe({
+    //   next: (files) => {
+    //     this.footprintPlotUrls = files.map(fileName =>
+    //       this.sanitizer.bypassSecurityTrustResourceUrl(
+    //         `${this.sessionService.apiUrl}/api/footprints/${jobDir}/${encodeURIComponent(fileName)}`
+    //       )
+    //     );
+    //   },
+    //   error: (err) => {
+    //     console.warn('Could not load footprint plots:', err);
+    //     this.footprintPlotUrls = [];
+    //   }
+    // });
   }
 
   private renderNhoodHeatmap(): void {

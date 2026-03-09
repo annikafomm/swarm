@@ -58,6 +58,7 @@ class DatasetRegistry:
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
         user: str = "anonymous",
+        footprint_list: Optional[List[str]] = None,
         **metadata
     ) -> None:
         """Register a newly uploaded dataset"""
@@ -74,7 +75,7 @@ class DatasetRegistry:
             "sponge_network_path": sponge_network_path,
             "user": user,
             "created_at": datetime.now().isoformat(),
-            **metadata
+            "footprint_list": footprint_list,
         }
         print(f"Saving registry to {self.registry_file}")
         self._save_registry()
