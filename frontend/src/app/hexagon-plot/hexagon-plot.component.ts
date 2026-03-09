@@ -2054,9 +2054,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private renderFootprintPlots(dataset: Dataset | null): void {
-    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(url =>
-      this.sanitizer.bypassSecurityTrustResourceUrl(url)
+    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
+      this.sanitizer.bypassSecurityTrustResourceUrl(
+        `${this.sessionService.apiUrl}/api/download/${relativePath}`
+      )
     );
+
     // const jobDir = this.extractJobDirFromDataPath(this.dataPath);
 
     // if (!jobDir) {

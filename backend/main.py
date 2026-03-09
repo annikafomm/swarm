@@ -799,7 +799,11 @@ async def upload(
 
             dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
 
-            footprint_list = [f for f in os.listdir(out_dir) if f.startswith("footprint") and f.endswith(".pdf")]
+            footprint_list = [
+                str(Path(out_dir).relative_to(BASE_UPLOAD_DIR) / f)
+                for f in os.listdir(out_dir)
+                if f.startswith("footprint") and f.endswith(".pdf")
+            ]
             dataset_registry.register_uploaded_dataset(
                 dataset_id=dataset_id,
                 alias=dataset_alias,

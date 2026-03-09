@@ -222,6 +222,11 @@ class DatasetRegistry:
                 # Extract user from directory name (job_TIMESTAMP_USER format)
                 user_part = dataset_id.split("_", 2)[-1] if "_" in dataset_id else "unknown"
 
+                footprint_list = [
+                    str(h5ad_file.parent.relative_to(uploads_dir) / f)
+                    for f in os.listdir(h5ad_file.parent)
+                    if f.startswith("footprint") and f.endswith(".pdf")
+                ]
                 # Register the dataset
                 self.register_uploaded_dataset(
                     dataset_id=dataset_id,
@@ -231,6 +236,7 @@ class DatasetRegistry:
                     genie_network_path=genie_network_path,
                     sponge_network_path=sponge_network_path,
                     user=user_part,
+                    footprint_list=footprint_list,
                     **metadata
                 )
                 results[dataset_id] = "registered"
