@@ -50,6 +50,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element!: ElementRef<HTMLElement>;
   @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement!: ElementRef<HTMLElement>;
   @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
+    @ViewChild('dgeaHeatmap', { static: false }) dgeaHeatmapElement!: ElementRef<HTMLElement>;
   private _resizeHandler: any = null;
   private sub!: Subscription;
 
@@ -144,6 +145,126 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     public selectedInterval: number = 0;
     public features: CellFeature[] = []; // public so that filterable table can update it
     public meta: { [key: string]: any } = {};
+
+    // Selected groups for the DGEA comparison (bound to the dropdowns)
+    public selectedDgeaGroup1: string | null = null;
+    public selectedDgeaGroup2: string | null = null;
+
+    // Selected groups for the DGEA comparison (bound to the dropdowns)
+    getSelectedDgeaHeatmap(): any | null {
+        const cmp = this.getSelectedDgeaComparison();
+        if (!cmp || cmp['skipped']) return null;
+        return cmp['heatmap_context'] ?? null;
+    }
+
+    // Returns all available cell type levels for the dropdown selectors
+    getDgeaCellTypeLevels(): string[] {
+        return this.meta?.['dgea']?.['cell_type']?.['levels'] ?? [];
+    }
+
+    // Returns the map of all DGEA comparisons
+    getDgeaComparisonMap(): { [key: string]: any } {
+        return this.meta?.['dgea']?.['cell_type']?.['comparisons'] ?? {};
+    }
+
+    // Re-render the DGEA heatmap when the user changes the group selections
+    public onDgeaSelectionChange(): void {
+        setTimeout(() => this.renderDgeaHeatmap(), 0);
+    }
+
+    // Create comparison ID matching the backend JSON format
+    private makeComparisonId(group1: string, group2: string): string {
+        const safe = (x: string) => x.replace(/[^A-Za-z0-9]+/g, '_');
+        return `${safe(group1)}__vs__${safe(group2)}`;
+    }
+
+    // Render the context heatmap
+    private renderDgeaHeatmap(): void {
+        const container = this.dgeaHeatmapElement?.nativeElement;
+        if (!container) return;
+
+        const hm = this.getSelectedDgeaHeatmap();
+
+        if (!hm || !hm.groups || !hm.rows || !hm.rows.length) {
+            Plotly.purge(container);
+            return;
+        }
+
+        const x = hm.groups as string[];
+        const y = hm.rows.map((r: any) => r.gene);
+        const z = hm.rows.map((r: any) => r.scaled);
+        const raw = hm.rows.map((r: any) => r.raw);
+
+        const data: Partial<Plotly.PlotData>[] = [
+            {
+                type: 'heatmap',
+                x,
+                y,
+                z,
+                customdata: raw,
+                colorscale: 'RdBu',
+                reversescale: true,
+                hovertemplate:
+                    'Gene: %{y}<br>' +
+                    'Group: %{x}<br>' +
+                    'Scaled expression: %{z:.2f}<br>' +
+                    'Mean expression: %{customdata:.2f}<extra></extra>',
+            }
+        ];
+
+        const layout: Partial<Plotly.Layout> = {
+            margin: { t: 30, l: 140, r: 20, b: 100 },
+            height: Math.max(420, y.length * 22),
+            xaxis: {
+                title: { text: 'Cell type' },
+                tickangle: -45,
+                automargin: true
+            },
+            yaxis: {
+                title: { text: 'Genes' },
+                automargin: true,
+                autorange: 'reversed'
+            }
+        };
+
+        Plotly.purge(container);
+        Plotly.newPlot(container, data, layout, {
+            responsive: true,
+            displayModeBar: false
+        });
+    }
+
+    // Returns all available cell type levels for the dropdown selectors
+    getSelectedDgeaComparison(): any | null {
+        if (!this.selectedDgeaGroup1 || !this.selectedDgeaGroup2) return null;
+        if (this.selectedDgeaGroup1 === this.selectedDgeaGroup2) return null;
+
+        const comps = this.getDgeaComparisonMap();
+
+        const directId = this.makeComparisonId(this.selectedDgeaGroup1, this.selectedDgeaGroup2);
+        if (comps[directId]) return comps[directId];
+
+        const reverseId = this.makeComparisonId(this.selectedDgeaGroup2, this.selectedDgeaGroup1);
+        if (comps[reverseId]) return comps[reverseId];
+
+        return null;
+    }
+
+    // Initialize default selections for the DGEA comparison dropdowns
+    initDgeaSelection(): void {
+        const levels = this.getDgeaCellTypeLevels();
+        if (!levels.length) return;
+
+        if (!this.selectedDgeaGroup1) {
+            this.selectedDgeaGroup1 = levels[0];
+        }
+
+        if (!this.selectedDgeaGroup2) {
+            const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
+            this.selectedDgeaGroup2 = firstDifferent ?? null;
+        }
+    }
+
 
     public clusterCells: CellFeature[] = [];
     public clusterCellTypes: {

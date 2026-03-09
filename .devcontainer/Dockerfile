@@ -11,6 +11,20 @@ RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
     micromamba clean --all --yes
 RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
     micromamba clean --all --yes
+
+Run micromamba run -n base R -q -e "\
+  if (!requireNamespace('remotes', quietly = TRUE)) \
+    install.packages('remotes', repos = 'https://cloud.r-project.org'); \
+  if (!requireNamespace('scCustomize', quietly = TRUE)) \
+    install.packages('scCustomize', repos = 'https://cloud.r-project.org'); \
+  remotes::install_github('mojaveazure/seurat-disk')"
+
+RUN rm -rf /opt/conda/lib/R/library/Seurat \
+           /opt/conda/lib/R/library/SeuratObject && \
+    micromamba install -n base -y -c conda-forge --force-reinstall \
+      r-seurat=5.3.0 \
+      r-seuratobject=5.2.0
+
 USER root
 
 ARG MAMBA_DOCKERFILE_ACTIVATE=1
