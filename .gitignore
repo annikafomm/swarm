@@ -96,6 +96,10 @@ testem.log
 typings
 .angular
 
+# 3005 vs 3000 port
+frontend/src/app/session.service.ts
+frontend/src/environments/environment.prod.ts
+
 # System files
 .DS_Store
 Thumbs.db
