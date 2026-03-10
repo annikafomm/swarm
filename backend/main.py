@@ -1126,11 +1126,11 @@ async def get_geneset_connections(
 
     # Get the geneset from the name
     adata = _load_adata_cached(session_data.adata_path)
-    
+
     # Check if genie_genesets exists in adata.uns
     if "genie_genesets" not in adata.uns:
         return {"connections": [], "slider_data": {}}
-    
+
     gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )
@@ -1221,7 +1221,6 @@ async def get_var_column(
 async def get_obsm_column(table: str, column: str, session_data: SessionData = Depends(verifier)):
     print(f"[DEBUG] Endpoint called: table={table}, column={column}")
     print(f"[DEBUG] Session username: {session_data.username}")
-    print(f"[DEBUG] Has adata: {session_data.adata is not None}")
     adata = _load_adata_cached(session_data.adata_path)
 
     # --- ChromVAR special case: column is motif name OR comma-separated motif names ---
@@ -1307,6 +1306,11 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
+    # TODO: remove this. just so that hardcodded footprint plot can be used
+    # Prevent path traversal outside uploads dir
+    # if BASE_UPLOAD_DIR not in full_path.parents:
+    #     raise HTTPException(status_code=403, detail="Forbidden")
+
     if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
@@ -1364,5 +1368,5 @@ async def get_X_by_gene(
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
-    # for Merit
-    #uvicorn.run(app, host="0.0.0.0", port=3005)
+    # for merit
+    # uvicorn.run(app, host="0.0.0.0", port=3005)

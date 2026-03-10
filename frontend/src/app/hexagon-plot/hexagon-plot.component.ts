@@ -203,6 +203,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   } | null = null;
   public showGlobalLigandReceptorScores: boolean = true;
   public showMoranI: boolean = true;
+  public showChromvarMoranI: boolean = true;
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([
@@ -478,6 +479,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         break;
       case 'Differential Motif Activity':
         // view should be cell type
+        newView = 'cell_type';
+        break;
+      case 'Footprints':
         newView = 'cell_type';
         break;
     }
