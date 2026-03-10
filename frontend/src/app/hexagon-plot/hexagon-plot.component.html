@@ -615,7 +615,7 @@
         <h4>ChromVAR Moran's I</h4>
         <app-table
           [data]="this.meta['chromvar_moranI']"
-          [actionColumns]="['chromvar_spot_scores', 'Sum_chromvar_spot_scores']"
+          [actionColumns]="['chromvar_spot_scores']"
           [features]="features"
           [updateColumn]="'chromvar_total_sum'"
           (featuresUpdated)="updateHexColors()">

@@ -5,9 +5,7 @@ cookies.txt
 notebooks/
 
 # Ignore local proxy config
-frontend/proxy.conf.json
-frontend/package.json
-frontend/package-lock.json
+# Note: proxy.conf.json, package.json, package-lock.json are managed via --skip-worktree
 
 # Ignore all h5ad files
 *.h5ad
@@ -96,9 +94,7 @@ testem.log
 typings
 .angular
 
-# 3005 vs 3000 port
-frontend/src/app/session.service.ts
-frontend/src/environments/environment.prod.ts
+# Note: session.service.ts and environment.prod.ts are managed via --skip-worktree
 
 # System files
 .DS_Store
@@ -110,5 +106,4 @@ my-container.sif
 my-custom-image.tar
 apptainer_prompt.txt
 overlay.img
-.vscode/
 backend/calc_multiome_scores/calc_multiome_scores_test.ipynb
