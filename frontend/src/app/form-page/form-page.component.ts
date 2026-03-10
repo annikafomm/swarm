@@ -474,7 +474,6 @@ export class FormPageComponent {
           fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
         }
         fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
-        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {

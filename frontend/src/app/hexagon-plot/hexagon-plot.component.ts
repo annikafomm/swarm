@@ -2022,36 +2022,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
-  private extractJobDirFromDataPath(dataPath: string): string | null {
-    try {
-
-      const url = new URL(dataPath, window.location.origin);
-      const parts = url.pathname.split('/').filter(Boolean);
-
-      // case 1: .../uploads/job_xxx/subdir/hexagons.geojson
-      const uploadsIndex = parts.indexOf('uploads');
-      if (uploadsIndex !== -1 && uploadsIndex < parts.length - 2) {
-        return parts.slice(uploadsIndex + 1, parts.length - 1).join('/');
-      }
-
-      // case 2: .../api/hexagon/job_xxx/subdir/hexagons.geojson
-      const apiIndex = parts.indexOf('api');
-      const hexagonIndex = parts.indexOf('hexagon');
-
-      if (
-        apiIndex !== -1 &&
-        hexagonIndex === apiIndex + 1 &&
-        parts.length >= hexagonIndex + 4
-      ) {
-        // /api/hexagon/{user}/{subdir}/{filename}
-        return parts.slice(hexagonIndex + 1, hexagonIndex + 3).join('/');
-      }
-    } catch (e) {
-      console.warn('Failed to parse dataPath:', dataPath, e);
-    }
-
-    return null;
-  }
 
   private renderFootprintPlots(dataset: Dataset | null): void {
     this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
@@ -2059,33 +2029,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         `${this.sessionService.apiUrl}/api/download/${relativePath}`
       )
     );
-
-    // const jobDir = this.extractJobDirFromDataPath(this.dataPath);
-
-    // if (!jobDir) {
-    //   console.warn('Could not extract jobDir from dataPath:', this.dataPath);
-    //   this.footprintPlotUrls = [];
-    //   return;
-    // }
-
-    // this.sessionService.callWithSession(() =>
-    //   this.http.get<string[]>(
-    //     `${this.sessionService.apiUrl}/api/footprints/${jobDir}`,
-    //     { withCredentials: true }
-    //   )
-    // ).subscribe({
-    //   next: (files) => {
-    //     this.footprintPlotUrls = files.map(fileName =>
-    //       this.sanitizer.bypassSecurityTrustResourceUrl(
-    //         `${this.sessionService.apiUrl}/api/footprints/${jobDir}/${encodeURIComponent(fileName)}`
-    //       )
-    //     );
-    //   },
-    //   error: (err) => {
-    //     console.warn('Could not load footprint plots:', err);
-    //     this.footprintPlotUrls = [];
-    //   }
-    // });
   }
 
   private renderNhoodHeatmap(): void {
