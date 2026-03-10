@@ -12,6 +12,10 @@ grn_score_names = (
     "spongeffects_GSVA_scores",
     "spongeffects_ssGSEA_scores",
     "viper_scores",
+    "grid_viper_scores",
+    "grid_aucell_scores",
+    "grid_spongeffects_GSVA_scores",
+    "grid_spongeffects_ssGSEA_scores",
 )
 
 genie3_score_names = [name + "_genie3" for name in grn_score_names]

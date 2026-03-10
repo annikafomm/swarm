@@ -716,7 +716,7 @@ async def upload(
 
         data_type = dataset.value.lower()
 
-        geojson_out = os.path.join(out_dir, "hexagons.geojson")
+        geojson_out = os.path.join(job_dir, "hexagons.geojson")
         print("geojson_out:", geojson_out)
         print("geojson input adata:", adata_path)
         print("geojson data_type:", dataset.value.lower())
@@ -729,7 +729,7 @@ async def upload(
                 "--adata",
                 adata_path,
                 "--outpath",
-                os.path.join(out_dir, "hexagons.geojson"),
+                geojson_out,
                 "--data_type",
                 data_type,
             ]
@@ -746,33 +746,33 @@ async def upload(
     payload["output_files"] = out_files
 
 
-        # Only register if we have an adata file
-        if adata_path is not None:
-            dataset_id = f"{job_id}_{user_safe}"
+    # Only register if we have an adata file
+    if adata_path is not None:
+        dataset_id = f"{job_id}_{user_safe}"
 
-            email_prefix = str(email.split("@")[0]) if email else "unknown"
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        email_prefix = str(email.split("@")[0]) if email else "unknown"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+        dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
 
-            dataset_registry.register_uploaded_dataset(
-                dataset_id=dataset_id,
-                alias=dataset_alias,
-                adata_path=adata_path,
-                tangram_adata_path=tangram_adata_path if use_tangram else None,
-                genie_network_path=out_files.get("genie_network_path"),
-                sponge_network_path=out_files.get("sponge_network_path"),
-                geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
-                user=user_safe,
-                dataset_type=dataset,
-                use_tangram=use_tangram,
-                created_at=datetime.now().isoformat(),
-            )
+        dataset_registry.register_uploaded_dataset(
+            dataset_id=dataset_id,
+            alias=dataset_alias,
+            adata_path=adata_path,
+            tangram_adata_path=tangram_adata_path if use_tangram else None,
+            genie_network_path=out_files.get("genie_network_path"),
+            sponge_network_path=out_files.get("sponge_network_path"),
+            geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
+            user=user_safe,
+            dataset_type=dataset,
+            use_tangram=use_tangram,
+            created_at=datetime.now().isoformat(),
+        )
 
-            # Include dataset_id in response
-            payload["dataset_id"] = dataset_id
-        else:
-            print("No adata file found in output, skipping dataset registration")
+        # Include dataset_id in response
+        payload["dataset_id"] = dataset_id
+    else:
+        print("No adata file found in output, skipping dataset registration")
 
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(

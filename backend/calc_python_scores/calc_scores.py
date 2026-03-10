@@ -313,10 +313,15 @@ def main():
             # 3) Create mapping: each cell -> nearest grid spot
             adata_cells = map_cells_to_grid(
                 adata_cells=adata_cells,
-                adata_grid=adata_grid,
+                adata_grid=adata_work,
             )
+            adata_cells.write(
+                os.path.join(args.outdir, "xenium_cells.h5ad")
+            )
+            log_message(f"Mapping cells to grid performed in {format_runtime(t0)}", logfile, 2)
+
             # 4) Proceed with all further analyses at the spot level
-            st_grid = os.path.join(args.outdir, "st_grid.h5ad")
+            st_grid = os.path.join(args.outdir, "xenium_st_grid.h5ad")
             adata_work.write(st_grid)
 
             st_preprocessed = st_grid
@@ -397,29 +402,8 @@ def main():
                             logfile,
                             2,
                         )
-        compute_spatial_scores(adata_work, "st", args, logfile)
-
-        if args.dataset == "xenium":
-
-            # Xenium only: scores were computed on the grid-level (adata_work),
-            # so we broadcast grid-level obs/obsm back to each cell using the stored mapping.
-
-
-            adata_cells = broadcast_grid_to_cells(
-                adata_cells=adata_cells,
-                adata_grid=adata_work,
-                prefix="grid_",
-                copy_obs=True,
-                copy_obsm=True,
-                copy_uns=True,
-                copy_varm=True,
-                overwrite=False,
-            )
-
-            adata_cells.write(
-                os.path.join(args.outdir, "xenium_cells_with_grid_scores.h5ad")
-            )
-
+        else:
+            compute_spatial_scores(adata_work, "st", args, logfile)
 
         log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
 

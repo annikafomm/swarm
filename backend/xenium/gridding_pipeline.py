@@ -124,4 +124,7 @@ def gridding_xenium(
         use_label=cluster_key,
     )
 
+    grid.var = adata.var.copy()
+    grid.var_names = adata.var_names.copy()
+
     return grid
