@@ -1,0 +1,24 @@
+name: base
+channels:
+  - conda-forge
+  - defaults
+  - pytorch
+  - nvidia
+dependencies:
+  - python
+  - numpy
+  - pandas
+  - scipy=1.10.*
+  - squidpy
+  - pytorch-cuda
+  - dask
+  - pip
+  - git
+  - python-multipart
+  - uvicorn
+  - decoupler-py
+  - mudata
+  - pip:
+      - spatialde
+      - git+https://github.com/broadinstitute/Tangram.git
+      - git+https://github.com/theislab/spapros.git@bump_python3.13

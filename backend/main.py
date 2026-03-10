@@ -23,6 +23,9 @@ import scanpy as sc
 import uvicorn
 from app import calculate_scores_helper
 
+# merit
+import re
+
 # ---------------------------------
 # Third-Party (FastAPI / Starlette)
 # ---------------------------------
@@ -32,11 +35,13 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     Response,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
 from fastapi_sessions.frontends.implementations import (
     CookieParameters,
@@ -54,6 +59,8 @@ import asyncio
 # -----------------------------------------------------------------------------
 
 # Base folder for all uploads (created on startup).
+# Use path relative to this file to avoid depending on current working dir.
+#BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
 BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -62,7 +69,8 @@ BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
-        "ALLOWED_ORIGINS", "http://localhost:4200,http://127.0.0.1:4200"
+        "ALLOWED_ORIGINS",
+        "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201"
     ).split(",")
     if o.strip()
 ]
@@ -77,6 +85,9 @@ class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+class Genome(str, Enum):
+    Visium = "hg37"
+    Xenium = "hg38"
 
 class Method(str, Enum):
     Genie3 = "Genie3"
@@ -279,6 +290,7 @@ def _ensure_under_max_size(upload: UploadFile) -> None:
     size_bytes = stream.tell()
     stream.seek(pos, 0)  # restore
     size_mb = size_bytes / (1024 * 1024)
+    print(f"MAX_FILE_MB: {MAX_FILE_MB}, size_mb: {size_mb}")
     if size_mb > MAX_FILE_MB:
         raise HTTPException(
             status_code=413,
@@ -298,7 +310,9 @@ def save_file(upload: Optional[UploadFile], job_dir: Path) -> Optional[str]:
     if not upload:
         return None
 
+    print(f"Saving uploaded file: {upload.filename}")
     _ensure_under_max_size(upload)
+    print(f"ensured under max size: {upload.filename}")
 
     job_dir.mkdir(parents=True, exist_ok=True)
     safe_name = _sanitize_filename(upload.filename or "upload.bin")
@@ -451,7 +465,10 @@ def api_root():
 # -----------------------------------------------------------------------------
 # Upload endpoint
 # -----------------------------------------------------------------------------
-
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    print(f"[REQ] {request.method} {request.url} content-length={request.headers.get('content-length')}")
+    return await call_next(request)
 
 # Main endpoint for receiving form fields and files (multipart/form-data).
 # It creates a dedicated job directory, saves all provided files there,
@@ -470,10 +487,25 @@ async def upload(
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
+    # Multiome
+    use_multiome: bool = Form(False),
+    multiome_rds: Optional[UploadFile] = File(None),
+
+    # need_multiome_fragments: bool = Form(False),
+    fragments_tsv_gz: Optional[UploadFile] = File(None),
+    fragments_tsv_gz_tbi: Optional[UploadFile] = File(None),
+
     # Scores
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
+    score_chromVar: bool = Form(False),
+    score_differential_motif_activity: bool = Form(False),
+    score_motif_enrichment: bool = Form(False),
+    score_FootprintingBias: bool = Form(False),
+
+    genome: str = Form(...),
+
     # Network Algos
     alg_viper: bool = Form(False),
     alg_aucell: bool = Form(False),
@@ -513,12 +545,35 @@ async def upload(
     squidpy_neighborhood_enrichment_cluster_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_library_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_n_perms: Optional[int] = Form(None),
+    # ChromVAR Flags + Params ---
+    chromVar_moranI: bool = Form(False),
+    chromVar_moranI_n_perms: Optional[int] = Form(None),
+    chromVar_moranI_two_tailed: Optional[str] = Form(None),   # "oneTailed" / "twoTailed"
+    chromVar_moranI_corr_method: Optional[str] = Form(None),
+
+    chromVar_gearyC: bool = Form(False),
+    chromVar_gearyC_n_perms: Optional[int] = Form(None),
+    chromVar_gearyC_two_tailed: Optional[str] = Form(None),
+    chromVar_gearyC_corr_method: Optional[str] = Form(None),
+
+    chromVar_differential_motif_activity: bool = Form(False),
+
     # LIANA
     liana_composition_column: Optional[str] = Form(None),
     liana_genie3_network: Optional[UploadFile] = File(None),
     liana_pathway_network: Optional[UploadFile] = File(None),
     session_data: "SessionData" = Depends(verifier),
 ):
+    print("in method")
+    raw_username = session_data.username
+    #raw_username = "merit"
+    user_safe = _sanitize_filename(raw_username) or "anon"
+    job_id = f"job_{int(time.time() * 1000)}"
+    job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(job_dir / f"{job_id}_multiome.txt", "w") as f:
+        f.write(f"use_multiome: {use_multiome}\n")
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
@@ -531,18 +586,14 @@ async def upload(
                 status_code=400, detail=f"Field '{name}' must be valid JSON."
             )
 
-    raw_username = session_data.username
-    user_safe = _sanitize_filename(raw_username) or "anon"
-
-    job_id = f"job_{int(time.time() * 1000)}"
-    job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
-    job_dir.mkdir(parents=True, exist_ok=True)
-
     # 3) Save all files into that directory
     # Dateien speichern (alles in ./uploads)
     saved_files = {
         "spatial_h5ad": save_file(spatial_h5ad, job_dir),
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
+        "multiome_rds": save_file(multiome_rds, job_dir),
+        "fragments_tsv_gz": save_file(fragments_tsv_gz, job_dir),
+        "fragments_tsv_gz_tbi": save_file(fragments_tsv_gz_tbi, job_dir),
         "genie3_network": save_file(genie3_network, job_dir),
         "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
         "sponge_networkinteractions": save_file(
@@ -551,6 +602,38 @@ async def upload(
         "liana_genie3_network": save_file(liana_genie3_network, job_dir),
         "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
+
+
+    # TODO: if .rds: convert to h5ad file, and read again
+    if use_multiome:
+        print("in rds2h5ad block")
+        rds_path = saved_files["multiome_rds"]
+        assay_name = "RNA"
+        h5ad_path = re.sub(r"\.rds$", f".h5ad", rds_path)
+        print(f"Running file conversion in multiome env ...")
+        log_path = Path(h5ad_path).with_suffix(".log")
+        with log_path.open("w") as log_file:
+            result = subprocess.run(
+                [   "Rscript",
+                    "../backend/rds_to_h5ad.R",
+                    "--rds_path", rds_path,
+                    "--assay", assay_name,
+                    "--h5ad_path", h5ad_path,
+                ],
+                stdout=log_file,
+                stderr=log_file,
+                text=True,
+                check=False,
+            )
+
+        use_tangram = True
+        single_cell_h5ad = h5ad_path
+        print(single_cell_h5ad)
+        saved_files["single_cell_h5ad"] = single_cell_h5ad
+
+
+    # TODO: change saved files dict. spatial_h5ad should become the h5ad path
+    # or single_cell_h5ad?
 
     # 4) Build response payload
     payload = {
@@ -567,11 +650,20 @@ async def upload(
             "filtering": singlecell_filtering if use_tangram else None,
             "normalization": singlecell_normalization if use_tangram else None,
         },
+        "multiome": {
+            "use": use_multiome,
+        },
         "scores": {
             "network": score_network,
             "squidpy": score_squidpy,
             "liana_plus": score_liana_plus,
+            "chromVar": score_chromVar,
+            "differential_motif_activity": score_differential_motif_activity,
+            "motif_enrichment": score_motif_enrichment,
+            "footprinting": score_FootprintingBias,
         },
+        "genome": genome,
+
         "network": {
             "algorithms": {
                 "viper": alg_viper,
@@ -623,12 +715,31 @@ async def upload(
                 "n_perms": squidpy_neighborhood_enrichment_n_perms,
             },
         },
+        "chromVar": {
+            "moranI": chromVar_moranI,
+            "moranI_params": {
+                "n_perms": chromVar_moranI_n_perms,
+                # bool in downstream code if you like:
+                "two_tailed": (chromVar_moranI_two_tailed == "twoTailed"),
+                "tails": chromVar_moranI_two_tailed,  # keep raw if useful
+                "corr_method": chromVar_moranI_corr_method,
+            },
+            "gearyC": chromVar_gearyC,
+            "gearyC_params": {
+                "n_perms": chromVar_gearyC_n_perms,
+                "two_tailed": (chromVar_gearyC_two_tailed == "twoTailed"),
+                "tails": chromVar_gearyC_two_tailed,
+                "corr_method": chromVar_gearyC_corr_method,
+            },
+            "differential_motif_activity": chromVar_differential_motif_activity,
+        },
         "liana": {
             "composition_column": liana_composition_column,
         },
     }
 
     # TODO call visium_to_geojson
+
     out_dir = await calculate_scores_helper(job_dir, payload)
 
     adata_path = None
@@ -688,6 +799,11 @@ async def upload(
 
             dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
 
+            footprint_list = [
+                str(Path(out_dir).relative_to(BASE_UPLOAD_DIR) / f)
+                for f in os.listdir(out_dir)
+                if f.startswith("footprint") and f.endswith(".pdf")
+            ]
             dataset_registry.register_uploaded_dataset(
                 dataset_id=dataset_id,
                 alias=dataset_alias,
@@ -700,6 +816,8 @@ async def upload(
                 dataset_type=dataset,
                 use_tangram=use_tangram,
                 created_at=datetime.now().isoformat(),
+                footprint_list=footprint_list,
+                # TODO Add paths for multiome
             )
 
             # Include dataset_id in response
@@ -720,7 +838,7 @@ async def upload(
 @app.get("/api/datasets", dependencies=[Depends(cookie)])
 async def get_datasets(session_data: SessionData = Depends(verifier)):
     """
-    Return all available datasets for the current user + builtin datasets.
+    Return all available datasets for the current user + builtin datasets + shared datasets.
     Filters out datasets with missing files.
     """
     try:
@@ -735,9 +853,16 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
             if Path(info["adata_path"]).exists():
                 valid_user_datasets[dataset_id] = info
 
+        # Also include shared datasets (marked with user="__shared__")
+        shared_datasets = {}
+        if "uploaded" in all_datasets:
+            for dataset_id, info in all_datasets["uploaded"].items():
+                if info.get("user") == "__shared__" and Path(info["adata_path"]).exists():
+                    shared_datasets[dataset_id] = info
+
         datasets_json = {
             "builtin": all_datasets.get("builtin", {}),
-            "uploaded": valid_user_datasets
+            "uploaded": {**valid_user_datasets, **shared_datasets}
         }
 
         print(f"Returning datasets: {datasets_json}")
@@ -795,6 +920,82 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
+
+
+# ============================================================================
+# DEBUG / TESTING ENDPOINTS (Backend-only, not exposed to frontend)
+# ============================================================================
+
+@app.post("/debug/rescan_uploads")
+async def debug_rescan_uploads():
+    """
+    TESTING ONLY: Re-scan the uploads folder and re-register existing datasets.
+    Useful when you've run the pipeline and want to reload without restarting the server.
+
+    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads`
+
+    Note: This endpoint is intentionally backend-only and not exposed in the frontend.
+    """
+    try:
+        # Rescan the uploads folder
+        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
+
+        # Reload datasets into memory
+        # Re-load to get the latest from disk
+        dataset_registry.datasets = dataset_registry._load_registry()
+
+        return {
+            "status": "success",
+            "message": "Rescanned uploads folder and reregistered datasets",
+            "results": results,
+            "total_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
+        }
+    except Exception as e:
+        print(f"Error in debug rescan: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/debug/rescan_uploads_shared")
+async def debug_rescan_uploads_shared():
+    """
+    TESTING ONLY: Rescan uploads folder and register ALL datasets as shared.
+    Datasets marked as shared will appear in the dropdown for all users.
+
+    This is useful for testing when you want datasets to be accessible without
+    worrying about session/user filtering.
+
+    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads_shared`
+    """
+    try:
+        # Rescan the uploads folder
+        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
+
+        # Now convert all newly registered datasets to "shared"
+        all_datasets = dataset_registry.get_all_datasets()
+        if "uploaded" in all_datasets:
+            for dataset_id, info in all_datasets["uploaded"].items():
+                # Change user to __shared__ so it appears for everyone
+                info["user"] = "__shared__"
+
+        # Save the updated registry
+        dataset_registry._save_registry()
+
+        # Reload datasets into memory without clearing shared datasets
+        dataset_registry.datasets = dataset_registry._load_registry(clear_uploads=False)
+
+        return {
+            "status": "success",
+            "message": "Rescanned uploads and marked all datasets as SHARED (visible to all users)",
+            "results": results,
+            "total_shared_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
+        }
+    except Exception as e:
+        print(f"Error in debug rescan shared: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/create_session/{name}")
@@ -925,6 +1126,11 @@ async def get_geneset_connections(
 
     # Get the geneset from the name
     adata = _load_adata_cached(session_data.adata_path)
+    
+    # Check if genie_genesets exists in adata.uns
+    if "genie_genesets" not in adata.uns:
+        return {"connections": [], "slider_data": {}}
+    
     gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )
@@ -990,15 +1196,83 @@ async def get_var_column(
     return adata.var[column].to_dict()
 
 
+# @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
+# async def get_obsm_column(
+#     table: str, column: str, session_data: SessionData = Depends(verifier)
+# ):
+#     """
+#     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
+#     """
+#     obsm_data = session_data.adata.obsm[table]
+
+#     # Special handling for chromvar_spot_scores: convert to DataFrame with motif names
+#     if table == "chromvar_spot_scores" and "chromvar_motifs" in session_data.adata.uns:
+#         motif_names = list(session_data.adata.uns["chromvar_motifs"])
+#         if not isinstance(obsm_data, pd.DataFrame):
+#             obsm_data = pd.DataFrame(
+#                 obsm_data,
+#                 index=session_data.adata.obs_names,
+#                 columns=motif_names
+#             )
+
+#     return obsm_data[column].to_dict()
+
 @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
-async def get_obsm_column(
-    table: str, column: str, session_data: SessionData = Depends(verifier)
-):
-    """
-    Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/ligand_receptor_cosine_similarity/LGALS9^PTPRC`
-    """
+async def get_obsm_column(table: str, column: str, session_data: SessionData = Depends(verifier)):
+    print(f"[DEBUG] Endpoint called: table={table}, column={column}")
+    print(f"[DEBUG] Session username: {session_data.username}")
+    print(f"[DEBUG] Has adata: {session_data.adata is not None}")
     adata = _load_adata_cached(session_data.adata_path)
-    return adata.obsm[table][column].to_dict()
+
+    # --- ChromVAR special case: column is motif name OR comma-separated motif names ---
+    if table == "chromvar_spot_scores":
+        try:
+            if adata is None:
+                raise HTTPException(status_code=500, detail="No adata loaded in session")
+
+            if "chromvar_motifs" not in adata.uns:
+                print(f"[DEBUG] Available uns keys: {list(adata.uns.keys())}")
+                raise HTTPException(status_code=500, detail="adata.uns['chromvar_motifs'] missing")
+
+            chromvar_motifs = np.asarray(adata.uns["chromvar_motifs"])
+            print(f"[DEBUG] chromvar_motifs shape: {chromvar_motifs.shape}, dtype: {chromvar_motifs.dtype}")
+            print(f"[DEBUG] First 5 motifs: {chromvar_motifs[:5]}")
+
+            motif_list = column.split(",")  # supports "MA1,MA2,MA3"
+            print(f"[DEBUG] Requested motifs: {motif_list}")
+
+            idx = np.where(np.isin(chromvar_motifs, motif_list))[0]
+            print(f"[DEBUG] Found indices: {idx}, size: {idx.size}")
+
+            if idx.size == 0:
+                raise HTTPException(status_code=404, detail=f"No motifs found from: {motif_list}")
+
+            if "chromvar_spot_scores" not in adata.obsm:
+                print(f"[DEBUG] Available obsm keys: {list(adata.obsm.keys())}")
+                raise HTTPException(status_code=500, detail="chromvar_spot_scores not in adata.obsm")
+
+            X = adata.obsm["chromvar_spot_scores"]
+            print(f"[DEBUG] chromvar_spot_scores type: {type(X)}, shape: {X.shape if hasattr(X, 'shape') else 'no shape'}")
+
+            # sum scores across selected motifs
+            scores = np.asarray(X[:, idx].sum(axis=1)).ravel()
+            print(f"[DEBUG] scores shape: {scores.shape}, dtype: {scores.dtype}")
+
+            return {bc: float(s) for bc, s in zip(adata.obs_names, scores)}
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[ERROR] chromvar_spot_scores endpoint failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"ChromVAR processing failed: {str(e)}")
+
+    # --- default behavior unchanged ---
+    obsm_data = adata.obsm[table]
+    if not isinstance(obsm_data, pd.DataFrame):
+        obsm_data = pd.DataFrame(obsm_data, index=adata.obs_names)
+
+    return obsm_data[column].to_dict()
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
@@ -1028,6 +1302,50 @@ async def get_obsm_row(
     return row_data
 
 
+
+@app.get("/api/download/{file_path:path}", dependencies=[Depends(cookie)])
+async def download_file(file_path: str):
+    full_path = (BASE_UPLOAD_DIR / file_path).resolve()
+
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+
+    return FileResponse(str(full_path))
+
+
+
+
+# @app.get("/api/footprints/{user}/{subdir}")
+# async def list_footprints(user: str, subdir: str):
+#     job_dir = BASE_UPLOAD_DIR / Path(user) / Path(subdir)
+
+#     if not job_dir.exists() or not job_dir.is_dir():
+#         raise HTTPException(status_code=404, detail="Directory not found")
+
+#     files = sorted(
+#         f.name for f in job_dir.glob("footprint_*.pdf") if f.is_file()
+#     )
+#     return files
+
+
+# @app.get("/api/footprints/{user}/{subdir}/{filename}")
+# async def get_footprint(user: str, subdir: str, filename: str):
+
+#     safe_name = Path(filename).name
+#     if safe_name != filename:
+#         raise HTTPException(status_code=400, detail="Invalid filename")
+
+#     if not safe_name.startswith("footprint_") or not safe_name.endswith(".pdf"):
+#         raise HTTPException(status_code=404, detail="File not found")
+
+#     file_path = BASE_UPLOAD_DIR / Path(user) / Path(subdir) / safe_name
+
+#     if file_path.exists() and file_path.is_file():
+#         return FileResponse(str(file_path), media_type="application/pdf")
+
+#     raise HTTPException(status_code=404, detail="File not found")
+
+
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])
 async def get_X_by_gene(
     gene: str, session_data: SessionData = Depends(verifier)
@@ -1046,3 +1364,5 @@ async def get_X_by_gene(
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
+    # for Merit
+    #uvicorn.run(app, host="0.0.0.0", port=3005)

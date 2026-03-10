@@ -9,6 +9,7 @@ import squidpy as sq
 from scipy import io, sparse
 import pandas as pd
 import time
+from scipy.io import mmwrite
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,6 +18,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from preprocessing.preprocessing_functions import *
 from calc_liana import run_liana
 from calc_tangram import run_tangram
+
+import anndata as ad
+ad.settings.allow_write_nullable_strings = True
 
 def log_message(msg, logfile, indent=0):
     prefix = " " * indent
@@ -34,6 +38,7 @@ def format_runtime(t0):
 def compute_spatial_scores(adata, description, args, logfile):
     # Calculate spatial scores
     if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
+
 
         if description == "tg":
             log_message("Preparing score calculation for the Tangram output ...", logfile)
@@ -122,14 +127,28 @@ def compute_spatial_scores(adata, description, args, logfile):
         log_message("Saving calculations ...", logfile, 2)
 
     #  TODO: tidy up andata --> delete entries, that are not used further
+    # --- FIX: ensure all obsm DataFrame column names are strings ---
+    for key, val in adata.obsm.items():
+        if isinstance(val, pd.DataFrame):
+            # cast column names to str
+            val.columns = val.columns.astype(str)
+    # ---------------------------------------------------------------
 
     t0 = time.time()
     filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
     adata.write(os.path.join(args.outdir, filename))
+    # Also save with fixed name for downstream multiome processing
+    if description == "tg":
+        adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
+    elif description == "st":
+        adata.write(os.path.join(args.outdir, "adata_st_scores.h5ad"))
     log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 4)
+    log_message(f"R scores params {args.R_scores}", logfile, 4)
 
     # R scores should be calculated
     if args.R_scores:
+        print("Saving expression matrix for R scores ...")
+        log_message("Saving expression matrix for R scores ...", logfile, 4)
         folder_path = os.path.join(args.outdir, f"expr_info_{description}")
         t0 = time.time()
 
@@ -163,8 +182,9 @@ def main():
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
-    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
+    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default='ctg', help="Gene selection strategy. Default: use all overlapping genes.")
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
     parser.add_argument('-feature_col', type=str, default='', help="Column in adata.var with type of gene")
 
@@ -204,6 +224,7 @@ def main():
 
     parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
 
+    parser.add_argument('-chromvar', action='store_true', help='chromvar scores present, add geary C and Moran I for chromvar motifs')
 
     args = parser.parse_args()
 
@@ -283,7 +304,18 @@ def main():
 
                     log_message("Running Tangram script ...", logfile, 2)
                     t0 = time.time()
-                    adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')
+                    adata_tangram, adata_map = run_tangram(adata_sc, adata, args.gene_selection, "cells", args.cell_label, args.ensembl_col, args.feature_col, 'gpu')
+                    adata_map.write(os.path.join(args.outdir, "adata_map.h5ad"))
+                    # wtite also X as csv and var/obs as csv
+
+                    df_adata_map = pd.DataFrame(
+                        adata_map.X,  # convert sparse to dense
+                        index=adata_map.obs_names,
+                        columns=adata_map.var_names)
+                    df_adata_map.to_csv(os.path.join(args.outdir, "adata_map.X.csv"))
+                    #mmwrite(os.path.join(args.outdir, "adata_map.X.mtx"), adata_map.X)
+                    adata_map.var.to_csv(os.path.join(args.outdir, "adata_map.var.csv"))
+                    adata_map.obs.to_csv(os.path.join(args.outdir, "adata_map.obs.csv"))
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)
 
                     compute_spatial_scores(adata_tangram, "tg", args, logfile)

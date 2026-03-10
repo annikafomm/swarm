@@ -49,19 +49,62 @@
         </tr>
       </thead>
 
-      <tbody>
+      <!-- <tbody>
         <tr *ngFor="let row of pagedRows">
           <td class="index-col">{{ truncateMiddle(row.index) }}</td>
+
           <td *ngFor="let col of columns" class="other-col">
             {{ displayNumeric(row[col]) }}
           </td>
+
+          <td *ngFor="let action of actionColumns" class="action-col"> -->
+            <!-- Checkbox column -->
+            <!-- <ng-container *ngIf="action === 'Sum_chromvar_spot_scores'; else showBtn">
+              <input
+                type="checkbox"
+                [checked]="isSumSelected(row)"
+                (change)="toggleSumMotif(row, $any($event.target).checked)" />
+            </ng-container> -->
+
+            <!-- Show button column -->
+            <!-- <ng-template #showBtn>
+              <button
+                class="btn btn-pill"
+                (click)="fetchAndUpdate(action, action === 'chromvar_spot_scores' ? row.motif_id : row.index)">
+                Show
+              </button>
+            </ng-template>
+          </td>
+        </tr>
+      </tbody> -->
+      <tbody>
+        <tr *ngFor="let row of pagedRows">
+          <td class="index-col">{{ truncateMiddle(row.index) }}</td>
+
+          <td *ngFor="let col of columns" class="other-col">
+            {{ displayNumeric(row[col]) }}
+          </td>
+
           <td *ngFor="let action of availableActionColumns" class="action-col">
-            <button class="btn btn-pill" (click)="fetchAndUpdate(action, row.index)">
-              Show
-            </button>
+            <!-- Sum column: checkbox -->
+            <ng-container *ngIf="action === 'Sum_chromvar_spot_scores'; else showBtn">
+              <input
+                type="checkbox"
+                [checked]="isSumSelected(row)"
+                (change)="toggleSumMotif(row, $any($event.target).checked)" />
+            </ng-container>
+
+            <!-- Other action columns: row-level Show button -->
+            <ng-template #showBtn>
+              <button class="btn btn-pill" (click)="onShowAction(action, row)">
+                Show
+              </button>
+            </ng-template>
           </td>
         </tr>
       </tbody>
+
+
     </table>
   </div>
 </div>

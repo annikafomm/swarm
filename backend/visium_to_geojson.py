@@ -6,6 +6,8 @@ import pandas as pd
 import scanpy as sc
 import simplejson as json
 
+# python ../backend/visium_to_geojson.py --adata ../backend/uploads/job_1764657831787_merit/junkDNA420/adata_st_scores.h5ad --outpath /workspaces/swarm/backend/uploads/job_1764657831787_merit/junkDNA420/hexagons.geojson
+
 grn_score_names = (
     "aucell_scores",
     "spongeffects_GSVA_scores",
@@ -21,7 +23,8 @@ sponge_score_names = [
 ]
 
 genewise_scores = ["moranI", "gearyC"]
-
+motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
+cluster_wise_scores = ["diff_motif_activity_top_motifs"]
 
 class Hexagons:
     """
@@ -36,6 +39,7 @@ class Hexagons:
         radius=5,
         scale=0.1,
         data_type="visium",
+        motif_groups=None,
     ):
 
         self.anndata = anndata
@@ -44,6 +48,12 @@ class Hexagons:
         self.geometry_type = "Polygon"
         self.scale = scale
         self.data_type = data_type
+        self.motif_groups = motif_groups or {}
+        self.motif_names = list(anndata.uns["chromvar_motifs"]) if "chromvar_motifs" in anndata.uns else []
+        # mapping for case-insensitive gene lookups
+        self.var_upper_to_name = {
+            g.upper(): g for g in self.anndata.var_names
+        }
         self.coordinates, self.centers = self.parse_coordinates()
         self.obs = self.parse_obs()
 
@@ -111,7 +121,9 @@ class Hexagons:
         """
         if gene is None:
             gene = self.anndata.var.index[0]
-        expressions = self.anndata[barcode, gene].X.toarray()
+
+        original_gene = self.var_upper_to_name.get(gene.upper())
+        expressions = self.anndata[barcode, original_gene].X.toarray()
         if expressions.size == 1:
             return dtype(expressions.flatten()[0])
 
@@ -178,8 +190,6 @@ class Hexagons:
                     break
 
 
-
-
             score_mappings = {
                 "ligand_receptor_relationships": (
                     "ligand_receptor_cosine_similarity",
@@ -206,6 +216,43 @@ class Hexagons:
                         barcode, gene_expression_of_interest
                     )
                     break
+
+
+            # Add motif group scores if chromvar_activity is available
+            if self.motif_groups and "chromvar_activity" in self.anndata.obsm:
+                chromvar_df = self.anndata.obsm["chromvar_activity"]
+
+                # case-insensitive mapping motif_name_upper -> actual column name
+                motif_upper_to_col = {
+                    m.upper(): m for m in chromvar_df.columns
+                }
+
+                # total sum of all motifs
+                all_cols = [
+                    motif_upper_to_col.get(motif_name.upper())
+                    for motif_name in self.motif_names
+                ]
+                all_cols = [c for c in all_cols if c is not None]
+
+                total_sum = float(chromvar_df.loc[barcode, all_cols].sum()) if all_cols else 0.0
+                property_dict["chromvar_total_sum"] = total_sum
+
+                for group_name, motif_list in self.motif_groups.items():
+                    cols_for_group = []
+                    for motif_name in motif_list:
+                        col = motif_upper_to_col.get(motif_name.upper())
+                        if col is not None:
+                            cols_for_group.append(col)
+
+                    if not cols_for_group:
+                        # none of the motifs in this group found, skip
+                        continue
+
+                    group_score = float(
+                        chromvar_df.loc[barcode, cols_for_group].sum()
+                    )
+                    property_dict[f"motif_{group_name}"] = group_score
+
 
             # Add additional properties from obs
             for key, value in self.obs[barcode].items():
@@ -249,6 +296,16 @@ def load_adata(path: str) -> sc.AnnData:
                 columns=spatial_data.uns["liana_columns"][col_names_key],
                 index=spatial_data.obs_names,
             )
+    if (
+        "chromvar_spot_scores" in spatial_data.obsm
+        and "chromvar_motifs" in spatial_data.uns
+    ):
+        motif_names = list(spatial_data.uns["chromvar_motifs"])
+        spatial_data.obsm["chromvar_activity"] = pd.DataFrame(
+            spatial_data.obsm["chromvar_spot_scores"],
+            index=spatial_data.obs_names,
+            columns=motif_names,
+        )
 
     return spatial_data
 
@@ -291,8 +348,21 @@ if __name__ == "__main__":
         help="Output path for the GeoJSON file.",
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--motif_groups",
+        type=str,
+        default=None,#"../backend/data/motif_groups.json",
+        # make this a dict
+            #     motif_groups = {
+            #       "GATA_like": ["m1", "m4"],
+            #       "RUNX": ["m3"],
+            #       "MYC_cluster": ["m10", "m20"],
+            #       }
+        help="JSON dict: {group_name: [motif1, motif2, ...]} for chromVAR motif groups.",
+    )
 
+
+    args = parser.parse_args()
     spatial_data = load_adata(args.adata)
 
     # Sort global liana scores by cosine similarity std
@@ -302,6 +372,8 @@ if __name__ == "__main__":
         "cell_comp_tf_activity_global_scores": "cosine_similarity_std",
         "moranI": "I",
         "gearyC": "C",
+        "chromvar_moranI": "I",
+        "chromvar_gearyC": "C",
     }
     for global_score, sort_key in global_scores_sort_keys.items():
         if global_score in spatial_data.uns:
@@ -309,12 +381,40 @@ if __name__ == "__main__":
                 global_score
             ].sort_values(sort_key, ascending=False)
 
+
+    if args.motif_groups is not None:
+        motif_groups = json.loads(args.motif_groups)
+    else:
+        motif_groups = {"GATA_like": [
+                            "MA0076.3",
+                            "MA0079.5"
+                        ],
+                        "RUNX_like": [
+                            "MA0003.5"
+                        ],
+                        "MYC_cluster": [
+                            "MA0140.3",
+                            "MA0141.4"
+                        ],
+                        "NFkB_like": [
+                            "MA0105.4",
+                            "MA0107.1"
+                        ]
+                        }
+
+
+        #motif_groups = json.loads(args.motif_groups)
+
     hexagons = Hexagons(
         spatial_data,
         radius=args.radius,
         scale=args.scale,
         data_type=args.data_type,
+        motif_groups=motif_groups,
     )
+
+    print("uns keys:", sorted([k for k in spatial_data.uns.keys()
+                          if "moran" in k.lower() or "geary" in k.lower()]))
 
     geojson_data = hexagons.to_geojson()
 
@@ -373,6 +473,18 @@ if __name__ == "__main__":
         meta_dict["interval"] = spatial_data.uns["leiden_co_occurrence"][
             "interval"
         ].tolist()
+
+    # Add differential motif activity top-motif tables
+    if "diff_motif_activity_top_motifs" in spatial_data.uns:
+        meta_dict["diff_motif_activity_top_motifs"] = {}
+
+        for comparison, df in spatial_data.uns["diff_motif_activity_top_motifs"].items():
+            # If stored as DataFrame, convert to table-friendly dict
+            if isinstance(df, pd.DataFrame):
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = df.to_dict()
+            else:
+                # fallback in case it already came in as a plain dict-like object
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = pd.DataFrame(df).to_dict()
 
     geojson_data["meta"] = meta_dict
 
