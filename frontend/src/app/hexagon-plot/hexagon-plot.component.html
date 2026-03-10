@@ -608,48 +608,6 @@
           </div>
         </mat-tab>
 
-    <!-- BEGIN Add spatial correlation score table for chromvar scores -->
-    <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C">
-      <div *ngIf="showMoranI; then moranI; else gearyC"></div>
-      <ng-template #moranI>
-        <h4>ChromVAR Moran's I</h4>
-        <!-- <div *ngIf="colorByProperty === 'chromvar_total_sum'">
-        <button type="button" class="basic-button"
-          (click)="showMoranI = showGearyC">
-          Show
-          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
-        </button>
-        </div> -->
-        <!-- [attr.aria-pressed]="showMoranI" -->
-        <!-- <app-table
-          [data]="this.meta['chromvar_moranI']"
-          [actionColumns]="['chromvar_spot_scores']"
-          [features]="features"
-          [updateColumn]="'chromvar_total_sum'"
-          (featuresUpdated)="updateHexColors()">
-        </app-table> -->
-        <app-table
-        [data]="this.meta['chromvar_moranI']"
-        [actionColumns]="['chromvar_spot_scores', 'Sum_chromvar_spot_scores']"
-        [features]="features"
-        [updateColumn]="'chromvar_total_sum'"
-        (featuresUpdated)="updateHexColors()">
-      </app-table>
-      </ng-template>
-
-      <ng-template #gearyC>
-        <h4>ChromVAR Geary's C</h4>
-        <app-table
-          [data]="this.meta['chromvar_gearyC']"
-          [actionColumns]="['chromvar_spot_scores']"
-          [features]="features"
-          [updateColumn]="'chromvar_total_sum'"
-          (featuresUpdated)="updateHexColors()">
-        </app-table>
-      </ng-template>
-    </mat-tab>
-     <!-- END Add spatial correlation score table for chromvar scores -->
-
      <mat-tab label="Differential Motif Activity" *ngIf="this.meta['diff_motif_activity_top_motifs']">
         <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
           <h4>{{ comparison.key }}</h4>
