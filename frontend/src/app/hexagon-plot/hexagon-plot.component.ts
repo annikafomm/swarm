@@ -37,6 +37,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 
 @Component({
@@ -53,6 +54,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChild('dgeaHeatmap', { static: false }) dgeaHeatmapElement!: ElementRef<HTMLElement>;
   private _resizeHandler: any = null;
   private sub!: Subscription;
+  footprintPlotUrls: SafeResourceUrl[] = [];
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
@@ -73,6 +75,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     private translationService: TranslationService,
     private datasetService: DatasetService,
     private pathsService: PathsService,
+    private sanitizer: DomSanitizer,
   ) {
 
     // Setup dataset observables
@@ -87,7 +90,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     );
 
   }
-
 
 
     // Define to use Math functions in the html template
@@ -370,6 +372,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
 
+  // allow nested tables like for differential motif activity view
+  public asTableData(value: unknown): {
+    [col: string]: { [index: string]: string | number } } | string[] {
+    return value as { [col: string]: { [index: string]: string | number } } | string[];
+    }
+
   ngOnInit(): void {
     // Initialize with default builtin dataset if no dataset is selected
     this.datasetService.availableDatasets$
@@ -417,13 +425,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.dataPath = hexagonPath;
         console.log('✓ Loading hexagon data from', this.dataPath);
 
-                // Clear hexagon-plot container
-                d3.select('#hexbin').selectAll('svg').remove();
-                d3.select('#hexbin-compare').selectAll('svg').remove();
+        // Clear hexagon-plot container
+        d3.select('#hexbin').selectAll('svg').remove();
+        d3.select('#hexbin-compare').selectAll('svg').remove();
+
+        this.footprintPlotUrls = [];
 
         // Load and render new data
         this.createHexagonPlot();
         this.loadAndRenderData(this.dataPath);
+
+        this.renderFootprintPlots(this.selectedDataset);
       } else {
         console.warn('✗ No hexagon path available');
       }
@@ -594,6 +606,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         break;
       case 'Ligand-Receptor Relationships':
         newView = 'ligand_receptor_relationships';
+        break;
+      case "ChromVar spatial correlation : Moran's I / Geary's C":
+        newView = 'chromvar_total_sum';
+        break;
+      case 'Differential Motif Activity':
+        // view should be cell type
+        newView = 'cell_type';
+        break;
     }
 
         console.log('[Tab Change] newView=', newView);
@@ -969,13 +989,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         // Group similar properties together
+        const chromvarKeys = ['chromvar_total_sum'];
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
           {
             key: 'Other', value: this.colorableProperties.filter(
-              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
-            ),
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+            )
           },
         ];
 
@@ -1984,6 +2006,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      // setTimeout(() => this.renderFootprintPlots(), 0);
     }
   }
 
@@ -1999,6 +2023,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCell = this.clusterCells[0];
       setTimeout(() => this.renderNhoodHeatmap(), 100);
       setTimeout(() => this.updateSubgraphGenie3(), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      // setTimeout(() => this.renderFootprintPlots(), 0);
     }
   }
 
@@ -2190,11 +2216,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             .attr('stroke', 'transparent')
             .style('opacity', 0.8);
 
-        // Reinitialize the mouseleave event
-        this.g
-            .selectAll<SVGPathElement, CellFeature>('path')
-            .on('mouseleave', (event, d) => this.mouseLeave(event, d));
-    }
+    // Reinitialize the mouseleave event
+    this.g
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d));
+  }
+
+  private renderFootprintPlots(dataset: Dataset | null): void {
+    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
+      this.sanitizer.bypassSecurityTrustResourceUrl(
+        `${this.sessionService.apiUrl}/api/download/${relativePath}`
+      )
+    );
+  }
 
     private renderNhoodHeatmap(): void {
         if (!this.selectedCell?.properties.leiden_nhood_enrichment) return;
@@ -2925,6 +2959,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             .style("pointer-events", "none");
     }
 }
+
+
+
 
 interface CellGeometry {
     type: 'Polygon';

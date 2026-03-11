@@ -13,6 +13,7 @@ export interface Dataset {
   geojson_path?: string;
   type: 'builtin' | 'uploaded';
   created_at?: string;
+  footprint_list?: string[]; // List of footprint PDF filenames
 }
 
 @Injectable({

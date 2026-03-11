@@ -228,11 +228,58 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.sortAsc = ascending;
   }
 
+  // async fetchAndUpdate(columnName: string, index: string) {
+  //   let isGeneExpression = columnName === 'gene_expression';
+  //   let request = isGeneExpression
+  //     ? `${this.sessionService.apiUrl}/X/${index}`
+  //     : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+  //   this.sessionService
+  //     .callWithSession(() => this.http.get(request, { withCredentials: true }))
+  //     .subscribe({
+  //       next: (res) => {
+  //         const data = res as { [barcode: string]: any };
+
+  //         if (this.features) {
+  //           for (const feature of this.features) {
+  //             const barcode = feature.properties?.barcode;
+  //             if (barcode && data[barcode] !== undefined) {
+  //               feature.properties[this.updateColumn] = data[barcode];
+  //             }
+  //           }
+  //         }
+  //         if (isGeneExpression) {
+  //           console.log(`[Backend] Loaded adata[:, ${index}].X`);
+  //         } else {
+  //           console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+  //         }
+
+  //         this.featuresUpdated.emit();
+  //       },
+  //       error: (err) => {
+  //         if (isGeneExpression) {
+  //           console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+  //         } else {
+  //           console.error(
+  //             `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+  //             err,
+  //           );
+  //         }
+  //       },
+  //     });
+  // }
+
   async fetchAndUpdate(columnName: string, index: string) {
-    let isGeneExpression = columnName === 'gene_expression';
-    let request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${index}`
-      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+    const isGeneExpression = columnName === 'gene_expression';
+    const isChromvar = columnName === 'chromvar_spot_scores';
+
+    const safeIndex = encodeURIComponent(index);
+
+    const request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      : isChromvar
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
@@ -247,8 +294,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
               }
             }
           }
+
           if (isGeneExpression) {
             console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else if (isChromvar) {
+            console.log(`[Backend] Loaded ChromVAR score for motif '${index}'`);
           } else {
             console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
           }
@@ -258,15 +308,15 @@ export class FilterableTableComponent implements OnInit, OnChanges {
         error: (err) => {
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else if (isChromvar) {
+            console.error(`[Backend] Failed to load ChromVAR score for motif '${index}'`, err);
           } else {
-            console.error(
-              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
-              err,
-            );
+            console.error(`[Backend] Failed to load adata.obsm[${columnName}][${index}]`, err);
           }
         },
       });
   }
+
 
   /**
    * Retrieve the computed CSS variable value for --ftable-min-width
@@ -276,4 +326,72 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const minWidth = computedStyle.getPropertyValue('--ftable-min-width').trim();
     return minWidth || '0';
   }
+
+
+  // --- ChromVAR sum state ---
+  private chromvarBaseMotif: string | null = null;
+  private sumMotifs = new Set<string>();
+
+  private getMotifId(row: any): string {
+    return String(row?.motif_id ?? row?.['motif_id']);
+  }
+
+  isSumSelected(row: any): boolean {
+    const id = this.getMotifId(row);
+    return this.sumMotifs.has(id);
+  }
+
+  toggleSumMotif(row: any, checked: boolean): void {
+    const id = this.getMotifId(row);
+    if (!id) return;
+
+    if (checked) this.sumMotifs.add(id);
+    else this.sumMotifs.delete(id);
+
+    // If user already clicked "Show" for a base motif, update the displayed score immediately
+    this.updateChromvarCombinedIfReady();
+  }
+
+  onShowAction(action: string, row: any): void {
+    if (action === 'chromvar_spot_scores') {
+      // base motif comes from motif_id column
+      this.chromvarBaseMotif = this.getMotifId(row);
+      this.updateChromvarCombinedIfReady(true);
+      return;
+    }
+
+    // default behavior (non-chromvar actions)
+    this.fetchAndUpdate(action, String(row.index));
+  }
+
+  private updateChromvarCombinedIfReady(force = false): void {
+    if (!this.chromvarBaseMotif) {
+      // Nothing to show yet until user clicks "Show"
+      return;
+    }
+
+    // combined list = base motif + all checked motifs
+    const motifs = new Set<string>([this.chromvarBaseMotif, ...this.sumMotifs]);
+
+    // If you want "Show" to always hit backend even with no boxes ticked, keep force=true
+    if (!force && motifs.size === 0) return;
+
+    const index = Array.from(motifs).join(','); // backend will split and sum
+    this.fetchAndUpdate('chromvar_spot_scores', index);
+  }
+
+  get selectedSumCount(): number {
+    return this.sumMotifs.size;
+  }
+
+  showSumChromvar(): void {
+    const motifs = Array.from(this.sumMotifs);
+    if (!motifs.length) return;
+
+    //  sum-only (ignores base motif)
+    this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
+
+  }
+
+
 }

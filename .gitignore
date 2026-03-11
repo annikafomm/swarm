@@ -1,7 +1,23 @@
+# Ignore session cookies
+cookies.txt
+
+# Ignore notebooks folder
+notebooks/
+
+# Ignore local proxy config
+frontend/proxy.conf.json
+frontend/package.json
+frontend/package-lock.json
+
 # Ignore all h5ad files
 *.h5ad
 *.parquet
 *.h5
+*.rds
+*.h5Seurat
+
+# ignore logs
+*.log
 
 # Ignore network files
 backend/networks
@@ -15,6 +31,9 @@ backend/calc_R_scores/.Rprofile
 backend/calc_R_scores/.RData*
 
 backend/results/*
+backend/uploads/*
+backend/datasets_runtime/*
+backend/prepro/*
 
 backend/uploads/
 backend/uploads/*
@@ -82,6 +101,10 @@ testem.log
 typings
 .angular
 
+# 3005 vs 3000 port
+frontend/src/app/session.service.ts
+frontend/src/environments/environment.prod.ts
+
 # System files
 .DS_Store
 Thumbs.db
@@ -92,3 +115,5 @@ my-container.sif
 my-custom-image.tar
 apptainer_prompt.txt
 overlay.img
+.vscode/
+backend/calc_multiome_scores/calc_multiome_scores_test.ipynb

@@ -19,6 +19,7 @@ from scipy import io, sparse
 import pandas as pd
 import time
 import subprocess
+from scipy.io import mmwrite
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -31,6 +32,9 @@ from xenium.gridding_mapping import (
     broadcast_grid_to_cells,
 )
 
+
+import anndata as ad
+ad.settings.allow_write_nullable_strings = True
 
 def log_message(msg, logfile, indent=0):
     prefix = " " * indent
@@ -48,6 +52,7 @@ def format_runtime(t0):
 def compute_spatial_scores(adata, description, args, logfile):
     # Calculate spatial scores
     if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
+
 
         if description == "tg":
             log_message("Preparing score calculation for the Tangram output ...", logfile)
@@ -136,14 +141,28 @@ def compute_spatial_scores(adata, description, args, logfile):
         log_message("Saving calculations ...", logfile, 2)
 
     #  TODO: tidy up andata --> delete entries, that are not used further
+    # --- FIX: ensure all obsm DataFrame column names are strings ---
+    for key, val in adata.obsm.items():
+        if isinstance(val, pd.DataFrame):
+            # cast column names to str
+            val.columns = val.columns.astype(str)
+    # ---------------------------------------------------------------
 
     t0 = time.time()
     filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
     adata.write(os.path.join(args.outdir, filename))
+    # Also save with fixed name for downstream multiome processing
+    if description == "tg":
+        adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
+    elif description == "st":
+        adata.write(os.path.join(args.outdir, "adata_st_scores.h5ad"))
     log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 4)
+    log_message(f"R scores params {args.R_scores}", logfile, 4)
 
     # R scores should be calculated
     if args.R_scores:
+        print("Saving expression matrix for R scores ...")
+        log_message("Saving expression matrix for R scores ...", logfile, 4)
         folder_path = os.path.join(args.outdir, f"expr_info_{description}")
         t0 = time.time()
 
@@ -180,8 +199,10 @@ def main():
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
     parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg', 'None'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
     parser.add_argument('-feature_col', type=str, default='', help="Column in adata.var with type of gene")
+    parser.add_argument('-multiome', action='store_true', help='Whether the single-cell data is from a multiome experiment (default: False)')
 
     # liana
     parser.add_argument("-liana", action='store_true', help='Compute Liana')
@@ -219,6 +240,7 @@ def main():
 
     parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
 
+    parser.add_argument('-chromvar', action='store_true', help='chromvar scores present, add geary C and Moran I for chromvar motifs')
 
     args = parser.parse_args()
 
@@ -375,7 +397,7 @@ def main():
                         "python", "../backend/calc_python_scores/calc_tangram.py",
                         "--sc_path", sc_preprocessed,
                         "--sp_path", st_preprocessed,
-                        "--out_path", tangram_out,
+                        "--outdir", args.outdir,
                         "--device", "cpu",
                     ]
 
@@ -387,6 +409,9 @@ def main():
                         cmd += ["--ensembl_col", args.ensembl_col]
                     if args.feature_col:
                         cmd += ["--feature_col", args.feature_col]
+
+                    if args.multiome:
+                        cmd += ["--multiome"]
 
                     log_message(f"Running Tangram in tangram_env ...", logfile, 2)
                     t0 = time.time()

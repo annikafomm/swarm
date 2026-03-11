@@ -66,7 +66,7 @@
 
     <!-- Only visible if Tangram is enabled -->
     <div *ngIf="useTangramChecked()" class="section" [formGroup]="tangramGroup">
-      <label>Upload single-cell dataset (.h5ad):</label>
+      <label>Upload single-cell dataset (.h5ad) file:</label>
       <div class="file">
         <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
         <label for="singleCell" class="file-control">
@@ -109,6 +109,33 @@
     </div>
   </div>
 
+    <!-- Tangram toggle MULTIOME -->
+  <div class="section">
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="useTangramMultiome" />
+      Analyse 10xMultiome data (mapped to spaial data with Tangram)
+    </label>
+
+    <!-- Only visible if Tangram is enabled -->
+    <div *ngIf="useTangramMultiomeChecked()" class="section"> <!-- [formGroup]="tangramGroup">-->
+      <label>Upload multiome dataset (.rds) file:</label>
+      <div class="file">
+        <input id="multiome" type="file" (change)="onFileSelected($event, 'multiome')" accept=".rds">
+        <label for="multiome" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="multiomeFile?.name || 'No file selected'">
+            {{ multiomeFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+
+      <div class="hint" *ngIf="form.get('useTangramMultiome')?.value && !multiomeFile" style="margin-top:6px;">
+        Please upload a multiome file. If multiome and single cell file are uploaded, only multiome will be concidered.
+      </div>
+    </div>
+  </div>
+  <!-- MULTIOME input end-->
+
   <!-- Scores master switches -->
   <div class="section">
     <div class="section-title">Select Gene-Regulatory Scores</div>
@@ -125,6 +152,61 @@
         <input type="checkbox" formControlName="lianaPlus" />
         <span class="score-text">LIANA+</span>
       </label>
+      <!-- Multiome data Scores master switches -->
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="chromVAR" />
+        <span class="score-text">chromVAR</span>
+      </label>
+      <!-- <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="diffMotifActivity" />
+        <span class="score-text">differential chromVar motif Activity</span>
+      </label> -->
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="motifEnrichment" />
+        <span class="score-text">Motif Enrichment</span>
+      </label>
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="FootprintingBias" />
+        <span class="score-text">Footprinting Bias</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- if footprint bias is checked, fragment file + tbi is needed -->
+  <div *ngIf="needFragmentFiles()" class="section"> <!-- [formGroup]="tangramGroup">-->
+    <label>Upload Fragment file for rds file (.tsv.gz)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragments" type="file" (change)="onFileSelected($event, 'fragments')" accept=".gz">
+      <label for="fragments" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsFile?.name || 'No file selected'">
+          {{ fragmentsFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+
+    <label>Upload Fragment tabix file (.tsv.gz.tbi)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragmentsTabix" type="file" (change)="onFileSelected($event, 'fragmentsTabix')" accept=".tbi">
+      <label for="fragmentsTabix" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsTabixFile?.name || 'No file selected'">
+          {{ fragmentsTabixFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Genome for Motif stuff -->
+  <div *ngIf="useTangramMultiomeChecked()" class="section">
+    <div class="field">
+      <label class="field-label">Select Genome</label>
+      <div class="select">
+        <select formControlName="genome">
+          <option value="hg37">hg37</option>
+          <option value="hg38">hg38</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -292,6 +374,89 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ChromVar — options (checkboxes) -->
+  <div *ngIf="form.get('scores.chromVAR')?.value" class="section" formGroupName="chromVAR">
+    <div class="section-title">ChromVAR — options</div>
+
+    <!-- Method checkboxes -->
+    <div class="checkbox-list" formGroupName="methods">
+      <label class="score-option">
+        <input type="checkbox" formControlName="moranI" />
+        <span class="score-text">MoranI</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="gearyC" />
+        <span class="score-text">GearyC</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="differential_motif_activity" />
+        <span class="score-text">Differential Motif Activity</span>
+      </label>
+
+    </div>
+
+    <!-- MoranI -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.moranI')?.value" formGroupName="moranI">
+      <h3> MoranI </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+      <label class="field-label">one-tailed or two-tailed</label>
+      <div class="select">
+        <select formControlName="tails">
+          <option value="oneTailed">one-tailed</option>
+          <option value="twoTailed">two-tailed</option>
+        </select>
+      </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
+    <!-- gearyC -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.gearyC')?.value" formGroupName="gearyC">
+      <h3> GearyC </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+      <label class="field-label">one-tailed or two-tailed</label>
+      <div class="select">
+        <select formControlName="tails">
+          <option value="oneTailed">one-tailed</option>
+          <option value="twoTailed">two-tailed</option>
+        </select>
+      </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
   </div>
 
   <!-- Squidpy — options (checkboxes, multiple methods) -->

@@ -9,6 +9,9 @@ import asyncio
 def dict2params(param_dict):
     python_params = []
     network_params = []
+    multiome_params = []
+    multiome_params_py = []
+    compute_R_scores = False
 
     for key in param_dict.keys():
         match key:
@@ -30,6 +33,15 @@ def dict2params(param_dict):
                             case "single_cell_h5ad":
                                 python_params.append("-sc_path")
                                 python_params.append(param_dict.get(key).get(fkey))
+                            case "multiome_rds":
+                                multiome_params.append("--multiome_rds")
+                                multiome_params.append(param_dict.get(key).get(fkey))
+                            case "fragments_tsv_gz":
+                                multiome_params.append("--fragments_tsv_gz")
+                                multiome_params.append(param_dict.get(key).get(fkey))
+                            case "fragments_tsv_gz_tbi":
+                                multiome_params.append("--fragments_tsv_gz_tbi")
+                                multiome_params.append(param_dict.get(key).get(fkey))
                             case "genie3_network":
                                 network_params.append("--genie_network")
                                 network_params.append(param_dict.get(key).get(fkey))
@@ -62,14 +74,38 @@ def dict2params(param_dict):
                                         python_params.append("-gene_selection")
                                         python_params.append(param_dict.get(key).get(tkey))
 
+            case "multiome":
+                for tkey in param_dict.get(key).keys():
+                    if tkey == "use" and param_dict.get(key).get(tkey):
+                        multiome_params.append("--multiome")
+            case "genome":
+                if param_dict.get(key) is not None:
+                    multiome_params.append("--genome")
+                    multiome_params.append(param_dict.get(key))
             case "scores":
                 for skey in param_dict.get(key).keys():
                     if param_dict.get(key).get(skey):
                         match skey:
                             case "network":
                                 python_params.append("-R_scores")
+                                compute_R_scores = True
                             case "liana_plus":
                                 python_params.append("-liana")
+
+                            case "chromVar":
+                                multiome_params.append("--chromvar")
+                                multiome_params_py.append("-chromvar")
+                                multiome_params_py.append("-moranI")
+                                multiome_params_py.append("-gearyC")
+                            # case "differential_motif_activity":
+                            #     multiome_params.append("--differential_motif_activity")
+                            #     multiome_params_py.append("-differential_motif_activity")
+                            case "motif_enrichment":
+                                multiome_params.append("--motif_enrichment")
+                                multiome_params_py.append("-motif_enrichment")
+                            case "footprinting":
+                                multiome_params.append("--footprinting")
+                                multiome_params_py.append("-footprinting")
 
             case "network":
                 for nkey in param_dict.get(key).keys():
@@ -153,6 +189,7 @@ def dict2params(param_dict):
                                     if param == "corr_method" and score_dict.get(param) is not None:
                                         python_params.append("-corr_method_gC")
                                         python_params.append(score_dict.get(param))
+
                             case "centrality_score":
                                 python_params.append("-centrality_scores")
                                 score_dict = param_dict.get(key).get(f"{skey}_params")
@@ -186,13 +223,44 @@ def dict2params(param_dict):
                                     if param == "n_perms" and score_dict.get(param) is not None:
                                         python_params.append("-n_perms_nhood")
                                         python_params.append(str(int(score_dict.get(param))))
+            case "chromVar":
+                for ckey in param_dict.get(key).keys():
+                    if (not ckey.endswith("_params")) and (param_dict.get(key).get(ckey)):
+                        match ckey:
+                            case "moranI":
+                                multiome_params_py.append("-moranI")
+                                score_dict = param_dict.get(key).get(f"{ckey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-n_perms_autocorr_mI")
+                                        multiome_params_py.append(str(int(score_dict.get(param))))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        multiome_params_py.append("-two_tailed_mI")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-corr_method_mI")
+                                        multiome_params_py.append(score_dict.get(param))
+                            case "gearyC":
+                                multiome_params_py.append("-gearyC")
+                                score_dict = param_dict.get(key).get(f"{ckey}_params")
+                                for param in score_dict.keys():
+                                    if param == "n_perms" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-n_perms_autocorr_gC")
+                                        multiome_params_py.append(str(int(score_dict.get(param))))
+                                    if param == "two_tailed" and score_dict.get(param):
+                                        multiome_params_py.append("-two_tailed_gC")
+                                    if param == "corr_method" and score_dict.get(param) is not None:
+                                        multiome_params_py.append("-corr_method_gC")
+                                        multiome_params_py.append(score_dict.get(param))
+                            case "differential_motif_activity":
+                                multiome_params_py.append("-differential_motif_activity")
+                                multiome_params.append("--differential_motif_activity")
             case "liana":
                 for lkey in param_dict.get(key).keys():
                     if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
                         python_params.append("-cell_comp_key")
                         python_params.append(param_dict.get(key).get(lkey))
 
-    return (python_params, network_params)
+    return (python_params, network_params, multiome_params, compute_R_scores, multiome_params_py)
 
 #          job_dir, payload
 async def calculate_scores_helper(job_dir, json_dict):
@@ -219,7 +287,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                 f.write(str(R_params) + "\n\n")
         else:
             # get parameters from json_dict
-            python_params, R_params = dict2params(json_dict)
+            python_params, R_params, multiome_params, compute_R_scores, multiome_params_py = dict2params(json_dict)
 
             print(python_params)
             print(R_params)
@@ -245,17 +313,46 @@ async def calculate_scores_helper(job_dir, json_dict):
 
 
             # Run scripts sequentially
-            subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
-                            "-dataset", dataset,
-                            "-outdir", out_dir,
-                            "-log", log_file] + python_params,
-                            check=True)
+            if multiome_params:
+                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                                "-dataset", dataset,
+                                "-outdir", out_dir,
+                                "-multiome",
+                                "-log", log_file] + python_params,
+                                check=True)
+            else:
+                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                                "-dataset", dataset,
+                                "-outdir", out_dir,
+                                "-log", log_file] + python_params,
+                                check=True)
+
+            if multiome_params:
+                print("RUNNING CALCULATION OF MULTIOME SCORES")
+                print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
+                                "--outdir", {out_dir},\
+                                "--log", {log_file} + {multiome_params}"')
+                subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
+                                "--outdir", out_dir,
+                                "--log", log_file] + multiome_params,
+                                check=True)
+                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                                "-indir", out_dir,
+                                "-log", log_file,
+                                "-multiome"],
+                                check=True)
+
+                subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
+                                "--dir", out_dir,
+                                "--log", log_file] + multiome_params_py,
+                                check=True)
 
             if [p for p in R_params if p != "--tangram"]:
                 subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
                                 "--dir", out_dir,
                                 "--log", log_file] + R_params,
                                 check=True)
+
 
                 subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
@@ -304,6 +401,7 @@ async def calculate_scores_helper(job_dir, json_dict):
         err_msg = f"Unexpected error: {str(e)}"
         print(err_msg)
         return None
+
 
 if __name__ == "__main__":
 
