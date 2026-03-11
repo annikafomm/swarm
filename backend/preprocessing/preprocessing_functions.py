@@ -3,11 +3,13 @@ import numpy as np
 from scipy.stats import median_abs_deviation
 
 
-# filtering functions 
+# filtering functions
 
-def small_filtering(adata, data_type):
+def small_filtering(adata, data_type, dataset):
     if data_type == "st":
-        adata = adata[adata.obs["in_tissue"] == True, :]
+        if dataset == "visium":
+            adata = adata[adata.obs["in_tissue"] == True, :]
+            print(f"Spots after removing off-tissue spots: {adata.n_obs}")
         mt_threshold = 20
         counts_threshold = 10 # AI: For spatial transcriptomics (like Xenium) typical values are 10–100.
     elif data_type == "sc":
@@ -23,13 +25,17 @@ def small_filtering(adata, data_type):
     adata.obs["mt_outlier"] = adata.obs["pct_counts_mt"] > mt_threshold
     adata = adata[~adata.obs.mt_outlier].copy()
 
-    sc.pp.filter_cells(adata, min_counts=counts_threshold) 
+    sc.pp.filter_cells(adata, min_counts=counts_threshold)
 
-    
-def normalize(adata):
-    sc.pp.normalize_total(adata, target_sum=1e4, inplace=True) # Normalize counts per cell
-    sc.pp.log1p(adata) # Logarithmize
-    sc.pp.pca(adata) # do principal component analysis
+
+def normalize(adata, dataset):
+    # TODO: normalize differently for Xenium
+    if dataset == "visium":
+        sc.pp.normalize_total(adata, target_sum=1e4, inplace=True) # Normalize counts per cell
+        sc.pp.log1p(adata) # Logarithmize
+        sc.pp.pca(adata) # do principal component analysis
+    else:
+        sc.pp.normalize_total(adata, target_sum=1e4, inplace=True)
 
 
 def clustering(adata):
@@ -43,15 +49,15 @@ def clean_qc_columns(adata):
     """Remove common QC-related columns from AnnData .obs, .var, and .uns."""
     # Columns to remove from obs
     obs_cols_to_remove = [
-        'n_genes_by_counts', 'log1p_n_genes_by_counts', 'total_counts', 
-        'log1p_total_counts', 'pct_counts_in_top_20_genes', 'total_counts_mt', 
+        'n_genes_by_counts', 'log1p_n_genes_by_counts', 'total_counts',
+        'log1p_total_counts', 'pct_counts_in_top_20_genes', 'total_counts_mt',
         'log1p_total_counts_mt', 'pct_counts_mt', 'outlier', 'mt_outlier'
     ]
     adata.obs.drop(columns=obs_cols_to_remove, inplace=True, errors="ignore")
 
     # Columns to remove from var
     var_cols_to_remove = [
-        'mt', 'n_cells_by_counts', 'mean_counts', 'log1p_mean_counts', 
+        'mt', 'n_cells_by_counts', 'mean_counts', 'log1p_mean_counts',
         'pct_dropout_by_counts', 'total_counts', 'log1p_total_counts'
     ]
     adata.var.drop(columns=var_cols_to_remove, inplace=True, errors="ignore")

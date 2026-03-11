@@ -22,7 +22,7 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
     Select genes according to the requested strategy. Falls back to overlapping genes
     when no selection is provided.
     """
-    if not selection_mode is None:
+    if selection_mode is not None:
         selection_mode = selection_mode.lower()
 
     # rank_genes_groups (used by ctg/spapros) requires the groupby column to be
@@ -45,22 +45,31 @@ def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
         genes = gene_selection.svg(ad_sp)
         print("[gene_selection] svg")
     else:
-        print("No gene selection performed. All overlapping genes will be used.")
         genes = None
-        print("none")
+        print("[gene_selection] Using all overlapping genes (no selection mode)")
 
-    if not genes is None:
-        genes = list(genes)
-        print(f"[gene_selection] Selected n={len(genes)} genes")
-    else:
-        print(f"[gene_selection] Selected n=0 genes")
+    if genes is None:
+        return None
+
+    genes = list(genes)
+    print(f"[gene_selection] Selected n={len(genes)} genes")
     return genes
 
 
-def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = 'ctg', mode: str = "cells", cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu'):
+def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu', multiome: bool = False):
+    # Tangram preprocessing mutates ad_sc/ad_sp in-place.
+    # We keep copies only to restore spatial metadata + map var annotations later.
     adata_sp_copy = ad_sp.copy()
     adata_sc_copy = ad_sc.copy()
     ad_sc_use = ad_sc.raw.to_adata().copy() if ad_sc.raw is not None else ad_sc.copy()
+    # if multiome -> mode = cells
+    if multiome:
+        mode = "cells"
+        print("[mapping] Multiome mode: mapping individual cells to space (mode='cells').")
+    else:
+        mode = "clusters"
+        print("[mapping] Non-multiome mode: mapping clusters to space (mode='clusters').")
+
 
     # Gene selection
     genes = select_genes(ad_sc_use, ad_sp, gene_selection_mode, cell_label)
@@ -74,7 +83,7 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = 'ctg', 
         if not torch.cuda.is_available():
             #raise RuntimeError("GPU selected but no CUDA device is available.")
             print("[mapping] Using CPU, no CUDA device available")
-            ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cpu", density_prior="uniform", cluster_label=cell_label)
+            ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cpu", cluster_label=cell_label)
             if mode == "clusters":
                 ad_ge = tg.project_genes(ad_map, ad_sc_use, cluster_label=cell_label)
             else:
@@ -82,14 +91,14 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = 'ctg', 
         else:
             print("[mapping] Using GPU (cuda:0) with cluster_label.")
             # M = ad_map.X map dissociated to spatial
-            ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cuda:0", density_prior="uniform", cluster_label=cell_label)
+            ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cuda:0", cluster_label=cell_label)
             if mode == "clusters":
                 ad_ge = tg.project_genes(ad_map, ad_sc_use, cluster_label=cell_label)
             else:
                 ad_ge = tg.project_genes(ad_map, ad_sc_use)
     elif device_choice == "cpu":
         print("[mapping] Using CPU with mode='clusters' and no cluster_label.")
-        ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cpu", density_prior="uniform", cluster_label=cell_label)
+        ad_map = tg.map_cells_to_space(ad_sc_use, ad_sp, mode=mode, device="cpu", cluster_label=cell_label)
         if mode == "clusters":
             ad_ge = tg.project_genes(ad_map, ad_sc_use, cluster_label=cell_label)
         else:
@@ -98,6 +107,7 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = 'ctg', 
         raise ValueError("Invalid device choice. Use 'cpu' or 'gpu'.")
 
     # Project gene expression and cell annotations
+    print("[mapping] Projecting gene expression and cell annotations to space...")
     tg.project_cell_annotations(ad_map, ad_ge, annotation=cell_label)
 
     ad_ge.obsm['spatial'] = adata_sp_copy.obsm['spatial']
@@ -159,4 +169,57 @@ def mapping_entropy_and_mass(ad_map, eps=1e-12):
     spot_mass = M.sum(axis=0)  # total mass per spot
 
     return entropy_per_row, spot_mass
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--sc_path", required=True, help="Pfad zur Single-Cell h5ad")
+    parser.add_argument("--sp_path", required=True, help="Pfad zur Spatial h5ad")
+    parser.add_argument("--multiome", action='store_true', help='Whether the single-cell data is from a multiome experiment (default: False)')
+    parser.add_argument("--outdir", required=True, help="Pfad für Ausgabe-Verzeichnis (Tangram)")
+    parser.add_argument("--gene_selection_mode", default=None, help="ctg/hvg/spapros/svg/None")
+    parser.add_argument("--cell_label", default="cell_type")
+    parser.add_argument("--ensembl_col", default="")
+    parser.add_argument("--feature_col", default="")
+    parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"])
+
+    args = parser.parse_args()
+
+    # Daten laden
+    print("[tangram_cli] Lade Single-Cell AnnData:", args.sc_path)
+    ad_sc = sc.read_h5ad(args.sc_path)
+
+    print("[tangram_cli] Lade Spatial AnnData:", args.sp_path)
+    ad_sp = sc.read_h5ad(args.sp_path)
+
+    # Tangram ausführen
+    ad_ge, adata_map = run_tangram(
+        ad_sc,
+        ad_sp,
+        multiome=args.multiome,
+        gene_selection_mode=args.gene_selection_mode,
+        cell_label=args.cell_label,
+        ensembl_col=args.ensembl_col,
+        feature_col=args.feature_col,
+        device_choice=args.device,
+    )
+
+    # Ergebnis speichern
+    print("[tangram_cli] Schreibe Ergebnis nach:", args.outdir)
+    print(ad_ge)
+    print(ad_ge.obsm["tangram_ct_pred"])
+    ad_ge.obsm["tangram_ct_pred"] = ad_ge.obsm["tangram_ct_pred"].rename(columns=str)
+    ad_ge.write_h5ad(os.path.join(args.outdir, "tangram_output.h5ad"))
+    adata_map.write(os.path.join(args.outdir, "adata_map.h5ad"))
+    # wtite also X as csv and var/obs as csv
+
+    df_adata_map = pd.DataFrame(
+        adata_map.X,  # convert sparse to dense
+        index=adata_map.obs_names,
+        columns=adata_map.var_names)
+    df_adata_map.to_csv(os.path.join(args.outdir, "adata_map.X.csv"))
+    #mmwrite(os.path.join(args.outdir, "adata_map.X.mtx"), adata_map.X)
+    adata_map.var.to_csv(os.path.join(args.outdir, "adata_map.var.csv"))
+    adata_map.obs.to_csv(os.path.join(args.outdir, "adata_map.obs.csv"))
+    print("[tangram_cli] Fertig.")
+
 
