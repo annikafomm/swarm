@@ -120,6 +120,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     private currentPathGenerator!: d3.GeoPath<any, CellFeature>;
 
     private detailSize = 80;
+
+    private detailVisible = false;
+    private detailScreenPos: { x: number; y: number } | null = null;
+    private keydownHandler?: (event: KeyboardEvent) => void;
     // =======================================
 
 
@@ -455,6 +459,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     try {
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler as any);
     } catch (e) { }
+
+    try {
+      if (this.keydownHandler) {
+        window.removeEventListener('keydown', this.keydownHandler);
+      }
+    } catch (e) { }
   }
 
     ngAfterViewInit(): void {
@@ -758,6 +768,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                     this.currentTransform = event.transform;
                 }),
         );
+
+        const zoomBehavior = d3
+            .zoom<SVGSVGElement, unknown>()
+            .scaleExtent([1, 5])
+            .extent([
+                [0, 0],
+                [width, height],
+            ])
+            .on('zoom', (event) => {
+                if (containerName === '#hexbin-compare' && this.g_compare) {
+                    this.g_compare.attr('transform', event.transform.toString());
+                } else if (this.g) {
+                    this.g.attr('transform', event.transform.toString());
+                }
+                this.currentTransform = event.transform;
+            });
+
+        (svgSel as any).call(zoomBehavior);
     }
 
   private initCompareHexagonPlot(): void {
@@ -896,47 +924,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 this.features = data.features;
 
                 if (data.meta) {
-                    // ✅ volle Daten merken
+                    // save all features for potential downsampling in Xenium datasets
                     this.fullFeatures = data.features;
 
-                    // ✅ Xenium erkennen
                     this.isXenium =
                         (data.meta && data.meta["data_type"] === "xenium") ||
                         data.features.length > 50000;
-
-                    // ✅ Base-Daten setzen
+                    if (this.svg) {
+                        if (this.isXenium) {
+                            (this.svg as any).on('dblclick.zoom', null);
+                        }
+                    }
+                    // set base
                     if (this.isXenium) {
                         const target = 10000;
                         const step = Math.ceil(this.fullFeatures.length / target);
                         this.features = this.fullFeatures.filter((_, i) => i % step === 0);
 
-                        // Fenster nur bei Xenium
+                        // window only for xenium
                         this.initDetailWindow();
                         if (this.isXenium) {
-                            let rafPending = false;
-                            let lastMx = 0, lastMy = 0;
 
-                            this.svg.on("mousemove", (event) => {
-                                const [mx, my] = d3.pointer(event);
-                                lastMx = mx; lastMy = my;
-
-                                if (rafPending) return;
-                                rafPending = true;
-
-                                requestAnimationFrame(() => {
-                                    rafPending = false;
-
-                                    this.svg.select("#detail-window")
-                                        .attr("x", lastMx - this.detailSize / 2)
-                                        .attr("y", lastMy - this.detailSize / 2);
-
-                                    this.svg.select("#detail-frame")
-                                        .attr("x", lastMx - this.detailSize / 2)
-                                        .attr("y", lastMy - this.detailSize / 2);
-
-                                    this.updateDetailAtScreenPos(lastMx, lastMy);
-                                });
-                            });
+                            this.initDetailWindow();
+                            this.hideDetailWindow();
+                            this.bindDetailWindowInteractions();
                         }
 
                     } else {
@@ -1312,6 +1323,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                         : d.properties[viewVariablesToUpdate.view];
                     return viewVariablesToUpdate.ordinal(String(raw));
                 });
+        }
+        if (
+            containerName === '#hexbin' &&
+            this.isXenium &&
+            this.detailVisible &&
+            this.detailScreenPos
+        ) {
+            this.showDetailWindowAt(this.detailScreenPos.x, this.detailScreenPos.y);
+            this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
         }
         this.renderLegend(containerName);
     }
@@ -2958,6 +2978,81 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             .attr("stroke-width", 1)
             .style("pointer-events", "none");
     }
+
+    private bindDetailWindowInteractions(): void {
+      if (!this.svg) return;
+
+      // Alte Handler entfernen, damit bei Reloads nichts doppelt gebunden wird
+      this.svg.on('click.detail', null);
+      this.svg.on('dblclick.detail', null);
+      this.svg.on('contextmenu.detail', null);
+
+      // Doppelklick = explizit repositionieren
+      this.svg.on('dblclick.detail', (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const [mx, my] = d3.pointer(event, this.svg.node());
+          this.setDetailWindow(mx, my);
+      });
+
+      // Rechtsklick = entfernen
+      this.svg.on('contextmenu.detail', (event: MouseEvent) => {
+          event.preventDefault();
+          event.stopPropagation();
+          this.clearDetailWindow();
+      });
+
+      // ESC = schließen
+      if (this.keydownHandler) {
+          window.removeEventListener('keydown', this.keydownHandler);
+      }
+
+      this.keydownHandler = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') {
+              this.clearDetailWindow();
+          }
+      };
+
+      window.addEventListener('keydown', this.keydownHandler);
+  }
+
+  private setDetailWindow(screenX: number, screenY: number): void {
+      this.detailVisible = true;
+      this.detailScreenPos = { x: screenX, y: screenY };
+
+      this.showDetailWindowAt(screenX, screenY);
+      this.updateDetailAtScreenPos(screenX, screenY);
+  }
+
+  private clearDetailWindow(): void {
+      this.detailVisible = false;
+      this.detailScreenPos = null;
+      this.hideDetailWindow();
+
+      // Optional: Detail-Layer Inhalte leeren
+      this.detailLayer.selectAll('path').remove();
+  }
+
+  private showDetailWindowAt(screenX: number, screenY: number): void {
+      this.svg.select('#detail-window')
+          .attr('x', screenX - this.detailSize / 2)
+          .attr('y', screenY - this.detailSize / 2)
+          .style('display', null);
+
+      this.svg.select('#detail-frame')
+          .attr('x', screenX - this.detailSize / 2)
+          .attr('y', screenY - this.detailSize / 2)
+          .style('display', null);
+
+      this.detailLayer.style('display', null);
+  }
+
+  private hideDetailWindow(): void {
+      this.svg.select('#detail-window').style('display', 'none');
+      this.svg.select('#detail-frame').style('display', 'none');
+      this.detailLayer.style('display', 'none');
+  }
 }
 
 
