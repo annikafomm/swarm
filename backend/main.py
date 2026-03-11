@@ -1371,6 +1371,11 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
+    # TODO: remove this. just so that hardcodded footprint plot can be used
+    # Prevent path traversal outside uploads dir
+    # if BASE_UPLOAD_DIR not in full_path.parents:
+    #     raise HTTPException(status_code=403, detail="Forbidden")
+
     if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
@@ -1428,5 +1433,5 @@ async def get_X_by_gene(
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
-    # for Merit
-    #uvicorn.run(app, host="0.0.0.0", port=3005)
+    # for merit
+    # uvicorn.run(app, host="0.0.0.0", port=3005)
