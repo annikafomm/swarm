@@ -86,12 +86,14 @@
           </td>
 
           <td *ngFor="let action of availableActionColumns" class="action-col">
-            <!-- Sum column: checkbox -->
-            <ng-container *ngIf="action === 'Sum_chromvar_spot_scores'; else showBtn">
+            <!-- ChromVAR: Show button + checkbox for summing -->
+            <ng-container *ngIf="action === 'chromvar_spot_scores'; else showBtn">
+              <button class="btn btn-pill" (click)="onShowAction(action, row)">Show</button>
               <input
                 type="checkbox"
                 [checked]="isSumSelected(row)"
-                (change)="toggleSumMotif(row, $any($event.target).checked)" />
+                (change)="toggleSumMotif(row, $any($event.target).checked)"
+                title="Add to sum" />
             </ng-container>
 
             <!-- Other action columns: row-level Show button -->
