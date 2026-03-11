@@ -51,7 +51,7 @@ compute_network_scores <- function(description, args, logfile) {
 
   expr <- readMM(file.path(dir_expr, "expr.mtx"))
   rownames(expr) <- fread(file.path(dir_expr, "cells.txt"), header = FALSE)$V1
-  var_df <- fread(file.path(dir_expr, "var.csv"))
+  var_df <- fread(file.path(dir_expr, "var.csv"), header = TRUE)
   expr <- t(as.matrix(expr))
 
   if (nrow(expr) != nrow(var_df)) {
