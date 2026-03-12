@@ -933,11 +933,26 @@ async def upload(
             adata_path = str(saved_files_dict.get("spatial_h5ad"))
             selected_reason = "original_spatial"
 
-        tangram_adata_path = str(out_dir / "tangram_results.h5ad") if (out_dir / "tangram_results.h5ad").exists() else None
 
-        geojson_path = str(out_dir / "hexagons.geojson") if (out_dir / "hexagons.geojson").exists() else None
-        if geojson_path and Path(geojson_path).exists():
+        tangram_adata_path = str(out_dir / "tangram_results.h5ad") if (out_dir / "tangram_results.h5ad").exists() else None
+        geojson_path = os.path.join(job_dir, "hexagons.geojson")
+        if geojson_path:
             out_files["geojson_path"] = f"/api/geojson/{job_id}_{user_safe}"
+            print("geojson_path:", geojson_path)
+            print("geojson input adata:", adata_path)
+            print("geojson data_type:", dataset.lower())
+
+            subprocess.run(
+                [
+                    "python",
+                    "../backend/visium_to_geojson.py",
+                    "--adata", adata_path,
+                    "--outpath", geojson_path,
+                    "--data_type", dataset.lower(),
+                ]
+            )
+            print(f"✓ Generated GeoJSON at {geojson_path}")
+        geojson_path = str(out_dir / "hexagons.geojson") if (out_dir / "hexagons.geojson").exists() else None
 
         # Network files
         if Path(out_dir / "genie_network_filtered_st.csv").exists():

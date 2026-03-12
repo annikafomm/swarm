@@ -446,7 +446,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('leiden_co_occurrence')">
+        <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('co_occurrence')">
           <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
             <div class="co-occurrence-controls">
               <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
