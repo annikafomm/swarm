@@ -112,7 +112,7 @@ for (c in cluster_by_mult) {
       message(paste0("Processing cluster column: ", c, " with cell type: ", ct))
       if (ct %in% available_cts) {
         message(paste0("Adding column ", c, " to metadata"))
-        spot_obj@meta.data[[c]] <- spot_obj@meta.data$cell_type == ct
+        spot_obj@meta.data[[c]] <- ifelse(spot_obj@meta.data$cell_type == ct, ct, "other cells")
       }
     }
   }

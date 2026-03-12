@@ -630,7 +630,7 @@ main <- function() {
 
     # footprinting params
     make_option("--footprinting_motifs", type="character", default="", help="Comma-separated motif IDs to footprint. If empty, uses top motifs from diff_motif_activity_top_motifs.csv / spot_obj@misc when available.", metavar="str"),
-    make_option("--footprinting_top_n", type="integer", default=10, help="Number of top motifs per comparison to use when --footprinting_motifs is empty.", metavar="int"),
+    make_option("--footprinting_top_n", type="integer", default=3, help="Number of top motifs per comparison to use when --footprinting_motifs is empty.", metavar="int"),
 # score flags
     make_option("--chromvar", action="store_true", default=FALSE, help="Calculate chromVAR score"),
     make_option("--differential_motif_activity", action="store_true", default=FALSE, help="Calculate differential motif activity"),
