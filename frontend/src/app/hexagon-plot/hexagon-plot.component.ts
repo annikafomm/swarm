@@ -743,17 +743,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const width = 500;
     const height = 400;
 
-        // use data-join to reuse an existing svg in the container or create a new one
-        const container = d3.select(containerName);
-        const svgSel = container
-            .selectAll('svg')
-            .data([0])
-            .join('svg')
-            .attr('width', width)
-            .attr('height', height)
-            .attr('viewBox', [0, 0, 1200, 1000] as [number, number, number, number])
-            .style('background-color', 'white')
-            .style('overflow', 'hidden');
+    // use data-join to reuse an existing svg in the container or create a new one
+    const container = d3.select(containerName);
+    const svgSel = container
+      .selectAll('svg')
+      .data([0])
+      .join('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', [0, 0, 1200, 1000] as [number, number, number, number])
+      .style('background-color', 'white')
+      .style('overflow', 'hidden');
 
     // create (or reuse) a root group inside the svg
     const gSel = svgSel
@@ -784,7 +784,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('clip-path', 'url(#detail-clip)');
     }
 
-        // attach a zoom handler once (reusing svgSel is safe)
+    // attach a zoom handler once (reusing svgSel is safe)
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
@@ -958,8 +958,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const step = Math.ceil(this.fullFeatures.length / target);
             this.features = this.fullFeatures.filter((_, i) => i % step === 0);
 
-                        // window only for xenium
-                        if (this.isXenium) {
+            // window only for xenium
+            if (this.isXenium) {
 
               this.initDetailWindow();
               this.hideDetailWindow();
@@ -1080,8 +1080,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const height = 1000;
 
         const projection = d3.geoIdentity().fitSize([width, height], {
-            type: 'FeatureCollection',
-            features: (this.isXenium ? this.fullFeatures : this.features),
+          type: 'FeatureCollection',
+          features: (this.isXenium ? this.fullFeatures : this.features),
         });
 
         // Create a geoPath generator with the projection
@@ -1091,10 +1091,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         // Precompute projected centroids for Xenium detail window (performance)
         if (this.isXenium) {
           this.fullFeatures.forEach((f) => {
-             if (!(f.properties as any).__centroidProjected) {
-                const c = this.currentPathGenerator!.centroid(f as any);
-                (f.properties as any).__centroidProjected = c;
-              }
+            if (!(f.properties as any).__centroidProjected) {
+              const c = this.currentPathGenerator!.centroid(f as any);
+              (f.properties as any).__centroidProjected = c;
+            }
           });
         }
 
@@ -1103,47 +1103,47 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
         if (this.isXenium) {
           this.baseLayer
-              .style('cursor', 'default')
-              .style('pointer-events', 'none')
-              .selectAll<SVGPathElement, CellFeature>('path')
-              .data(this.features, (d: any) => d.properties.barcode)
-              .join('path')
-              .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-              .attr('fill', (d: CellFeature) => {
-                  const value = d.properties?.[this.colorByProperty];
-                  if (this.currentLegendType === 'categorical') {
-                      return this.colorScale(String(value));
-                  } else {
-                      const num = this.toNumber(value);
-                      return Number.isFinite(num)
-                          ? this.continuousColorScale(num)
-                          : '#ccc';
-                  }
-              })
-              .style('opacity', 0.8);
+            .style('cursor', 'default')
+            .style('pointer-events', 'none')
+            .selectAll<SVGPathElement, CellFeature>('path')
+            .data(this.features, (d: any) => d.properties.barcode)
+            .join('path')
+            .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+            .attr('fill', (d: CellFeature) => {
+              const value = d.properties?.[this.colorByProperty];
+              if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+              } else {
+                const num = this.toNumber(value);
+                return Number.isFinite(num)
+                  ? this.continuousColorScale(num)
+                  : '#ccc';
+              }
+            })
+            .style('opacity', 0.8);
         } else {
           this.g
-              .style('cursor', 'pointer')
-              .style('pointer-events', null)
-              .selectAll<SVGPathElement, CellFeature>('path')
-              .data(this.features, (d: any) => d.properties.barcode)
-              .join('path')
-              .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-              .attr('fill', (d: CellFeature) => {
-                  const value = d.properties?.[this.colorByProperty];
-                  if (this.currentLegendType === 'categorical') {
-                      return this.colorScale(String(value));
-                  } else {
-                      const num = this.toNumber(value);
-                      return Number.isFinite(num)
-                          ? this.continuousColorScale(num)
-                          : '#ccc';
-                  }
-              })
-              .style('opacity', 0.8)
-              .on('mouseover', (event, d) => this.mouseOver(event, d))
-              .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-              .on('click', (event, d) => this.openSidenav(event, d));
+            .style('cursor', 'pointer')
+            .style('pointer-events', null)
+            .selectAll<SVGPathElement, CellFeature>('path')
+            .data(this.features, (d: any) => d.properties.barcode)
+            .join('path')
+            .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+            .attr('fill', (d: CellFeature) => {
+              const value = d.properties?.[this.colorByProperty];
+              if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+              } else {
+                const num = this.toNumber(value);
+                return Number.isFinite(num)
+                  ? this.continuousColorScale(num)
+                  : '#ccc';
+              }
+            })
+            .style('opacity', 0.8)
+            .on('mouseover', (event, d) => this.mouseOver(event, d))
+            .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+            .on('click', (event, d) => this.openSidenav(event, d));
         }
 
         this.onColorbyPropertyChange();
@@ -2893,25 +2893,26 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .text(legendTitle);
 
     } else {
-      // Categorical legend for compare view
+      // Categorical legend
       const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
       categories.sort();
-      const legendX = -100;
-      const legendY = 10;
+      const legendX = 0;
+      const legendY = 50;
       const itemHeight = 40;
       const rectHeight = 20;
       const rectWidth = 30;
       const fontSize = 24;
       const titlePadding = 15;
+      const padding = 15;
 
-      // Measure using svg_compare
+      // Measure using svg
       const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
       const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
-      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
       const titleWidth =
         tempSvg
           .append('text')
-          .text(titleText)
+          .text(legendTitleCat)
           .style('font-size', `${fontSize}px`)
           .style('font-weight', 'bold')
           .node()
@@ -2930,19 +2931,33 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         : 0;
       tempSvg.remove();
 
-      const itemWidth = Math.max(200, maxTextWidth + 60, titleWidth + 40);
-      const backgroundWidth = itemWidth + 20;
+      const itemWidth = Math.max(200, maxTextWidth + rectWidth + 20, titleWidth + 40);
+      const backgroundWidth = itemWidth + padding * 2;
+      const categoryItemsHeight = categories.length * itemHeight;
       const titleHeight = fontSize * 1.2 + titlePadding;
+      const backgroundHeight = titleHeight + categoryItemsHeight + padding * 2;
 
       const legendG = viewVariablesToUpdate.svg
         .append('g')
         .attr('class', viewVariablesToUpdate.legendContainerName)
         .attr('transform', `translate(${legendX},${legendY})`);
 
-      // Title (categorical compare)
+      // Background rectangle for categorical legend
+      legendG
+        .append('rect')
+        .attr('x', -padding)
+        .attr('y', -padding)
+        .attr('width', backgroundWidth)
+        .attr('height', backgroundHeight)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 5);
+
+      // Title (categorical)
       legendG
         .append('text')
-        .attr('x', backgroundWidth / 2 - 10)
+        .attr('x', backgroundWidth / 2 - padding)
         .attr('y', titlePadding + fontSize / 2)
         .attr('dy', '0.35em')
         .attr('text-anchor', 'middle')
@@ -2999,40 +3014,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const localScale = 6;
 
     this.detailLayer.attr(
-        'transform',
-        `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
+      'transform',
+      `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
     );
 
     const subset = this.fullFeatures.filter((f) => {
-        const c = (f.properties as any).__centroidProjected;
-        if (!c || c.length < 2) return false;
+      const c = (f.properties as any).__centroidProjected;
+      if (!c || c.length < 2) return false;
 
-        const [x, y] = c as [number, number];
-        return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
+      const [x, y] = c as [number, number];
+      return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
     });
 
     this.detailLayer
-        .style('cursor', 'pointer')
-        .selectAll<SVGPathElement, CellFeature>('path')
-        .data(subset)
-        .join('path')
-        .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
-        .attr('fill', (d: CellFeature) => {
-            const value = d.properties?.[this.colorByProperty];
-            if (this.currentLegendType === 'categorical') {
-                return this.colorScale(String(value));
-            } else {
-                const num = this.toNumber(value);
-                return Number.isFinite(num)
-                    ? this.continuousColorScale(num)
-                    : '#ccc';
-            }
-        })
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 0.4)
-        .style('opacity', 1)
-        .on('click', (event, d) => this.openSidenav(event, d));
-}
+      .style('cursor', 'pointer')
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .data(subset)
+      .join('path')
+      .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
+      .attr('fill', (d: CellFeature) => {
+        const value = d.properties?.[this.colorByProperty];
+        if (this.currentLegendType === 'categorical') {
+          return this.colorScale(String(value));
+        } else {
+          const num = this.toNumber(value);
+          return Number.isFinite(num)
+            ? this.continuousColorScale(num)
+            : '#ccc';
+        }
+      })
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 0.4)
+      .style('opacity', 1)
+      .on('click', (event, d) => this.openSidenav(event, d));
+  }
 
 
   private initDetailWindow() {
