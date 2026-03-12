@@ -632,11 +632,6 @@
           <!-- ── Section 2: Compute on demand ───────────────────────────── -->
           <div class="cluster-plots">
             <h4>Compute New Footprint</h4>
-            <p class="helper small">
-              Requires <code>spot_obj_footprints.rds</code> and <code>dissociated_obj_footprints.rds</code>
-              to be present in the job directory (created when the pipeline runs with footprinting enabled).
-            </p>
-
             <div class="footprint-form">
               <!-- Cluster-by selector -->
               <mat-form-field appearance="fill" style="width: 100%;">
@@ -644,7 +639,11 @@
                 <mat-select [(ngModel)]="footprintClusterBy">
                   <mat-option value="cell_type">Cell Type</mat-option>
                   <mat-option value="leiden">Leiden</mat-option>
-                  <mat-option value="seurat_clusters">Seurat Clusters</mat-option>
+                  <mat-optgroup *ngIf="availableCellTypes.length > 0" label="Specific Cell Type (is_…)">
+                    <mat-option *ngFor="let ct of availableCellTypes" [value]="'is_' + ct">
+                      {{ ct }}
+                    </mat-option>
+                  </mat-optgroup>
                 </mat-select>
               </mat-form-field>
 

@@ -58,6 +58,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   footprintPlotUrls: SafeResourceUrl[] = [];
   onDemandFootprintUrls: SafeResourceUrl[] = [];
   availableMotifs: string[] = [];
+  availableCellTypes: string[] = [];
   footprintMotifs: string[] = [];
   motifSearchQuery: string = '';
   footprintClusterBy: string = 'cell_type';
@@ -313,6 +314,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.footprintPlotUrls = [];
         this.onDemandFootprintUrls = [];
         this.availableMotifs = [];
+        this.availableCellTypes = [];
         this.footprintMotifs = [];
         this.motifSearchQuery = '';
         this.footprintComputeError = '';
@@ -2064,9 +2066,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         next: resp => { this.availableMotifs = resp.motifs ?? []; },
         error: () => { this.availableMotifs = []; }
       });
+      this.http.get<{ cell_types: string[] }>(
+        `${this.sessionService.apiUrl}/api/cell_types${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableCellTypes = resp.cell_types ?? []; },
+        error: () => { this.availableCellTypes = []; }
+      });
     } else {
       this.availableMotifs = [];
+      this.availableCellTypes = [];
     }
+    console.log('availableCellTypes:', this.availableCellTypes);
   }
 
   public computeFootprint(): void {

@@ -1383,6 +1383,7 @@ async def get_available_motifs(
     2. Fallback: dataset_id query param → look up adata_path from the registry.
        This handles the rescanned-dataset case where /read_adata was never called.
     """
+    print("[DEBUG] get available motifs")
     adata_path = session_data.adata_path
 
     if not adata_path and dataset_id:
@@ -1405,6 +1406,41 @@ async def get_available_motifs(
         return {"motifs": motifs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load motifs: {e}")
+
+
+@app.get("/api/cell_types", dependencies=[Depends(cookie)])
+async def get_available_cell_types(
+    session_data: SessionData = Depends(verifier),
+    dataset_id: Optional[str] = None,
+):
+    """
+    Return the unique cell types from spot_obj_footprints.rds for the current dataset.
+    Uses a small inline Rscript so no extra dependency is needed.
+    """
+    print("[DEBUG] get available cell types")
+    adata_path = session_data.adata_path
+
+    if not adata_path and dataset_id:
+        ds = dataset_registry.get_dataset_by_id(dataset_id)
+        if not ds:
+            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
+        adata_path = ds.get("adata_path")
+
+    if not adata_path:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset loaded in session and no dataset_id provided. "
+                   "Either call /read_adata or pass ?dataset_id=<id>."
+        )
+    print(f"[DEBUG] adata_path = {adata_path}")
+    try:
+        adata = _load_adata_cached(adata_path)
+        cell_types = list(adata.obs["cell_type"].unique())
+        print(f"[get_available_cell_types] Found cell types: {cell_types}, dataset_id={dataset_id}")
+        
+        return {"cell_types": cell_types}
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="Rscript timed out reading cell types")
 
 
 @app.post("/api/compute_footprint", dependencies=[Depends(cookie)])

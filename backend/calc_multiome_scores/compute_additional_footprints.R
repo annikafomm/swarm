@@ -102,18 +102,22 @@ message("reading spot object...")
 spot_obj <- readRDS(spot_rds)
 
 
+available_cts <- unique(spot_obj@meta.data$cell_type)
+message(paste0("Available cell types in spot_obj: ", paste(available_cts, collapse = ", ")))
 # handle clusters: is_celltype: needs to be added in obs columns
 for (c in cluster_by_mult) {
   if (!(c %in% colnames(spot_obj@meta.data))) {
     if (startsWith(c, "is_")) {
       ct <- sub("^is_", "", c)
-      if (ct %in% unique(spot_obj@meta.data$cell_type)) {
-        spot_obj@meta.data$c <- spot_obj@meta.data$cell_type == ct
+      message(paste0("Processing cluster column: ", c, " with cell type: ", ct))
+      if (ct %in% available_cts) {
+        message(paste0("Adding column ", c, " to metadata"))
+        spot_obj@meta.data[[c]] <- spot_obj@meta.data$cell_type == ct
       }
     }
   }
 }
-message(paste0("cluster_by", cluster_by))
+message(paste0("cluster_by ", cluster_by))
 cluster_by_mult <- Filter(function(cl) cl %in% colnames(spot_obj@meta.data), unique(c(cluster_by_mult, cluster_by)))
 message(paste0("cluster_by_mult: ", paste(cluster_by_mult, collapse = ", ")))
 message(paste0("Available metadata columns in spot_obj: ", paste(colnames(spot_obj@meta.data), collapse = ", ")))
