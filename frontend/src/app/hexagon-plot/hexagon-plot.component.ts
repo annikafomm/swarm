@@ -38,11 +38,13 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { MatInputModule } from '@angular/material/input';
+
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader, MatInputModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -55,6 +57,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private _resizeHandler: any = null;
   private sub!: Subscription;
   footprintPlotUrls: SafeResourceUrl[] = [];
+  onDemandFootprintUrls: SafeResourceUrl[] = [];
+  availableMotifs: string[] = [];
+  footprintMotif: string = '';
+  footprintClusterBy: string = 'cell_type';
+  isComputingFootprint: boolean = false;
+  footprintComputeError: string = '';
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
@@ -436,6 +444,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         d3.select('#hexbin-compare').selectAll('svg').remove();
 
         this.footprintPlotUrls = [];
+        this.onDemandFootprintUrls = [];
+        this.availableMotifs = [];
+        this.footprintMotif = '';
+        this.footprintComputeError = '';
 
         // Load and render new data
         this.createHexagonPlot();
@@ -731,17 +743,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const width = 500;
     const height = 400;
 
-    // use data-join to reuse an existing svg in the container or create a new one
-    const container = d3.select(containerName);
-    const svgSel = container
-      .selectAll('svg')
-      .data([0])
-      .join('svg')
-      .attr('width', width)
-      .attr('height', height)
-      .attr('viewBox', [0, 0, 1000, 1000] as [number, number, number, number])
-      .style('background-color', 'white')
-      .style('overflow', 'hidden');
+        // use data-join to reuse an existing svg in the container or create a new one
+        const container = d3.select(containerName);
+        const svgSel = container
+            .selectAll('svg')
+            .data([0])
+            .join('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('viewBox', [0, 0, 1200, 1000] as [number, number, number, number])
+            .style('background-color', 'white')
+            .style('overflow', 'hidden');
 
     // create (or reuse) a root group inside the svg
     const gSel = svgSel
@@ -772,24 +784,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('clip-path', 'url(#detail-clip)');
     }
 
-    // attach a zoom handler once (reusing svgSel is safe)
-    (svgSel as any).call(
-      d3
-        .zoom<SVGSVGElement, unknown>()
-        .scaleExtent([1, 5])
-        .extent([
-          [0, 0],
-          [width, height],
-        ])
-        .on('zoom', (event) => {
-          if (containerName === '#hexbin-compare' && this.g_compare) {
-            this.g_compare.attr('transform', event.transform.toString());
-          } else if (this.g) {
-            this.g.attr('transform', event.transform.toString());
-          }
-          this.currentTransform = event.transform;
-        }),
-    );
+        // attach a zoom handler once (reusing svgSel is safe)
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
@@ -963,9 +958,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const step = Math.ceil(this.fullFeatures.length / target);
             this.features = this.fullFeatures.filter((_, i) => i % step === 0);
 
-            // window only for xenium
-            this.initDetailWindow();
-            if (this.isXenium) {
+                        // window only for xenium
+                        if (this.isXenium) {
 
               this.initDetailWindow();
               this.hideDetailWindow();
@@ -1086,39 +1080,71 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const height = 1000;
 
         const projection = d3.geoIdentity().fitSize([width, height], {
-          type: 'FeatureCollection',
-          features: (this.isXenium ? this.fullFeatures : this.features),
+            type: 'FeatureCollection',
+            features: (this.isXenium ? this.fullFeatures : this.features),
         });
 
         // Create a geoPath generator with the projection
         this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
         const pathGenerator = this.currentPathGenerator;
 
+        // Precompute projected centroids for Xenium detail window (performance)
+        if (this.isXenium) {
+          this.fullFeatures.forEach((f) => {
+             if (!(f.properties as any).__centroidProjected) {
+                const c = this.currentPathGenerator!.centroid(f as any);
+                (f.properties as any).__centroidProjected = c;
+              }
+          });
+        }
+
+
 
         // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
-        const drawLayer = (this.isXenium ? this.baseLayer : this.g) as unknown as d3.Selection<SVGGElement, any, any, any>;
-
-        (drawLayer
-          .style('cursor', 'pointer')
-          .selectAll('path') as unknown as d3.Selection<SVGPathElement, CellFeature, any, any>)
-          .data(this.features)
-          .join('path')
-          .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-          .attr('fill', (d: CellFeature) => {
-            const value = d.properties?.[this.colorByProperty];
-            if (this.currentLegendType === 'categorical') {
-              return this.colorScale(String(value));
-            } else {
-              const num = this.toNumber(value);
-              return Number.isFinite(num)
-                ? this.continuousColorScale(num)
-                : '#ccc';
-            }
-          })
-          .style('opacity', 0.8)
-          .on('mouseover', (event, d) => this.mouseOver(event, d))
-          .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-          .on('click', (event, d) => this.openSidenav(event, d));
+        if (this.isXenium) {
+          this.baseLayer
+              .style('cursor', 'default')
+              .style('pointer-events', 'none')
+              .selectAll<SVGPathElement, CellFeature>('path')
+              .data(this.features, (d: any) => d.properties.barcode)
+              .join('path')
+              .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+              .attr('fill', (d: CellFeature) => {
+                  const value = d.properties?.[this.colorByProperty];
+                  if (this.currentLegendType === 'categorical') {
+                      return this.colorScale(String(value));
+                  } else {
+                      const num = this.toNumber(value);
+                      return Number.isFinite(num)
+                          ? this.continuousColorScale(num)
+                          : '#ccc';
+                  }
+              })
+              .style('opacity', 0.8);
+        } else {
+          this.g
+              .style('cursor', 'pointer')
+              .style('pointer-events', null)
+              .selectAll<SVGPathElement, CellFeature>('path')
+              .data(this.features, (d: any) => d.properties.barcode)
+              .join('path')
+              .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+              .attr('fill', (d: CellFeature) => {
+                  const value = d.properties?.[this.colorByProperty];
+                  if (this.currentLegendType === 'categorical') {
+                      return this.colorScale(String(value));
+                  } else {
+                      const num = this.toNumber(value);
+                      return Number.isFinite(num)
+                          ? this.continuousColorScale(num)
+                          : '#ccc';
+                  }
+              })
+              .style('opacity', 0.8)
+              .on('mouseover', (event, d) => this.mouseOver(event, d))
+              .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+              .on('click', (event, d) => this.openSidenav(event, d));
+        }
 
         this.onColorbyPropertyChange();
         setTimeout(() => {
@@ -2273,6 +2299,52 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         `${this.sessionService.apiUrl}/api/download/${relativePath}`
       )
     );
+    // Load available motifs for the on-demand compute form.
+    // Pass dataset_id so the backend can resolve the adata path even when
+    // /read_adata has not been called yet (e.g. rescanned datasets).
+    if (dataset) {
+      const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
+      this.http.get<{ motifs: string[] }>(
+        `${this.sessionService.apiUrl}/api/motifs${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableMotifs = resp.motifs ?? []; },
+        error: () => { this.availableMotifs = []; }
+      });
+    } else {
+      this.availableMotifs = [];
+    }
+  }
+
+  public computeFootprint(): void {
+    if (!this.footprintMotif) return;
+    this.isComputingFootprint = true;
+    this.footprintComputeError = '';
+    const body = new FormData();
+    body.append('motif', this.footprintMotif);
+    body.append('cluster_by', this.footprintClusterBy);
+    // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
+    if (this.selectedDataset?.id) {
+      body.append('dataset_id', this.selectedDataset.id);
+    }
+    this.http.post<{ footprint_url: string; relative_path: string }>(
+      `${this.sessionService.apiUrl}/api/compute_footprint`,
+      body,
+      { withCredentials: true }
+    ).subscribe({
+      next: resp => {
+        this.isComputingFootprint = false;
+        const url = this.sanitizer.bypassSecurityTrustResourceUrl(
+          `${this.sessionService.apiUrl}${resp.footprint_url}`
+        );
+        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, url];
+      },
+      error: err => {
+        this.isComputingFootprint = false;
+        this.footprintComputeError =
+          err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+      }
+    });
   }
 
   private renderNhoodHeatmap(): void {
@@ -2916,7 +2988,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const y0s = screenY - half;
     const y1s = screenY + half;
 
-    // Screen → projizierte Koordinaten (gleiches System wie geoPath)
     const [x0d, y0d] = this.currentTransform.invert([x0s, y0s]);
     const [x1d, y1d] = this.currentTransform.invert([x1s, y1s]);
 
@@ -2928,43 +2999,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const localScale = 6;
 
     this.detailLayer.attr(
-      'transform',
-      `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
+        'transform',
+        `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
     );
 
-    // ⬇️ WICHTIG: wieder geoPath.centroid verwenden, nicht properties.centroid
     const subset = this.fullFeatures.filter((f) => {
-      const c = this.currentPathGenerator!.centroid(f as any);
-      if (!c || c.length < 2) return false;
+        const c = (f.properties as any).__centroidProjected;
+        if (!c || c.length < 2) return false;
 
-      const [x, y] = c as [number, number];  // hier der kleine Type-Cast
-      return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
+        const [x, y] = c as [number, number];
+        return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
     });
 
     this.detailLayer
-      .style('cursor', 'pointer')
-      .selectAll<SVGPathElement, CellFeature>('path')
-      .data(subset)
-      .join('path')
-      .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
-      .attr('fill', (d: CellFeature) => {
-        const value = d.properties?.[this.colorByProperty];
-        if (this.currentLegendType === 'categorical') {
-          return this.colorScale(String(value));
-        } else {
-          const num = this.toNumber(value);
-          return Number.isFinite(num)
-            ? this.continuousColorScale(num)
-            : '#ccc';
-        }
-      })
-      .attr('stroke', '#fff')
-      .attr('stroke-width', 0.4)
-      .style('opacity', 1)
-      .on('mouseover', (event, d) => this.mouseOver(event, d))
-      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-      .on('click', (event, d) => this.openSidenav(event, d));
-  }
+        .style('cursor', 'pointer')
+        .selectAll<SVGPathElement, CellFeature>('path')
+        .data(subset)
+        .join('path')
+        .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
+        .attr('fill', (d: CellFeature) => {
+            const value = d.properties?.[this.colorByProperty];
+            if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+            } else {
+                const num = this.toNumber(value);
+                return Number.isFinite(num)
+                    ? this.continuousColorScale(num)
+                    : '#ccc';
+            }
+        })
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.4)
+        .style('opacity', 1)
+        .on('click', (event, d) => this.openSidenav(event, d));
+}
 
 
   private initDetailWindow() {
