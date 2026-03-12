@@ -33,6 +33,9 @@ backend/uploads/*
 backend/datasets_runtime/*
 backend/prepro/*
 
+backend/uploads/
+backend/uploads/*
+
 .Rproj.user
 
 settings.json
@@ -43,6 +46,8 @@ backend/.DS_Store
 # Python Cache
 __pycache__/
 *.py[cod]
+
+frontend/public/assets/hexagons_Xenium.geojson
 
 backend/datasets_scores/*
 frontend/uploads/*

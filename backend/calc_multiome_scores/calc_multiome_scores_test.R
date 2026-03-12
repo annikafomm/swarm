@@ -428,6 +428,8 @@ global_motif_analysis <- function(object, args, logfile) {
     # object[["chromvar"]]@data      # motif deviation scores (motifs × cells)
     # object[["chromvar"]]@meta.features  # motif-level metadata, if present
     log_message("Running chromVAR...", logfile, 2)
+    library(BiocParallel)
+    register(SerialParam())
     object <- RunChromVAR(object = object, genome = genome, assay = "peaks")
 
     # save chromVAR scores

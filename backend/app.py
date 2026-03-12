@@ -69,6 +69,11 @@ def dict2params(param_dict):
                                     python_params.append("-filter_sc")
                                 case "normalization":
                                     python_params.append("-normalize_sc")
+                                case "gene_selection_mode":
+                                    if param_dict.get(key).get(tkey) is not None and param_dict.get(key).get(tkey) != "None":
+                                        python_params.append("-gene_selection")
+                                        python_params.append(param_dict.get(key).get(tkey))
+
             case "multiome":
                 for tkey in param_dict.get(key).keys():
                     if tkey == "use" and param_dict.get(key).get(tkey):
@@ -86,6 +91,7 @@ def dict2params(param_dict):
                                 compute_R_scores = True
                             case "liana_plus":
                                 python_params.append("-liana")
+
                             case "chromVar":
                                 multiome_params.append("--chromvar")
                                 multiome_params_py.append("-chromvar")
@@ -248,7 +254,6 @@ def dict2params(param_dict):
                             case "differential_motif_activity":
                                 multiome_params_py.append("-differential_motif_activity")
                                 multiome_params.append("--differential_motif_activity")
-
             case "liana":
                 for lkey in param_dict.get(key).keys():
                     if lkey == "composition_column" and param_dict.get(key).get(lkey) is not None:
@@ -284,54 +289,96 @@ async def calculate_scores_helper(job_dir, json_dict):
             # get parameters from json_dict
             python_params, R_params, multiome_params, compute_R_scores, multiome_params_py = dict2params(json_dict)
 
-        print(python_params)
-        print("these are R_params:")
-        print(R_params)
+            print(python_params)
+            print(R_params)
+            only_input = (
+                len(python_params) == 2 and
+                python_params[0] == "-input" and
+                not R_params
+            )
 
-        subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
-                            "-outdir", out_dir,
-                            "-log", log_file] + python_params,
-                            check=True)
-
-        if multiome_params:
-            print("RUNNING CALCULATION OF MULTIOME SCORES")
-            print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
-                            "--outdir", {out_dir},\
-                            "--log", {log_file} + {multiome_params}"')
-            subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
-                            "--outdir", out_dir,
-                            "--log", log_file] + multiome_params,
-                            check=True)
-            subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
-                            "-indir", out_dir,
-                            "-log", log_file,
-                            "-multiome"],
-                            check=True)
-
-            subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
-                            "--dir", out_dir,
-                            "--log", log_file] + multiome_params_py,
-                            check=True)
+            if only_input:
+                msg = "No scores/tangram/network selected – skipping score pipeline."
+                print(msg)
+                with open(log_file, "a") as f:
+                    f.write(msg + "\n")
+                # Du kannst hier einfach out_dir zurückgeben oder sogar None
+                return out_dir
 
 
-        if [p for p in R_params if p != "--tangram"] or compute_R_scores:
-            subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
-                            "--dir", out_dir,
-                            "--log", log_file] + R_params,
-                            check=True)
+            dataset_value = json_dict.get("dataset", "Visium")  # Default = Visium
+            dataset = dataset_value.lower()                    # "visium" oder "xenium"
 
-            subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
-                            "-indir", out_dir,
-                            "-log", log_file,
-                            "-Rscores"],
-                            check=True)
+            print("Using dataset type:", dataset)
 
-            # delete temporary folders
-            for folder in ["expr_info_st", "Rscores_st", "expr_info_tg", "Rscores_tg"]:
-                path = os.path.join(out_dir, folder)
-                if os.path.exists(path):
-                    shutil.rmtree(path)  # removes the whole folder tree
 
+            # Run scripts sequentially
+            if multiome_params:
+                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                                "-dataset", dataset,
+                                "-outdir", out_dir,
+                                "-multiome",
+                                "-log", log_file] + python_params,
+                                check=True)
+            else:
+                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                                "-dataset", dataset,
+                                "-outdir", out_dir,
+                                "-log", log_file] + python_params,
+                                check=True)
+
+            if multiome_params:
+                print("RUNNING CALCULATION OF MULTIOME SCORES")
+                print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
+                                "--outdir", {out_dir},\
+                                "--log", {log_file} + {multiome_params}"')
+                subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
+                                "--outdir", out_dir,
+                                "--log", log_file] + multiome_params,
+                                check=True)
+                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                                "-indir", out_dir,
+                                "-log", log_file,
+                                "-multiome"],
+                                check=True)
+
+                subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
+                                "--dir", out_dir,
+                                "--log", log_file] + multiome_params_py,
+                                check=True)
+
+            if [p for p in R_params if p != "--tangram"]:
+                subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
+                                "--dir", out_dir,
+                                "--log", log_file] + R_params,
+                                check=True)
+
+
+                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                                "-indir", out_dir,
+                                "-log", log_file],
+                                check=True)
+
+                # delete temporary folders
+                for folder in ["expr_info_st", "Rscores_st", "expr_info_tg", "Rscores_tg"]:
+                    path = os.path.join(out_dir, folder)
+                    if os.path.exists(path):
+                        shutil.rmtree(path)  # removes the whole folder tree
+            # back mapping
+            if dataset == "xenium":
+                tangram_used = "-tangram" in python_params or "--tangram" in R_params
+                print("Tangram used:", tangram_used)
+                print("Running back mapping for Xenium...")
+                cmd = [
+                    "python3", "../backend/xenium/compute_backmapping.py",
+                    "-indir", out_dir,
+                    "-log", log_file
+                ]
+
+                if tangram_used:
+                    cmd.append("-tangram")
+
+                subprocess.run(cmd, check=True)
 
         # finish the log file
         message = f"Finished! Check out the log file and the AnnData object(s) in {out_dir} for details."

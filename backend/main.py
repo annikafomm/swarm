@@ -85,6 +85,13 @@ class Dataset(str, Enum):
     Visium = "Visium"
     Xenium = "Xenium"
 
+class GeneSelectionMode(str, Enum):
+    ctg = "ctg"
+    hvg = "hvg"
+    spapros = "spapros"
+    svg = "svg"
+    none = "None"
+
 class Genome(str, Enum):
     Visium = "hg37"
     Xenium = "hg38"
@@ -267,6 +274,29 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
             )
 
     return adata
+
+GRID_PREFIX = "grid_"
+
+def strip_grid_prefix_dict(d: dict, prefix: str = GRID_PREFIX) -> dict:
+    out = {}
+    for k, v in d.items():
+        if k.startswith(prefix):
+            out[k[len(prefix):]] = v
+        else:
+            out[k] = v
+    return out
+
+def prefer_unprefixed_then_grid(adata, key: str, prefix: str = GRID_PREFIX) -> str | None:
+    """
+    Return the key that exists: prefer key, else prefix+key, else None
+    """
+    if key in adata.obs.columns:
+        return key
+    k2 = f"{prefix}{key}"
+    if k2 in adata.obs.columns:
+        return k2
+    return None
+
 
 def _sanitize_filename(name: str) -> str:
     """
@@ -477,7 +507,7 @@ async def log_requests(request: Request, call_next):
 async def upload(
     # --- core ---
     email: Optional[str] = Form(None),
-    dataset: str = Form(...),
+    dataset: Dataset = Form(...),
     # Spatial
     spatial_h5ad: UploadFile = File(...),
     spatial_normalization: bool = Form(False),
@@ -487,6 +517,7 @@ async def upload(
     single_cell_h5ad: Optional[UploadFile] = File(None),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
+    gene_selection_mode: Optional[GeneSelectionMode] = Form(None),
     # Multiome
     use_multiome: bool = Form(False),
     multiome_rds: Optional[UploadFile] = File(None),
@@ -504,7 +535,7 @@ async def upload(
     score_motif_enrichment: bool = Form(False),
     score_FootprintingBias: bool = Form(False),
 
-    genome: str = Form(...),
+    genome: str = Form(None),
 
     # Network Algos
     alg_viper: bool = Form(False),
@@ -638,7 +669,7 @@ async def upload(
     # 4) Build response payload
     payload = {
         "email": str(email),
-        "dataset": dataset,
+        "dataset": dataset.value,
         "spatial": {
             "normalization": spatial_normalization,
             "filtering": spatial_filtering,
@@ -646,9 +677,11 @@ async def upload(
         "files": saved_files,
         "tangram": {
             "use": use_tangram,
-            # Dateien/Parameter nur füllen, wenn Tangram aktiv:
             "filtering": singlecell_filtering if use_tangram else None,
             "normalization": singlecell_normalization if use_tangram else None,
+            "gene_selection_mode": (
+                gene_selection_mode.value if (use_tangram and gene_selection_mode) else None
+            ),
         },
         "multiome": {
             "use": use_multiome,
@@ -742,88 +775,120 @@ async def upload(
 
     out_dir = await calculate_scores_helper(job_dir, payload)
 
+    # Xenium: scores are computed on a grid/spot representation, then broadcast back to cells.
+    # For the web app we prefer the *cell-level* AnnData (xenium_cells_with_grid_scores.h5ad).
+    # If not available, we fall back to spot-level (st_scores.h5ad) or the original upload.
+
+
+    print("\n=== DEBUG upload() ===")
+    print("dataset:", dataset.value)
+    print("job_dir:", job_dir)
+    print("out_dir:", out_dir)
+
+    if out_dir is not None:
+        print("files in out_dir:", sorted(os.listdir(out_dir)))
+    else:
+        print("out_dir is None (pipeline returned None)")
+
     adata_path = None
+    selected_reason = None
     tangram_adata_path = None
     out_files = {}
 
     if out_dir is not None:
-        print(f"Output directory: {out_dir}")
+        for filename in os.listdir(out_dir):
+            if filename.endswith("xenium_cells_with_grid_scores.h5ad") and dataset == Dataset.Xenium:
+                adata_path = os.path.join(out_dir, filename)
+                selected_reason = "Found xenium cell-level output"
+                break
 
-        # Search for h5ad files recursively in case they're in subdirectories
-        for root, dirs, files in os.walk(out_dir):
-            for filename in files:
+        if adata_path is None:
+            for filename in os.listdir(out_dir):
                 if filename.endswith("st_scores.h5ad"):
-                    adata_path = os.path.join(root, filename)
-                    print(f"Found adata: {adata_path}")
-                if filename.endswith("tg_scores.h5ad"):
-                    tangram_adata_path = os.path.join(root, filename)
-                    print(f"Found tangram adata: {tangram_adata_path}")
+                    adata_path = os.path.join(out_dir, filename)
+                    selected_reason = "Fallback to grid-level st_scores (cell-level missing)"
+                    break
 
-        # Create geojson from adata if found
-        if adata_path is not None:
-            out_files["adata_path"] = adata_path
+        if filename.endswith("tg_scores.h5ad"):
+            tangram_adata_path = os.path.join(out_dir, filename)
 
-            # Create hexagons.geojson in the job_dir (root), not in nested dir
-            hexagon_output = os.path.join(job_dir, "hexagons.geojson")
-            subprocess.run(
-                [
-                    "python",
-                    "../backend/visium_to_geojson.py",
-                    "--adata",
-                    adata_path,
-                    "--outpath",
-                    hexagon_output,
-                ]
-            )
-            out_files["geojson_path"] = hexagon_output
-            print(f"Created geojson at: {hexagon_output}")
+        if filename.endswith("xenium_tg_scores.h5ad"):
+            tangram_adata_path = os.path.join(out_dir, filename)
 
-        # Look for network files in both the output dir and subdirectories
-        for root, dirs, files in os.walk(out_dir):
-            for filename in files:
-                if filename == "genie_network_filtered_st.csv":
-                    out_files["genie_network_path"] = os.path.join(root, filename)
-                    print(f"Found genie network: {out_files['genie_network_path']}")
-                if filename == "sponge_network_filtered_st.csv":
-                    out_files["sponge_network_path"] = os.path.join(root, filename)
-                    print(f"Found sponge network: {out_files['sponge_network_path']}")
+        print("selected adata_path:", adata_path)
+        print("selection reason:", selected_reason)
 
-        payload["output_files"] = out_files
 
-        # Only register if we have an adata file
-        if adata_path is not None:
-            dataset_id = f"{job_id}_{user_safe}"
 
-            email_prefix = str(email.split("@")[0]) if email else "unknown"
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-            dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+    if adata_path is None:
+        adata_path = saved_files.get("spatial_h5ad")
+        selected_reason = "Fallback to uploaded spatial_h5ad (no pipeline output found)"
+        print("WARNING:", selected_reason)
 
-            footprint_list = [
-                str(Path(out_dir).relative_to(BASE_UPLOAD_DIR) / f)
-                for f in os.listdir(out_dir)
-                if f.startswith("footprint") and f.endswith(".pdf")
+    if out_dir is None:
+        out_dir = job_dir
+
+    if adata_path is not None:
+        dataset_id = f"{job_id}_{user_safe}"
+
+        email_prefix = str(email.split("@")[0]) if email else "unknown"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
+        out_files["adataPath"] = adata_path
+
+        data_type = dataset.value.lower()
+        footprint_list = [
+            str(Path(out_dir).relative_to(BASE_UPLOAD_DIR) / f)
+            for f in os.listdir(out_dir)
+            if f.startswith("footprint") and f.endswith(".pdf")
+        ]
+        dataset_registry.register_uploaded_dataset(
+            dataset_id=dataset_id,
+            alias=dataset_alias,
+            adata_path=adata_path,
+            tangram_adata_path=tangram_adata_path if use_tangram else None,
+            genie_network_path=out_files.get("genie_network_path"),
+            sponge_network_path=out_files.get("sponge_network_path"),
+            geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
+            user=user_safe,
+            dataset_type=dataset,
+            use_tangram=use_tangram,
+            created_at=datetime.now().isoformat(),
+            footprint_list=footprint_list,
+            # TODO Add paths for multiome
+        )
+
+        geojson_out = os.path.join(job_dir, "hexagons.geojson")
+        print("geojson_out:", geojson_out)
+        print("geojson input adata:", adata_path)
+        print("geojson data_type:", dataset.value.lower())
+
+        # Convert selected AnnData to GeoJSON for map rendering.
+        subprocess.run(
+            [
+                "python",
+                "../backend/visium_to_geojson.py",
+                "--adata",
+                adata_path,
+                "--outpath",
+                geojson_out,
+                "--data_type",
+                data_type,
             ]
-            dataset_registry.register_uploaded_dataset(
-                dataset_id=dataset_id,
-                alias=dataset_alias,
-                adata_path=adata_path,
-                tangram_adata_path=tangram_adata_path if use_tangram else None,
-                genie_network_path=out_files.get("genie_network_path"),
-                sponge_network_path=out_files.get("sponge_network_path"),
-                geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
-                user=user_safe,
-                dataset_type=dataset,
-                use_tangram=use_tangram,
-                created_at=datetime.now().isoformat(),
-                footprint_list=footprint_list,
-                # TODO Add paths for multiome
-            )
+        )
+        out_files["geojsonPath"] = os.path.join(out_dir, "hexagons.geojson")
+        print("geojson exists after run?:", os.path.isfile(geojson_out))
 
-            # Include dataset_id in response
-            payload["dataset_id"] = dataset_id
-        else:
-            print("No adata file found in output, skipping dataset registration")
+    if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
+        out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
+
+    if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
+        out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+
+    payload["output_files"] = out_files
+
 
     # 5) Persist a copy of the payload next to the uploaded files
     (job_dir / f"{job_id}_config.json").write_text(
