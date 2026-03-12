@@ -129,30 +129,68 @@ if (length(cluster_by_mult) == 0) {
 
 
 message("Computing footprint...")
-for (m in motifs) {
-  for (c in cluster_by_mult) {
-    message(sprintf("Processing motif: %s with cluster_by: %s", m, c))
-    plot_out_path <- file.path(outdir, paste0("footprint_", m, "_", c, ".pdf"))
 
-    res <- plot_footprint_for_motif(
-      motif_name            = m,
-      M                     = M,
-      spot_obj              = spot_obj,
-      object_dissociated    = object,
-      assay                 = "peaks",
-      clustering_var        = c,
-      plot_out_path         = plot_out_path,
-      overwrite             = TRUE
+# Optional override from environment, e.g. FOOTPRINT_WORKERS=4
+n_workers <- suppressWarnings(as.integer(Sys.getenv("FOOTPRINT_WORKERS", NA)))
+
+if (is.na(n_workers) || n_workers < 1L) {
+  n_workers <- parallel::detectCores(logical = FALSE)
+  if (is.na(n_workers)) n_workers <- 1L
+  n_workers <- max(1L, min(length(motifs), n_workers - 1L))
+} else {
+  n_workers <- min(length(motifs), n_workers)
+}
+
+message(sprintf(
+  "Parallelising over motifs with %d worker(s) for %d motif(s)",
+  n_workers, length(motifs)
+))
+
+results <- parallel::mclapply(
+  X = motifs,
+  FUN = function(m) {
+    tryCatch({
+      for (c in cluster_by_mult) {
+        message(sprintf("Processing motif: %s with cluster_by: %s", m, c))
+        plot_out_path <- file.path(outdir, paste0("footprint_", m, "_", c, ".pdf"))
+
+        plot_footprint_for_motif(
+          motif_name            = m,
+          M                     = M,
+          spot_obj              = spot_obj,
+          object_dissociated    = object,
+          assay                 = "peaks",
+          clustering_var        = c,
+          plot_out_path         = plot_out_path,
+          overwrite             = TRUE
+        )
+      }
+
+      list(ok = TRUE, motif = m)
+    }, error = function(e) {
+      list(ok = FALSE, motif = m, error = conditionMessage(e))
+    })
+  },
+  mc.cores = n_workers,
+  mc.preschedule = FALSE
+)
+
+failed <- Filter(function(x) !isTRUE(x$ok), results)
+if (length(failed) > 0L) {
+  stop(
+    paste(
+      vapply(
+        failed,
+        function(x) sprintf("motif %s failed: %s", x$motif, x$error),
+        character(1)
+      ),
+      collapse = "\n"
     )
-
-    object   <- res$object_dissociated
-    spot_obj <- res$spot_obj
-  }
+  )
 }
 
-message("Footprint computation complete. Saving updated objects and plot...")
-if (args$save_rds) {
-  saveRDS(object,   file.path(outdir, "dissociated_obj_footprints.rds"))
-  saveRDS(spot_obj, file.path(outdir, "spot_obj_footprints.rds"))
-}
-message(sprintf("[compute_additional_footprints] Done. Plot saved to: %s", plot_out_path))
+# message("Footprint computation complete. Saving updated objects and plot...")
+# if (args$save_rds) {
+#   saveRDS(object,   file.path(outdir, "dissociated_obj_footprints.rds"))
+#   saveRDS(spot_obj, file.path(outdir, "spot_obj_footprints.rds"))
+# }
