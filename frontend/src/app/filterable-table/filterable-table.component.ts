@@ -90,9 +90,9 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       this.availableActionColumns = [];
       return;
     }
-
-    // Check if action columns exist in the actual data
-    if (!Array.isArray(this.data)) {
+    if ('motif_id' in this.data) {
+      this.availableActionColumns = this.actionColumns;
+    } else if (!Array.isArray(this.data)) {
       const tableData = this.data as {
         [col: string]: { [index: string]: string | number };
       };
@@ -102,6 +102,20 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     } else {
       this.availableActionColumns = this.actionColumns;
     }
+
+
+    // Check if action columns exist in the actual data
+    // if (!Array.isArray(this.data)) {
+    //   const tableData = this.data as {
+    //     [col: string]: { [index: string]: string | number };
+    //   };
+    //   this.availableActionColumns = this.actionColumns.filter(
+    //     (col) => col in tableData
+    //   );
+    // } else {
+    //   this.availableActionColumns = this.actionColumns;
+    // }
+
   }
 
   hasData(): boolean {

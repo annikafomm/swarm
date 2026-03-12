@@ -38,14 +38,16 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { MatInputModule } from '@angular/material/input';
+
 
 
 @Component({
-    selector: 'app-hexagon-plot',
-    imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader],
-    standalone: true,
-    templateUrl: './hexagon-plot.component.html',
-    styleUrls: ['./hexagon-plot.component.scss'],
+  selector: 'app-hexagon-plot',
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader, MatInputModule],
+  standalone: true,
+  templateUrl: './hexagon-plot.component.html',
+  styleUrls: ['./hexagon-plot.component.scss'],
 })
 export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element!: ElementRef<HTMLElement>;
@@ -55,6 +57,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private _resizeHandler: any = null;
   private sub!: Subscription;
   footprintPlotUrls: SafeResourceUrl[] = [];
+  onDemandFootprintUrls: SafeResourceUrl[] = [];
+  availableMotifs: string[] = [];
+  footprintMotif: string = '';
+  footprintClusterBy: string = 'cell_type';
+  isComputingFootprint: boolean = false;
+  footprintComputeError: string = '';
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
@@ -341,6 +349,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   } | null = null;
   public showGlobalLigandReceptorScores: boolean = true;
   public showMoranI: boolean = true;
+  public showChromvarMoranI: boolean = true;
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([
@@ -434,6 +443,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         d3.select('#hexbin-compare').selectAll('svg').remove();
 
         this.footprintPlotUrls = [];
+        this.onDemandFootprintUrls = [];
+        this.availableMotifs = [];
+        this.footprintMotif = '';
+        this.footprintComputeError = '';
 
         // Load and render new data
         this.createHexagonPlot();
@@ -622,6 +635,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         break;
       case 'Differential Motif Activity':
         // view should be cell type
+        newView = 'cell_type';
+        break;
+      case 'Footprints':
         newView = 'cell_type';
         break;
     }
@@ -2262,6 +2278,52 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         `${this.sessionService.apiUrl}/api/download/${relativePath}`
       )
     );
+    // Load available motifs for the on-demand compute form.
+    // Pass dataset_id so the backend can resolve the adata path even when
+    // /read_adata has not been called yet (e.g. rescanned datasets).
+    if (dataset) {
+      const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
+      this.http.get<{ motifs: string[] }>(
+        `${this.sessionService.apiUrl}/api/motifs${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableMotifs = resp.motifs ?? []; },
+        error: () => { this.availableMotifs = []; }
+      });
+    } else {
+      this.availableMotifs = [];
+    }
+  }
+
+  public computeFootprint(): void {
+    if (!this.footprintMotif) return;
+    this.isComputingFootprint = true;
+    this.footprintComputeError = '';
+    const body = new FormData();
+    body.append('motif', this.footprintMotif);
+    body.append('cluster_by', this.footprintClusterBy);
+    // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
+    if (this.selectedDataset?.id) {
+      body.append('dataset_id', this.selectedDataset.id);
+    }
+    this.http.post<{ footprint_url: string; relative_path: string }>(
+      `${this.sessionService.apiUrl}/api/compute_footprint`,
+      body,
+      { withCredentials: true }
+    ).subscribe({
+      next: resp => {
+        this.isComputingFootprint = false;
+        const url = this.sanitizer.bypassSecurityTrustResourceUrl(
+          `${this.sessionService.apiUrl}${resp.footprint_url}`
+        );
+        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, url];
+      },
+      error: err => {
+        this.isComputingFootprint = false;
+        this.footprintComputeError =
+          err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+      }
+    });
   }
 
     private renderNhoodHeatmap(): void {

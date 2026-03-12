@@ -1366,6 +1366,11 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
+    # TODO: remove this. just so that hardcodded footprint plot can be used
+    # Prevent path traversal outside uploads dir
+    # if BASE_UPLOAD_DIR not in full_path.parents:
+    #     raise HTTPException(status_code=403, detail="Forbidden")
+
     if not full_path.exists() or not full_path.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
@@ -1421,7 +1426,147 @@ async def get_X_by_gene(
     }
 
 
+# ---------------------------------------------------------------------------
+# On-demand footprint computation endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/motifs", dependencies=[Depends(cookie)])
+async def get_available_motifs(
+    session_data: SessionData = Depends(verifier),
+    dataset_id: Optional[str] = None,
+):
+    """
+    Return the list of chromVAR motif IDs for the current dataset.
+
+    Resolution order:
+    1. Active session (session_data.adata_path set via /read_adata) — normal flow.
+    2. Fallback: dataset_id query param → look up adata_path from the registry.
+       This handles the rescanned-dataset case where /read_adata was never called.
+    """
+    adata_path = session_data.adata_path
+
+    if not adata_path and dataset_id:
+        ds = dataset_registry.get_dataset_by_id(dataset_id)
+        if not ds:
+            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
+        adata_path = ds.get("adata_path")
+
+    if not adata_path:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset loaded in session and no dataset_id provided. "
+                   "Either call /read_adata or pass ?dataset_id=<id>."
+        )
+
+    try:
+        adata = _load_adata_cached(adata_path)
+        motifs = list(adata.uns.get("chromvar_motifs", []))
+        print(f"[get_available_motifs] Found motifs[0:5]: {motifs[:5]}, total={len(motifs)}, dataset_id={dataset_id}")
+        return {"motifs": motifs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load motifs: {e}")
+
+
+@app.post("/api/compute_footprint", dependencies=[Depends(cookie)])
+async def compute_footprint(
+    motif: str = Form(...),
+    cluster_by: str = Form("cell_type"),
+    dataset_id: Optional[str] = Form(None),
+    session_data: SessionData = Depends(verifier),
+):
+    """
+    Trigger on-demand footprint computation for a specific motif.
+    Runs compute_additional_footprints.R and returns the new footprint URL.
+
+    Resolution order for adata_path:
+    1. Active session (session_data.adata_path set via /read_adata).
+    2. Fallback: dataset_id form field → registry lookup (rescanned-dataset case).
+    """
+    adata_path = session_data.adata_path
+
+    if not adata_path and dataset_id:
+        ds = dataset_registry.get_dataset_by_id(dataset_id)
+        if not ds:
+            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
+        adata_path = ds.get("adata_path")
+
+    if not adata_path:
+        raise HTTPException(
+            status_code=400,
+            detail="No dataset loaded in session and no dataset_id provided. "
+                   "Either call /read_adata or pass dataset_id in the form."
+        )
+
+    # The job output dir is the directory containing the adata file
+    out_dir = Path(adata_path).resolve().parent
+
+    # Validate required files exist before launching R
+    spot_rds = out_dir / "spot_obj_footprints.rds"
+    dissociated_rds = out_dir / "dissociated_obj_footprints.rds"
+    if not spot_rds.exists() or not dissociated_rds.exists():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Pre-computed footprint RDS objects not found in the job directory. "
+                "The initial pipeline must be run with --footprinting first."
+            ),
+        )
+
+
+    import subprocess
+    cmd = [
+        "Rscript", "../backend/calc_multiome_scores/compute_additional_footprints.R",
+        "--outdir", str(out_dir),
+        "--motif", motif,
+        "--cluster_by", cluster_by,
+    ]
+    print(f"[compute_footprint] Running: {' '.join(cmd)}")
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # merge stderr into stdout so both stream together
+        text=True,
+        bufsize=1,  # line-buffered
+    )
+    output_lines: list[str] = []
+    for line in proc.stdout:  # type: ignore[union-attr]
+        print(f"[R] {line}", end="", flush=True)
+        output_lines.append(line)
+    proc.wait()
+    if proc.returncode != 0:
+        full_output = "".join(output_lines)
+        raise HTTPException(
+            status_code=500,
+            detail=f"R script failed (exit {proc.returncode}): {full_output[-2000:]}"
+        )
+
+    # Verify the PDF was actually produced
+    pdf_filename = f"footprint_{motif}.pdf"
+    pdf_path = out_dir / pdf_filename
+    if not pdf_path.exists():
+        raise HTTPException(status_code=500, detail=f"Expected output {pdf_filename} was not created")
+
+    # TODO: decide whether to add here
+    # Update the dataset registry entry that owns this adata file
+    relative_pdf = str(pdf_path.relative_to(BASE_UPLOAD_DIR.resolve()))
+    all_datasets = dataset_registry.get_all_datasets()
+    for category in ("uploaded", "builtin"):
+        for ds_id, info in all_datasets.get(category, {}).items():
+            if info.get("adata_path") == adata_path:
+                existing = info.get("footprint_list") or []
+                if relative_pdf not in existing:
+                    dataset_registry.update_dataset_paths(ds_id, footprint_list=existing + [relative_pdf])
+                break
+
+    return {
+        "footprint_url": f"/api/download/{relative_pdf}",
+        "relative_path": relative_pdf,
+        "motif": motif,
+        "cluster_by": cluster_by,
+    }
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
-    # for Merit
+    # for merit
     #uvicorn.run(app, host="0.0.0.0", port=3005)

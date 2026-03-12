@@ -345,30 +345,8 @@ plot_footprint_for_motif <- function(
 }
 
 
-# top_motifs_per_comparison <- function(spot_obj, n = 5) {
-#   comparisons <- names(spot_obj@misc$diff_motif_activity)
-#   top_motifs <- lapply(comparisons, function(comp) {
-#     res <- spot_obj@misc$diff_motif_activity[[comp]]
-#     if (is.null(res) || nrow(res) == 0) return(res)
 
-#     res <- as.data.frame(res)
-#     res$motif <- rownames(res)
-
-#     score_col <- c("avg_diff", "avg_log2FC", "avg_logFC")[
-#       c("avg_diff", "avg_log2FC", "avg_logFC") %in% colnames(res)
-#     ][1]
-
-#     if (is.na(score_col)) {
-#       stop("No ranking column found for comparison: ", comp)
-#     }
-
-#     ord <- order(res[[score_col]], decreasing = TRUE, na.last = NA)
-#     head(res[ord, , drop = FALSE], n = n)
-#   })
-#   names(top_motifs) <- comparisons
-#   return(top_motifs)
-# }
-top_motifs_per_comparison <- function(spot_obj, n = 5) {
+top_motifs_per_comparison <- function(spot_obj, n = NULL) {
   comparisons <- names(spot_obj@misc$diff_motif_activity)
 
   top_motifs <- lapply(comparisons, function(comp) {
@@ -387,7 +365,11 @@ top_motifs_per_comparison <- function(spot_obj, n = 5) {
     }
 
     ord <- order(res[[score_col]], decreasing = TRUE, na.last = NA)
-    head(res[ord, , drop = FALSE], n = n)
+    if (!is.null(n)) {
+      head(res[ord, , drop = FALSE], n = n)
+    } else {
+      res[ord, , drop = FALSE]
+    }
   })
 
   names(top_motifs) <- comparisons
@@ -490,7 +472,10 @@ global_motif_analysis <- function(object, args, logfile) {
 
       saveRDS(spot_obj, file.path(outdir, "spot_obj_chromvar.rds"))
 
-      top_tbls <- top_motifs_per_comparison(spot_obj, n = 3)
+      top_tbls <- top_motifs_per_comparison(spot_obj)
+      # save top motifs in misc for later use in footprinting
+
+      #spot_obj@misc$diff_motif_activity_top_motifs <- top_tbls
 
 
       multiome_dir <- file.path(outdir, "multiome")
@@ -507,10 +492,9 @@ global_motif_analysis <- function(object, args, logfile) {
           multiome_dir,
           paste0("diff_motif_activity_top_motifs_", safe_comp, ".csv")
         )
-
+        spot_obj@misc$diff_motif_activity_top_motifs[[comp]] <- head(tbl,n=3)
         write.csv(tbl, out_file, row.names = FALSE)
       }
-      #write.csv(top_tbls, file.path(outdir, "diff_motif_activity_top_motifs.csv"), row.names = FALSE)
     }
 
   }
@@ -592,7 +576,7 @@ global_motif_analysis <- function(object, args, logfile) {
     log_message(paste0("Footprinting motifs (n=", length(motifs), "): ", paste(motifs, collapse = ", ")), logfile, 2)
 
     # --- Run footprints and plot ---
-    for (motif in motifs[0:3]) {
+    for (motif in motifs) {
       plot_out_path <- file.path(outdir, paste0("footprint_", motif, ".pdf"))
       res <- plot_footprint_for_motif(
         motif_name = motif,
