@@ -41,21 +41,40 @@ source(file.path(script_dir, "calc_multiome_scores_test.R"))
 #     --cluster_by cell_type
 # ---------------------------------------------------------------------------
 option_list <- list(
-  make_option("--outdir",     type = "character", help = "Job output directory (contains RDS files and adata_map.X.csv)"),
-  make_option("--motif",      type = "character", help = "JASPAR motif ID to compute footprint for (e.g. MA1638.2)"),
-  make_option("--cluster_by", type = "character", default = "cell_type",
-              help = "Metadata column to group cells by in the footprint plot [default: cell_type]")
+  make_option("--outdir",          type = "character", help = "Job output directory (contains RDS files and adata_map.X.csv)"),
+  make_option("--motif",           type = "character", default = NULL, help = "JASPAR motif ID to compute footprint for (e.g. MA1638.2)"),
+  make_option("--motifs",          type = "character", default = NULL,
+              help = "Comma-separated list of JASPAR motif IDs to compute footprints for (e.g. MA1638.2,MA0006.2). Overrides --motif if provided."),
+  make_option("--cluster_by",      type = "character", default = "cell_type",
+              help = "Metadata column to group cells by in the footprint plot [default: cell_type]"),
+  make_option("--cluster_by_mult", type = "character", default = NULL,
+              help = "Comma-separated list of cluster types to cluster by, overrides --cluster_by (e.g. cell_type,leiden_cluster)"),
+  make_option("--save_rds",        action = "store_true", default = FALSE,
+              help = "Whether to write updated RDS files with computed footprints (overwrites existing RDS files in outdir) [default: FALSE]")
 )
 
 args <- parse_args(OptionParser(option_list = option_list))
 
-if (is.null(args$outdir) || is.null(args$motif)) {
-  stop("--outdir and --motif are required arguments.")
+if (is.null(args$outdir)) {
+  stop("--outdir is a required argument.")
+}
+if (is.null(args$motifs) && is.null(args$motif)) {
+  stop("Either --motifs or --motif must be provided.")
 }
 
 outdir <- args$outdir
 motif  <- args$motif
 cluster_by <- args$cluster_by
+if (!is.null(args$motifs)) {
+  motifs <- unlist(strsplit(args$motifs, ","))
+} else {
+  motifs <- motif
+}
+if (!is.null(args$cluster_by_mult)) {
+  cluster_by_mult <- unlist(strsplit(args$cluster_by_mult, ","))
+} else {
+  cluster_by_mult <- cluster_by
+}
 
 
 message(sprintf("[compute_additional_footprints] outdir=%s  motif=%s  cluster_by=%s",
@@ -83,26 +102,95 @@ message("reading spot object...")
 spot_obj <- readRDS(spot_rds)
 
 
-message("Computing footprint...")
-plot_out_path <- file.path(outdir, paste0("footprint_", motif, ".pdf"))
+available_cts <- unique(spot_obj@meta.data$cell_type)
+message(paste0("Available cell types in spot_obj: ", paste(available_cts, collapse = ", ")))
+# handle clusters: is_celltype: needs to be added in obs columns
+for (c in cluster_by_mult) {
+  if (!(c %in% colnames(spot_obj@meta.data))) {
+    if (startsWith(c, "is_")) {
+      ct <- sub("^is_", "", c)
+      message(paste0("Processing cluster column: ", c, " with cell type: ", ct))
+      if (ct %in% available_cts) {
+        message(paste0("Adding column ", c, " to metadata"))
+        spot_obj@meta.data[[c]] <- ifelse(spot_obj@meta.data$cell_type == ct, ct, "other cells")
+      }
+    }
+  }
+}
+message(paste0("cluster_by ", cluster_by))
+cluster_by_mult <- Filter(function(cl) cl %in% colnames(spot_obj@meta.data), unique(c(cluster_by_mult, cluster_by)))
+message(paste0("cluster_by_mult: ", paste(cluster_by_mult, collapse = ", ")))
+message(paste0("Available metadata columns in spot_obj: ", paste(colnames(spot_obj@meta.data), collapse = ", ")))
 
-res <- plot_footprint_for_motif(
-  motif_name            = motif,
-  M                     = M,
-  spot_obj              = spot_obj,
-  object_dissociated    = object,
-  assay                 = "peaks",
-  clustering_var        = cluster_by,
-  plot_out_path         = plot_out_path,
-  overwrite             = TRUE
+
+if (length(cluster_by_mult) == 0) {
+  stop("None of the specified cluster types are valid metadata columns in spot_obj. Please check your --cluster_by_mult argument and ensure the specified columns exist in the spot object metadata.")
+}
+
+
+message("Computing footprint...")
+
+# Optional override from environment, e.g. FOOTPRINT_WORKERS=4
+n_workers <- suppressWarnings(as.integer(Sys.getenv("FOOTPRINT_WORKERS", NA)))
+
+if (is.na(n_workers) || n_workers < 1L) {
+  n_workers <- parallel::detectCores(logical = FALSE)
+  if (is.na(n_workers)) n_workers <- 1L
+  n_workers <- max(1L, min(length(motifs), n_workers - 1L))
+} else {
+  n_workers <- min(length(motifs), n_workers)
+}
+
+message(sprintf(
+  "Parallelising over motifs with %d worker(s) for %d motif(s)",
+  n_workers, length(motifs)
+))
+
+results <- parallel::mclapply(
+  X = motifs,
+  FUN = function(m) {
+    tryCatch({
+      for (c in cluster_by_mult) {
+        message(sprintf("Processing motif: %s with cluster_by: %s", m, c))
+        plot_out_path <- file.path(outdir, paste0("footprint_", m, "_", c, ".pdf"))
+
+        plot_footprint_for_motif(
+          motif_name            = m,
+          M                     = M,
+          spot_obj              = spot_obj,
+          object_dissociated    = object,
+          assay                 = "peaks",
+          clustering_var        = c,
+          plot_out_path         = plot_out_path,
+          overwrite             = TRUE
+        )
+      }
+
+      list(ok = TRUE, motif = m)
+    }, error = function(e) {
+      list(ok = FALSE, motif = m, error = conditionMessage(e))
+    })
+  },
+  mc.cores = n_workers,
+  mc.preschedule = FALSE
 )
 
-object   <- res$object_dissociated
-spot_obj <- res$spot_obj
+failed <- Filter(function(x) !isTRUE(x$ok), results)
+if (length(failed) > 0L) {
+  stop(
+    paste(
+      vapply(
+        failed,
+        function(x) sprintf("motif %s failed: %s", x$motif, x$error),
+        character(1)
+      ),
+      collapse = "\n"
+    )
+  )
+}
 
-message("Footprint computation complete. Saving updated objects and plot...")
-# Persist updated objects so subsequent calls benefit from cached computations
-# saveRDS(object,   file.path(outdir, "dissociated_obj_footprints_add_motifs.rds"))
-# saveRDS(spot_obj, file.path(outdir, "spot_obj_footprints_add_motifs.rds"))
-
-message(sprintf("[compute_additional_footprints] Done. Plot saved to: %s", plot_out_path))
+# message("Footprint computation complete. Saving updated objects and plot...")
+# if (args$save_rds) {
+#   saveRDS(object,   file.path(outdir, "dissociated_obj_footprints.rds"))
+#   saveRDS(spot_obj, file.path(outdir, "spot_obj_footprints.rds"))
+# }

@@ -31,7 +31,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormField } from '@angular/material/form-field';
 import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
 import { MatLabel } from '@angular/material/form-field';
-import { MatSelect } from '@angular/material/select';
+import { MatSelect, MatSelectTrigger } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
@@ -44,7 +44,7 @@ import { MatInputModule } from '@angular/material/input';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader, MatInputModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader, MatInputModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -59,10 +59,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   footprintPlotUrls: SafeResourceUrl[] = [];
   onDemandFootprintUrls: SafeResourceUrl[] = [];
   availableMotifs: string[] = [];
-  footprintMotif: string = '';
+  availableCellTypes: string[] = [];
+  footprintMotifs: string[] = [];
+  motifSearchQuery: string = '';
   footprintClusterBy: string = 'cell_type';
   isComputingFootprint: boolean = false;
   footprintComputeError: string = '';
+
+  get filteredMotifs(): string[] {
+    const q = this.motifSearchQuery.trim().toLowerCase();
+    return q ? this.availableMotifs.filter(m => m.toLowerCase().includes(q)) : this.availableMotifs;
+  }
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
@@ -453,7 +460,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.footprintPlotUrls = [];
         this.onDemandFootprintUrls = [];
         this.availableMotifs = [];
-        this.footprintMotif = '';
+        this.availableCellTypes = [];
+        this.footprintMotifs = [];
+        this.motifSearchQuery = '';
         this.footprintComputeError = '';
 
         // Load and render new data
@@ -2345,33 +2354,44 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         next: resp => { this.availableMotifs = resp.motifs ?? []; },
         error: () => { this.availableMotifs = []; }
       });
+      this.http.get<{ cell_types: string[] }>(
+        `${this.sessionService.apiUrl}/api/cell_types${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableCellTypes = resp.cell_types ?? []; },
+        error: () => { this.availableCellTypes = []; }
+      });
     } else {
       this.availableMotifs = [];
+      this.availableCellTypes = [];
     }
+    console.log('availableCellTypes:', this.availableCellTypes);
   }
 
   public computeFootprint(): void {
-    if (!this.footprintMotif) return;
+    if (this.footprintMotifs.length === 0) return;
     this.isComputingFootprint = true;
     this.footprintComputeError = '';
     const body = new FormData();
-    body.append('motif', this.footprintMotif);
+    this.footprintMotifs.forEach(m => body.append('motif', m));
     body.append('cluster_by', this.footprintClusterBy);
     // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
     if (this.selectedDataset?.id) {
       body.append('dataset_id', this.selectedDataset.id);
     }
-    this.http.post<{ footprint_url: string; relative_path: string }>(
+    this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
       `${this.sessionService.apiUrl}/api/compute_footprint`,
       body,
       { withCredentials: true }
     ).subscribe({
       next: resp => {
         this.isComputingFootprint = false;
-        const url = this.sanitizer.bypassSecurityTrustResourceUrl(
-          `${this.sessionService.apiUrl}${resp.footprint_url}`
+        const newUrls = (resp.results ?? []).map(r =>
+          this.sanitizer.bypassSecurityTrustResourceUrl(
+            `${this.sessionService.apiUrl}${r.footprint_url}`
+          )
         );
-        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, url];
+        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, ...newUrls];
       },
       error: err => {
         this.isComputingFootprint = false;
