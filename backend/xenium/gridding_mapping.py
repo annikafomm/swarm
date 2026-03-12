@@ -11,7 +11,8 @@ import scanpy as sc
 from scipy.spatial import cKDTree
 import pandas as pd
 from scipy import sparse
-
+import os
+import gc
 
 
 def map_cells_to_grid(
@@ -38,108 +39,180 @@ def map_cells_to_grid(
     return adata_cells
 
 
-
-def broadcast_grid_to_cells(
-    adata_cells: sc.AnnData,
-    adata_grid: sc.AnnData,
+def expand_spot_adata_to_cells(
+    adata_scores: sc.AnnData,
+    adata_map: sc.AnnData,
     spot_col: str = "grid_spot",
-    prefix: str = "grid_",
-    copy_obs: bool = True,
-    copy_obsm: bool = True,
+    keep_map_obs=("imagecol", "imagerow", "grid_spot", "grid_dist"),
+    keep_map_obsm=("spatial",),
+    chunk_size: int = 200,
+    tmp_dir: str | None = None,
+    float_dtype=np.float32,
     copy_uns: bool = True,
-    copy_varm: bool = True,
-    overwrite: bool = False,
-    skip_obsm_keys=("spatial",),
-    skip_uns_keys=(),
-    skip_varm_keys=(),
 ) -> sc.AnnData:
-    """
-    Broadcast grid-level results back to cells using adata_cells.obs[spot_col] mapping.
 
-    - OBS:   adata_grid.obs columns -> adata_cells.obs (optional prefix)
-    - OBSM:  adata_grid.obsm tables -> adata_cells.obsm (optional prefix; spatial wird geskippt)
-    - UNS:   adata_grid.uns -> adata_cells.uns (gleiche Keys)
-    - VARM:  adata_grid.varm -> adata_cells.varm (gleiche Keys; nur wenn var_names kompatibel)
-    - OBSP:  wird NICHT kopiert
-    """
+    if spot_col not in adata_map.obs:
+        raise KeyError(f"'{spot_col}' not found in adata_map.obs")
 
-    if spot_col not in adata_cells.obs:
-        raise KeyError(f"{spot_col} not found in adata_cells.obs")
+    if tmp_dir is not None:
+        os.makedirs(tmp_dir, exist_ok=True)
 
-    # Normalize indices to string for safe mapping
-    grid_index = adata_grid.obs_names.astype(str)
-    cell_spots = adata_cells.obs[spot_col].astype(str)
+    cell_spots = adata_map.obs[spot_col].astype(str)
+    spot_index = pd.Index(adata_scores.obs_names.astype(str))
 
-    # Map each cell to a row index in the grid
-    grid_pos = pd.Index(grid_index).get_indexer(cell_spots.values)
+    grid_pos = spot_index.get_indexer(cell_spots.values)
+
     if (grid_pos < 0).any():
-        missing = int((grid_pos < 0).sum())
+        missing = np.unique(cell_spots.values[grid_pos < 0])[:10]
         raise ValueError(
-            f"{missing} cells map to unknown grid spots. "
-            f"Check {spot_col} and that grid obs_names match."
+            f"Some cells reference spots not present in adata_scores: {missing}"
         )
 
-    # ---- OBS ----
-    if copy_obs:
-        for col in adata_grid.obs.columns:
-            # Special case: grid_leiden -> Leiden
-            if col == "leiden":
-                out_col = "leiden"
-            else:
-                out_col = f"{prefix}{col}" if prefix else col
+    n_cells = adata_map.n_obs
+    n_vars = adata_scores.n_vars
 
-            if (not overwrite) and (out_col in adata_cells.obs.columns):
-                continue
+    # ------------------------------------------------------------------
+    # Sparse expansion helper (memory safe)
+    # ------------------------------------------------------------------
+    def _expand_sparse(mat):
+        mat = mat.tocsr()
 
-            adata_cells.obs[out_col] = adata_grid.obs.iloc[grid_pos][col].values
+        data_parts = []
+        indices_parts = []
+        indptr = [0]
 
-    # ---- OBSM ----
-    if copy_obsm:
-        for key, mat in adata_grid.obsm.items():
-            if key in skip_obsm_keys:
-                continue
-            out_key = f"{prefix}{key}" if prefix else key
-            if (not overwrite) and (out_key in adata_cells.obsm):
-                continue
+        for src_row in grid_pos:
+            start = mat.indptr[src_row]
+            end = mat.indptr[src_row + 1]
 
-            if isinstance(mat, pd.DataFrame):
-                df = mat.iloc[grid_pos].copy()
-                df.index = adata_cells.obs_names
-                adata_cells.obsm[out_key] = df
-                continue
+            data_parts.append(mat.data[start:end])
+            indices_parts.append(mat.indices[start:end])
 
-            if sparse.issparse(mat):
-                adata_cells.obsm[out_key] = mat[grid_pos, :].copy()
-                continue
+            indptr.append(indptr[-1] + (end - start))
 
-            arr = np.asarray(mat)
-            if arr.ndim != 2 or arr.shape[0] != adata_grid.n_obs:
-                continue
-            adata_cells.obsm[out_key] = arr[grid_pos, :].copy()
+        data = np.concatenate(data_parts) if data_parts else np.array([], dtype=mat.data.dtype)
+        indices = np.concatenate(indices_parts) if indices_parts else np.array([], dtype=mat.indices.dtype)
+        indptr = np.asarray(indptr, dtype=np.int64)
 
-    # ---- UNS (same keys) ----
+        return sparse.csr_matrix((data, indices, indptr), shape=(n_cells, mat.shape[1]))
+
+    # ------------------------------------------------------------------
+    # Dense expansion helper
+    # ------------------------------------------------------------------
+    def _expand_dense(arr, out_name):
+
+        arr = np.asarray(arr)
+
+        dtype = float_dtype if np.issubdtype(arr.dtype, np.floating) else arr.dtype
+
+        if tmp_dir is not None:
+            path = os.path.join(tmp_dir, f"{out_name}.dat")
+            out = np.memmap(path, mode="w+", dtype=dtype, shape=(n_cells, arr.shape[1]))
+        else:
+            out = np.empty((n_cells, arr.shape[1]), dtype=dtype)
+
+        for start in range(0, n_cells, chunk_size):
+            end = min(start + chunk_size, n_cells)
+            out[start:end] = arr[grid_pos[start:end]]
+
+        if isinstance(out, np.memmap):
+            out.flush()
+
+        return out
+
+    # ------------------------------------------------------------------
+    # Matrix dispatcher
+    # ------------------------------------------------------------------
+    def _expand_matrix(mat, out_name):
+
+        if isinstance(mat, pd.DataFrame):
+            arr = mat.to_numpy()
+            cols = mat.columns.copy()
+
+            out = _expand_dense(arr, out_name)
+
+            return pd.DataFrame(out, index=adata_map.obs_names, columns=cols)
+
+        if sparse.issparse(mat):
+            return _expand_sparse(mat)
+
+        return _expand_dense(mat, out_name)
+
+    # ------------------------------------------------------------------
+    # X
+    # ------------------------------------------------------------------
+    print("Expanding X ...")
+    X_new = _expand_matrix(adata_scores.X, "X")
+
+    # ------------------------------------------------------------------
+    # obs
+    # ------------------------------------------------------------------
+    print("Expanding obs ...")
+
+    obs_new = adata_scores.obs.iloc[grid_pos].copy()
+    obs_new.index = adata_map.obs_names.copy()
+
+    for col in keep_map_obs:
+        if col in adata_map.obs:
+            obs_new[col] = adata_map.obs[col].values
+
+    # ------------------------------------------------------------------
+    # var
+    # ------------------------------------------------------------------
+    var_new = adata_scores.var.copy()
+
+    # ------------------------------------------------------------------
+    # Create AnnData
+    # ------------------------------------------------------------------
+    adata_cells = sc.AnnData(
+        X=X_new,
+        obs=obs_new,
+        var=var_new,
+    )
+
+    adata_cells.obs_names = adata_map.obs_names.copy()
+
+    # ------------------------------------------------------------------
+    # obsm
+    # ------------------------------------------------------------------
+    print("Expanding obsm ...")
+
+    for key, value in adata_scores.obsm.items():
+        print(f"  obsm[{key}]")
+        adata_cells.obsm[key] = _expand_matrix(value, f"obsm_{key}")
+        gc.collect()
+
+    # overwrite with real cell spatial coordinates
+    for key in keep_map_obsm:
+        if key in adata_map.obsm:
+            print(f"  overwriting obsm[{key}] from adata_map")
+            val = adata_map.obsm[key]
+            adata_cells.obsm[key] = val.copy() if hasattr(val, "copy") else np.array(val)
+
+    # ------------------------------------------------------------------
+    # layers
+    # ------------------------------------------------------------------
+    print("Expanding layers ...")
+
+    for key, value in adata_scores.layers.items():
+        print(f"  layer[{key}]")
+        adata_cells.layers[key] = _expand_matrix(value, f"layer_{key}")
+        gc.collect()
+
+    # ------------------------------------------------------------------
+    # varm
+    # ------------------------------------------------------------------
+    print("Copying varm ...")
+
+    for key, value in adata_scores.varm.items():
+        adata_cells.varm[key] = value.copy() if hasattr(value, "copy") else value
+
+    # ------------------------------------------------------------------
+    # uns
+    # ------------------------------------------------------------------
     if copy_uns:
-        for k, v in adata_grid.uns.items():
-            if k in skip_uns_keys:
-                continue
-            if (not overwrite) and (k in adata_cells.uns):
-                continue
-            adata_cells.uns[k] = v
-
-    # ---- VARM (same keys) ----
-    if copy_varm:
-        # varm is var-aligned -> require identical var_names
-        if not adata_cells.var_names.equals(adata_grid.var_names):
-            raise ValueError(
-                "Cannot copy .varm because adata_cells.var_names != adata_grid.var_names. "
-                "Align variables first (same order) or disable copy_varm."
-            )
-        for k, v in adata_grid.varm.items():
-            if k in skip_varm_keys:
-                continue
-            if (not overwrite) and (k in adata_cells.varm):
-                continue
-            adata_cells.varm[k] = v
+        print("Copying uns ...")
+        for key, value in adata_scores.uns.items():
+            adata_cells.uns[key] = value
 
     return adata_cells
-

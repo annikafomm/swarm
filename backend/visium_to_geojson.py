@@ -144,7 +144,10 @@ class Hexagons:
         if gene is None:
             gene = self.anndata.var.index[0]
 
-        X = self.anndata[barcode, gene].X
+        original_gene = self.var_upper_to_name.get(gene.upper(), gene)
+        X = self.anndata[barcode, original_gene].X
+
+        #X = self.anndata[barcode, gene].X
 
         # Handle both sparse and dense matrices
         if sparse.issparse(X):

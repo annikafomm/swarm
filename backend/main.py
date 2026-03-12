@@ -603,8 +603,6 @@ async def upload(
     job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(job_dir / f"{job_id}_multiome.txt", "w") as f:
-        f.write(f"use_multiome: {use_multiome}\n")
 
     # 1b) Option-JSONs sicher parsen
     def _parse_json_field(name: str, val: Optional[str]):
@@ -808,12 +806,9 @@ async def upload(
                     adata_path = os.path.join(out_dir, filename)
                     selected_reason = "Fallback to grid-level st_scores (cell-level missing)"
                     break
-
-        if filename.endswith("tg_scores.h5ad"):
-            tangram_adata_path = os.path.join(out_dir, filename)
-
-        if filename.endswith("xenium_tg_scores.h5ad"):
-            tangram_adata_path = os.path.join(out_dir, filename)
+                if filename.endswith("adata_tg_scores.h5ad"):
+                    adata_path = os.path.join(out_dir, filename)
+                    break
 
         print("selected adata_path:", adata_path)
         print("selection reason:", selected_reason)

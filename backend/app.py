@@ -367,18 +367,19 @@ async def calculate_scores_helper(job_dir, json_dict):
             # back mapping
             if dataset == "xenium":
                 tangram_used = "-tangram" in python_params or "--tangram" in R_params
-                print("Tangram used:", tangram_used)
-                print("Running back mapping for Xenium...")
-                cmd = [
-                    "python3", "../backend/xenium/compute_backmapping.py",
-                    "-indir", out_dir,
-                    "-log", log_file
-                ]
+                if not tangram_used:
+                    print("Tangram used:", tangram_used)
+                    print("Running back mapping for Xenium...")
+                    cmd = [
+                        "python3", "../backend/xenium/compute_backmapping.py",
+                        "-indir", out_dir,
+                        "-log", log_file
+                    ]
 
-                if tangram_used:
-                    cmd.append("-tangram")
+                    #if tangram_used:
+                    #cmd.append("-tangram")
 
-                subprocess.run(cmd, check=True)
+                    subprocess.run(cmd, check=True)
 
         # finish the log file
         message = f"Finished! Check out the log file and the AnnData object(s) in {out_dir} for details."

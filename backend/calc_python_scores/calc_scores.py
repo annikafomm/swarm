@@ -29,7 +29,6 @@ from preprocessing.preprocessing_functions import *
 from calc_liana import run_liana
 from xenium.gridding_mapping import (
     map_cells_to_grid,
-    broadcast_grid_to_cells,
 )
 
 
@@ -149,8 +148,8 @@ def compute_spatial_scores(adata, description, args, logfile):
     # ---------------------------------------------------------------
 
     t0 = time.time()
-    filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
-    adata.write(os.path.join(args.outdir, filename))
+    #filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
+    #adata.write(os.path.join(args.outdir, filename))
     # Also save with fixed name for downstream multiome processing
     if description == "tg":
         adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
@@ -313,15 +312,7 @@ def main():
             t0 = time.time()
             from xenium.gridding_pipeline import choose_grid_n, gridding_xenium
 
-            # 1) Keep cell-level AnnData (visualization + final output later)
             adata_cells = adata.copy()
-            cell_file = os.path.basename(args.input).replace(
-                ".h5ad",
-                "_xenium_cells.h5ad"
-            )
-            cell_path = os.path.join(args.outdir, cell_file)
-            adata_cells.write(cell_path)
-            log_message(f"Cell-level Xenium AnnData written to {cell_path}", logfile, 2)
 
             # 2) Create grid-level for scoring
             n_ = choose_grid_n(adata, target_cells_per_spot=20)
@@ -338,12 +329,12 @@ def main():
                 adata_grid=adata_work,
             )
             adata_cells.write(
-                os.path.join(args.outdir, "xenium_cells.h5ad")
+                os.path.join(args.outdir, "xenium_map.h5ad")
             )
             log_message(f"Mapping cells to grid performed in {format_runtime(t0)}", logfile, 2)
 
             # 4) Proceed with all further analyses at the spot level
-            st_grid = os.path.join(args.outdir, "xenium_st_grid.h5ad")
+            st_grid = os.path.join(args.outdir, "xenium_grid.h5ad")
             adata_work.write(st_grid)
 
             st_preprocessed = st_grid
