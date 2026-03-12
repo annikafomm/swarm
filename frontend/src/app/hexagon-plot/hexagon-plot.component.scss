@@ -479,3 +479,113 @@ select {
     text-align: center;
   }
 }
+
+// Cluster Information Tab Styling
+.cluster-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #f5f5f5 0%, #efefef 100%);
+  border-radius: 6px;
+  border-bottom: 2px solid #1976d2;
+
+  h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+    color: #333;
+    flex: 1;
+  }
+
+  .deselect-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 6px 12px;
+    height: auto;
+  }
+}
+
+.cluster-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  max-width: 100%;
+  width: 100%;
+
+  .cluster-stats,
+  .cell-types,
+  .cluster-centrality,
+  .cluster-nhood {
+    background: #fafafa;
+    padding: 12px;
+    border-radius: 6px;
+    border-left: 3px solid #1976d2;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+    h4 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1976d2;
+    }
+
+    p {
+      margin: 4px 0;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+  }
+
+  .cell-type-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 13px;
+    padding: 4px 0;
+
+    .cell-type-color {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  .centrality-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+
+    li {
+      margin: 6px 0;
+      font-size: 13px;
+      padding: 4px 0;
+    }
+
+    strong {
+      color: #555;
+    }
+  }
+
+  .cluster-nhood {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+
+    #cluster-nhood-heatmap {
+      width: 100% !important;
+      max-width: 100% !important;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+  }
+}
