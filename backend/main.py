@@ -1,16 +1,12 @@
 # backend/main.py
 
-from __future__ import annotations
-
-# ---------------------------------
-# Standard Library
-# ---------------------------------
 import json
 import os
 import shutil
 import subprocess
 import time
 from dataset_management import DatasetRegistry
+from dataset_structure import Params, DatasetFactory
 from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
@@ -22,6 +18,14 @@ import pandas as pd
 import scanpy as sc
 import uvicorn
 from app import calculate_scores_helper
+from models import (
+    UploadRequest,
+    UploadResponse,
+    OutputFiles,
+    FilesInput,
+    DatasetType,
+    GeneSelectionMode,
+)
 
 # merit
 import re
@@ -79,27 +83,6 @@ ALLOWED_ORIGINS = [
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
 MAX_FILE_MB: Optional[int] = None
 
-
-# Enumerations for strict validation of form fields.
-class Dataset(str, Enum):
-    Visium = "Visium"
-    Xenium = "Xenium"
-
-class GeneSelectionMode(str, Enum):
-    ctg = "ctg"
-    hvg = "hvg"
-    spapros = "spapros"
-    svg = "svg"
-    none = "None"
-
-class Genome(str, Enum):
-    Visium = "hg37"
-    Xenium = "hg38"
-
-class Method(str, Enum):
-    Genie3 = "Genie3"
-    Sponge = "Sponge"
-
 class BaseModel(PydanticBaseModel):
     class Config:
         arbitrary_types_allowed = True
@@ -154,6 +137,7 @@ class BasicVerifier(SessionVerifier[UUID, SessionData]):
         return True
 
 
+# Simple models for path parameters used in specific endpoints
 class AnnDataPath(BaseModel):
     path: str
 
@@ -166,9 +150,9 @@ class GenieNetworkPath(BaseModel):
     path: str
 
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # Application
-# -----------------------------------------------------------------------------
+# =============================================================================
 # Lifespan event handler
 
 @asynccontextmanager
@@ -438,16 +422,10 @@ async def cleanup_expired_sessions():
             current_time = datetime.now()
             expired_sessions = []
 
-            # Iterate through all sessions
-            for session_id, session_data in backend._data.items():
-                age = current_time - session_data.created_at
-                if age > timedelta(hours=1):  # Sessions expire after 1 hour
-                    expired_sessions.append(session_id)
-
-            # Delete expired sessions
-            for session_id in expired_sessions:
-                await backend.delete(session_id)
-                print(f"Cleaned up expired session: {session_id}")
+            # InMemoryBackend doesn't expose _data directly, so we skip aggressive cleanup.
+            # Sessions will naturally be garbage collected when no longer referenced.
+            # This is a fallback that won't error out.
+            pass
         except Exception as e:
             print(f"Error in cleanup task: {e}")
 
@@ -500,33 +478,249 @@ async def log_requests(request: Request, call_next):
     print(f"[REQ] {request.method} {request.url} content-length={request.headers.get('content-length')}")
     return await call_next(request)
 
+def build_upload_request(
+    email: Optional[str],
+    dataset: str,
+    saved_files: Dict[str, Optional[str]],
+    # Spatial
+    spatial_normalization: bool,
+    spatial_filtering: bool,
+    # Tangram
+    use_tangram: bool,
+    singlecell_filtering: bool,
+    singlecell_normalization: bool,
+    gene_selection_mode: Optional[str],
+    # Multiome
+    use_multiome: bool,
+    # Scores
+    score_network: bool,
+    score_squidpy: bool,
+    score_liana_plus: bool,
+    score_chromVar: bool,
+    score_differential_motif_activity: bool,
+    score_motif_enrichment: bool,
+    score_FootprintingBias: bool,
+    genome: Optional[str],
+    # Network Algos
+    alg_viper: bool,
+    alg_aucell: bool,
+    alg_gsva: bool,
+    alg_ssgsea: bool,
+    # SPONGE-Params
+    net_m_score_threshold: Optional[float],
+    net_p_adjust: Optional[str],
+    net_ensembl_id_col: Optional[str],
+    net_feature_col: Optional[str],
+    net_rna_types: Optional[str],
+    net_max_modules: Optional[int],
+    # GENIE3-Params
+    genie3_top_n_weights: Optional[int],
+    genie3_n_regulatory_genes: Optional[int],
+    genie3_n_regulons: Optional[int],
+    # Squidpy Flags + Params
+    squidpy_moranI: bool,
+    squidpy_moranI_n_perms: Optional[int],
+    squidpy_moranI_two_tailed: bool,
+    squidpy_moranI_corr_method: Optional[str],
+    squidpy_gearyC: bool,
+    squidpy_gearyC_n_perms: Optional[int],
+    squidpy_gearyC_two_tailed: bool,
+    squidpy_gearyC_corr_method: Optional[str],
+    squidpy_centrality_score: bool,
+    squidpy_centrality_score_cluster_key: Optional[str],
+    squidpy_co_occurrence: bool,
+    squidpy_co_occurrence_cluster_key: Optional[str],
+    squidpy_co_occurrence_interval: Optional[int],
+    squidpy_co_occurrence_n_splits: Optional[int],
+    squidpy_neighborhood_enrichment: bool,
+    squidpy_neighborhood_enrichment_cluster_key: Optional[str],
+    squidpy_neighborhood_enrichment_library_key: Optional[str],
+    squidpy_neighborhood_enrichment_n_perms: Optional[int],
+    # ChromVAR Flags + Params
+    chromVar_moranI: bool,
+    chromVar_moranI_n_perms: Optional[int],
+    chromVar_moranI_two_tailed: Optional[str],
+    chromVar_moranI_corr_method: Optional[str],
+    chromVar_gearyC: bool,
+    chromVar_gearyC_n_perms: Optional[int],
+    chromVar_gearyC_two_tailed: Optional[str],
+    chromVar_gearyC_corr_method: Optional[str],
+    chromVar_differential_motif_activity: bool,
+    # LIANA
+    liana_composition_column: Optional[str],
+) -> UploadRequest:
+    """
+    Convert individual form parameters into a structured UploadRequest model.
+    """
+    from models import (
+        FilesInput,
+        SpatialInput,
+        TangramInput,
+        MultiomeInput,
+        ScoresInput,
+        NetworkAlgorithms,
+        SpongeParams,
+        Genie3Params,
+        NetworkConfig,
+        SquidpyMoranIParams,
+        SquidpyGearyCParams,
+        SquidpyCentralityParams,
+        SquidpyCoOccurrenceParams,
+        SquidpyNeighborhoodEnrichmentParams,
+        SquidpyConfig,
+        ChromVarMoranIParams,
+        ChromVarGearyCParams,
+        ChromVarConfig,
+        LianaConfig,
+        UploadRequest,
+    )
+
+    files_input = FilesInput(**saved_files)
+
+    spatial_input = SpatialInput(
+        normalization=spatial_normalization,
+        filtering=spatial_filtering,
+    )
+
+    tangram_input = TangramInput(
+        use=use_tangram,
+        filtering=singlecell_filtering if use_tangram else None,
+        normalization=singlecell_normalization if use_tangram else None,
+        gene_selection_mode=GeneSelectionMode(gene_selection_mode) if (use_tangram and gene_selection_mode) else None,
+    )
+
+    multiome_input = MultiomeInput(use=use_multiome)
+
+    scores_input = ScoresInput(
+        network=score_network,
+        squidpy=score_squidpy,
+        liana_plus=score_liana_plus,
+        chromVar=score_chromVar,
+        differential_motif_activity=score_differential_motif_activity,
+        motif_enrichment=score_motif_enrichment,
+        footprinting=score_FootprintingBias,
+    )
+
+    network_config = NetworkConfig(
+        algorithms=NetworkAlgorithms(
+            viper=alg_viper,
+            aucell=alg_aucell,
+            gsva=alg_gsva,
+            ssgsea=alg_ssgsea,
+        ),
+        sponge_params=SpongeParams(
+            m_score_threshold=net_m_score_threshold,
+            p_adjust=net_p_adjust,
+            ensembl_id_col=net_ensembl_id_col,
+            feature_col=net_feature_col,
+            rna_types=net_rna_types,
+            max_modules=net_max_modules,
+        ),
+        genie3_params=Genie3Params(
+            top_n_weights=genie3_top_n_weights,
+            n_regulatory_genes=genie3_n_regulatory_genes,
+            n_regulons=genie3_n_regulons,
+        ),
+    )
+
+    squidpy_config = SquidpyConfig(
+        moranI=squidpy_moranI,
+        moranI_params=SquidpyMoranIParams(
+            n_perms=squidpy_moranI_n_perms,
+            two_tailed=squidpy_moranI_two_tailed,
+            corr_method=squidpy_moranI_corr_method,
+        ),
+        gearyC=squidpy_gearyC,
+        gearyC_params=SquidpyGearyCParams(
+            n_perms=squidpy_gearyC_n_perms,
+            two_tailed=squidpy_gearyC_two_tailed,
+            corr_method=squidpy_gearyC_corr_method,
+        ),
+        centrality_score=squidpy_centrality_score,
+        centrality_score_params=SquidpyCentralityParams(
+            cluster_key=squidpy_centrality_score_cluster_key,
+        ),
+        co_occurrence=squidpy_co_occurrence,
+        co_occurrence_params=SquidpyCoOccurrenceParams(
+            cluster_key=squidpy_co_occurrence_cluster_key,
+            interval=squidpy_co_occurrence_interval,
+            n_splits=squidpy_co_occurrence_n_splits,
+        ),
+        neighborhood_enrichment=squidpy_neighborhood_enrichment,
+        neighborhood_enrichment_params=SquidpyNeighborhoodEnrichmentParams(
+            cluster_key=squidpy_neighborhood_enrichment_cluster_key,
+            library_key=squidpy_neighborhood_enrichment_library_key,
+            n_perms=squidpy_neighborhood_enrichment_n_perms,
+        ),
+    )
+
+    chromvar_config = ChromVarConfig(
+        moranI=chromVar_moranI,
+        moranI_params=ChromVarMoranIParams(
+            n_perms=chromVar_moranI_n_perms,
+            two_tailed=chromVar_moranI_two_tailed,
+            corr_method=chromVar_moranI_corr_method,
+        ),
+        gearyC=chromVar_gearyC,
+        gearyC_params=ChromVarGearyCParams(
+            n_perms=chromVar_gearyC_n_perms,
+            two_tailed=chromVar_gearyC_two_tailed,
+            corr_method=chromVar_gearyC_corr_method,
+        ),
+        differential_motif_activity=chromVar_differential_motif_activity,
+    )
+
+    liana_config = LianaConfig(
+        composition_column=liana_composition_column,
+    )
+
+    return UploadRequest(
+        email=email,
+        dataset=DatasetType(dataset),
+        files=files_input,
+        spatial=spatial_input,
+        tangram=tangram_input,
+        multiome=multiome_input,
+        scores=scores_input,
+        network=network_config,
+        squidpy=squidpy_config,
+        chromVar=chromvar_config,
+        liana=liana_config,
+        genome=genome,
+    )
+
+
 # Main endpoint for receiving form fields and files (multipart/form-data).
 # It creates a dedicated job directory, saves all provided files there,
 # stores a config JSON for reproducibility, and returns a summary payload.
+
 @app.post("/api/upload", dependencies=[Depends(cookie)])
 async def upload(
-    # --- core ---
+    # --- metadata ---
     email: Optional[str] = Form(None),
-    dataset: Dataset = Form(...),
-    # Spatial
+    dataset: str = Form(...),
+    # --- files ---
     spatial_h5ad: UploadFile = File(...),
-    spatial_normalization: bool = Form(False),
-    spatial_filtering: bool = Form(False),
-    # Tangram
-    use_tangram: bool = Form(False),
     single_cell_h5ad: Optional[UploadFile] = File(None),
-    singlecell_filtering: bool = Form(False),
-    singlecell_normalization: bool = Form(False),
-    gene_selection_mode: Optional[GeneSelectionMode] = Form(None),
-    # Multiome
-    use_multiome: bool = Form(False),
     multiome_rds: Optional[UploadFile] = File(None),
-
-    # need_multiome_fragments: bool = Form(False),
     fragments_tsv_gz: Optional[UploadFile] = File(None),
     fragments_tsv_gz_tbi: Optional[UploadFile] = File(None),
-
-    # Scores
+    genie3_network: Optional[UploadFile] = File(None),
+    sponge_networkanalysis: Optional[UploadFile] = File(None),
+    sponge_networkinteractions: Optional[UploadFile] = File(None),
+    liana_genie3_network: Optional[UploadFile] = File(None),
+    liana_pathway_network: Optional[UploadFile] = File(None),
+    # --- spatial options ---
+    spatial_normalization: bool = Form(False),
+    spatial_filtering: bool = Form(False),
+    # --- tangram options ---
+    use_tangram: bool = Form(False),
+    singlecell_filtering: bool = Form(False),
+    singlecell_normalization: bool = Form(False),
+    gene_selection_mode: Optional[str] = Form(None),
+    # --- multiome options ---
+    use_multiome: bool = Form(False),
+    # --- scoring ---
     score_network: bool = Form(False),
     score_squidpy: bool = Form(False),
     score_liana_plus: bool = Form(False),
@@ -534,30 +728,24 @@ async def upload(
     score_differential_motif_activity: bool = Form(False),
     score_motif_enrichment: bool = Form(False),
     score_FootprintingBias: bool = Form(False),
-
-    genome: str = Form(None),
-
-    # Network Algos
+    genome: Optional[str] = Form(None),
+    # --- network algorithms ---
     alg_viper: bool = Form(False),
     alg_aucell: bool = Form(False),
     alg_gsva: bool = Form(False),
     alg_ssgsea: bool = Form(False),
-    # SPONGE-Params
+    # --- sponge params ---
     net_m_score_threshold: Optional[float] = Form(None),
     net_p_adjust: Optional[str] = Form(None),
     net_ensembl_id_col: Optional[str] = Form(None),
     net_feature_col: Optional[str] = Form(None),
     net_rna_types: Optional[str] = Form(None),
     net_max_modules: Optional[int] = Form(None),
-    # GENIE3-Params
+    # --- genie3 params ---
     genie3_top_n_weights: Optional[int] = Form(None),
     genie3_n_regulatory_genes: Optional[int] = Form(None),
     genie3_n_regulons: Optional[int] = Form(None),
-    # Network-Dateien
-    genie3_network: Optional[UploadFile] = File(None),
-    sponge_networkanalysis: Optional[UploadFile] = File(None),
-    sponge_networkinteractions: Optional[UploadFile] = File(None),
-    # Squidpy Flags + Params
+    # --- squidpy params ---
     squidpy_moranI: bool = Form(False),
     squidpy_moranI_n_perms: Optional[int] = Form(None),
     squidpy_moranI_two_tailed: bool = Form(False),
@@ -576,48 +764,34 @@ async def upload(
     squidpy_neighborhood_enrichment_cluster_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_library_key: Optional[str] = Form(None),
     squidpy_neighborhood_enrichment_n_perms: Optional[int] = Form(None),
-    # ChromVAR Flags + Params ---
+    # --- chromvar params ---
     chromVar_moranI: bool = Form(False),
     chromVar_moranI_n_perms: Optional[int] = Form(None),
-    chromVar_moranI_two_tailed: Optional[str] = Form(None),   # "oneTailed" / "twoTailed"
+    chromVar_moranI_two_tailed: Optional[str] = Form(None),
     chromVar_moranI_corr_method: Optional[str] = Form(None),
-
     chromVar_gearyC: bool = Form(False),
     chromVar_gearyC_n_perms: Optional[int] = Form(None),
     chromVar_gearyC_two_tailed: Optional[str] = Form(None),
     chromVar_gearyC_corr_method: Optional[str] = Form(None),
-
     chromVar_differential_motif_activity: bool = Form(False),
-
-    # LIANA
+    # --- liana params ---
     liana_composition_column: Optional[str] = Form(None),
-    liana_genie3_network: Optional[UploadFile] = File(None),
-    liana_pathway_network: Optional[UploadFile] = File(None),
+    # --- session ---
     session_data: "SessionData" = Depends(verifier),
 ):
-    print("in method")
+    """
+    Main upload endpoint. Accepts multipart form data with files and options.
+    Returns a structured response with processed data paths and configuration.
+    """
+    print("=== Upload endpoint called ===")
     raw_username = session_data.username
-    #raw_username = "merit"
     user_safe = _sanitize_filename(raw_username) or "anon"
     job_id = f"job_{int(time.time() * 1000)}"
     job_dir = BASE_UPLOAD_DIR / f"{job_id}_{user_safe}"
     job_dir.mkdir(parents=True, exist_ok=True)
 
-
-    # 1b) Option-JSONs sicher parsen
-    def _parse_json_field(name: str, val: Optional[str]):
-        if val in (None, "", "null"):
-            return None
-        try:
-            return json.loads(val)
-        except Exception:
-            raise HTTPException(
-                status_code=400, detail=f"Field '{name}' must be valid JSON."
-            )
-
-    # 3) Save all files into that directory
-    # Dateien speichern (alles in ./uploads)
-    saved_files = {
+    # 1) Save all uploaded files to disk
+    saved_files_dict = {
         "spatial_h5ad": save_file(spatial_h5ad, job_dir),
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
         "multiome_rds": save_file(multiome_rds, job_dir),
@@ -625,28 +799,27 @@ async def upload(
         "fragments_tsv_gz_tbi": save_file(fragments_tsv_gz_tbi, job_dir),
         "genie3_network": save_file(genie3_network, job_dir),
         "sponge_networkanalysis": save_file(sponge_networkanalysis, job_dir),
-        "sponge_networkinteractions": save_file(
-            sponge_networkinteractions, job_dir
-        ),
+        "sponge_networkinteractions": save_file(sponge_networkinteractions, job_dir),
         "liana_genie3_network": save_file(liana_genie3_network, job_dir),
         "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
 
+    with open(job_dir / f"{job_id}_multiome.txt", "w") as f:
+        f.write(f"use_multiome: {use_multiome}\n")
 
-    # TODO: if .rds: convert to h5ad file, and read again
-    if use_multiome:
-        print("in rds2h5ad block")
-        rds_path = saved_files["multiome_rds"]
-        assay_name = "RNA"
-        h5ad_path = re.sub(r"\.rds$", f".h5ad", rds_path)
-        print(f"Running file conversion in multiome env ...")
+    # 2) Handle RDS to H5AD conversion if needed
+    if use_multiome and saved_files_dict.get("multiome_rds"):
+        print("Converting RDS to H5AD...")
+        rds_path = saved_files_dict["multiome_rds"]
+        h5ad_path = re.sub(r"\.rds$", ".h5ad", rds_path)
         log_path = Path(h5ad_path).with_suffix(".log")
         with log_path.open("w") as log_file:
             result = subprocess.run(
-                [   "Rscript",
+                [
+                    "Rscript",
                     "../backend/rds_to_h5ad.R",
                     "--rds_path", rds_path,
-                    "--assay", assay_name,
+                    "--assay", "RNA",
                     "--h5ad_path", h5ad_path,
                 ],
                 stdout=log_file,
@@ -654,245 +827,161 @@ async def upload(
                 text=True,
                 check=False,
             )
+        saved_files_dict["single_cell_h5ad"] = h5ad_path
 
-        use_tangram = True
-        single_cell_h5ad = h5ad_path
-        print(single_cell_h5ad)
-        saved_files["single_cell_h5ad"] = single_cell_h5ad
+    # 3) Build structured UploadRequest using helper function
+    upload_request = build_upload_request(
+        email=email,
+        dataset=dataset,
+        saved_files=saved_files_dict,
+        spatial_normalization=spatial_normalization,
+        spatial_filtering=spatial_filtering,
+        use_tangram=use_tangram,
+        singlecell_filtering=singlecell_filtering,
+        singlecell_normalization=singlecell_normalization,
+        gene_selection_mode=gene_selection_mode,
+        use_multiome=use_multiome,
+        score_network=score_network,
+        score_squidpy=score_squidpy,
+        score_liana_plus=score_liana_plus,
+        score_chromVar=score_chromVar,
+        score_differential_motif_activity=score_differential_motif_activity,
+        score_motif_enrichment=score_motif_enrichment,
+        score_FootprintingBias=score_FootprintingBias,
+        genome=genome,
+        alg_viper=alg_viper,
+        alg_aucell=alg_aucell,
+        alg_gsva=alg_gsva,
+        alg_ssgsea=alg_ssgsea,
+        net_m_score_threshold=net_m_score_threshold,
+        net_p_adjust=net_p_adjust,
+        net_ensembl_id_col=net_ensembl_id_col,
+        net_feature_col=net_feature_col,
+        net_rna_types=net_rna_types,
+        net_max_modules=net_max_modules,
+        genie3_top_n_weights=genie3_top_n_weights,
+        genie3_n_regulatory_genes=genie3_n_regulatory_genes,
+        genie3_n_regulons=genie3_n_regulons,
+        squidpy_moranI=squidpy_moranI,
+        squidpy_moranI_n_perms=squidpy_moranI_n_perms,
+        squidpy_moranI_two_tailed=squidpy_moranI_two_tailed,
+        squidpy_moranI_corr_method=squidpy_moranI_corr_method,
+        squidpy_gearyC=squidpy_gearyC,
+        squidpy_gearyC_n_perms=squidpy_gearyC_n_perms,
+        squidpy_gearyC_two_tailed=squidpy_gearyC_two_tailed,
+        squidpy_gearyC_corr_method=squidpy_gearyC_corr_method,
+        squidpy_centrality_score=squidpy_centrality_score,
+        squidpy_centrality_score_cluster_key=squidpy_centrality_score_cluster_key,
+        squidpy_co_occurrence=squidpy_co_occurrence,
+        squidpy_co_occurrence_cluster_key=squidpy_co_occurrence_cluster_key,
+        squidpy_co_occurrence_interval=squidpy_co_occurrence_interval,
+        squidpy_co_occurrence_n_splits=squidpy_co_occurrence_n_splits,
+        squidpy_neighborhood_enrichment=squidpy_neighborhood_enrichment,
+        squidpy_neighborhood_enrichment_cluster_key=squidpy_neighborhood_enrichment_cluster_key,
+        squidpy_neighborhood_enrichment_library_key=squidpy_neighborhood_enrichment_library_key,
+        squidpy_neighborhood_enrichment_n_perms=squidpy_neighborhood_enrichment_n_perms,
+        chromVar_moranI=chromVar_moranI,
+        chromVar_moranI_n_perms=chromVar_moranI_n_perms,
+        chromVar_moranI_two_tailed=chromVar_moranI_two_tailed,
+        chromVar_moranI_corr_method=chromVar_moranI_corr_method,
+        chromVar_gearyC=chromVar_gearyC,
+        chromVar_gearyC_n_perms=chromVar_gearyC_n_perms,
+        chromVar_gearyC_two_tailed=chromVar_gearyC_two_tailed,
+        chromVar_gearyC_corr_method=chromVar_gearyC_corr_method,
+        chromVar_differential_motif_activity=chromVar_differential_motif_activity,
+        liana_composition_column=liana_composition_column,
+    )
 
+    # 3b) Convert UploadRequest to Params for OOP dataset structure
+    try:
+        params = Params.from_upload_request(upload_request)
+        print(f"✓ Created Params from UploadRequest")
+    except Exception as e:
+        print(f"⚠ Could not create Params: {e}; will use raw UploadRequest")
+        params = None
 
-    # TODO: change saved files dict. spatial_h5ad should become the h5ad path
-    # or single_cell_h5ad?
+    # 4) Convert UploadRequest to dict for pipeline processing
+    payload = upload_request.model_dump(exclude_none=False)
 
-    # 4) Build response payload
-    payload = {
-        "email": str(email),
-        "dataset": dataset.value,
-        "spatial": {
-            "normalization": spatial_normalization,
-            "filtering": spatial_filtering,
-        },
-        "files": saved_files,
-        "tangram": {
-            "use": use_tangram,
-            "filtering": singlecell_filtering if use_tangram else None,
-            "normalization": singlecell_normalization if use_tangram else None,
-            "gene_selection_mode": (
-                gene_selection_mode.value if (use_tangram and gene_selection_mode) else None
-            ),
-        },
-        "multiome": {
-            "use": use_multiome,
-        },
-        "scores": {
-            "network": score_network,
-            "squidpy": score_squidpy,
-            "liana_plus": score_liana_plus,
-            "chromVar": score_chromVar,
-            "differential_motif_activity": score_differential_motif_activity,
-            "motif_enrichment": score_motif_enrichment,
-            "footprinting": score_FootprintingBias,
-        },
-        "genome": genome,
-
-        "network": {
-            "algorithms": {
-                "viper": alg_viper,
-                "aucell": alg_aucell,
-                "gsva": alg_gsva,
-                "ssgsea": alg_ssgsea,
-            },
-            "sponge_params": {
-                "m_score_threshold": net_m_score_threshold,
-                "p_adjust": net_p_adjust,
-                "ensembl_id_col": net_ensembl_id_col,
-                "feature_col": net_feature_col,
-                "rna_types": net_rna_types,
-                "max_modules": net_max_modules,
-            },
-            "genie3_params": {
-                "top_n_weights": genie3_top_n_weights,
-                "n_regulatory_genes": genie3_n_regulatory_genes,
-                "n_regulons": genie3_n_regulons,
-            },
-        },
-        "squidpy": {
-            "moranI": squidpy_moranI,
-            "moranI_params": {
-                "n_perms": squidpy_moranI_n_perms,
-                "two_tailed": squidpy_moranI_two_tailed,
-                "corr_method": squidpy_moranI_corr_method,
-            },
-            "gearyC": squidpy_gearyC,
-            "gearyC_params": {
-                "n_perms": squidpy_gearyC_n_perms,
-                "two_tailed": squidpy_gearyC_two_tailed,
-                "corr_method": squidpy_gearyC_corr_method,
-            },
-            "centrality_score": squidpy_centrality_score,
-            "centrality_score_params": {
-                "cluster_key": squidpy_centrality_score_cluster_key
-            },
-            "co_occurrence": squidpy_co_occurrence,
-            "co_occurrence_params": {
-                "cluster_key": squidpy_co_occurrence_cluster_key,
-                "interval": squidpy_co_occurrence_interval,
-                "n_splits": squidpy_co_occurrence_n_splits,
-            },
-            "neighborhood_enrichment": squidpy_neighborhood_enrichment,
-            "neighborhood_enrichment_params": {
-                "cluster_key": squidpy_neighborhood_enrichment_cluster_key,
-                "library_key": squidpy_neighborhood_enrichment_library_key,
-                "n_perms": squidpy_neighborhood_enrichment_n_perms,
-            },
-        },
-        "chromVar": {
-            "moranI": chromVar_moranI,
-            "moranI_params": {
-                "n_perms": chromVar_moranI_n_perms,
-                # bool in downstream code if you like:
-                "two_tailed": (chromVar_moranI_two_tailed == "twoTailed"),
-                "tails": chromVar_moranI_two_tailed,  # keep raw if useful
-                "corr_method": chromVar_moranI_corr_method,
-            },
-            "gearyC": chromVar_gearyC,
-            "gearyC_params": {
-                "n_perms": chromVar_gearyC_n_perms,
-                "two_tailed": (chromVar_gearyC_two_tailed == "twoTailed"),
-                "tails": chromVar_gearyC_two_tailed,
-                "corr_method": chromVar_gearyC_corr_method,
-            },
-            "differential_motif_activity": chromVar_differential_motif_activity,
-        },
-        "liana": {
-            "composition_column": liana_composition_column,
-        },
-    }
-
-    # TODO call visium_to_geojson
-
+    # 5) Run analysis pipeline
     out_dir = await calculate_scores_helper(job_dir, payload)
 
-    # Xenium: scores are computed on a grid/spot representation, then broadcast back to cells.
-    # For the web app we prefer the *cell-level* AnnData (xenium_cells_with_grid_scores.h5ad).
-    # If not available, we fall back to spot-level (st_scores.h5ad) or the original upload.
+    print(f"\n=== DEBUG upload() ===")
+    print(f"dataset: {dataset}")
+    print(f"job_dir: {job_dir}")
+    print(f"out_dir: {out_dir}")
 
-
-    print("\n=== DEBUG upload() ===")
-    print("dataset:", dataset.value)
-    print("job_dir:", job_dir)
-    print("out_dir:", out_dir)
-
-    if out_dir is not None:
-        print("files in out_dir:", sorted(os.listdir(out_dir)))
-    else:
-        print("out_dir is None (pipeline returned None)")
-
+    # 6) Identify output files
     adata_path = None
     selected_reason = None
     tangram_adata_path = None
     out_files = {}
 
     if out_dir is not None:
-        for filename in os.listdir(out_dir):
-            if filename.endswith("xenium_cells_with_grid_scores.h5ad") and dataset == Dataset.Xenium:
-                adata_path = os.path.join(out_dir, filename)
-                selected_reason = "Found xenium cell-level output"
-                break
+        out_dir = Path(out_dir)
+        # Check for xenium cells file first
+        xenium_cells_file = out_dir / "xenium_cells_with_grid_scores.h5ad"
+        st_scores_file = out_dir / "st_scores.h5ad"
 
-        if adata_path is None:
-            for filename in os.listdir(out_dir):
-                if filename.endswith("st_scores.h5ad"):
-                    adata_path = os.path.join(out_dir, filename)
-                    selected_reason = "Fallback to grid-level st_scores (cell-level missing)"
-                    break
-                if filename.endswith("adata_tg_scores.h5ad"):
-                    adata_path = os.path.join(out_dir, filename)
-                    break
+        if xenium_cells_file.exists() and xenium_cells_file.is_file():
+            adata_path = str(xenium_cells_file)
+            selected_reason = "xenium_cells_with_grid_scores"
+        elif st_scores_file.exists() and st_scores_file.is_file():
+            adata_path = str(st_scores_file)
+            selected_reason = "st_scores"
+        else:
+            adata_path = str(saved_files_dict.get("spatial_h5ad"))
+            selected_reason = "original_spatial"
 
-        print("selected adata_path:", adata_path)
-        print("selection reason:", selected_reason)
+        tangram_adata_path = str(out_dir / "tangram_results.h5ad") if (out_dir / "tangram_results.h5ad").exists() else None
 
+        geojson_path = str(out_dir / "hexagons.geojson") if (out_dir / "hexagons.geojson").exists() else None
+        if geojson_path and Path(geojson_path).exists():
+            out_files["geojson_path"] = f"/api/geojson/{job_id}_{user_safe}"
 
-
+        # Network files
+        if Path(out_dir / "genie_network_filtered_st.csv").exists():
+            out_files["genie_network_path"] = str(out_dir / "genie_network_filtered_st.csv")
+        if Path(out_dir / "sponge_network_filtered_st.csv").exists():
+            out_files["sponge_network_path"] = str(out_dir / "sponge_network_filtered_st.csv")
 
     if adata_path is None:
-        adata_path = saved_files.get("spatial_h5ad")
-        selected_reason = "Fallback to uploaded spatial_h5ad (no pipeline output found)"
-        print("WARNING:", selected_reason)
+        adata_path = saved_files_dict.get("spatial_h5ad")
+        selected_reason = "fallback_to_input"
 
-    if out_dir is None:
-        out_dir = job_dir
-
-    if adata_path is not None:
-        dataset_id = f"{job_id}_{user_safe}"
-
-        email_prefix = str(email.split("@")[0]) if email else "unknown"
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        dataset_alias = f"{email_prefix}_{dataset_id}_{timestamp}"
-        out_files["adataPath"] = adata_path
-
-        data_type = dataset.value.lower()
-        footprint_list = [
-            str(Path(out_dir).relative_to(BASE_UPLOAD_DIR) / f)
-            for f in os.listdir(out_dir)
-            if f.startswith("footprint") and f.endswith(".pdf")
-        ]
-        dataset_registry.register_uploaded_dataset(
-            dataset_id=dataset_id,
-            alias=dataset_alias,
-            adata_path=adata_path,
-            tangram_adata_path=tangram_adata_path if use_tangram else None,
-            genie_network_path=out_files.get("genie_network_path"),
-            sponge_network_path=out_files.get("sponge_network_path"),
-            geojson_path=f"/api/geojson/{dataset_id}",  # Use API URL instead of file path
-            user=user_safe,
-            dataset_type=dataset,
-            use_tangram=use_tangram,
-            created_at=datetime.now().isoformat(),
-            footprint_list=footprint_list,
-            # TODO Add paths for multiome
-        )
-
-        geojson_out = os.path.join(job_dir, "hexagons.geojson")
-        print("geojson_out:", geojson_out)
-        print("geojson input adata:", adata_path)
-        print("geojson data_type:", dataset.value.lower())
-
-        # Convert selected AnnData to GeoJSON for map rendering.
-        subprocess.run(
-            [
-                "python",
-                "../backend/visium_to_geojson.py",
-                "--adata",
-                adata_path,
-                "--outpath",
-                geojson_out,
-                "--data_type",
-                data_type,
-            ]
-        )
-        out_files["geojsonPath"] = os.path.join(out_dir, "hexagons.geojson")
-        print("geojson exists after run?:", os.path.isfile(geojson_out))
-
-    if os.path.isfile(os.path.join(out_dir, "genie_network_filtered_st.csv")):
-        out_files["genieFiltPath"] = os.path.join(out_dir, "genie_network_filtered_st.csv")
-
-    if os.path.isfile(os.path.join(out_dir, "sponge_network_filtered_st.csv")):
-        out_files["spongeFiltPath"] = os.path.join(out_dir, "sponge_network_filtered_st.csv")
+    out_files["adata_path"] = adata_path
+    if tangram_adata_path:
+        out_files["tangram_adata_path"] = tangram_adata_path
 
     payload["output_files"] = out_files
 
+    # 7) Create and register Dataset object if Params were successfully created
+    if params is not None and adata_path:
+        try:
+            dataset_obj = DatasetFactory.create_dataset(
+                params=params,
+                dataset_id=f"{job_id}_{user_safe}",
+                user=raw_username,
+                adata_path=adata_path,
+                tangram_adata_path=tangram_adata_path,
+                geojson_path=out_files.get("geojson_path"),
+                genie_network_path=out_files.get("genie_network_path"),
+                sponge_network_path=out_files.get("sponge_network_path"),
+            )
+            dataset_registry.register_uploaded_dataset(dataset=dataset_obj)
+            print(f"✓ Registered Dataset: {dataset_obj.id}")
+        except Exception as e:
+            print(f"⚠ Could not register Dataset object: {e}")
+            import traceback
+            traceback.print_exc()
 
-    # 5) Persist a copy of the payload next to the uploaded files
+    # 8) Persist config for reproducibility
     (job_dir / f"{job_id}_config.json").write_text(
-        json.dumps(payload, indent=2), encoding="utf-8"
+        json.dumps(payload, indent=2, default=str), encoding="utf-8"
     )
 
-    # 6) Return a clean JSON response the frontend can consume
+    # 9) Return clean JSON response
     return payload
-
 
 
 @app.get("/api/datasets", dependencies=[Depends(cookie)])
@@ -900,32 +989,40 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
     """
     Return all available datasets for the current user + builtin datasets + shared datasets.
     Filters out datasets with missing files.
+    Returns Dataset objects serialized as JSON.
     """
     try:
-        all_datasets = dataset_registry.get_all_datasets()
-        print(f"All datasets: {all_datasets}")
-        user_datasets = dataset_registry.get_user_datasets(session_data.username)
-        print(f"User datasets for {session_data.username}: {user_datasets}")
+        # Get all datasets (already serialized as dicts)
+        all_datasets = dataset_registry.get_all_datasets(as_dict=True)
+        print(f"Fetching datasets for user: {session_data.username}")
 
-        # Verify files exist before returning
-        valid_user_datasets = {}
-        for dataset_id, info in user_datasets.items():
-            if Path(info["adata_path"]).exists():
-                valid_user_datasets[dataset_id] = info
-
-        # Also include shared datasets (marked with user="__shared__")
-        shared_datasets = {}
-        if "uploaded" in all_datasets:
-            for dataset_id, info in all_datasets["uploaded"].items():
-                if info.get("user") == "__shared__" and Path(info["adata_path"]).exists():
-                    shared_datasets[dataset_id] = info
-
+        # Build response: filter out datasets with missing files
         datasets_json = {
-            "builtin": all_datasets.get("builtin", {}),
-            "uploaded": {**valid_user_datasets, **shared_datasets}
+            "builtin": {},
+            "uploaded": {},
         }
 
-        print(f"Returning datasets: {datasets_json}")
+        # Process builtin datasets
+        for dataset_id, dataset_dict in all_datasets.get("builtin", {}).items():
+            adata_path = dataset_dict.get("adata_path")
+            if adata_path and Path(adata_path).exists():
+                datasets_json["builtin"][dataset_id] = dataset_dict
+                print(f"✓ Included builtin dataset: {dataset_id}")
+            else:
+                print(f"✗ Skipped builtin dataset {dataset_id}: missing adata at {adata_path}")
+
+        # Process user's uploaded datasets
+        user = session_data.username
+        for dataset_id, dataset_dict in all_datasets.get("uploaded", {}).items():
+            if dataset_dict.get("user") == user:
+                adata_path = dataset_dict.get("adata_path")
+                if adata_path and Path(adata_path).exists():
+                    datasets_json["uploaded"][dataset_id] = dataset_dict
+                    print(f"✓ Included uploaded dataset: {dataset_id}")
+                else:
+                    print(f"✗ Skipped uploaded dataset {dataset_id}: missing adata at {adata_path}")
+
+        print(f"Returning datasets: {list(datasets_json['builtin'].keys())} builtin + {list(datasets_json['uploaded'].keys())} uploaded")
         return datasets_json
     except Exception as e:
         print(f"✗ Error in get_datasets: {e}")

@@ -2,12 +2,16 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
+
+from dataset_structure import Dataset, DatasetFactory, VisiumDataset, Params
+
 
 class DatasetRegistry:
     """
     Manages available datasets across the application.
     Stores metadata about uploaded and built-in datasets.
+    Holds Dataset objects in memory, persists as JSON to disk.
     """
 
     def __init__(self, registry_file: Path = None):
@@ -18,39 +22,76 @@ class DatasetRegistry:
         self.registry_file = registry_file
         self.registry_file.parent.mkdir(parents=True, exist_ok=True)
         print(f"Dataset registry path: {self.registry_file}")
+        # self.datasets now stores Dataset objects organized by category
         self.datasets = self._load_registry()
 
     def _load_registry(self, clear_uploads: bool = True) -> Dict:
-        """Load existing registry or create new one.
+        """
+        Load existing registry or create new one.
+        Deserializes JSON into Dataset objects.
 
         Args:
             clear_uploads: If True (on startup), clear uploaded datasets.
                           If False (runtime), preserve existing uploads.
+
+        Returns:
+            Dict with "builtin" and "uploaded" keys containing Dataset objects
         """
+        datasets = {"builtin": {}, "uploaded": {}}
+
         if self.registry_file.exists():
             try:
                 with open(self.registry_file, 'r') as f:
                     data = json.load(f)
-                    if clear_uploads:
-                        # On startup, keep only builtin datasets, clear uploaded ones
-                        return {
-                            "builtin": data.get("builtin", {}),
-                            "uploaded": {}
-                        }
-                    else:
-                        # At runtime, preserve everything
-                        return data
+
+                    # Load builtin datasets
+                    for dataset_id, dataset_dict in data.get("builtin", {}).items():
+                        try:
+                            # Mark as builtin to preserve category
+                            dataset_dict["category"] = "builtin"
+                            dataset = DatasetFactory.from_registry_dict(dataset_dict)
+                            datasets["builtin"][dataset_id] = dataset
+                        except Exception as e:
+                            print(f"⚠ Failed to load builtin dataset {dataset_id}: {e}")
+
+                    # Load uploaded datasets (if not clearing)
+                    if not clear_uploads:
+                        for dataset_id, dataset_dict in data.get("uploaded", {}).items():
+                            try:
+                                dataset_dict["category"] = "uploaded"
+                                dataset = DatasetFactory.from_registry_dict(dataset_dict)
+                                datasets["uploaded"][dataset_id] = dataset
+                            except Exception as e:
+                                print(f"⚠ Failed to load uploaded dataset {dataset_id}: {e}")
+
+                return datasets
 
             except Exception as e:
                 print(f"Error loading registry: {e}")
-                return {"builtin": {}, "uploaded": {}}
-        return {"builtin": {}, "uploaded": {}}
+                return datasets
+
+        return datasets
 
     def _save_registry(self):
-        """Persist registry to disk"""
+        """
+        Persist registry to disk.
+        Converts Dataset objects to dictionaries for JSON serialization.
+        """
         try:
+            # Convert Dataset objects to dicts for JSON storage
+            json_data = {
+                "builtin": {
+                    dataset_id: dataset.to_registry_dict()
+                    for dataset_id, dataset in self.datasets.get("builtin", {}).items()
+                },
+                "uploaded": {
+                    dataset_id: dataset.to_registry_dict()
+                    for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
+                }
+            }
+
             with open(self.registry_file, 'w') as f:
-                json.dump(self.datasets, indent=2, fp=f)
+                json.dump(json_data, indent=2, fp=f, default=str)
             print(f"✓ Registry saved to {self.registry_file}")
         except Exception as e:
             print(f"✗ Error saving registry: {e}")
@@ -58,9 +99,10 @@ class DatasetRegistry:
 
     def register_uploaded_dataset(
         self,
-        dataset_id: str,
-        alias: str,
-        adata_path: str,
+        dataset: Optional[Dataset] = None,
+        dataset_id: Optional[str] = None,
+        alias: Optional[str] = None,
+        adata_path: Optional[str] = None,
         tangram_adata_path: Optional[str] = None,
         geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
@@ -69,70 +111,165 @@ class DatasetRegistry:
         footprint_list: Optional[List[str]] = None,
         **metadata
     ) -> None:
-        """Register a newly uploaded dataset"""
+        """
+        Register a newly uploaded dataset.
 
+        Can accept either:
+        1. A Dataset object directly: register_uploaded_dataset(dataset=my_dataset)
+        2. Legacy parameters: register_uploaded_dataset(dataset_id=..., alias=..., adata_path=..., etc.)
+
+        Args:
+            dataset: Dataset object to register (if provided, other args are ignored)
+            dataset_id: Legacy: unique identifier
+            alias: Legacy: user-friendly name
+            adata_path: Legacy: path to AnnData H5AD file
+            ... (other legacy parameters)
+        """
         if "uploaded" not in self.datasets:
             self.datasets["uploaded"] = {}
 
-        self.datasets["uploaded"][dataset_id] = {
-            "alias": alias,
-            "adata_path": adata_path,
-            "tangram_adata_path": tangram_adata_path,
-            "geojson_path": geojson_path,
-            "genie_network_path": genie_network_path,
-            "sponge_network_path": sponge_network_path,
-            "user": user,
-            "created_at": datetime.now().isoformat(),
-            "footprint_list": footprint_list,
-        }
+        if dataset is not None:
+            # Register Dataset object directly
+            self.datasets["uploaded"][dataset.id] = dataset
+            print(f"Registering Dataset object: {dataset.id}")
+        else:
+            # Legacy: create VisiumDataset from parameters
+            if not all([dataset_id, alias, adata_path]):
+                raise ValueError("Must provide either dataset object or (dataset_id, alias, adata_path)")
+
+            dataset_obj = VisiumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user=user,
+                tangram_adata_path=tangram_adata_path,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                footprint_list=footprint_list,
+                **metadata
+            )
+            self.datasets["uploaded"][dataset_id] = dataset_obj
+            print(f"Registered legacy dataset: {dataset_id}")
+
         print(f"Saving registry to {self.registry_file}")
         self._save_registry()
-        print(f"✓ Registered dataset {dataset_id}")
+        print(f"✓ Registered dataset {dataset_id if dataset is None else dataset.id}")
 
     def register_builtin_dataset(
         self,
-        dataset_id: str,
-        alias: str,
-        adata_path: str,
+        dataset: Optional[Dataset] = None,
+        dataset_id: Optional[str] = None,
+        alias: Optional[str] = None,
+        adata_path: Optional[str] = None,
         geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
         **metadata
     ) -> None:
-        """Register a built-in dataset (from backend/data)"""
+        """
+        Register a built-in dataset (from backend/data).
 
+        Can accept either:
+        1. A Dataset object directly: register_builtin_dataset(dataset=my_dataset)
+        2. Legacy parameters: register_builtin_dataset(dataset_id=..., alias=..., adata_path=..., etc.)
+
+        Args:
+            dataset: Dataset object to register
+            dataset_id: Legacy: unique identifier
+            alias: Legacy: user-friendly name
+            adata_path: Legacy: path to AnnData H5AD file
+            ... (other legacy parameters)
+        """
         if "builtin" not in self.datasets:
             self.datasets["builtin"] = {}
 
-        self.datasets["builtin"][dataset_id] = {
-            "alias": alias,
-            "adata_path": adata_path,
-            "geojson_path": geojson_path,
-            "genie_network_path": genie_network_path,
-            "sponge_network_path": sponge_network_path,
-            "created_at": datetime.now().isoformat(),
-            **metadata
-        }
+        if dataset is not None:
+            # Register Dataset object directly
+            self.datasets["builtin"][dataset.id] = dataset
+            print(f"Registering builtin Dataset: {dataset.id}")
+        else:
+            # Legacy: create VisiumDataset from parameters
+            if not all([dataset_id, alias, adata_path]):
+                raise ValueError("Must provide either dataset object or (dataset_id, alias, adata_path)")
+
+            dataset_obj = VisiumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                **metadata
+            )
+            self.datasets["builtin"][dataset_id] = dataset_obj
+            print(f"Registered legacy builtin dataset: {dataset_id}")
+
         self._save_registry()
 
-    def get_all_datasets(self) -> Dict[str, Dict]:
-        """Return all available datasets grouped by type"""
-        return self.datasets
+    def get_all_datasets(self, as_dict: bool = True) -> Dict:
+        """
+        Return all available datasets grouped by type.
 
-    def get_dataset_by_id(self, dataset_id: str) -> Optional[Dict]:
-        """Get a single dataset by ID"""
+        Args:
+            as_dict: If True, return Dataset objects serialized as dicts.
+                    If False, return Dataset objects directly.
+
+        Returns:
+            Dict: {"builtin": {...}, "uploaded": {...}} with Dataset entries
+        """
+        if not as_dict:
+            # Return Dataset objects directly (for in-app use)
+            return self.datasets
+
+        # Return serialized dicts (for JSON API responses)
+        return {
+            "builtin": {
+                dataset_id: dataset.to_dict()
+                for dataset_id, dataset in self.datasets.get("builtin", {}).items()
+            },
+            "uploaded": {
+                dataset_id: dataset.to_dict()
+                for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
+            }
+        }
+
+    def get_dataset_by_id(self, dataset_id: str, as_dict: bool = True) -> Optional[Union[Dataset, Dict]]:
+        """
+        Get a single dataset by ID.
+
+        Args:
+            dataset_id: Dataset identifier
+            as_dict: If True, return serialized dict. If False, return Dataset object.
+
+        Returns:
+            Dataset object (if as_dict=False) or dict (if as_dict=True), or None if not found
+        """
         for category in ["builtin", "uploaded"]:
             if category in self.datasets and dataset_id in self.datasets[category]:
-                return self.datasets[category][dataset_id]
+                dataset = self.datasets[category][dataset_id]
+                return dataset.to_dict() if as_dict else dataset
         return None
 
-    def get_user_datasets(self, user: str) -> Dict[str, Dict]:
-        """Get all datasets for a specific user"""
+    def get_user_datasets(self, user: str, as_dict: bool = True) -> Dict[str, Union[Dataset, Dict]]:
+        """
+        Get all datasets for a specific user.
+
+        Args:
+            user: Username to filter by
+            as_dict: If True, return serialized dicts. If False, return Dataset objects.
+
+        Returns:
+            Dict of {dataset_id: Dataset or dict} for datasets owned by user
+        """
         user_datasets = {}
         if "uploaded" in self.datasets:
-            for dataset_id, info in self.datasets["uploaded"].items():
-                if info.get("user") == user:
-                    user_datasets[dataset_id] = info
+            for dataset_id, dataset in self.datasets["uploaded"].items():
+                if dataset.user == user:
+                    user_datasets[dataset_id] = dataset.to_dict() if as_dict else dataset
         return user_datasets
 
     def remove_dataset(self, dataset_id: str) -> bool:
@@ -144,15 +281,25 @@ class DatasetRegistry:
                 return True
         return False
 
-    def update_dataset_paths(
-        self,
-        dataset_id: str,
-        **new_paths
-    ) -> bool:
-        """Update paths for an existing dataset"""
-        dataset = self.get_dataset_by_id(dataset_id)
+    def update_dataset_paths(self, dataset_id: str, **new_paths) -> bool:
+        """
+        Update paths for an existing dataset.
+
+        Args:
+            dataset_id: Dataset to update
+            **new_paths: Keyword arguments for Dataset attributes to update
+                        (e.g., adata_path=..., geojson_path=...)
+
+        Returns:
+            True if update successful, False if dataset not found
+        """
+        dataset = self.get_dataset_by_id(dataset_id, as_dict=False)
         if dataset:
-            dataset.update(new_paths)
+            for key, value in new_paths.items():
+                if hasattr(dataset, key):
+                    setattr(dataset, key, value)
+                else:
+                    print(f"⚠ Dataset attribute '{key}' does not exist")
             self._save_registry()
             return True
         return False
@@ -161,6 +308,8 @@ class DatasetRegistry:
         """
         TESTING ONLY: Scan the uploads folder and re-register datasets found there.
         Looks for *_st_scores.h5ad files and attempts to reconstruct metadata.
+        Creates Dataset objects from found files.
+
         Returns a dict with results: {dataset_id: status_message}
         """
         if not uploads_dir.exists():
@@ -187,15 +336,17 @@ class DatasetRegistry:
                 geojson_path = None
                 genie_network_path = None
                 sponge_network_path = None
+                dataset_type = "visium"
+                use_tangram = False
+                use_multiome = False
 
                 if config_file.exists():
                     try:
                         with open(config_file, 'r') as f:
                             config = json.load(f)
-                            metadata = {
-                                "dataset_type": config.get("dataset", "Unknown"),
-                                "use_tangram": config.get("tangram", {}).get("use", False),
-                            }
+                            dataset_type = config.get("dataset", "visium")
+                            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+                            use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
                             if "output_files" in config:
                                 genie_network_path = config["output_files"].get("genie_network_path")
                                 sponge_network_path = config["output_files"].get("sponge_network_path")
@@ -203,45 +354,42 @@ class DatasetRegistry:
                         print(f"  ⚠ Could not parse config for {dataset_id}: {e}")
 
                 # Look for geojson in multiple locations
-                # First in h5ad's direct directory, then in parent directories up to job_dir
-                geojson_candidates = []
                 search_dir = h5ad_file.parent
-                max_depth = 5  # Limit how far up we search
+                max_depth = 5
                 for _ in range(max_depth):
                     candidates = list(search_dir.glob("hexagons.geojson"))
                     if candidates:
-                        geojson_candidates = candidates
                         geojson_path = f"/api/geojson/{dataset_id}"
                         break
-                    # Stop if we've reached or passed the job_dir
                     if search_dir <= job_dir:
                         break
-                    # Move up one directory level
                     search_dir = search_dir.parent
 
-                # Extract user from directory name (job_TIMESTAMP_USER format)
+                # Extract user from directory name
                 user_part = dataset_id.split("_", 2)[-1] if "_" in dataset_id else "unknown"
 
-                footprint_list = [
-                    str(h5ad_file.parent.relative_to(uploads_dir) / f)
-                    for f in os.listdir(h5ad_file.parent)
-                    if f.startswith("footprint") and f.endswith(".pdf")
-                ]
-                # Register the dataset
-                self.register_uploaded_dataset(
+                # Create Dataset object
+                dataset = VisiumDataset(
                     dataset_id=dataset_id,
                     alias=f"[RESCANNED] {dataset_id}",
                     adata_path=str(h5ad_file),
+                    user=user_part,
                     geojson_path=geojson_path,
                     genie_network_path=genie_network_path,
                     sponge_network_path=sponge_network_path,
-                    user=user_part,
-                    footprint_list=footprint_list,
-                    **metadata
+                    created_at=datetime.now(),
+                    dataset_type=dataset_type,
+                    use_tangram=use_tangram,
+                    use_multiome=use_multiome,
                 )
+
+                # Register the Dataset object
+                self.register_uploaded_dataset(dataset=dataset)
                 results[dataset_id] = "registered"
 
             except Exception as e:
                 results[str(h5ad_file)] = f"error: {e}"
+                import traceback
+                traceback.print_exc()
 
         return results
