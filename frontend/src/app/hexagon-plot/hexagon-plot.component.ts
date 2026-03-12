@@ -114,9 +114,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     private g_compare!: d3.Selection<SVGGElement, any, any, any>;
     private svg_compare!: d3.Selection<SVGSVGElement, any, any, any>;
 
-  // Nested g elements that contain the actual paths
-  private g_paths!: d3.Selection<SVGGElement, any, any, any>;
-  private g_paths_compare!: d3.Selection<SVGGElement, any, any, any>;
+    // Nested g elements that contain the actual paths
+    private g_paths!: d3.Selection<SVGGElement, any, any, any>;
+    private g_paths_compare!: d3.Selection<SVGGElement, any, any, any>;
     // ======= Xenium performance state =======
     private fullFeatures: CellFeature[] = [];
     private isXenium = false;
@@ -135,13 +135,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // =======================================
 
 
-  public selectedCell: CellFeature | null = null;
-  public selectedCellCompare: CellFeature | null = null;
-  public selectedCluster: number | null = null;
-  public colorByProperty = 'regulatory_scores';
-  public selectedGeneSetGenie3: string | null = null;
-  public selectedGeneSetSponge: string | null = null;
-  public selectedRegulatoryScore: string | null = null;
+    public selectedCell: CellFeature | null = null;
+    public selectedCellCompare: CellFeature | null = null;
+    public selectedCluster: number | null = null;
+    public colorByProperty = 'regulatory_scores';
+    public selectedGeneSetGenie3: string | null = null;
+    public selectedGeneSetSponge: string | null = null;
+    public selectedRegulatoryScore: string | null = null;
 
     // Data sources for the two tables
     public genie3RawData: TableData = {};
@@ -164,6 +164,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     public selectedDgeaGroup1: string | null = null;
     public selectedDgeaGroup2: string | null = null;
 
+    private hiddenPropKeys = new Set<string>([]);
+
     // Selected groups for the DGEA comparison (bound to the dropdowns)
     getSelectedDgeaHeatmap(): any | null {
         const cmp = this.getSelectedDgeaComparison();
@@ -184,6 +186,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // Re-render the DGEA heatmap when the user changes the group selections
     public onDgeaSelectionChange(): void {
         setTimeout(() => this.renderDgeaHeatmap(), 0);
+    }
+
+    private getLeidenClusterAnnotation(clusterId: number | null | undefined): any | null {
+      if (clusterId === null || clusterId === undefined) return null;
+      return this.meta?.['leiden_cluster_annotations']?.[String(clusterId)] ?? null;
     }
 
     // Create comparison ID matching the backend JSON format
@@ -707,6 +714,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * hasn't been computed or loaded yet.
    */
   public propertyAvailable(prop: string): boolean {
+    if (prop === 'co_occurrence') {
+      const clusters = this.meta?.['leiden_cluster_annotations'];
+      if (!clusters) return false;
+
+      return Object.values(clusters).some(
+        (c: any) => Array.isArray(c?.co_occurrence) && c.co_occurrence.length > 0
+      );
+    }
     return !!this.propertyAvailability[prop];
   }
 
@@ -834,7 +849,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .attr('d', (d) => pathGenerator(d) || '')
       .attr('fill', (d) => {
         const value = (this.leidenCentralityProps.includes(this.selectedCompareView))
-          ? d.properties.leiden_centrality[this.selectedCompareView]
+          ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedCompareView]
           : d.properties[this.selectedCompareView];
         if (this.currentCompareLegendType === 'categorical') {
           return this.colorScaleCompare(String(value));
@@ -952,6 +967,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                         this.features = this.fullFeatures;
                     }
                     this.meta = data.meta;
+                    const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
+                    if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+                      this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+                    }
+
+                    const interval = this.meta?.['interval'];
+                    if (Array.isArray(interval) && interval.length > 0) {
+                      this.maxInterval = interval.length - 1;
+                    }
                     this.selectedRegulatoryScore =
                         this.meta['grn_score_names']?.[0] || null;
                     this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
@@ -990,6 +1014,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         scoreKeys.forEach((k) => allKeys.add(k));
         lianaKeys.forEach((k) => allKeys.add(k));
 
+        this.leidenCentralityProps.forEach((k) => allKeys.add(k));
         this.colorableProperties = Array.from(allKeys);
         console.log('Initial colourable properties (including potential ones):',
           this.colorableProperties);
@@ -1014,11 +1039,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const candidates = new Set(this.colorableProperties);
         // ensure some non-colorable but still important keys are included
         candidates.add('regulatory_scores');
-        candidates.add('leiden_co_occurrence');
         this.propertyAvailability = {};
         candidates.forEach((prop) => {
           if (prop === 'regulatory_scores') {
             this.propertyAvailability[prop] = this.hasRegulatoryScoresData();
+          }else if (this.leidenCentralityProps.includes(prop)) {
+            this.propertyAvailability[prop] = this.features.some((f) => {
+              const val = this.getLeidenClusterAnnotation(f.properties.leiden)?.centrality?.[prop];
+              return val !== undefined && val !== null && val !== '';
+            });
           } else {
             this.propertyAvailability[prop] = this.features.some((f) => {
               const val = f.properties ? f.properties[prop] : undefined;
@@ -1092,7 +1121,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               .join('path')
               .attr('d', (d: CellFeature) => pathGenerator(d) || '')
               .attr('fill', (d: CellFeature) => {
-                  const value = d.properties?.[this.colorByProperty];
+                  const value = this.leidenCentralityProps.includes(this.colorByProperty)
+                    ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
+                    : d.properties?.[this.colorByProperty];
                   if (this.currentLegendType === 'categorical') {
                       return this.colorScale(String(value));
                   } else {
@@ -1112,7 +1143,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               .join('path')
               .attr('d', (d: CellFeature) => pathGenerator(d) || '')
               .attr('fill', (d: CellFeature) => {
-                  const value = d.properties?.[this.colorByProperty];
+                  const value = this.leidenCentralityProps.includes(this.colorByProperty)
+                    ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
+                    : d.properties?.[this.colorByProperty];
                   if (this.currentLegendType === 'categorical') {
                       return this.colorScale(String(value));
                   } else {
@@ -1198,9 +1231,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         const valuesRaw = sourceFeatures.map((f) => {
             if (this.leidenCentralityProps.includes(view)) {
-                return f.properties.leiden_centrality[view];
+                const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden);
+                return clusterAnnotation?.centrality?.[view];
             }
-            return f.properties[view];
+            return f.properties[view];;
         });
 
         const numericValues = valuesRaw.map((v) => this.toNumber(v));
@@ -1249,25 +1283,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     public updateHexColors(containerName?: string): void {
 
-        if (!containerName) {
-            containerName = '#hexbin';
-        }
-
-        const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
-        let valuesRaw;
-
-    console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
-
-    // Debug: check if the view property exists in features
-    if (viewVariablesToUpdate.features.length > 0) {
-      const firstFeature = viewVariablesToUpdate.features[0];
-      const hasProperty = viewVariablesToUpdate.view in (firstFeature.properties || {});
-      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
-      console.log('[updateHexColors] Looking for property:', viewVariablesToUpdate.view, '- Exists:', hasProperty);
-      if (!hasProperty) {
-        console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+      if (!containerName) {
+          containerName = '#hexbin';
       }
-    }
+
+      const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
+      let valuesRaw;
+
+      console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
+
+      // Debug: check if the view property exists in features
+      if (viewVariablesToUpdate.features.length > 0) {
+        const firstFeature = viewVariablesToUpdate.features[0];
+        const hasProperty = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+          ? true
+          : viewVariablesToUpdate.view in (firstFeature.properties || {});
+        console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
+        console.log('[updateHexColors] Looking for property:', viewVariablesToUpdate.view, '- Exists:', hasProperty);
+        if (!hasProperty) {
+          console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+        }
+      }
 
         this.resetClusterExtension();
 
@@ -1296,7 +1332,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         valuesRaw = viewVariablesToUpdate.features.map((f) => {
             if (this.leidenCentralityProps.includes(viewVariablesToUpdate.view)) {
-                return f.properties.leiden_centrality[viewVariablesToUpdate.view];
+                return this.getLeidenClusterAnnotation(f.properties.leiden)?.centrality?.[viewVariablesToUpdate.view];
             }
             return f.properties[viewVariablesToUpdate.view];
         });
@@ -1326,7 +1362,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 .attr('stroke', 'transparent')
                 .attr('fill', (d) => {
                     const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
-                        ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+                        ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[viewVariablesToUpdate.view]
                         : d.properties[viewVariablesToUpdate.view];
                     const n = this.toNumber(raw);
                     return Number.isFinite(n)
@@ -1349,7 +1385,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 .attr('stroke', 'transparent')
                 .attr('fill', (d) => {
                     const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
-                        ? d.properties.leiden_centrality[viewVariablesToUpdate.view]
+                        ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[viewVariablesToUpdate.view]
                         : d.properties[viewVariablesToUpdate.view];
                     return viewVariablesToUpdate.ordinal(String(raw));
                 });
@@ -2167,15 +2203,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             }))
             .sort((a, b) => b.count - a.count);
 
+        const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster!);
+
         if (this.clusterCells.length > 0) {
-            const firstCell = this.clusterCells[0];
             this.clusterCentralityAvg = {
-                degree_centrality:
-                    firstCell.properties.leiden_centrality['degree_centrality'] || 0,
-                average_clustering:
-                    firstCell.properties.leiden_centrality['average_clustering'] || 0,
-                closeness_centrality:
-                    firstCell.properties.leiden_centrality['closeness_centrality'] || 0,
+                degree_centrality: clusterAnnotation?.centrality?.['degree_centrality'] ?? 0,
+                average_clustering: clusterAnnotation?.centrality?.['average_clustering'] ?? 0,
+                closeness_centrality: clusterAnnotation?.centrality?.['closeness_centrality'] ?? 0,
             };
         }
     }
@@ -2327,54 +2361,55 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
     private renderNhoodHeatmap(): void {
-        if (!this.selectedCell?.properties.leiden_nhood_enrichment) return;
+      const leiden = this.selectedCell?.properties?.leiden;
+      const clusterAnnotation = this.getLeidenClusterAnnotation(leiden);
+      const enrichment = clusterAnnotation?.neighborhood_enrichment;
 
-        const enrichment = this.selectedCell.properties.leiden_nhood_enrichment;
-        const leiden = this.selectedCell.properties.leiden;
-        const n = enrichment.length;
-        const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
+      if (!enrichment || !Array.isArray(enrichment)) return;
 
-        const minValue = Math.min(...enrichment);
-        const maxValue = Math.max(...enrichment);
-        const normalized = (maxValue > minValue)
-            ? enrichment.map(v => (v - minValue) / (maxValue - minValue))
-            : enrichment.map(() => 0);
+      const n = enrichment.length;
+      const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
 
-        const data: Partial<Plotly.PlotData>[] = [
-            {
-                x: clusterLabels,
-                y: normalized,
-                type: 'bar',
-                marker: { color: 'rgba(55,128,191,0.7)' },
-                name: `Cluster ${leiden}`,
-            },
-        ];
+      const minValue = Math.min(...enrichment);
+      const maxValue = Math.max(...enrichment);
+      const normalized = (maxValue > minValue)
+        ? enrichment.map((v: number) => (v - minValue) / (maxValue - minValue))
+        : enrichment.map(() => 0);
 
-        const layout = {
-            margin: { t: 30, l: 60, r: 10, b: 40 },
-            width: 300,
-            height: 170,
-            xaxis: {
-                title: { text: 'Cluster' },
-                automargin: true,
-                tickfont: { size: 10 },
-            },
-            yaxis: {
-                title: { text: 'Enrichment' },
-                automargin: true,
-                tickfont: { size: 10 },
-            }
-        };
-
-        const container = document.getElementById('cluster-nhood-heatmap');
-        if (!container) {
-            console.error('Container cluster-nhood-heatmap not found');
-            return;
+      const data: Partial<Plotly.PlotData>[] = [
+        {
+          x: clusterLabels,
+          y: normalized,
+          type: 'bar',
+          marker: { color: 'rgba(55, 128, 191, 0.7)' },
+          name: `Cluster ${leiden} Neighborhood Enrichment`,
         }
+      ];
 
-        if (!container) return;
-        Plotly.purge(container);
-        Plotly.newPlot(container, data, layout, { displayModeBar: false });
+      const layout = {
+        margin: { t: 30, l: 60, r: 10, b: 40 },
+        width: 300,
+        height: 170,
+        xaxis: {
+          title: { text: 'Cluster' },
+          automargin: true,
+          tickfont: { size: 10 },
+        },
+        yaxis: {
+          title: { text: 'Enrichment' },
+          automargin: true,
+          tickfont: { size: 10 },
+        },
+      };
+
+      const container = document.getElementById('cluster-nhood-heatmap');
+      if (!container) {
+        console.error('Container cluster-nhood-heatmap not found for rendering heatmap');
+        return;
+      }
+
+      Plotly.purge(container);
+      Plotly.newPlot(container, data, layout, { displayModeBar: false});
     }
 
     public closeSidenav(): void {
@@ -2383,29 +2418,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
   public updateCoOccurrenceTable(): void {
-    if (this.clusterCells.length === 0 || this.selectedCluster === null) {
+    if (this.selectedCluster === null) {
       this.coOccurrenceData = [];
       return;
+  }
+
+    const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster);
+    const coOccurrenceMatrix = clusterAnnotation?.co_occurrence;
+
+
+    if (!Array.isArray(coOccurrenceMatrix)) {
+        console.warn('No co-occurrence data found for cluster', this.selectedCluster);
+        this.coOccurrenceData = [];
+        return;
     }
-
-    // Get co-occurrence data from a cell in the selected cluster
-    const clusterCell = this.clusterCells[0];
-    if (!clusterCell?.properties?.leiden_co_occurrence) {
-      console.warn('No leiden_co_occurrence data found');
-      this.coOccurrenceData = [];
-      return;
-    }
-
-    const coOccurrenceMatrix = clusterCell.properties.leiden_co_occurrence as any;
-
-        if (!Array.isArray(coOccurrenceMatrix)) {
-            console.error(
-                'Co-occurrence matrix is not an array:',
-                coOccurrenceMatrix,
-            );
-            this.coOccurrenceData = [];
-            return;
-        }
 
     this.coOccurrenceData = [];
     console.log('Selected Cluster:', this.selectedCluster, 'Interval:', this.selectedInterval);
@@ -2428,17 +2454,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.coOccurrenceData = Array(this.clusterCount).fill(0);
     }
 
-        // Calculate threshold for highlighting
-        this.calculateCoOccurrenceThreshold();
+      // Calculate threshold for highlighting
+      this.calculateCoOccurrenceThreshold();
 
-        console.log(
-            'Co-occurrence data for cluster',
-            this.selectedCluster,
-            'at interval',
-            this.selectedInterval,
-            ':',
-            this.coOccurrenceData,
-        );
+      console.log(
+          'Co-occurrence data for cluster',
+          this.selectedCluster,
+          'at interval',
+          this.selectedInterval,
+          ':',
+          this.coOccurrenceData,
+      );
     }
 
     private calculateCoOccurrenceThreshold(): void {
@@ -2669,10 +2695,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
     }
 
-    private hiddenPropKeys = new Set<string>([
-        'leiden_co_occurrence',
-        'leiden_nhood_enrichment',
-    ]);
 
     shouldShowProperty(key: string): boolean {
         if (key == null) return true;
@@ -2985,7 +3007,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .join('path')
         .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
         .attr('fill', (d: CellFeature) => {
-            const value = d.properties?.[this.colorByProperty];
+            const value = this.leidenCentralityProps.includes(this.colorByProperty)
+              ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
+              : d.properties?.[this.colorByProperty];
             if (this.currentLegendType === 'categorical') {
                 return this.colorScale(String(value));
             } else {
@@ -3139,20 +3163,11 @@ interface CellProperties {
     barcode: string;
     centroid: [number, number] | [];
     cell_type: string;
-    leiden_nhood_enrichment: number[];
     leiden: number;
     color: string;
     aucell_genie3: { [key: string]: number };
     aucell_sponge: { [key: string]: number };
-    leiden_centrality: { [key: string]: number };
-    leiden_co_occurrence: number[][];
-    [key: string]:
-    | string
-    | number
-    | number[]
-    | []
-    | undefined
-    | { [key: string]: any };
+    [key: string]: string | number | number[] | [] | undefined | { [key: string]: any };
 }
 
 interface CellFeature {

@@ -181,34 +181,6 @@ class Hexagons:
                 "barcode": barcode,
             }
 
-            leiden_cluster = (
-                int(self.anndata.obs.get("leiden", {}).get(barcode, -1))
-                if "leiden" in self.anndata.obs.columns
-                else None
-            )
-
-            if leiden_cluster is not None:
-                property_dict["leiden"] = leiden_cluster
-
-                if "leiden_centrality_scores" in self.anndata.uns:
-                    property_dict["leiden_centrality"] = (
-                        self.anndata.uns["leiden_centrality_scores"]
-                        .iloc[leiden_cluster]
-                        .to_dict()
-                    )
-
-                if "leiden_co_occurrence" in self.anndata.uns:
-                    property_dict["leiden_co_occurrence"] = self.anndata.uns[
-                        "leiden_co_occurrence"
-                    ]["occ"][leiden_cluster].tolist()
-
-                if "leiden_nhood_enrichment" in self.anndata.uns:
-                    property_dict["leiden_nhood_enrichment"] = (
-                        self.anndata.uns["leiden_nhood_enrichment"]["zscore"][
-                            leiden_cluster
-                        ].tolist()
-                    )
-
             property_dict["centroid"] = (
                 self.centers[barcode] if barcode in self.centers else None
             )
@@ -458,6 +430,41 @@ if __name__ == "__main__":
 
     # Add meta information like ligand receptor pair names for api fetching
     meta_dict = {}
+
+    meta_dict["leiden_cluster_annotations"] = {}
+
+    if "leiden" in spatial_data.obs.columns:
+        cluster_ids = sorted(
+            spatial_data.obs["leiden"].dropna().astype(int).unique().tolist()
+        )
+
+        for cluster_id in cluster_ids:
+            cluster_key = str(cluster_id)
+            meta_dict["leiden_cluster_annotations"][cluster_key] = {}
+
+            # Centrality scores for this cluster
+            if "leiden_centrality_scores" in spatial_data.uns:
+                meta_dict["leiden_cluster_annotations"][cluster_key]["centrality"] = (
+                    spatial_data.uns["leiden_centrality_scores"]
+                    .iloc[cluster_id]
+                    .to_dict()
+                )
+
+            # Co-occurrence scores for this cluster
+            if "leiden_co_occurrence" in spatial_data.uns:
+                occ = spatial_data.uns["leiden_co_occurrence"].get("occ")
+                if occ is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["co_occurrence"] = (
+                        occ[cluster_id].tolist()
+                    )
+
+            # Neighborhood enrichment scores for this cluster
+            if "leiden_nhood_enrichment" in spatial_data.uns:
+                zscore = spatial_data.uns["leiden_nhood_enrichment"].get("zscore")
+                if zscore is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["neighborhood_enrichment"] = (
+                        zscore[cluster_id].tolist()
+                    )
 
     if any(gs in spatial_data.uns for gs in global_scores_sort_keys):
         for global_score in global_scores_sort_keys:
