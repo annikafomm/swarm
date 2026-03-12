@@ -1,7 +1,7 @@
 import argparse
 import os
 import scanpy as sc
-from gridding_mapping import broadcast_grid_to_cells
+from gridding_mapping import expand_spot_adata_to_cells
 
 
 def main():
@@ -18,25 +18,20 @@ def main():
     # so we broadcast grid-level obs/obsm back to each cell using the stored mapping.
     print(args.tangram)
     if args.tangram:
-        work_path = os.path.join(args.indir, "xenium_tg_scores.h5ad")
+        work_path = os.path.join(args.indir, "adata_tg_scores.h5ad")
         adata_work = sc.read_h5ad(work_path)
     else:
-        work_path = os.path.join(args.indir, "xenium_st_scores.h5ad")
+        work_path = os.path.join(args.indir, "adata_st_scores.h5ad")
         adata_work = sc.read_h5ad(work_path)
-    adata_cells_path = os.path.join(args.indir, "xenium_cells.h5ad")
+    adata_cells_path = os.path.join(args.indir, "xenium_map.h5ad")
     adata_cells = sc.read_h5ad(adata_cells_path)
     print(adata_work)
     print(adata_cells)
 
-    adata_cells = broadcast_grid_to_cells(
-        adata_cells=adata_cells,
-        adata_grid=adata_work,
-        prefix="grid_",
-        copy_obs=True,
-        copy_obsm=True,
-        copy_uns=True,
-        copy_varm=True,
-        overwrite=False,
+    adata_cells = expand_spot_adata_to_cells(
+        adata_scores=adata_work,
+        adata_map=adata_cells,
+        spot_col="grid_spot"
     )
     print(f"Broadcasted grid-level data to cells: {adata_cells} cells")
 
