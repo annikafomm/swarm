@@ -14,7 +14,7 @@ from dataset_management import DatasetRegistry
 from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -1409,7 +1409,7 @@ async def get_available_motifs(
 
 @app.post("/api/compute_footprint", dependencies=[Depends(cookie)])
 async def compute_footprint(
-    motif: str = Form(...),
+    motif: List[str] = Form(...),
     cluster_by: str = Form("cell_type"),
     dataset_id: Optional[str] = Form(None),
     session_data: SessionData = Depends(verifier),
@@ -1454,10 +1454,11 @@ async def compute_footprint(
 
 
     import subprocess
+    motifs_csv = ",".join(motif)
     cmd = [
         "Rscript", "../backend/calc_multiome_scores/compute_additional_footprints.R",
         "--outdir", str(out_dir),
-        "--motif", motif,
+        "--motifs", motifs_csv,
         "--cluster_by", cluster_by,
     ]
     print(f"[compute_footprint] Running: {' '.join(cmd)}")
@@ -1480,33 +1481,35 @@ async def compute_footprint(
             detail=f"R script failed (exit {proc.returncode}): {full_output[-2000:]}"
         )
 
-    # Verify the PDF was actually produced
-    pdf_filename = f"footprint_{motif}.pdf"
-    pdf_path = out_dir / pdf_filename
-    if not pdf_path.exists():
-        raise HTTPException(status_code=500, detail=f"Expected output {pdf_filename} was not created")
-
-    # TODO: decide whether to add here
-    # Update the dataset registry entry that owns this adata file
-    relative_pdf = str(pdf_path.relative_to(BASE_UPLOAD_DIR.resolve()))
+    # Collect one result entry per requested motif
+    results = []
     all_datasets = dataset_registry.get_all_datasets()
-    for category in ("uploaded", "builtin"):
-        for ds_id, info in all_datasets.get(category, {}).items():
-            if info.get("adata_path") == adata_path:
-                existing = info.get("footprint_list") or []
-                if relative_pdf not in existing:
-                    dataset_registry.update_dataset_paths(ds_id, footprint_list=existing + [relative_pdf])
-                break
+    for single_motif in motif:
+        pdf_filename = f"footprint_{single_motif}_{cluster_by}.pdf"
+        pdf_path = out_dir / pdf_filename
+        if not pdf_path.exists():
+            raise HTTPException(status_code=500, detail=f"Expected output {pdf_filename} was not created")
 
-    return {
-        "footprint_url": f"/api/download/{relative_pdf}",
-        "relative_path": relative_pdf,
-        "motif": motif,
-        "cluster_by": cluster_by,
-    }
+        relative_pdf = str(pdf_path.relative_to(BASE_UPLOAD_DIR.resolve()))
+        for category in ("uploaded", "builtin"):
+            for ds_id, info in all_datasets.get(category, {}).items():
+                if info.get("adata_path") == adata_path:
+                    existing = info.get("footprint_list") or []
+                    if relative_pdf not in existing:
+                        dataset_registry.update_dataset_paths(ds_id, footprint_list=existing + [relative_pdf])
+                    break
+
+        results.append({
+            "footprint_url": f"/api/download/{relative_pdf}",
+            "relative_path": relative_pdf,
+            "motif": single_motif,
+            "cluster_by": cluster_by,
+        })
+
+    return {"results": results}
 
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=3000)
     # for merit
-    #uvicorn.run(app, host="0.0.0.0", port=3005)
+    # uvicorn.run(app, host="0.0.0.0", port=3005)

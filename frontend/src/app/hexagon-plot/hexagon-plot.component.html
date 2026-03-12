@@ -648,21 +648,32 @@
                 </mat-select>
               </mat-form-field>
 
-              <!-- Motif input with datalist autocomplete -->
+              <!-- Motif multi-select with search -->
               <mat-form-field appearance="fill" style="width: 100%;">
-                <mat-label>Motif ID</mat-label>
-                <input matInput list="motif-list" [(ngModel)]="footprintMotif"
-                       placeholder="e.g. MA1638.2" />
-                <datalist id="motif-list">
-                  <option *ngFor="let m of availableMotifs" [value]="m">{{ m }}</option>
-                </datalist>
+                <mat-label>Motif ID(s)</mat-label>
+                <mat-select multiple [(ngModel)]="footprintMotifs" [disabled]="availableMotifs.length === 0">
+                  <mat-select-trigger>
+                    {{ footprintMotifs.length === 0 ? '' : footprintMotifs.length + ' motif(s) selected' }}
+                  </mat-select-trigger>
+                  <div style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
+                    <input
+                      placeholder="Search motifs…"
+                      [value]="motifSearchQuery"
+                      (input)="motifSearchQuery = $any($event.target).value"
+                      (click)="$event.stopPropagation()"
+                      (keydown)="$event.stopPropagation()"
+                      style="width: 100%; border: 1px solid #ccc; padding: 5px 8px; border-radius: 4px; font-size: 13px; outline: none;" />
+                  </div>
+                  <mat-option *ngFor="let m of filteredMotifs" [value]="m">{{ m }}</mat-option>
+                  <mat-option *ngIf="filteredMotifs.length === 0" disabled>No motifs match</mat-option>
+                </mat-select>
               </mat-form-field>
 
               <!-- submit button -->
               <button class="hx-btn hx-btn-upload"
-                      [disabled]="!footprintMotif || isComputingFootprint"
+                      [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
                       (click)="computeFootprint()">
-                <span *ngIf="!isComputingFootprint">Compute Footprint</span>
+                <span *ngIf="!isComputingFootprint">Compute Footprints</span>
                 <span *ngIf="isComputingFootprint">
                   Computing&hellip;
                   <mat-progress-spinner mode="indeterminate" [diameter]="16"
