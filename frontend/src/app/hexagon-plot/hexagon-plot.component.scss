@@ -671,6 +671,7 @@ select {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-sizing: border-box;
 }
 
 .cluster-header {
@@ -707,6 +708,7 @@ select {
   padding: 0;
   max-width: 100%;
   width: 100%;
+  box-sizing: border-box;
 
   .cluster-stats,
   .cell-types,
@@ -718,6 +720,7 @@ select {
     border-left: 4px solid #ff9800;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
     transition: all 0.2s ease;
+    box-sizing: border-box;
 
     &:hover {
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
@@ -802,8 +805,9 @@ select {
     width: 100%;
 
     #cluster-nhood-heatmap {
-      width: 100% !important;
-      max-width: 100% !important;
+      width: 100%;
+      max-width: 300px;
+      height: 220px;
       border-radius: 4px;
       overflow: hidden;
       box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
