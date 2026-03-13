@@ -81,7 +81,7 @@ ALLOWED_ORIGINS = [
 
 # Optional maximum file size in megabytes (None disables size check).
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
-MAX_FILE_MB: Optional[int] = None
+MAX_FILE_MB: Optional[int] = 5000
 
 class BaseModel(PydanticBaseModel):
     class Config:
@@ -1257,7 +1257,12 @@ async def read_network_genie(
 
     session_data = await backend.read(session_id)
 
-    session_data.genie_network_path = genie_network_path.path
+    if genie_network_path.path and not os.path.exists(genie_network_path.path):
+        raise HTTPException(status_code=400, detail="Genie network file not found")
+    elif genie_network_path.path:
+        session_data.genie_network_path = genie_network_path.path
+    elif not genie_network_path.path:
+        session_data.genie_network_path = None
     await backend.update(session_id, session_data)
 
     return {"status": "ok"}
@@ -1277,7 +1282,12 @@ async def read_network_sponge(sponge_network_path: SpongeNetworksPath, session_i
      """
     session_data = await backend.read(session_id)
 
-    session_data.sponge_network_path = sponge_network_path.path
+    if sponge_network_path.path and not os.path.exists(sponge_network_path.path):
+        raise HTTPException(status_code=400, detail="Sponge network file not found")
+    elif sponge_network_path.path:
+        session_data.sponge_network_path = sponge_network_path.path
+    elif not sponge_network_path.path:
+        session_data.sponge_network_path = None
 
     await backend.update(session_id, session_data)
 
@@ -1609,7 +1619,7 @@ async def get_available_cell_types(
         adata = _load_adata_cached(adata_path)
         cell_types = list(adata.obs["cell_type"].unique())
         print(f"[get_available_cell_types] Found cell types: {cell_types}, dataset_id={dataset_id}")
-        
+
         return {"cell_types": cell_types}
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Rscript timed out reading cell types")

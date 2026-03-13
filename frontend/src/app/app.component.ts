@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, HostBinding } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, HostBinding } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormPageComponent } from './form-page/form-page.component';
@@ -6,6 +6,8 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 import { PathsService } from './paths.service';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
 
 @Component({
@@ -21,7 +23,10 @@ import Shepherd from 'shepherd.js';
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+  private isLoadingPaths = false; // Prevent concurrent path loads
+
   constructor(
     private http: HttpClient,
     public sessionService: SessionService,
@@ -31,31 +36,47 @@ export class AppComponent implements OnInit {
   ngOnInit() {
     this.sessionService.initSession();
 
-    this.pathsService.paths$.subscribe((paths) => {
-      if (!paths) return;
+    this.pathsService.paths$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((paths) => {
+        if (!paths || this.isLoadingPaths) return;
 
-      const loadPath = (backendUrl: string, path: string, label: string) => {
-        this.sessionService.callWithSession(() =>
-          this.http.post(
-            `${this.sessionService.apiUrl}/${backendUrl}`,
-            { path },
-            { withCredentials: true }
-          )
-        ).subscribe({
-          next: (res) => console.log(`[Backend] Loaded ${label}`, res),
-          error: (err) => console.error(`[Backend] Failed to load ${label} ${path}`, err),
+        this.isLoadingPaths = true;
+
+        const loadPath = (backendUrl: string, path: string, label: string) => {
+          return this.sessionService.callWithSession(() =>
+            this.http.post(
+              `${this.sessionService.apiUrl}/${backendUrl}`,
+              { path },
+              { withCredentials: true }
+            )
+          ).toPromise().then(
+            res => {
+              console.log(`[Backend] Loaded ${label}`, res);
+              return res;
+            },
+            err => {
+              console.error(`[Backend] Failed to load ${label} ${path}`, err);
+              return null;
+            }
+          );
+        };
+
+        // Load paths sequentially to avoid race conditions
+        const promises: Promise<any>[] = [];
+        if (paths.adataMainPath) promises.push(loadPath('read_adata', paths.adataMainPath, 'adata'));
+        if (paths.genieFiltPath) promises.push(loadPath('read_network_genie', paths.genieFiltPath, 'network_genie'));
+        if (paths.spongeFiltPath) promises.push(loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge'));
+
+        Promise.all(promises).finally(() => {
+          this.isLoadingPaths = false;
         });
-      };
+      });
+  }
 
-      if (paths.adataMainPath) loadPath('read_adata', paths.adataMainPath, 'adata');
-      if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
-      if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
-      // for multiome data
-      // if (paths.fragmentsFilePath && paths.fragmentsIndexPath) {
-      //   loadPath('read_fragments', paths.fragmentsFilePath, 'fragments');
-      //   loadPath('read_fragments_index', paths.fragmentsIndexPath, 'fragments_index');
-      // }
-    });
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
   }
 
   title = 'frontend';

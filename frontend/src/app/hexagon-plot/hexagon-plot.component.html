@@ -1,4 +1,13 @@
-<div class="hexagon-plot">
+<div class="hexagon-plot" [class.is-loading]="isInitializing">
+
+  <!-- Full-page loading overlay -->
+  <div *ngIf="isInitializing" class="initialization-overlay">
+    <div class="initialization-spinner-container">
+      <mat-progress-spinner mode="indeterminate" [diameter]="60" color="primary" aria-label="Initializing application">
+      </mat-progress-spinner>
+      <p class="initialization-message">Initializing...</p>
+    </div>
+  </div>
 
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
@@ -14,7 +23,8 @@
       <div class="centered-row-container" style="width: 100%;">
         <mat-form-field appearance="fill" id="color-by-property">
           <mat-label>Color hexagons by</mat-label>
-          <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
+          <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()"
+            [disabled]="isInitializing">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop">
                 {{ prop | translate | async }}
@@ -23,14 +33,14 @@
           </mat-select>
         </mat-form-field>
 
-        <button mat-icon-button class="info-btn"
-          (click)="selectViewTutorial()">
+        <button mat-icon-button class="info-btn" (click)="selectViewTutorial()">
           <mat-icon>help_outline</mat-icon>
         </button>
 
         <mat-form-field appearance="fill" class="dataset-dropdown">
           <mat-label>Select Dataset</mat-label>
-          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)">
+          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)"
+            [disabled]="isInitializing">
             <mat-optgroup label="Built-in Datasets">
               <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
                 {{ ds.alias }}
@@ -112,9 +122,9 @@
 
     </div>
 
-    <div class="metadata-tables-container">
+    <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
       <mat-tab-group (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false"
-        class="metadata-tables">
+        class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
         <mat-tab label="Cell Information" *ngIf="selectedCell">
           <div *ngIf="selectedCell && colorByProperty !== 'leiden'">
@@ -126,120 +136,121 @@
                     <div class="property-label">{{ label(kv.key) }}</div>
                     <div class="property-content">
 
-                    <ng-container *ngIf="isArray(kv.value); else notArray">
+                      <ng-container *ngIf="isArray(kv.value); else notArray">
 
 
-                      <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
-                        <div class="array-header">
-                          <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's'
-                            }}</span>
-                          <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                            {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                          </button>
-                        </div>
-
-                        <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                          <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
-                            <span class="row-badge">Row {{ r + 1 }}</span>
-                            <ul class="chip-list inner">
-                              <li class="chip" *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
-                                <ng-container *ngIf="isPrimitive(x); else nestedObj">
-                                  {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                </ng-container>
-                                <ng-template #nestedObj>
-                                  <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                </ng-template>
-                              </li>
-                            </ul>
-                          </li>
-                        </ul>
-                      </ng-container>
-
-
-                      <ng-template #oneDim>
-                        <div class="array-header">
-                          <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's'
-                            }}</span>
-                          <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                            {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                          </button>
-                        </div>
-
-                        <div class="array-stats" *ngIf="isNumericArray(kv.value)">
-                          Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
-                          Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
-                          Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
-                        </div>
-
-                        <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                          <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
-                            <ng-container *ngIf="isPrimitive(item); else objectItem">
-                              {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
-                            </ng-container>
-                            <ng-template #objectItem>
-                              <code class="chip-json">{{ toJsonCompact(item) }}</code>
-                            </ng-template>
-                          </li>
-                        </ul>
-                      </ng-template>
-
-                    </ng-container>
-
-
-                    <ng-template #notArray>
-                      <ng-container *ngIf="isPrimitive(kv.value); else complex">
-                        {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
-                      </ng-container>
-
-
-                      <ng-template #complex>
-                        <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
-
+                        <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
                           <div class="array-header">
-                            <span class="count-badge">{{ objectKeyCount(kv.value) }}
-                              key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
-                            <button type="button" class="toggle" (click)="toggleExpand(dictId(label(kv.key)))">
-                              {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
+                            <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's'
+                              }}</span>
+                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
+                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
                             </button>
                           </div>
 
-                          <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
-                            <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
-                              <div class="kv-key">{{ prettyKey(e.key) }}</div>
-                              <div class="kv-val">
-                                <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
-                                  {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
-                                </ng-container>
-                                <ng-template #nonPrimitiveVal>
-
-                                  <ng-container *ngIf="isArray(e.value); else fallbackJson">
-                                    <ul class="chip-list small">
-                                      <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
-                                        <ng-container *ngIf="isPrimitive(x); else objInArray">
-                                          {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                        </ng-container>
-                                        <ng-template #objInArray>
-                                          <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                        </ng-template>
-                                      </li>
-                                    </ul>
+                          <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
+                            <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
+                              <span class="row-badge">Row {{ r + 1 }}</span>
+                              <ul class="chip-list inner">
+                                <li class="chip"
+                                  *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
+                                  <ng-container *ngIf="isPrimitive(x); else nestedObj">
+                                    {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
                                   </ng-container>
-                                  <ng-template #fallbackJson>
-                                    <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                                  <ng-template #nestedObj>
+                                    <code class="chip-json">{{ toJsonCompact(x) }}</code>
                                   </ng-template>
-                                </ng-template>
-                              </div>
-                            </div>
-                          </div>
-
+                                </li>
+                              </ul>
+                            </li>
+                          </ul>
                         </ng-container>
 
 
-                        <ng-template #complexPre>
-                          <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
+                        <ng-template #oneDim>
+                          <div class="array-header">
+                            <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's'
+                              }}</span>
+                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
+                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
+                            </button>
+                          </div>
+
+                          <div class="array-stats" *ngIf="isNumericArray(kv.value)">
+                            Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
+                            Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
+                            Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
+                          </div>
+
+                          <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
+                            <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
+                              <ng-container *ngIf="isPrimitive(item); else objectItem">
+                                {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
+                              </ng-container>
+                              <ng-template #objectItem>
+                                <code class="chip-json">{{ toJsonCompact(item) }}</code>
+                              </ng-template>
+                            </li>
+                          </ul>
+                        </ng-template>
+
+                      </ng-container>
+
+
+                      <ng-template #notArray>
+                        <ng-container *ngIf="isPrimitive(kv.value); else complex">
+                          {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
+                        </ng-container>
+
+
+                        <ng-template #complex>
+                          <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
+
+                            <div class="array-header">
+                              <span class="count-badge">{{ objectKeyCount(kv.value) }}
+                                key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
+                              <button type="button" class="toggle" (click)="toggleExpand(dictId(label(kv.key)))">
+                                {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
+                              </button>
+                            </div>
+
+                            <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
+                              <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
+                                <div class="kv-key">{{ prettyKey(e.key) }}</div>
+                                <div class="kv-val">
+                                  <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
+                                    {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
+                                  </ng-container>
+                                  <ng-template #nonPrimitiveVal>
+
+                                    <ng-container *ngIf="isArray(e.value); else fallbackJson">
+                                      <ul class="chip-list small">
+                                        <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
+                                          <ng-container *ngIf="isPrimitive(x); else objInArray">
+                                            {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                                          </ng-container>
+                                          <ng-template #objInArray>
+                                            <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                                          </ng-template>
+                                        </li>
+                                      </ul>
+                                    </ng-container>
+                                    <ng-template #fallbackJson>
+                                      <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                                    </ng-template>
+                                  </ng-template>
+                                </div>
+                              </div>
+                            </div>
+
+                          </ng-container>
+
+
+                          <ng-template #complexPre>
+                            <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
+                          </ng-template>
                         </ng-template>
                       </ng-template>
-                    </ng-template>
                     </div>
                   </div>
                 </ng-container>
@@ -309,12 +320,13 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [emptyMessage]="'No Sponge global regulatory scores loaded'"
-                  (featuresUpdated)="updateHexColors()"></app-table>
+                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
               </div>
             </mat-expansion-panel>
 
@@ -323,9 +335,23 @@
 
               <div class="gene-set-body">
                 <section class="graph-block genie3-block">
-                  <h3 *ngIf="selectedGeneSetGenie3">Genie3 Gene Set: {{ selectedGeneSetGenie3 }}</h3>
+                  <div class="gene-set-header">
+                    <h3>Genie3 Network</h3>
+                    <mat-form-field appearance="fill" class="gene-selector">
+                      <mat-label>Gene Set</mat-label>
+                      <mat-select [(ngModel)]="selectedGeneSetGenie3" (selectionChange)="onGeneSetChange()">
+                        <mat-option [value]="null">None</mat-option>
+                        <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
+                          {{ gene }}
+                        </mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+                  <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
+                    Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
+                  </div>
                   <div *ngIf="!selectedGeneSetGenie3" class="network-message">
-                    No Genie3 network uploaded
+                    No Genie3 network selected
                   </div>
 
                   <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
@@ -354,7 +380,8 @@
                     <div class="loading-text">Loading Genie3 network...</div>
                   </div>
 
-                  <div id="aucell_graph_genie3" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
+                  <div id="aucell_graph_genie3" #aucell_graph_genie3
+                    [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
                   <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
                     <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
@@ -371,9 +398,23 @@
                 </section>
 
                 <section class="graph-block sponge-block">
-                  <h3 *ngIf="selectedGeneSetSponge">Sponge Gene Set: {{ selectedGeneSetSponge }}</h3>
+                  <div class="gene-set-header">
+                    <h3>Sponge Network</h3>
+                    <mat-form-field appearance="fill" class="gene-selector">
+                      <mat-label>Gene Set</mat-label>
+                      <mat-select [(ngModel)]="selectedGeneSetSponge" (selectionChange)="onGeneSetChange()">
+                        <mat-option [value]="null">None</mat-option>
+                        <mat-option *ngFor="let gene of spongeElements" [value]="gene">
+                          {{ gene }}
+                        </mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+                  <div *ngIf="selectedGeneSetSponge" class="selected-gene-info">
+                    Selected: <strong>{{ selectedGeneSetSponge }}</strong>
+                  </div>
                   <div *ngIf="!selectedGeneSetSponge" class="network-message">
-                    No Sponge network uploaded
+                    No Sponge network selected
                   </div>
 
                   <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
@@ -401,7 +442,8 @@
                     <div class="loading-text">Loading Sponge network...</div>
                   </div>
 
-                  <div id="aucell_graph_sponge" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+                  <div id="aucell_graph_sponge" #aucell_graph_sponge
+                    [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
 
                   <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
                     <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
@@ -493,8 +535,7 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value + ' (Click to select)'"
-                      style="cursor: pointer;">
+                  value + ' (Click to select)'" style="cursor: pointer;">
                       {{ value | number: "1.0-3" }}
                     </td>
                   </tr>
@@ -572,49 +613,42 @@
           </div>
         </mat-tab>
 
-      <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C" [disabled]="!propertyAvailable('chromvar_total_sum')">
-        <div>
-          <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
-            (click)="showChromvarMoranI = !showChromvarMoranI">
-            Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
-          </button>
-        </div>
-        <div *ngIf="showChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
-        <ng-template #chromvarMoranI>
-          <h4>ChromVAR Moran's I</h4>
-          <app-table
-            [data]="this.meta['chromvar_moranI']"
-            [actionColumns]="['chromvar_spot_scores']"
-            [features]="features"
-            [updateColumn]="'chromvar_total_sum'"
-            (featuresUpdated)="updateHexColors()">
-          </app-table>
-        </ng-template>
+        <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
+          [disabled]="!propertyAvailable('chromvar_total_sum')">
+          <div>
+            <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
+              (click)="showChromvarMoranI = !showChromvarMoranI">
+              Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
+            </button>
+          </div>
+          <div *ngIf="showChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
+          <ng-template #chromvarMoranI>
+            <h4>ChromVAR Moran's I</h4>
+            <app-table [data]="this.meta['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
+              [features]="features" [updateColumn]="'chromvar_total_sum'" (featuresUpdated)="updateHexColors()">
+            </app-table>
+          </ng-template>
 
-        <ng-template #chromvarGearyC>
-          <h4>ChromVAR Geary's C</h4>
-          <app-table
-            [data]="this.meta['chromvar_gearyC']"
-            [actionColumns]="['chromvar_spot_scores']"
-            [features]="features"
-            [updateColumn]="'chromvar_total_sum'"
-            (featuresUpdated)="updateHexColors()">
-          </app-table>
-        </ng-template>
-      </mat-tab>
+          <ng-template #chromvarGearyC>
+            <h4>ChromVAR Geary's C</h4>
+            <app-table [data]="this.meta['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
+              [features]="features" [updateColumn]="'chromvar_total_sum'" (featuresUpdated)="updateHexColors()">
+            </app-table>
+          </ng-template>
+        </mat-tab>
 
 
-     <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
-        <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
-          <h4>{{ comparison.key }}</h4>
+        <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
+          <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
+            <h4>{{ comparison.key }}</h4>
 
-          <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
+            <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
 
-          <br />
-        </div>
-      </mat-tab>
+            <br />
+          </div>
+        </mat-tab>
 
-      <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
+        <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
 
           <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
           <div class="cluster-plots">
@@ -654,12 +688,10 @@
                   <mat-select-trigger>
                     {{ footprintMotifs.length === 0 ? '' : footprintMotifs.length + ' motif(s) selected' }}
                   </mat-select-trigger>
-                  <div style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
-                    <input
-                      placeholder="Search motifs…"
-                      [value]="motifSearchQuery"
-                      (input)="motifSearchQuery = $any($event.target).value"
-                      (click)="$event.stopPropagation()"
+                  <div
+                    style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
+                    <input placeholder="Search motifs…" [value]="motifSearchQuery"
+                      (input)="motifSearchQuery = $any($event.target).value" (click)="$event.stopPropagation()"
                       (keydown)="$event.stopPropagation()"
                       style="width: 100%; border: 1px solid #ccc; padding: 5px 8px; border-radius: 4px; font-size: 13px; outline: none;" />
                   </div>
@@ -669,9 +701,8 @@
               </mat-form-field>
 
               <!-- submit button -->
-              <button class="hx-btn hx-btn-upload"
-                      [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
-                      (click)="computeFootprint()">
+              <button class="hx-btn hx-btn-upload" [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
+                (click)="computeFootprint()">
                 <span *ngIf="!isComputingFootprint">Compute Footprints</span>
                 <span *ngIf="isComputingFootprint">
                   Computing&hellip;
@@ -696,7 +727,7 @@
             </div>
           </div>
 
-      </mat-tab>
+        </mat-tab>
 
         <mat-tab label="Cell Composition TF Activity"
           [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
@@ -731,67 +762,60 @@
               [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
-          <mat-tab label="DGEA">
-            <div *ngIf="meta?.['dgea']?.['cell_type']; else noDgea">
-              <h4>DGEA Comparison (cell_type)</h4>
+        <mat-tab label="DGEA">
+          <div *ngIf="meta?.['dgea']?.['cell_type']; else noDgea">
+            <h4>DGEA Comparison (cell_type)</h4>
 
-              <div class="row-container" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-                <mat-form-field appearance="fill">
-                  <mat-label>Cell type 1</mat-label>
-                  <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange()">
-                    <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
-                      {{ level }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
+            <div class="row-container" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+              <mat-form-field appearance="fill">
+                <mat-label>Cell type 1</mat-label>
+                <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange()">
+                  <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
+                    {{ level }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
 
-                <mat-form-field appearance="fill">
-                  <mat-label>Cell type 2</mat-label>
-                  <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange()">
-                    <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
-                      {{ level }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-
-              <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparison">
-                <p>
-                  <strong>Comparison:</strong>
-                  {{ cmp['group1'] }} vs {{ cmp['group2'] }}
-                  (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
-                </p>
-
-                <div *ngIf="cmp['skipped']" class="no-data">
-                  This comparison was skipped: {{ cmp['skip_reason'] }}
-                </div>
-
-                <app-table
-                  *ngIf="!cmp['skipped']"
-                  [data]="cmp['table']"
-                  [actionColumns]="[]"
-                  [features]="features"
-                  [updateColumn]="'dgea'">
-                </app-table>
-              </div>
-
-              <div
-                #dgeaHeatmap
-                id="dgea-heatmap"
-                style="width: 100%; min-height: 500px; margin-top: 16px;">
-              </div>
-
-              <ng-template #noComparison>
-                <div class="no-data">
-                  No comparison found for this selection.
-                </div>
-              </ng-template>
+              <mat-form-field appearance="fill">
+                <mat-label>Cell type 2</mat-label>
+                <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange()">
+                  <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
+                    {{ level }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
             </div>
 
-            <ng-template #noDgea>
-              <div class="no-data">No DGEA data available.</div>
+            <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparison">
+              <p>
+                <strong>Comparison:</strong>
+                {{ cmp['group1'] }} vs {{ cmp['group2'] }}
+                (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+              </p>
+
+              <div *ngIf="cmp['skipped']" class="no-data">
+                This comparison was skipped: {{ cmp['skip_reason'] }}
+              </div>
+
+              <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="[]" [features]="features"
+                [updateColumn]="'dgea'">
+              </app-table>
+            </div>
+
+            <div #dgeaHeatmap id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
+            </div>
+
+            <ng-template #noComparison>
+              <div class="no-data">
+                No comparison found for this selection.
+              </div>
             </ng-template>
-          </mat-tab>
+          </div>
+
+          <ng-template #noDgea>
+            <div class="no-data">No DGEA data available.</div>
+          </ng-template>
+        </mat-tab>
       </mat-tab-group>
 
 
@@ -1029,8 +1053,7 @@
                   ' → Cluster ' +
                   j +
                   ': ' +
-                  value + ' (Click to select)'"
-                        style="cursor: pointer;">
+                  value + ' (Click to select)'" style="cursor: pointer;">
                         {{ value | number: "1.0-3" }}
                       </td>
                     </tr>
