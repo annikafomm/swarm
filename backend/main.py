@@ -804,8 +804,6 @@ async def upload(
         "liana_pathway_network": save_file(liana_pathway_network, job_dir),
     }
 
-    with open(job_dir / f"{job_id}_multiome.txt", "w") as f:
-        f.write(f"use_multiome: {use_multiome}\n")
 
     # 2) Handle RDS to H5AD conversion if needed
     if use_multiome and saved_files_dict.get("multiome_rds"):

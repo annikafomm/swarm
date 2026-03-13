@@ -763,7 +763,17 @@
           </div>
         </mat-tab>
         <mat-tab label="DGEA">
-          <div *ngIf="meta?.['dgea']?.['cell_type']; else noDgea">
+          <ng-template #noDgeaTpl>
+            <div class="no-data">No DGEA data available.</div>
+          </ng-template>
+
+          <ng-template #noComparisonTpl>
+            <div class="no-data">
+              No comparison found for this selection.
+            </div>
+          </ng-template>
+
+          <ng-container *ngIf="dgeaReady; else noDgeaTpl">
             <h4>DGEA Comparison (cell_type)</h4>
 
             <div class="row-container" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -786,7 +796,7 @@
               </mat-form-field>
             </div>
 
-            <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparison">
+            <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparisonTpl">
               <p>
                 <strong>Comparison:</strong>
                 {{ cmp['group1'] }} vs {{ cmp['group2'] }}
@@ -797,24 +807,21 @@
                 This comparison was skipped: {{ cmp['skip_reason'] }}
               </div>
 
-              <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="[]" [features]="features"
+              <app-table
+                *ngIf="!cmp['skipped']"
+                [data]="cmp['table']"
+                [actionColumns]="[]"
+                [features]="features"
                 [updateColumn]="'dgea'">
               </app-table>
             </div>
 
-            <div #dgeaHeatmap id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
+            <div
+              #dgeaHeatmap
+              id="dgea-heatmap"
+              style="width: 100%; min-height: 500px; margin-top: 16px;">
             </div>
-
-            <ng-template #noComparison>
-              <div class="no-data">
-                No comparison found for this selection.
-              </div>
-            </ng-template>
-          </div>
-
-          <ng-template #noDgea>
-            <div class="no-data">No DGEA data available.</div>
-          </ng-template>
+          </ng-container>
         </mat-tab>
       </mat-tab-group>
 

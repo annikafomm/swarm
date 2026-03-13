@@ -162,6 +162,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+  public dgeaReady: boolean = false;
 
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
@@ -527,6 +528,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       // Render neighborhood enrichment when cell info tab is opened
       // Use longer timeout to ensure Angular has rendered the template
       setTimeout(() => this.renderNhoodHeatmap(), 300);
+      return;
+    }
+
+    if (tabLabel === 'DGEA') {
+      this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+
+      if (this.dgeaReady) {
+        this.initDgeaSelection();
+        setTimeout(() => this.renderDgeaHeatmap(), 100);
+      }
+
       return;
     }
 
@@ -999,14 +1011,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               this.bindDetailWindowInteractions();
             }
 
-          } else {
-            this.features = this.fullFeatures;
-          }
-          this.meta = data.meta;
-          const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
-          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
-          }
+                    } else {
+                        this.features = this.fullFeatures;
+                    }
+                    this.meta = data.meta;
+                    this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+                    if (this.dgeaReady) {
+                      this.initDgeaSelection();
+                    }
+                    const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
+                    if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+                      this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+                    }
 
           const interval = this.meta?.['interval'];
           if (Array.isArray(interval) && interval.length > 0) {
