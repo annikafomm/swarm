@@ -1,4 +1,13 @@
-<div class="hexagon-plot">
+<div class="hexagon-plot" [class.is-loading]="isInitializing">
+
+  <!-- Full-page loading overlay -->
+  <div *ngIf="isInitializing" class="initialization-overlay">
+    <div class="initialization-spinner-container">
+      <mat-progress-spinner mode="indeterminate" [diameter]="60" color="primary" aria-label="Initializing application">
+      </mat-progress-spinner>
+      <p class="initialization-message">Initializing...</p>
+    </div>
+  </div>
 
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
@@ -14,7 +23,8 @@
       <div class="centered-row-container" style="width: 100%;">
         <mat-form-field appearance="fill" id="color-by-property">
           <mat-label>Color hexagons by</mat-label>
-          <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()">
+          <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()"
+            [disabled]="isInitializing">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop">
                 {{ prop | translate | async }}
@@ -29,7 +39,8 @@
 
         <mat-form-field appearance="fill" class="dataset-dropdown">
           <mat-label>Select Dataset</mat-label>
-          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)">
+          <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)"
+            [disabled]="isInitializing">
             <mat-optgroup label="Built-in Datasets">
               <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
                 {{ ds.alias }}
@@ -111,9 +122,9 @@
 
     </div>
 
-    <div class="metadata-tables-container">
+    <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
       <mat-tab-group (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false"
-        class="metadata-tables">
+        class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
         <mat-tab label="Cell Information" *ngIf="selectedCell">
           <div *ngIf="selectedCell && colorByProperty !== 'leiden'">
@@ -369,7 +380,8 @@
                     <div class="loading-text">Loading Genie3 network...</div>
                   </div>
 
-                  <div id="aucell_graph_genie3" #aucell_graph_genie3 [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
+                  <div id="aucell_graph_genie3" #aucell_graph_genie3
+                    [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
                   <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
                     <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
@@ -430,7 +442,8 @@
                     <div class="loading-text">Loading Sponge network...</div>
                   </div>
 
-                  <div id="aucell_graph_sponge" #aucell_graph_sponge [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+                  <div id="aucell_graph_sponge" #aucell_graph_sponge
+                    [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
 
                   <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
                     <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"

@@ -213,6 +213,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
 
+  // Returns true if any initial data loading is in progress
+  public get isInitializing(): boolean {
+    return this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge;
+  }
+
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
   public coOccurrenceColumns: string[] = [];
