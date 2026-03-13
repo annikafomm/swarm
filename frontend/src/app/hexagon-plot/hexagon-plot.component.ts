@@ -35,7 +35,7 @@ import { MatSelect, MatSelectTrigger } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule, MatTabHeader } from '@angular/material/tabs';
+import { MatTabsModule} from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
@@ -44,7 +44,7 @@ import { MatInputModule } from '@angular/material/input';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatTabHeader, MatInputModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -244,6 +244,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     'average_clustering',
     'closeness_centrality',
   ];
+  
   public groupedProperties: { key: string; value: string[] }[] | null = null;
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
@@ -285,7 +286,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
-
 
 
   ngOnInit(): void {

@@ -260,14 +260,12 @@
         </mat-tab>
 
         <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null">
-          <mat-tab-header> Cluster {{ selectedCluster }} Details </mat-tab-header>
-          <div class="cluster-sidenav" *ngIf="colorByProperty === 'leiden' && selectedCluster !== null">
-            <div class="cluster-sidenav-header">
+          <div class="cluster-info-container" *ngIf="colorByProperty === 'leiden' && selectedCluster !== null">
+            <div class="cluster-header">
               <h3>Cluster {{ selectedCluster }}</h3>
-              <button class="close-btn" (click)="closeClusterSidenav()">×</button>
             </div>
 
-            <div class="cluster-sidenav-content">
+            <div class="cluster-content">
               <div class="cluster-stats">
                 <h4>Cluster Statistics</h4>
                 <p><strong>Cells in cluster:</strong> {{ clusterCells.length }}</p>
@@ -305,8 +303,6 @@
                 <h4>Neighborhood Enrichment (Selected Cell)</h4>
                 <div id="cluster-nhood-heatmap" style="width: 300px; height: 220px"></div>
               </div>
-
-
             </div>
           </div>
         </mat-tab>
