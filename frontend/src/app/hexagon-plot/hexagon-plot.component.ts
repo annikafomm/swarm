@@ -155,6 +155,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+  public dgeaReady: boolean = false;
 
   public selectedInterval: number = 0;
   public features: CellFeature[] = []; // public so that filterable table can update it
@@ -627,6 +628,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    if (tabLabel === 'DGEA') {
+      this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+
+      if (this.dgeaReady) {
+        this.initDgeaSelection();
+        setTimeout(() => this.renderDgeaHeatmap(), 100);
+      }
+
+      return;
+    }
+
     // Handle visualization tabs that change the color property
     switch (tabLabel) {
       case 'Regulatory Scores':
@@ -985,6 +997,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                         this.features = this.fullFeatures;
                     }
                     this.meta = data.meta;
+                    this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+                    if (this.dgeaReady) {
+                      this.initDgeaSelection();
+                    }
                     const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
                     if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
                       this.clusterCount = Object.keys(leidenClusterAnnotations).length;
