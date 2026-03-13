@@ -35,7 +35,7 @@ import { MatSelect, MatSelectTrigger } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule} from '@angular/material/tabs';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
@@ -213,11 +213,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
+  public isLoadingRegulatoryScores: boolean = false; // Track regulatory scores fetches during init
   public isAppInitializing: boolean = true; // Only for initial app load
 
   // Returns true if any initial data loading is in progress (ONLY for first time)
   public get isInitializing(): boolean {
-    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge);
+    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge || this.isLoadingRegulatoryScores);
   }
 
   // Co-occurrence table
@@ -244,7 +245,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     'average_clustering',
     'closeness_centrality',
   ];
-  
+
   public groupedProperties: { key: string; value: string[] }[] | null = null;
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
@@ -1011,18 +1012,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               this.bindDetailWindowInteractions();
             }
 
-                    } else {
-                        this.features = this.fullFeatures;
-                    }
-                    this.meta = data.meta;
-                    this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
-                    if (this.dgeaReady) {
-                      this.initDgeaSelection();
-                    }
-                    const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
-                    if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-                      this.clusterCount = Object.keys(leidenClusterAnnotations).length;
-                    }
+          } else {
+            this.features = this.fullFeatures;
+          }
+          this.meta = data.meta;
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+          if (this.dgeaReady) {
+            this.initDgeaSelection();
+          }
+          const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
+          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+          }
 
           const interval = this.meta?.['interval'];
           if (Array.isArray(interval) && interval.length > 0) {
@@ -2266,7 +2267,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * Sets isAppInitializing to false once all initial data fetches are done.
    */
   private checkInitializationComplete(): void {
-    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge) {
+    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
       this.isAppInitializing = false;
       console.log('[Init] App initialization complete - hiding loader');
     }
@@ -2661,6 +2662,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
+    // Track regulatory scores fetches during initialization
+    const isInitializing = this.isAppInitializing;
+    if (isInitializing) {
+      this.isLoadingRegulatoryScores = true;
+    }
+
     this.sessionService
       .callWithSession(() =>
         this.http.get(
@@ -2692,12 +2699,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
           console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
           this.updateHexColors();
+
+          // Mark regulatory scores fetch as complete if during initialization
+          if (isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete();
+          }
         },
-        error: (err) =>
+        error: (err) => {
           console.error(
             `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
             err,
-          ),
+          );
+          // Mark as complete even on error
+          if (isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete();
+          }
+        },
       });
   }
 
