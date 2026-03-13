@@ -25,6 +25,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() updateColumn!: string;
   @Input() emptyMessage: string = '';
   @Output() featuresUpdated = new EventEmitter<void>();
+  @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
 
   constructor(
     private http: HttpClient,
@@ -59,7 +60,12 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   prepareTable() {
-    if (Array.isArray(this.data)) {
+    if (!this.data) {
+      this.columns = [];
+      this.rows = [];
+      return;
+    }
+    else if (Array.isArray(this.data)) {
       this.columns = [];
       this.rows = this.data.map((val) => ({
         index: val,
@@ -367,6 +373,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   onShowAction(action: string, row: any): void {
+    const geneName = String(row.index);
+    
+    // Emit event to parent component for gene selection
+    this.geneSelected.emit({ gene: geneName, action: action });
+    
     if (action === 'chromvar_spot_scores') {
       // base motif comes from motif_id column
       this.chromvarBaseMotif = this.getMotifId(row);
@@ -375,7 +386,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     }
 
     // default behavior (non-chromvar actions)
-    this.fetchAndUpdate(action, String(row.index));
+    this.fetchAndUpdate(action, geneName);
   }
 
   private updateChromvarCombinedIfReady(force = false): void {
