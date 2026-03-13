@@ -55,7 +55,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
   @ViewChild('dgeaHeatmap', { static: false }) dgeaHeatmapElement!: ElementRef<HTMLElement>;
   private _resizeHandler: any = null;
-  private sub!: Subscription;
+  // Removed manual subscription tracker - all subscriptions use takeUntil now
   footprintPlotUrls: SafeResourceUrl[] = [];
   onDemandFootprintUrls: SafeResourceUrl[] = [];
   availableMotifs: string[] = [];
@@ -212,10 +212,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
+  public isAppInitializing: boolean = true; // Only for initial app load
 
-  // Returns true if any initial data loading is in progress
+  // Returns true if any initial data loading is in progress (ONLY for first time)
   public get isInitializing(): boolean {
-    return this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge;
+    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge);
   }
 
   // Co-occurrence table
@@ -323,38 +324,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
 
     this.isLoadingHexagons = true;
-    // Subscribe to path changes
-    this.sub = this.pathsService.paths$.subscribe(paths => {
-      console.log("Paths updated:", paths)
-      const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
+    // Subscribe to path changes with proper cleanup
+    this.pathsService.paths$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(paths => {
+        if (!paths) return;
 
-      if (hexagonPath) {
-        // Update the component's dataPath
-        this.dataPath = hexagonPath;
-        console.log('✓ Loading hexagon data from', this.dataPath);
+        const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
-        // Clear hexagon-plot container
-        d3.select('#hexbin').selectAll('svg').remove();
-        d3.select('#hexbin-compare').selectAll('svg').remove();
+        if (hexagonPath) {
+          // Update the component's dataPath
+          this.dataPath = hexagonPath;
+          console.log('✓ Loading hexagon data from', this.dataPath);
 
-        this.footprintPlotUrls = [];
-        this.onDemandFootprintUrls = [];
-        this.availableMotifs = [];
-        this.availableCellTypes = [];
-        this.footprintMotifs = [];
-        this.motifSearchQuery = '';
-        this.footprintComputeError = '';
+          // Clear hexagon-plot container
+          d3.select('#hexbin').selectAll('svg').remove();
+          d3.select('#hexbin-compare').selectAll('svg').remove();
 
-        // Load and render new data
-        this.createHexagonPlot();
-        this.loadAndRenderData(this.dataPath);
+          this.footprintPlotUrls = [];
+          this.onDemandFootprintUrls = [];
+          this.availableMotifs = [];
+          this.availableCellTypes = [];
+          this.footprintMotifs = [];
+          this.motifSearchQuery = '';
+          this.footprintComputeError = '';
 
-        this.renderFootprintPlots(this.selectedDataset);
-      } else {
-        console.warn('✗ No hexagon path available');
-      }
+          // Load and render new data
+          this.createHexagonPlot();
+          this.loadAndRenderData(this.dataPath);
 
-    });
+          this.renderFootprintPlots(this.selectedDataset);
+        } else {
+          console.warn('✗ No hexagon path available');
+        }
+      });
   }
 
   ngOnDestroy(): void {
@@ -362,10 +365,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.destroy$.next();
     this.destroy$.complete();
 
-    if (this.sub) {
-      this.sub.unsubscribe();
-    }
-    // remove resize listener if added
+    // Remove resize listener if added
     try {
       if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler as any);
     } catch (e) { }
@@ -1207,11 +1207,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.onColorbyPropertyChange();
         setTimeout(() => {
           this.isLoadingHexagons = false;
+          this.checkInitializationComplete();
         }, 0);
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
         this.isLoadingHexagons = false;
+        this.checkInitializationComplete();
       });
   }
 
@@ -1510,6 +1512,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!this.selectedGeneSetGenie3 || this.genie3Network.length === 0) {
       this.isLoadingGenie3 = false;
+      this.checkInitializationComplete();
       return;
     }
 
@@ -1711,6 +1714,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(() => this.updateGraphWidths(), 50);
 
     this.isLoadingGenie3 = false;
+    this.checkInitializationComplete();
 
 
   }
@@ -1789,6 +1793,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (!this.selectedGeneSetSponge || this.spongeNetwork.length === 0) {
       this.isLoadingSponge = false;
+      this.checkInitializationComplete();
       return;
     }
 
@@ -1984,6 +1989,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     this.isLoadingSponge = false;
+    this.checkInitializationComplete();
 
     setTimeout(() => this.updateGraphWidths(), 50);
 
@@ -2236,6 +2242,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectGeneSetFromTable(event.gene, 'genie3');
     } else if (networkType === 'sponge' && event.action.includes('sponge')) {
       this.selectGeneSetFromTable(event.gene, 'sponge');
+    }
+  }
+
+  /**
+   * Check if initial app loading is complete.
+   * Sets isAppInitializing to false once all initial data fetches are done.
+   */
+  private checkInitializationComplete(): void {
+    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge) {
+      this.isAppInitializing = false;
+      console.log('[Init] App initialization complete - hiding loader');
     }
   }
 
