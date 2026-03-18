@@ -919,14 +919,18 @@ async def upload(
         out_dir = Path(out_dir)
         # Check for xenium cells file first
         xenium_cells_file = out_dir / "xenium_cells_with_grid_scores.h5ad"
-        st_scores_file = out_dir / "st_scores.h5ad"
+        st_scores_file = out_dir / "adata_st_scores.h5ad"
+        tg_scores_file = out_dir / "adata_tg_scores.h5ad"
 
         if xenium_cells_file.exists() and xenium_cells_file.is_file():
             adata_path = str(xenium_cells_file)
             selected_reason = "xenium_cells_with_grid_scores"
         elif st_scores_file.exists() and st_scores_file.is_file():
             adata_path = str(st_scores_file)
-            selected_reason = "st_scores"
+            selected_reason = "adata_st_scores"
+        elif tg_scores_file.exists() and tg_scores_file.is_file():
+            adata_path = str(tg_scores_file)
+            selected_reason = "adata_tg_scores"
         else:
             adata_path = str(saved_files_dict.get("spatial_h5ad"))
             selected_reason = "original_spatial"
@@ -942,12 +946,13 @@ async def upload(
 
             subprocess.run(
                 [
-                    "python",
+                    "python3",
                     "../backend/visium_to_geojson.py",
                     "--adata", adata_path,
                     "--outpath", geojson_path,
                     "--data_type", dataset.lower(),
-                ]
+                ],
+                check=True,
             )
             print(f"✓ Generated GeoJSON at {geojson_path}")
         geojson_path = str(out_dir / "hexagons.geojson") if (out_dir / "hexagons.geojson").exists() else None

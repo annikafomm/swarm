@@ -356,7 +356,8 @@ async def calculate_scores_helper(job_dir, json_dict):
 
                 subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
-                                "-log", log_file],
+                                "-log", log_file,
+                                "-Rscores"],
                                 check=True)
 
                 # delete temporary folders

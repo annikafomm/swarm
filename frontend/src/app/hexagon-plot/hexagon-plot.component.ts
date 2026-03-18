@@ -149,6 +149,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
+  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
@@ -2746,6 +2747,39 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedGeneSetSponge,
       );
     }
+  }
+
+  public getRegulatoryActionColumns(networkType: 'genie3' | 'sponge'): string[] {
+    const scoreNames = this.meta?.['grn_score_names'];
+    if (!Array.isArray(scoreNames)) {
+      return [];
+    }
+    return scoreNames.filter((name: string) => name.endsWith(`_${networkType}`));
+  }
+
+  public getRegulatoryTableData(networkType: 'genie3' | 'sponge'): TableData {
+    const key =
+      this.regulatoryScoreDisplayMode === 'raw'
+        ? `global_regulatory_scores_${networkType}`
+        : this.regulatoryScoreDisplayMode === 'moranI'
+          ? `global_regulatory_moranI_${networkType}`
+          : `global_regulatory_gearyC_${networkType}`;
+
+    const table = this.meta?.[key];
+    if (!table || typeof table !== 'object') {
+      return {};
+    }
+    return table as TableData;
+  }
+
+  public getRegulatoryEmptyMessage(networkType: 'genie3' | 'sponge'): string {
+    if (this.regulatoryScoreDisplayMode === 'moranI') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Moran's I regulatory scores loaded`;
+    }
+    if (this.regulatoryScoreDisplayMode === 'gearyC') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Geary's C regulatory scores loaded`;
+    }
+    return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} global regulatory scores loaded`;
   }
 
 
