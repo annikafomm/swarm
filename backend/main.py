@@ -57,6 +57,7 @@ from pydantic import EmailStr
 from starlette.responses import RedirectResponse
 from datetime import datetime, timedelta
 import asyncio
+from scipy import sparse
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -82,6 +83,12 @@ ALLOWED_ORIGINS = [
 # Optional maximum file size in megabytes (None disables size check).
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
 MAX_FILE_MB: Optional[int] = 5000
+
+# TTL cache for per-(dataset,gene) expression min/max stats.
+# Key: (dataset_id, normalized_gene)
+# Value: {"min": float, "max": float, "expires_at": datetime}
+GENE_STATS_CACHE: Dict[tuple[str, str], Dict[str, Any]] = {}
+GENE_STATS_CACHE_TTL_SECONDS = 600
 
 class BaseModel(PydanticBaseModel):
     class Config:
@@ -288,6 +295,103 @@ def _sanitize_filename(name: str) -> str:
     Everything else is replaced with an underscore.
     """
     return "".join(c if c.isalnum() or c in "._-" else "_" for c in name)
+
+
+def _normalize_gene_key(gene: str) -> str:
+    return gene.strip().lower()
+
+
+def _get_visible_dataset_paths(session_data: SessionData) -> Dict[str, str]:
+    """
+    Return dataset_id -> adata_path for datasets visible to this user.
+    Visibility:
+      - builtin datasets (always)
+      - uploaded datasets owned by user or marked shared (__shared__)
+    """
+    visible: Dict[str, str] = {}
+    all_datasets = dataset_registry.get_all_datasets(as_dict=True)
+
+    for dataset_id, dataset_dict in all_datasets.get("builtin", {}).items():
+        adata_path = dataset_dict.get("adata_path")
+        if adata_path and Path(adata_path).exists():
+            visible[dataset_id] = adata_path
+
+    username = session_data.username
+    for dataset_id, dataset_dict in all_datasets.get("uploaded", {}).items():
+        owner = dataset_dict.get("user")
+        if owner not in {username, "__shared__"}:
+            continue
+        adata_path = dataset_dict.get("adata_path")
+        if adata_path and Path(adata_path).exists():
+            visible[dataset_id] = adata_path
+
+    return visible
+
+
+def _resolve_adata_path(session_data: SessionData, dataset_id: Optional[str] = None) -> str:
+    """
+    Resolve adata path with optional dataset override.
+
+    Resolution order:
+    1) dataset_id (if provided and visible to user)
+    2) session_data.adata_path
+    3) builtin fallback handled in _load_adata_cached when None
+    """
+    if dataset_id:
+        visible = _get_visible_dataset_paths(session_data)
+        adata_path = visible.get(dataset_id)
+        if not adata_path:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset '{dataset_id}' not found or not visible",
+            )
+        return adata_path
+    return session_data.adata_path
+
+
+def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, float]]:
+    """
+    Return min/max for one gene from an AnnData object.
+    Returns None if gene is not found.
+    """
+    if gene not in adata.var_names:
+        return None
+
+    vector = adata[:, gene].X
+    if sparse.issparse(vector):
+        min_val = float(vector.min())
+        max_val = float(vector.max())
+    else:
+        arr = np.asarray(vector).ravel()
+        if arr.size == 0:
+            return None
+        min_val = float(np.min(arr))
+        max_val = float(np.max(arr))
+
+    return {"min": min_val, "max": max_val}
+
+
+def _get_cached_or_compute_gene_stats(dataset_id: str, adata_path: str, gene: str) -> Optional[Dict[str, float]]:
+    """
+    Return min/max for (dataset, gene), using TTL cache.
+    """
+    now = datetime.utcnow()
+    cache_key = (dataset_id, _normalize_gene_key(gene))
+    cached = GENE_STATS_CACHE.get(cache_key)
+    if cached and cached.get("expires_at") and cached["expires_at"] > now:
+        return {"min": float(cached["min"]), "max": float(cached["max"])}
+
+    adata = _load_adata_cached(adata_path)
+    stats = _extract_gene_min_max(adata, gene)
+    if stats is None:
+        return None
+
+    GENE_STATS_CACHE[cache_key] = {
+        "min": stats["min"],
+        "max": stats["max"],
+        "expires_at": now + timedelta(seconds=GENE_STATS_CACHE_TTL_SECONDS),
+    }
+    return stats
 
 
 def _ensure_under_max_size(upload: UploadFile) -> None:
@@ -1398,10 +1502,16 @@ async def get_var_column(
 #     return obsm_data[column].to_dict()
 
 @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
-async def get_obsm_column(table: str, column: str, session_data: SessionData = Depends(verifier)):
+async def get_obsm_column(
+    table: str,
+    column: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
     print(f"[DEBUG] Endpoint called: table={table}, column={column}")
     print(f"[DEBUG] Session username: {session_data.username}")
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
 
     # --- ChromVAR special case: column is motif name OR comma-separated motif names ---
     if table == "chromvar_spot_scores":
@@ -1455,7 +1565,9 @@ async def get_obsm_column(table: str, column: str, session_data: SessionData = D
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
-    barcode: str, session_data: SessionData = Depends(verifier)
+    barcode: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/obsm/AAACCTCATGAAGTTG-1`
@@ -1466,7 +1578,8 @@ async def get_obsm_row(
     'spongeeffects_GSVA_scores',
     'viper_scores',
     ]
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     available_scores = adata.obsm.keys()
     available_scores = [score for score in available_scores if score.endswith("_genie3") or score.endswith("_sponge")]
 
@@ -1532,17 +1645,98 @@ async def download_file(file_path: str):
 
 @app.get("/X/{gene}", dependencies=[Depends(cookie)])
 async def get_X_by_gene(
-    gene: str, session_data: SessionData = Depends(verifier)
+    gene: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/X/ENSG00000241860`
     """
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     expressions = adata[:, gene].X.toarray().flatten().tolist()
     barcodes = adata.obs.index
     return {
         barcode: expression
         for barcode, expression in zip(barcodes, expressions)
+    }
+
+
+@app.get("/X_stats/{gene}", dependencies=[Depends(cookie)])
+async def get_X_stats_by_gene(
+    gene: str,
+    dataset_ids: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    """
+    Return aggregated expression min/max for `gene` across selected visible datasets.
+
+    Query params:
+    - dataset_ids: optional comma-separated dataset ids.
+      If omitted, all visible datasets for the current user are used.
+
+    Response:
+    {
+      "gene": "...",
+      "dataset_ids": [...],
+      "global_min": float,
+      "global_max": float,
+      "per_dataset": {"dataset_id": {"min": ..., "max": ...}},
+      "missing_in": [...]
+    }
+    """
+    requested_gene = (gene or "").strip()
+    if not requested_gene:
+        raise HTTPException(status_code=400, detail="Gene must not be empty")
+
+    visible_paths = _get_visible_dataset_paths(session_data)
+    if not visible_paths:
+        raise HTTPException(status_code=404, detail="No visible datasets available")
+
+    selected_ids: List[str]
+    if dataset_ids:
+        raw_ids = [x.strip() for x in dataset_ids.split(",") if x.strip()]
+        selected_ids = [dataset_id for dataset_id in raw_ids if dataset_id in visible_paths]
+        if not selected_ids:
+            raise HTTPException(
+                status_code=404,
+                detail="None of the requested dataset_ids are visible/available",
+            )
+    else:
+        selected_ids = list(visible_paths.keys())
+
+    per_dataset: Dict[str, Dict[str, float]] = {}
+    missing_in: List[str] = []
+
+    for dataset_id in selected_ids:
+        adata_path = visible_paths[dataset_id]
+        try:
+            stats = _get_cached_or_compute_gene_stats(dataset_id, adata_path, requested_gene)
+        except Exception as e:
+            print(f"[X_stats] Failed for dataset={dataset_id}, gene={requested_gene}: {e}")
+            stats = None
+
+        if stats is None:
+            missing_in.append(dataset_id)
+        else:
+            per_dataset[dataset_id] = stats
+
+    if not per_dataset:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Gene '{requested_gene}' not found in any selected dataset",
+        )
+
+    global_min = float(min(v["min"] for v in per_dataset.values()))
+    global_max = float(max(v["max"] for v in per_dataset.values()))
+
+    return {
+        "gene": requested_gene,
+        "dataset_ids": selected_ids,
+        "global_min": global_min,
+        "global_max": global_max,
+        "per_dataset": per_dataset,
+        "missing_in": missing_in,
     }
 
 

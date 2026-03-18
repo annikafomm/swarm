@@ -316,12 +316,12 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
-                  (featuresUpdated)="updateHexColors()"
+                  (featuresUpdated)="repaintBothViews()"
                   (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="updateHexColors()"
+                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="repaintBothViews()"
                   (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
               </div>
             </mat-expansion-panel>
@@ -597,14 +597,16 @@
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
 
             <ng-template #gearyC>
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
           </div>
         </mat-tab>
@@ -803,19 +805,12 @@
                 This comparison was skipped: {{ cmp['skip_reason'] }}
               </div>
 
-              <app-table
-                *ngIf="!cmp['skipped']"
-                [data]="cmp['table']"
-                [actionColumns]="[]"
-                [features]="features"
+              <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="[]" [features]="features"
                 [updateColumn]="'dgea'">
               </app-table>
             </div>
 
-            <div
-              #dgeaHeatmap
-              id="dgea-heatmap"
-              style="width: 100%; min-height: 500px; margin-top: 16px;">
+            <div #dgeaHeatmap id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
             </div>
           </ng-container>
         </mat-tab>
@@ -952,13 +947,15 @@
           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
-              <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
+              <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="compareFeatures"
                 [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                [updateColumn]="'regulatory_scores'" (featuresUpdated)="updateHexColors()"></app-table>
-              <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
+                (featuresUpdated)="repaintBothViews()"></app-table>
+              <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="compareFeatures"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
 
             <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
@@ -968,18 +965,20 @@
                 <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
 
                 <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
-                <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
+                <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="compareFeatures"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                  (featuresUpdated)="updateHexColors()">
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="compareFeatures"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  (featuresUpdated)="updateHexColors()">
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
                 <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
@@ -995,14 +994,18 @@
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
               <ng-template #moranI>
                 <h4>Moran's I</h4>
-                <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+                <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']"
+                  [features]="compareFeatures" [updateColumn]="'gene_expression'"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"></app-table>
               </ng-template>
 
               <ng-template #gearyC>
                 <h4>Geary's C</h4>
-                <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                  [updateColumn]="'gene_expression'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+                <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']"
+                  [features]="compareFeatures" [updateColumn]="'gene_expression'"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"></app-table>
               </ng-template>
             </div>
           </mat-tab>
@@ -1101,15 +1104,17 @@
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
-          ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+          ]" [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (featuresUpdated)="repaintBothViews()"></app-table>
               </ng-template>
 
               <ng-template #nmf_scores>
                 <h4>Ligand-Receptor NMF Scores</h4>
                 <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
-                  [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+                  [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (featuresUpdated)="repaintBothViews()"></app-table>
               </ng-template>
             </div>
           </mat-tab>
@@ -1121,8 +1126,9 @@
               <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
-        ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+        ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
           </mat-tab>
 
@@ -1130,8 +1136,9 @@
             <div *ngIf="colorByProperty === 'tf_activity'">
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.meta['tf_names']"
-                [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
-                [updateColumn]="'tf_activity'" (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+                [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
+                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
           </mat-tab>
 
@@ -1141,8 +1148,9 @@
               <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="features" [updateColumn]="'pathwayActivity'"
-                (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-table>
+        ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'"
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
           </mat-tab>
         </mat-tab-group>
