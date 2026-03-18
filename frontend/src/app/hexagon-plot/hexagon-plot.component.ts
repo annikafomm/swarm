@@ -1040,6 +1040,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             Object.keys(this.meta['genie_genesets'] || {})[0] || null;
           this.selectedGeneSetSponge =
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+
+          // Mark initial network loads as pending before any completion check can run.
+          // This prevents `isAppInitializing` from switching off in the short window
+          // before `onGeneSetChange()` sets loading flags and starts requests.
+          this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+          this.isLoadingSponge = !!this.selectedGeneSetSponge;
+
           // Set previous values to null so first onGeneSetChange() will trigger visualization
           this.previousGeneSetGenie3 = null;
           this.previousGeneSetSponge = null;
