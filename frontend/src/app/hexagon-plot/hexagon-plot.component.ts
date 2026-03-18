@@ -160,6 +160,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetSpongeCompare: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
+  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public selectedRegulatoryScoreCompare: string | null = null;
   public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public selectedGeneExpressionMain: string | null = null;
@@ -3278,12 +3279,11 @@ const layout = {
   },
 };
 
-const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
-const container = document.getElementById(containerId);
-if (!container) {
-  console.error(`Container ${containerId} not found for rendering heatmap`);
-  return;
-}
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.error(`Container ${containerId} not found for rendering heatmap`);
+      return;
+    }
 
 Plotly.purge(container);
 Plotly.newPlot(container, data, layout, { displayModeBar: false });

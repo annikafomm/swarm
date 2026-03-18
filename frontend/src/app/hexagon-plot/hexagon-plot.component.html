@@ -328,14 +328,13 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
-                  [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)"></app-table>
+                  (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="repaintBothViews()"
-                  [datasetId]="selectedDataset?.id"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)"></app-table>
+                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
               </div>
             </mat-expansion-panel>
 
@@ -1110,6 +1109,17 @@
 
           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
+              <h4>Aggregated Regulatory Scores</h4>
+
+              <mat-form-field appearance="fill" class="dataset-dropdown">
+                <mat-label>Show Regulatory Statistic</mat-label>
+                <mat-select [(ngModel)]="regulatoryScoreDisplayMode">
+                  <mat-option [value]="'raw'">Raw scores</mat-option>
+                  <mat-option [value]="'moranI'">Moran's I</mat-option>
+                  <mat-option [value]="'gearyC'">Geary's C</mat-option>
+                </mat-select>
+              </mat-form-field>
+
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
                 Score: {{ this.selectedRegulatoryScoreCompare || 'None' }}<br>
