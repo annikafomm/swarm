@@ -23,6 +23,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
   @Input() updateColumn!: string;
+  @Input() datasetId?: string;
   @Input() emptyMessage: string = '';
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
@@ -102,9 +103,14 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       const tableData = this.data as {
         [col: string]: { [index: string]: string | number };
       };
-      this.availableActionColumns = this.actionColumns.filter(
+      const matchingColumns = this.actionColumns.filter(
         (col) => col in tableData
       );
+      // Some actions (e.g. gene_expression) are virtual actions and are not literal
+      // table column names. Keep configured actions as fallback in that case.
+      this.availableActionColumns = matchingColumns.length > 0
+        ? matchingColumns
+        : this.actionColumns;
     } else {
       this.availableActionColumns = this.actionColumns;
     }
@@ -293,12 +299,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const isChromvar = columnName === 'chromvar_spot_scores';
 
     const safeIndex = encodeURIComponent(index);
+    const datasetQuery = this.datasetId ? `?dataset_id=${encodeURIComponent(this.datasetId)}` : '';
 
     const request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}${datasetQuery}`
       : isChromvar
-        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}`
-        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}${datasetQuery}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}${datasetQuery}`;
 
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
@@ -374,10 +381,10 @@ export class FilterableTableComponent implements OnInit, OnChanges {
 
   onShowAction(action: string, row: any): void {
     const geneName = String(row.index);
-    
+
     // Emit event to parent component for gene selection
     this.geneSelected.emit({ gene: geneName, action: action });
-    
+
     if (action === 'chromvar_spot_scores') {
       // base motif comes from motif_id column
       this.chromvarBaseMotif = this.getMotifId(row);
