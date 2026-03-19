@@ -44,7 +44,7 @@
             </div>
           </th>
           <th *ngFor="let action of availableActionColumns" class="action-col">
-            {{ action | translate | async }}
+            {{ action === 'show_on_plot' ? 'Show on plot' : (action | translate | async) }}
           </th>
         </tr>
       </thead>

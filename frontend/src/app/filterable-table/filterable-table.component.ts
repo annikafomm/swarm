@@ -97,45 +97,28 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   filterAvailableActionColumns() {
-    if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
-      this.availableActionColumns = [];
-      return;
-    }
-    if ('motif_id' in this.data) {
-      this.availableActionColumns = this.actionColumns;
-    } else if (!Array.isArray(this.data)) {
-      const tableData = this.data as {
-        [col: string]: { [index: string]: string | number };
-      };
-      const matchingColumns = this.actionColumns.filter(
-        (col) => col in tableData
-      );
-      const virtualColumns = this.actionColumns.filter(
-        (col) => this.virtualActionColumns.has(col)
-      );
-
-      // Show only actually available columns, plus known virtual actions.
-      this.availableActionColumns = Array.from(
-        new Set([...matchingColumns, ...virtualColumns])
-      );
-    } else {
-      this.availableActionColumns = this.actionColumns;
-    }
-
-
-    // Check if action columns exist in the actual data
-    // if (!Array.isArray(this.data)) {
-    //   const tableData = this.data as {
-    //     [col: string]: { [index: string]: string | number };
-    //   };
-    //   this.availableActionColumns = this.actionColumns.filter(
-    //     (col) => col in tableData
-    //   );
-    // } else {
-    //   this.availableActionColumns = this.actionColumns;
-    // }
-
+  if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
+    this.availableActionColumns = [];
+    return;
   }
+
+  if (Array.isArray(this.data)) {
+    this.availableActionColumns = this.actionColumns;
+    return;
+  }
+
+  const tableData = this.data as {
+    [col: string]: { [index: string]: string | number };
+  };
+
+  this.availableActionColumns = this.actionColumns.filter((col) => {
+    if (col === 'show_on_plot') return true;
+    if (col === 'gene_expression') return true;
+    if (col === 'chromvar_spot_scores') return true;
+
+    return col in tableData;
+  });
+}
 
   hasData(): boolean {
     return this.rows && this.rows.length > 0;
@@ -395,13 +378,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.geneSelected.emit({ gene: geneName, action: action });
 
     if (action === 'chromvar_spot_scores') {
-      // base motif comes from motif_id column
       this.chromvarBaseMotif = this.getMotifId(row);
       this.updateChromvarCombinedIfReady(true);
       return;
     }
 
-    // default behavior (non-chromvar actions)
     this.fetchAndUpdate(action, geneName);
   }
 
