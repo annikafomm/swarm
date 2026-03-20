@@ -1673,9 +1673,19 @@ async def get_obsm_column(
             raise HTTPException(status_code=500, detail=f"ChromVAR processing failed: {str(e)}")
 
     # --- default behavior unchanged ---
+    if table not in adata.obsm:
+        print(f"[ERROR] Table '{table}' not found in adata.obsm")
+        print(f"[DEBUG] Available obsm keys: {list(adata.obsm.keys())}")
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found in adata.obsm. Available tables: {', '.join(adata.obsm.keys())}")
+    
     obsm_data = adata.obsm[table]
     if not isinstance(obsm_data, pd.DataFrame):
         obsm_data = pd.DataFrame(obsm_data, index=adata.obs_names)
+
+    if column not in obsm_data.columns:
+        print(f"[ERROR] Column '{column}' not found in table '{table}'")
+        print(f"[DEBUG] Available columns: {list(obsm_data.columns)}")
+        raise HTTPException(status_code=404, detail=f"Column '{column}' not found in table '{table}'. Available columns: {', '.join(obsm_data.columns)}")
 
     return obsm_data[column].to_dict()
 
