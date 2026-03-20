@@ -97,6 +97,34 @@ class DatasetRegistry:
             print(f"✗ Error saving registry: {e}")
             raise
 
+    def _refresh_uploaded_datasets(self):
+        """
+        Reload uploaded datasets from the registry file.
+        This keeps the in-memory registry in sync with disk, so newly registered
+        datasets are visible after a page refresh without restarting.
+        """
+        if not self.registry_file.exists():
+            return
+
+        try:
+            with open(self.registry_file, 'r') as f:
+                data = json.load(f)
+
+            # Reload uploaded datasets
+            uploaded = {}
+            for dataset_id, dataset_dict in data.get("uploaded", {}).items():
+                try:
+                    dataset_dict["category"] = "uploaded"
+                    dataset = DatasetFactory.from_registry_dict(dataset_dict)
+                    uploaded[dataset_id] = dataset
+                except Exception as e:
+                    print(f"⚠ Failed to reload uploaded dataset {dataset_id}: {e}")
+
+            self.datasets["uploaded"] = uploaded
+            print(f"[DEBUG] Reloaded {len(uploaded)} uploaded datasets from disk")
+        except Exception as e:
+            print(f"✗ Error reloading uploaded datasets: {e}")
+
     def register_uploaded_dataset(
         self,
         dataset: Optional[Dataset] = None,
@@ -338,13 +366,10 @@ class DatasetRegistry:
 
                 print(f"[DEBUG] Checking config: {dataset_id} - Registered: {dataset_id in self.datasets.get('uploaded', {})}")
 
-                # Skip if already registered
-                if dataset_id in self.datasets.get("uploaded", {}):
-                    print(f"[DEBUG] Skipping {dataset_id} - already registered")
-                    continue
-
+                # Allow re-registration even if already registered
+                # This enables recovery and re-registration on new sessions
                 unregistered.append(config_file)
-                print(f"[DEBUG] Added unregistered: {dataset_id}")
+                print(f"[DEBUG] Added dataset for registration: {dataset_id}")
             except Exception as e:
                 print(f"⚠ Error processing config file {config_file}: {e}")
 
@@ -362,6 +387,10 @@ class DatasetRegistry:
         Returns:
             List of dicts with dataset info for UI display
         """
+        # Reload uploaded datasets from disk to sync with latest registry
+        # This ensures newly registered datasets show up after refresh
+        self._refresh_uploaded_datasets()
+
         config_files = self.find_config_files(uploads_dir)
         unregistered = []
 
@@ -429,9 +458,10 @@ class DatasetRegistry:
         parent_dir = config_file.parent
         dataset_id = parent_dir.name
 
-        # Check if already registered
+        # Allow re-registration of already registered datasets
+        # This supports recovery flows and re-registration on new sessions
         if dataset_id in self.datasets.get("uploaded", {}):
-            raise ValueError(f"Dataset {dataset_id} already registered")
+            print(f"[DEBUG] Dataset {dataset_id} already registered, re-registering...")
 
         # Extract paths and metadata from config
         adata_path = config.get("output_files", {}).get("adata_path")

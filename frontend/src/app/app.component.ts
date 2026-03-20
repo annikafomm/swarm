@@ -29,7 +29,6 @@ import Shepherd from 'shepherd.js';
 export class AppComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private isLoadingPaths = false; // Prevent concurrent path loads
-  private hasShownUnregisteredDialog = false; // Only show once per session
 
   constructor(
     private http: HttpClient,
@@ -42,13 +41,23 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.sessionService.initSession();
 
-    // Show unregistered datasets dialog after a short delay to allow session to initialize
+    // Show unregistered datasets dialog after session is initialized
+    // Track by session ID - show dialog on each NEW session (page refresh creates new session)
     setTimeout(() => {
-      if (!this.hasShownUnregisteredDialog) {
+      const currentSessionId = this.sessionService.sessionId;
+      const lastDialogSessionId = sessionStorage.getItem('lastUnregisteredDialogSessionId');
+
+      console.log(`[APP] Current session: ${currentSessionId}, Last dialog session: ${lastDialogSessionId}`);
+
+      // Show dialog if this is a new session (different from last time we showed it)
+      if (currentSessionId && currentSessionId !== lastDialogSessionId) {
+        console.log('[APP] New session detected, showing unregistered datasets dialog');
         this.showUnregisteredDatasetsDialog();
-        this.hasShownUnregisteredDialog = true;
+        sessionStorage.setItem('lastUnregisteredDialogSessionId', currentSessionId);
+      } else {
+        console.log('[APP] Same session, skipping unregistered datasets dialog');
       }
-    }, 500);
+    }, 1000);  // Increased timeout to ensure session is ready
 
     this.pathsService.paths$
       .pipe(takeUntil(this.destroy$))
@@ -95,7 +104,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private showUnregisteredDatasetsDialog(): void {
     console.log('[DEBUG] Checking for unregistered datasets...');
-    this.datasetService.loadUnregisteredDatasets()
+    this.sessionService.callWithSession(() =>
+      this.datasetService.loadUnregisteredDatasets()
+    )
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
