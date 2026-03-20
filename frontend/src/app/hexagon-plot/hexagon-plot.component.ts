@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { KeyValue } from '@angular/common';
 import { Data, Router } from '@angular/router';
-import { map, Observable, Subject, Subscription, takeUntil } from 'rxjs';
+import { firstValueFrom, map, Observable, Subject, Subscription, takeUntil } from 'rxjs';
 
 // Visualizations
 import * as d3 from 'd3';
@@ -35,7 +35,7 @@ import { MatSelect, MatSelectTrigger } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
-import { MatTabsModule} from '@angular/material/tabs';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
@@ -151,6 +151,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
+  public selectedGeneExpressionMain: string | null = null;
+  public selectedGeneExpressionCompare: string | null = null;
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
@@ -164,6 +166,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+  private geneDomainToken: number = 0;
+  private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
+  private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
+  private sharedGeneExpressionDomain: { min: number; max: number } | null = null;
+  private sharedGeneExpressionContextKey: string | null = null;
   public dgeaReady: boolean = false;
 
   public selectedInterval: number = 0;
@@ -216,11 +223,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
+  public isLoadingRegulatoryScores: boolean = false; // Track regulatory scores fetches during init
   public isAppInitializing: boolean = true; // Only for initial app load
 
   // Returns true if any initial data loading is in progress (ONLY for first time)
   public get isInitializing(): boolean {
-    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge);
+    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge || this.isLoadingRegulatoryScores);
   }
 
   // Co-occurrence table
@@ -289,6 +297,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
   private dataCompare: GeoJsonData | null = null;
+
+  public get compareFeatures(): CellFeature[] {
+    return this.dataCompare?.features || [];
+  }
+
+  public repaintBothViews(): void {
+    this.updateHexColors();
+    if (this.compareMode) {
+      this.updateHexColors('#hexbin-compare');
+    }
+  }
 
 
   ngOnInit(): void {
@@ -393,6 +412,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.datasetService.selectDataset(dataset);  // Networks load automatically
     this.updatePathsFromDataset(dataset);
     this.reloadHexagons();
+    this.refreshSharedGeneExpressionDomain();
   }
 
   private updateGraphWidths(): void {
@@ -421,6 +441,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.datasetService.selectDataset(tangramDataset);
     this.updatePathsFromDataset(tangramDataset);
     this.reloadHexagons();
+    this.refreshSharedGeneExpressionDomain();
   }
 
   onDatasetCompareSelected(dataset: Dataset | null): void {
@@ -429,6 +450,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     if (dataset) {
       this.reloadComparisonView();
     }
+    this.refreshSharedGeneExpressionDomain();
   }
 
   reloadHexagons(): void {
@@ -814,6 +836,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isLoadingCompare = true;
       // schedule a single init attempt so Angular has time to render the compare container
       setTimeout(() => this.initCompareHexagonPlot(), 50);
+      this.refreshSharedGeneExpressionDomain();
 
 
     } else {
@@ -838,6 +861,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch (e) {
         // ignore
       }
+      this.refreshSharedGeneExpressionDomain();
     }
   }
 
@@ -1123,7 +1147,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               this.hideDetailWindow();
               this.bindDetailWindowInteractions();
             }
-
                     } else {
                         this.features = this.fullFeatures;
                     }
@@ -1157,6 +1180,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             Object.keys(this.meta['genie_genesets'] || {})[0] || null;
           this.selectedGeneSetSponge =
             Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+
+          // Mark initial network loads as pending before any completion check can run.
+          // This prevents `isAppInitializing` from switching off in the short window
+          // before `onGeneSetChange()` sets loading flags and starts requests.
+          this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+          this.isLoadingSponge = !!this.selectedGeneSetSponge;
+
           // Set previous values to null so first onGeneSetChange() will trigger visualization
           this.previousGeneSetGenie3 = null;
           this.previousGeneSetSponge = null;
@@ -1361,8 +1391,185 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return NaN;
   }
 
+  private normalizeGeneKey(gene: string): string {
+    return gene.trim().toLowerCase();
+  }
+
+  private buildGeneDomainCacheKey(datasetId: string, gene: string): string {
+    return `${datasetId}::${this.normalizeGeneKey(gene)}`;
+  }
+
+  private getGeneDomainRequests(): Array<{ datasetId: string; gene: string; cacheKey: string }> {
+    const requests: Array<{ datasetId: string; gene: string; cacheKey: string }> = [];
+    const seen = new Set<string>();
+
+    const add = (datasetId: string | undefined, gene: string | null) => {
+      const cleanGene = (gene ?? '').trim();
+      if (!datasetId || !cleanGene) return;
+      const cacheKey = this.buildGeneDomainCacheKey(datasetId, cleanGene);
+      if (seen.has(cacheKey)) return;
+      seen.add(cacheKey);
+      requests.push({ datasetId, gene: cleanGene, cacheKey });
+    };
+
+    if (this.colorByProperty === 'gene_expression') {
+      add(this.selectedDataset?.id, this.selectedGeneExpressionMain);
+    }
+
+    if (this.compareMode && this.selectedCompareView === 'gene_expression') {
+      const compareDatasetId = this.selectedDatasetCompare?.id ?? this.selectedDataset?.id;
+      const compareGene = this.selectedGeneExpressionCompare ?? this.selectedGeneExpressionMain;
+      add(compareDatasetId, compareGene);
+    }
+
+    return requests;
+  }
+
+  private getGeneDomainContextKey(requests: Array<{ cacheKey: string }>): string {
+    return requests.map(r => r.cacheKey).sort().join('|');
+  }
+
+  private getSharedDomainForGeneExpressionView(): { min: number; max: number } | null {
+    return this.sharedGeneExpressionDomain;
+  }
+
+  private extractViewValue(feature: CellFeature, view: string): unknown {
+    if (this.leidenCentralityProps.includes(view)) {
+      return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
+    }
+    return feature.properties[view];
+  }
+
+  private collectFiniteValuesForView(features: CellFeature[], view: string): number[] {
+    return features
+      .map((f) => this.toNumber(this.extractViewValue(f, view)))
+      .filter((n) => Number.isFinite(n));
+  }
+
+  private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
+    const values = this.collectFiniteValuesForView(features, view);
+    if (!values.length) return null;
+    return {
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+  }
+
+  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
+    if (!this.compareMode) return null;
+
+    const mainView = this.colorByProperty;
+    const compareView = this.selectedCompareView;
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.dataCompare?.features || [];
+    if (!mainFeatures.length || !compareFeatures.length) return null;
+
+    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
+    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
+    if (!mainIsContinuous || !compareIsContinuous) return null;
+
+    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
+    if (!mainMinMax || !compareMinMax) return null;
+
+    return {
+      min: Math.min(mainMinMax.min, compareMinMax.min),
+      max: Math.max(mainMinMax.max, compareMinMax.max),
+    };
+  }
+
+  private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
+    if (token !== this.geneDomainToken) return;
+    this.sharedGeneExpressionDomain = domain;
+    this.sharedGeneExpressionContextKey = domain ? contextKey : null;
+
+    this.updateHexColors();
+    if (this.compareMode) {
+      this.updateHexColors('#hexbin-compare');
+    }
+  }
+
+  private async refreshSharedGeneExpressionDomain(): Promise<void> {
+    const requests = this.getGeneDomainRequests();
+    if (!requests.length) {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
+      return;
+    }
+
+    const contextKey = this.getGeneDomainContextKey(requests);
+    const token = ++this.geneDomainToken;
+    const now = Date.now();
+
+    const pending = requests.filter((r) => {
+      const cached = this.geneDomainCache.get(r.cacheKey);
+      return !cached || cached.expiresAt <= now;
+    });
+
+    if (pending.length > 0) {
+      const results = await Promise.allSettled(
+        pending.map((r) => firstValueFrom(
+          this.sessionService.callWithSession(() =>
+            this.http.get<GeneStatsResponse>(
+              `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+              { withCredentials: true },
+            )
+          )
+        ))
+      );
+
+      if (token !== this.geneDomainToken) {
+        return;
+      }
+
+      results.forEach((result, idx) => {
+        const req = pending[idx];
+        if (result.status === 'fulfilled') {
+          this.geneDomainCache.set(req.cacheKey, {
+            min: result.value.global_min,
+            max: result.value.global_max,
+            expiresAt: now + this.geneDomainCacheTtlMs,
+          });
+        } else {
+          console.warn('[gene-domain] failed to fetch global stats', req, result.reason);
+        }
+      });
+    }
+
+    const valid = requests
+      .map((r) => this.geneDomainCache.get(r.cacheKey))
+      .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
+
+    if (!valid.length) {
+      this.applySharedDomainAndRepaint(null, contextKey, token);
+      return;
+    }
+
+    const min = Math.min(...valid.map((v) => v.min));
+    const max = Math.max(...valid.map((v) => v.max));
+    this.applySharedDomainAndRepaint({ min, max }, contextKey, token);
+  }
+
+  public onGeneExpressionSelected(event: { gene: string; action: string }, panel: 'main' | 'compare'): void {
+    if (event.action !== 'gene_expression') return;
+    const selectedGene = String(event.gene ?? '').trim();
+    if (!selectedGene) return;
+
+    if (panel === 'main') {
+      this.selectedGeneExpressionMain = selectedGene;
+    } else {
+      this.selectedGeneExpressionCompare = selectedGene;
+    }
+
+    this.refreshSharedGeneExpressionDomain();
+  }
+
   public onColorbyPropertyChange(): void {
     console.log('[onColorbyPropertyChange] colorByProperty changed to:', this.colorByProperty);
+
+    if (this.colorByProperty === 'gene_expression' || (this.compareMode && this.selectedCompareView === 'gene_expression')) {
+      this.refreshSharedGeneExpressionDomain();
+    }
 
     if (this.colorByProperty === 'regulatory_scores') {
       if (
@@ -1509,27 +1716,41 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .selectAll('path')
       .data(viewVariablesToUpdate.features);
 
-    valuesRaw = viewVariablesToUpdate.features.map((f) => {
-      if (this.leidenCentralityProps.includes(viewVariablesToUpdate.view)) {
-        return this.getLeidenClusterAnnotation(f.properties.leiden)?.centrality?.[viewVariablesToUpdate.view];
-      }
-      return f.properties[viewVariablesToUpdate.view];
-    });
+    if (containerName === '#hexbin-compare' && this.compareMode && sel.size() === 0) {
+      console.warn('[updateHexColors] Compare layer has no paths; re-initializing compare plot');
+      this.initCompareHexagonPlot();
+      return;
+    }
+
+    valuesRaw = viewVariablesToUpdate.features.map((f) => this.extractViewValue(f, viewVariablesToUpdate.view));
 
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
     if (viewVariablesToUpdate.isContinuous) {
       // continuous scale - only if not integers or too many unique integers
-      let min = Math.min(...numericValues);
-      let max = Math.max(...numericValues);
+      const compareSharedDomain = this.getPairedContinuousDomainForCompare();
+      const sharedDomain = compareSharedDomain ?? (viewVariablesToUpdate.view === 'gene_expression'
+        ? this.getSharedDomainForGeneExpressionView()
+        : null);
+
+      let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
+      let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
       if (min === max) {
         const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
         min -= eps;
         max += eps;
       }
 
-
-      viewVariablesToUpdate.continuous.domain([min, max]);
+      if (sharedDomain) {
+        this.continuousColorScale.domain([min, max]);
+        this.continuousColorScaleCompare.domain([min, max]);
+        this.currentLegendDomain = [min, max];
+        this.currentLegendDomainCompare = [min, max];
+        this.currentLegendType = 'continuous';
+        this.currentCompareLegendType = 'continuous';
+      } else {
+        viewVariablesToUpdate.continuous.domain([min, max]);
+      }
 
       viewVariablesToUpdate.setLegendDomain([min, max]);
       viewVariablesToUpdate.setLegendType('continuous');
@@ -1540,9 +1761,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
-            ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[viewVariablesToUpdate.view]
-            : d.properties[viewVariablesToUpdate.view];
+          const raw = this.extractViewValue(d, viewVariablesToUpdate.view);
           const n = this.toNumber(raw);
           return Number.isFinite(n)
             ? viewVariablesToUpdate.continuous(n)
@@ -1563,9 +1782,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
-            ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[viewVariablesToUpdate.view]
-            : d.properties[viewVariablesToUpdate.view];
+          const raw = this.extractViewValue(d, viewVariablesToUpdate.view);
           return viewVariablesToUpdate.ordinal(String(raw));
         });
     }
@@ -2238,7 +2455,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.resetClusterExtension();
     this.selectedCell = cell;
     if (this.colorByProperty === 'regulatory_scores') {
-      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+      this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
     }
     if (this.colorByProperty === 'leiden') {
       this.openClusterSidenav(cell.properties.leiden);
@@ -2257,7 +2474,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public openSidenavCompare(event: MouseEvent, cell: CellFeature): void {
     this.selectedCellCompare = cell;
     if (this.selectedCompareView === 'regulatory_scores') {
-      this.getRegulatoryScoresforSpots(cell.properties.barcode)
+      this.getRegulatoryScoresforSpots(
+        cell.properties.barcode,
+        this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
+      )
     }
     d3.select(event.target as SVGElement)
       .transition()
@@ -2384,7 +2604,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * Sets isAppInitializing to false once all initial data fetches are done.
    */
   private checkInitializationComplete(): void {
-    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge) {
+    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
       this.isAppInitializing = false;
       console.log('[Init] App initialization complete - hiding loader');
     }
@@ -2732,10 +2952,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  async getRegulatoryScoresforSpots(barcode: string) {
+  async getRegulatoryScoresforSpots(barcode: string, datasetId?: string) {
+    const datasetQuery = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
     this.sessionService.callWithSession(() =>
       this.http.get(
-        `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}`,
+        `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}${datasetQuery}`,
         { withCredentials: true },
       ),
     ).subscribe({
@@ -2782,9 +3003,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const safeIndex = encodeURIComponent(index);
     const isGeneExpression = columnName === 'gene_expression';
 
-    const request = isGeneExpression
+    const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
       : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+
+    const datasetQuery = this.selectedDataset?.id
+      ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
+      : '';
+
+    const request = `${baseRequest}${datasetQuery}`;
 
     this.sessionService
       .callWithSession(() =>
@@ -2816,13 +3043,25 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             console.log(`[Backend] Also updated compare view property '${this.selectedCompareView}' from obsm["${columnName}"][${index}]`);
           }
           console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
-          this.updateHexColors();
+          this.repaintBothViews();
+
+          // Mark regulatory scores fetch as complete if during initialization
+          if (this.isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete();
+          }
         },
-        error: (err) =>
+        error: (err) => {
           console.error(
             `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
             err,
-          ),
+          );
+          // Mark as complete even on error
+          if (this.isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete();
+          }
+        },
       });
   }
 
@@ -3450,4 +3689,13 @@ interface spongeRegGraphConnection {
 
 interface TableData {
   [columnHeader: string]: { [rowHeader: string]: string | number };
+}
+
+interface GeneStatsResponse {
+  gene: string;
+  dataset_ids: string[];
+  global_min: number;
+  global_max: number;
+  per_dataset: { [datasetId: string]: { min: number; max: number } };
+  missing_in: string[];
 }

@@ -23,6 +23,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
   @Input() updateColumn!: string;
+  @Input() datasetId?: string;
   @Input() emptyMessage: string = '';
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
@@ -96,6 +97,41 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.availableActionColumns = [];
     return;
   }
+    if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
+      this.availableActionColumns = [];
+      return;
+    }
+    if ('motif_id' in this.data) {
+      this.availableActionColumns = this.actionColumns;
+    } else if (!Array.isArray(this.data)) {
+      const tableData = this.data as {
+        [col: string]: { [index: string]: string | number };
+      };
+      const matchingColumns = this.actionColumns.filter(
+        (col) => col in tableData
+      );
+      // Some actions (e.g. gene_expression) are virtual actions and are not literal
+      // table column names. Keep configured actions as fallback in that case.
+      this.availableActionColumns = matchingColumns.length > 0
+        ? matchingColumns
+        : this.actionColumns;
+    } else {
+      this.availableActionColumns = this.actionColumns;
+    }
+
+
+    // Check if action columns exist in the actual data
+    // if (!Array.isArray(this.data)) {
+    //   const tableData = this.data as {
+    //     [col: string]: { [index: string]: string | number };
+    //   };
+    //   this.availableActionColumns = this.actionColumns.filter(
+    //     (col) => col in tableData
+    //   );
+    // } else {
+    //   this.availableActionColumns = this.actionColumns;
+    // }
+
 
   if (Array.isArray(this.data)) {
     this.availableActionColumns = this.actionColumns;
@@ -110,7 +146,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (col === 'show_on_plot') return true;
     if (col === 'gene_expression') return true;
     if (col === 'chromvar_spot_scores') return true;
-    
+
     return col in tableData;
   });
 }
@@ -284,12 +320,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const isChromvar = columnName === 'chromvar_spot_scores';
 
     const safeIndex = encodeURIComponent(index);
+    const datasetQuery = this.datasetId ? `?dataset_id=${encodeURIComponent(this.datasetId)}` : '';
 
     const request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}${datasetQuery}`
       : isChromvar
-        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}`
-        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}${datasetQuery}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}${datasetQuery}`;
 
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
