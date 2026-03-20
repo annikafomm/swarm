@@ -1153,6 +1153,117 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
         raise
 
 
+@app.get("/api/unregistered_datasets", dependencies=[Depends(cookie)])
+async def get_unregistered_datasets(session_data: SessionData = Depends(verifier)):
+    """
+    Get list of unregistered datasets from uploads folder.
+    Used by popup dialog to show what datasets can be recovered/registered.
+    """
+    try:
+        unregistered = dataset_registry.get_unregistered_datasets(BASE_UPLOAD_DIR)
+        print(f"Found {len(unregistered)} unregistered datasets")
+        return {"datasets": unregistered}
+    except Exception as e:
+        print(f"✗ Error in get_unregistered_datasets: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/register_dataset", dependencies=[Depends(cookie)])
+async def register_dataset(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier)
+):
+    """
+    Register an unregistered dataset from its config file.
+    The dataset_id corresponds to the job directory name.
+    """
+    try:
+        job_dir = BASE_UPLOAD_DIR / dataset_id
+
+        # Look for config file matching pattern job_*_config.json
+        config_files = list(job_dir.glob("job_*_config.json"))
+
+        if not config_files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Config file not found for dataset {dataset_id}"
+            )
+
+        config_file = config_files[0]  # Use first match
+
+        # Register the dataset using the current user
+        dataset = dataset_registry.register_dataset_from_config(
+            config_file=config_file,
+            user=session_data.username
+        )
+
+        print(f"✓ Registered dataset {dataset_id} for user {session_data.username}")
+        return {
+            "success": True,
+            "message": f"Dataset {dataset_id} registered successfully",
+            "dataset": dataset.to_dict()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"✗ Error registering dataset: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/delete_unregistered_dataset", dependencies=[Depends(cookie)])
+async def delete_unregistered_dataset(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier)
+):
+    """
+    Delete an unregistered dataset's directory.
+    Only unregistered datasets can be deleted via this endpoint.
+    """
+    try:
+        # Verify it's actually unregistered
+        if dataset_id in dataset_registry.datasets.get("uploaded", {}):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dataset {dataset_id} is already registered. Use dataset deletion instead."
+            )
+
+        job_dir = BASE_UPLOAD_DIR / dataset_id
+        if not job_dir.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset directory not found: {dataset_id}"
+            )
+
+        success = dataset_registry.delete_unregistered_dataset(
+            dataset_id=dataset_id,
+            uploads_dir=BASE_UPLOAD_DIR,
+            delete_files=True
+        )
+
+        if success:
+            print(f"✓ Deleted unregistered dataset {dataset_id}")
+            return {
+                "success": True,
+                "message": f"Dataset {dataset_id} deleted successfully"
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to delete dataset {dataset_id}"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ Error deleting dataset: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/geojson/{dataset_id}", dependencies=[Depends(cookie)])
 async def get_geojson(dataset_id: str):
     """Serve GeoJSON files for datasets"""

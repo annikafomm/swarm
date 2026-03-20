@@ -6,6 +6,9 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 import { PathsService } from './paths.service';
+import { DatasetService } from './datasets.service';
+import { MatDialog } from '@angular/material/dialog';
+import { UnregisteredDatasetsDialogComponent } from './unregistered-datasets-dialog/unregistered-datasets-dialog.component';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
@@ -26,15 +29,26 @@ import Shepherd from 'shepherd.js';
 export class AppComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private isLoadingPaths = false; // Prevent concurrent path loads
+  private hasShownUnregisteredDialog = false; // Only show once per session
 
   constructor(
     private http: HttpClient,
     public sessionService: SessionService,
     private pathsService: PathsService,
+    private datasetService: DatasetService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
     this.sessionService.initSession();
+
+    // Show unregistered datasets dialog after a short delay to allow session to initialize
+    setTimeout(() => {
+      if (!this.hasShownUnregisteredDialog) {
+        this.showUnregisteredDatasetsDialog();
+        this.hasShownUnregisteredDialog = true;
+      }
+    }, 500);
 
     this.pathsService.paths$
       .pipe(takeUntil(this.destroy$))
@@ -77,6 +91,46 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private showUnregisteredDatasetsDialog(): void {
+    console.log('[DEBUG] Checking for unregistered datasets...');
+    this.datasetService.loadUnregisteredDatasets()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          console.log('[DEBUG] Got response:', response);
+          const datasets = response.datasets || [];
+          console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
+          if (datasets.length > 0) {
+            console.log('[DEBUG] Opening unregistered datasets dialog');
+            const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
+              width: '1000px',
+              maxHeight: '80vh',
+              disableClose: false,
+              autoFocus: 'first-button',
+            });
+
+            // Reload datasets when dialog closes
+            dialogRef.afterClosed()
+              .pipe(takeUntil(this.destroy$))
+              .subscribe((result) => {
+                if (result?.datasetsChanged) {
+                  // Reload available datasets to reflect any registrations/deletions
+                  this.datasetService.loadAvailableDatasets();
+                  console.log('✓ Datasets list refreshed after dataset management');
+                }
+              });
+          } else {
+            console.log('[DEBUG] No unregistered datasets found');
+          }
+        },
+        error: (error) => {
+          console.error('[DEBUG] Error loading unregistered datasets:', error);
+          console.warn('Could not check for unregistered datasets:', error);
+          // Silently fail - not critical to functionality
+        }
+      });
   }
 
   title = 'frontend';
