@@ -115,4 +115,23 @@ export class DatasetService {
       });
     }
   }
+
+  // Load unregistered datasets from uploads folder
+  loadUnregisteredDatasets(): Observable<any> {
+    return this.http.get<any>('/api/unregistered_datasets', { withCredentials: true });
+  }
+
+  // Register an unregistered dataset
+  registerDataset(datasetId: string): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('dataset_id', datasetId);
+    return this.http.post<any>(`/api/register_dataset?${params.toString()}`, {}, { withCredentials: true });
+  }
+
+  // Delete an unregistered dataset
+  deleteUnregisteredDataset(datasetId: string): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('dataset_id', datasetId);
+    return this.http.post<any>(`/api/delete_unregistered_dataset?${params.toString()}`, {}, { withCredentials: true });
+  }
 }
