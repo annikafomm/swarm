@@ -922,12 +922,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedRegulatoryScore?.endsWith('genie3') &&
         this.selectedGeneSetGenie3
       ) {
-        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, true);
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, {
+          updateMain: true,
+          updateCompare: true,
+        });
       } else if (
         this.selectedRegulatoryScore?.endsWith('sponge') &&
         this.selectedGeneSetSponge
       ) {
-        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, true);
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, {
+          updateMain: true,
+          updateCompare: true,
+        });
       }
     }
   }
