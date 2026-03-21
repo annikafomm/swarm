@@ -875,6 +875,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
+      this.syncCompareSelectionsFromMain();
       this.isLoadingCompare = true;
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
@@ -908,6 +909,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.refreshSharedGeneExpressionDomain();
     }
   }
+
+  private syncCompareSelectionsFromMain(): void {
+    this.selectedCompareView = this.selectedView;
+
+    if (this.selectedView === 'gene_expression') {
+      this.selectedGeneExpressionCompare = this.selectedGeneExpressionMain;
+    }
+
+    if (this.selectedView === 'regulatory_scores') {
+      if (
+        this.selectedRegulatoryScore?.endsWith('genie3') &&
+        this.selectedGeneSetGenie3
+      ) {
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, true);
+      } else if (
+        this.selectedRegulatoryScore?.endsWith('sponge') &&
+        this.selectedGeneSetSponge
+      ) {
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, true);
+      }
+    }
+  }
+
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   getSelectedDgeaHeatmap(): any | null {
     const cmp = this.getSelectedDgeaComparison();
@@ -1586,6 +1610,51 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.sharedGeneExpressionDomain;
   }
 
+  private cloneGeoJsonData(data: GeoJsonData | null): GeoJsonData | null {
+    if (!data) return null;
+
+    try {
+      if (typeof structuredClone === 'function') {
+        return structuredClone(data);
+      }
+    } catch (e) {
+      console.warn('[compare:data] structuredClone failed, falling back to JSON clone', e);
+    }
+
+    return JSON.parse(JSON.stringify(data)) as GeoJsonData;
+  }
+
+  private async loadCompareGeoJsonData(): Promise<GeoJsonData | null> {
+    const comparePath = this.selectedDatasetCompare?.geojson_path
+      ?? this.selectedDataset?.geojson_path
+      ?? this.dataPath;
+
+    if (!comparePath) {
+      console.warn('[compare init] no compare geojson path available');
+      return null;
+    }
+
+    const fullUrl = comparePath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${comparePath}`
+      : comparePath;
+
+    const response = await fetch(fullUrl, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText} (${fullUrl})`);
+    }
+
+    const data = await response.json() as GeoJsonData;
+    console.log('[compare init] loaded geojson from path', {
+      comparePath,
+      fullUrl,
+      featureCount: data?.features?.length ?? 0,
+      selectedCompareDatasetId: this.selectedDatasetCompare?.id ?? null,
+      selectedMainDatasetId: this.selectedDataset?.id ?? null,
+    });
+
+    return data;
+  }
+
   private extractViewValue(feature: CellFeature, view: string): unknown {
     if (this.leidenCentralityProps.includes(view)) {
       return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
@@ -1601,15 +1670,35 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
     const values = this.collectFiniteValuesForView(features, view);
-    if (!values.length) return null;
-    return {
+    if (!values.length) {
+      console.log('[domain:getMinMaxForView] no finite values', {
+        view,
+        featureCount: features.length,
+      });
+      return null;
+    }
+
+    const result = {
       min: Math.min(...values),
       max: Math.max(...values),
     };
+
+    console.log('[domain:getMinMaxForView] computed', {
+      view,
+      featureCount: features.length,
+      finiteCount: values.length,
+      min: result.min,
+      max: result.max,
+    });
+
+    return result;
   }
 
   private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
-    if (!this.compareMode) return null;
+    if (!this.compareMode) {
+      console.log('[domain:getPaired] skipped: compare mode is off');
+      return null;
+    }
 
     const mainView = this.selectedView;
     const compareView = this.selectedCompareView;
@@ -1619,16 +1708,42 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
     const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
-    if (!mainIsContinuous || !compareIsContinuous) return null;
+    if (!mainIsContinuous || !compareIsContinuous) {
+      console.log('[domain:getPaired] skipped: one side is not continuous', {
+        mainView,
+        compareView,
+        mainIsContinuous,
+        compareIsContinuous,
+      });
+      return null;
+    }
 
     const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
     const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
-    if (!mainMinMax || !compareMinMax) return null;
+    if (!mainMinMax || !compareMinMax) {
+      console.log('[domain:getPaired] skipped: missing min/max', {
+        mainView,
+        compareView,
+        mainMinMax,
+        compareMinMax,
+      });
+      return null;
+    }
 
-    return {
+    const merged = {
       min: Math.min(mainMinMax.min, compareMinMax.min),
       max: Math.max(mainMinMax.max, compareMinMax.max),
     };
+
+    console.log('[domain:getPaired] merged domain', {
+      mainView,
+      compareView,
+      mainMinMax,
+      compareMinMax,
+      merged,
+    });
+
+    return merged;
   }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
@@ -1781,7 +1896,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
     const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
 
-    return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
+    return !shouldTreatAsCategorical;
   }
 
   private getViewVariablesToUpdate(containerName: string) {
@@ -1922,8 +2037,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         ? this.getSharedDomainForGeneExpressionView()
         : null);
 
+      const domainSource = compareSharedDomain
+        ? 'paired-compare-domain'
+        : (sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain');
+
       let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
       let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
+
+      if (!Number.isFinite(min) || !Number.isFinite(max)) {
+        min = 0;
+        max = 1;
+      }
+
+      console.log('[updateHexColors] applying continuous domain', {
+        container: containerName,
+        view: viewVariablesToUpdate.view,
+        compareMode: this.compareMode,
+        mainView: this.colorByProperty,
+        compareView: this.selectedCompareView,
+        domainSource,
+        localFiniteValueCount: numericValues.length,
+        min,
+        max,
+      });
       if (min === max) {
         const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
         min -= eps;
