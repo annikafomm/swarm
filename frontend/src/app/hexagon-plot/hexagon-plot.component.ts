@@ -1846,8 +1846,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('[onColorbyPropertyChange] colorByProperty changed to:', colorProp);
 
-    if (colorProp === 'gene_expression') {
+    const dualGeneExpressionCompare =
+      this.compareMode &&
+      this.selectedView === 'gene_expression' &&
+      this.selectedCompareView === 'gene_expression';
+
+    if (dualGeneExpressionCompare) {
       this.refreshSharedGeneExpressionDomain();
+    } else {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
     }
 
     if (colorProp === 'regulatory_scores') {
@@ -2039,6 +2047,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (isContinuous) {
       const compareSharedDomain = this.getPairedContinuousDomainForCompare();
+      console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
       const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
         ? this.getSharedDomainForGeneExpressionView()
         : null);
@@ -2075,10 +2084,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       if (sharedDomain) {
         this.continuousColorScale.domain([min, max]);
         this.continuousColorScaleCompare.domain([min, max]);
-        this.currentLegendDomain = [min, max];
-        this.currentLegendDomainCompare = [min, max];
-        this.currentLegendType = 'continuous';
-        this.currentCompareLegendType = 'continuous';
+
+        const syncBothLegends = !!compareSharedDomain || useSharedGeneExpressionDomain;
+        if (syncBothLegends) {
+          this.currentLegendDomain = [min, max];
+          this.currentLegendDomainCompare = [min, max];
+          this.currentLegendType = 'continuous';
+          this.currentCompareLegendType = 'continuous';
+        }
       } else {
         viewVariablesToUpdate.continuous.domain([min, max]);
       }
