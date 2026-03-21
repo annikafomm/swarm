@@ -885,6 +885,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
+      this.syncCompareSelectionsFromMain();
       this.isLoadingCompare = true;
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
@@ -918,6 +919,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.refreshSharedGeneExpressionDomain();
     }
   }
+
+  private syncCompareSelectionsFromMain(): void {
+    this.selectedCompareView = this.selectedView;
+
+    if (this.selectedView === 'gene_expression') {
+      this.selectedGeneExpressionCompare = this.selectedGeneExpressionMain;
+    }
+
+    if (this.selectedView === 'regulatory_scores') {
+      if (
+        this.selectedRegulatoryScore?.endsWith('genie3') &&
+        this.selectedGeneSetGenie3
+      ) {
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, true);
+      } else if (
+        this.selectedRegulatoryScore?.endsWith('sponge') &&
+        this.selectedGeneSetSponge
+      ) {
+        this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, true);
+      }
+    }
+  }
+
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   getSelectedDgeaHeatmap(): any | null {
     const cmp = this.getSelectedDgeaComparison();
