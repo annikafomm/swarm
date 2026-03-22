@@ -2952,6 +2952,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
+  public get intervalBoundaries(): number[] {
+  const raw = this.meta?.['interval'];
+  return Array.isArray(raw)
+    ? raw.map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v))
+    : [];
+}
+
+public getActualIntervalRange(index: number): { start: number; end: number } | null {
+  const intervals = this.intervalBoundaries;
+  if (!intervals.length || index < 0 || index >= intervals.length) return null;
+
+  return {
+    start: index === 0 ? 0 : intervals[index - 1],
+    end: intervals[index],
+  };
+}
+
+public formatActualIntervalRange(index: number, digits: number = 1): string {
+  const range = this.getActualIntervalRange(index);
+  if (!range) return '';
+
+  return `(${range.start.toFixed(digits)}–${range.end.toFixed(digits)})`;
+}
+
   async getRegulatoryScoresforSpots(barcode: string, datasetId?: string) {
     const datasetQuery = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
     this.sessionService.callWithSession(() =>
