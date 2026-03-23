@@ -93,7 +93,7 @@
       <div class="hint" *ngIf="form.get('useTangram')?.value && !singleCellFile" style="margin-top:6px;">
         Please upload a single-cell file (required when Tangram is enabled).
       </div>
-      
+
       <div class="section" style="margin-top:10px;">
         <label>Gene selection mode:</label>
         <div class="select">
@@ -109,7 +109,7 @@
     </div>
   </div>
 
-    <!-- Tangram toggle MULTIOME -->
+  <!-- Tangram toggle MULTIOME -->
   <div class="section">
     <label style="display:flex; gap:10px; align-items:center;">
       <input type="checkbox" formControlName="useTangramMultiome" />
@@ -236,7 +236,7 @@
 
     <!-- VIPER needs Genie3 only -->
     <div class="section" *ngIf="form.get('network.algorithms.viper')?.value">
-      <label>Upload Genie3 network (.csv) — <span class="required">required</span>:</label>
+      <label>Upload Genie3 network (.csv) <span class="required">*</span>:</label>
       <div class="file">
         <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
         <label for="genie3Net" class="file-control">
@@ -248,93 +248,91 @@
       </div>
     </div>
 
-        <div class="section" *ngIf="form.get('network.algorithms.viper')?.value && genie3Selected"
-          formGroupName="genie3Params">
-          <div class="section-title">Genie3 — options</div>
+    <div class="section" *ngIf="form.get('network.algorithms.viper')?.value && genie3Selected"
+      formGroupName="genie3Params">
+      <div class="section-title">Genie3 — options</div>
 
-          <div class="field-grid">
-            <div class="field">
-              <label>top n weights</label>
-              <input type="number" formControlName="topNWeights" placeholder="100000" />
-              <small>Default: 100000</small>
-            </div>
-            <div class="field">
-              <label>Number of connections used to score regulons</label>
-              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-            <div class="field">
-              <label>number of regulons</label>
-              <input type="number" formControlName="nRegulons" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-          </div>
+      <div class="field-grid">
+        <div class="field">
+          <label>top n weights</label>
+          <input type="number" formControlName="topNWeights" placeholder="100000" />
+          <small>Default: 100000</small>
         </div>
+        <div class="field">
+          <label>Number of connections used to score regulons</label>
+          <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+          <small>Default: 20</small>
+        </div>
+        <div class="field">
+          <label>number of regulons</label>
+          <input type="number" formControlName="nRegulons" placeholder="20" />
+          <small>Default: 20</small>
+        </div>
+      </div>
+    </div>
 
     <!-- AUCell / GSVA / ssGSEA share the same options & upload rules -->
     <div class="section" *ngIf="hasTriadSelected()">
 
       <!-- Upload rule: Genie3 OR both SPONGE files -->
-      <div class="section" style="margin-top:10px;">
-        <div class="subsection">
-          <label>Upload Genie3 network (.csv) — optional (required if SPONGE not provided):</label>
-          <div class="file">
-            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
-            <label for="genie3NetTriad" class="file-control">
-              <span class="btn">Choose file</span>
-              <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
-                {{ genie3NetFile?.name || 'No file selected' }}
-              </span>
-            </label>
+      <div class="subsection">
+        <label>Upload Genie3 network (.csv) — optional (required if SPONGE not provided):</label>
+        <div class="file">
+          <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
+          <label for="genie3NetTriad" class="file-control">
+            <span class="btn">Choose file</span>
+            <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
+              {{ genie3NetFile?.name || 'No file selected' }}
+            </span>
+          </label>
+        </div>
+      </div>
+      <!-- Genie3 parameters — only when network scores ON + a Genie3 file selected -->
+      <div class="section" *ngIf="form.get('scores.networkScores')?.value && genie3Selected"
+        formGroupName="genie3Params">
+        <div class="section-title">Genie3 — options</div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label>top n weights</label>
+            <input type="number" formControlName="topNWeights" placeholder="100000" />
+            <small>Default: 100000</small>
+          </div>
+          <div class="field">
+            <label>Number of connections used to score regulons</label>
+            <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+            <small>Default: 20</small>
+          </div>
+          <div class="field">
+            <label>number of regulons</label>
+            <input type="number" formControlName="nRegulons" placeholder="20" />
+            <small>Default: 20</small>
           </div>
         </div>
-        <!-- Genie3 parameters — only when network scores ON + a Genie3 file selected -->
-        <div class="section" *ngIf="form.get('scores.networkScores')?.value && genie3Selected"
-          formGroupName="genie3Params">
-          <div class="section-title">Genie3 — options</div>
+      </div>
 
-          <div class="field-grid">
-            <div class="field">
-              <label>top n weights</label>
-              <input type="number" formControlName="topNWeights" placeholder="100000" />
-              <small>Default: 100000</small>
-            </div>
-            <div class="field">
-              <label>Number of connections used to score regulons</label>
-              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-            <div class="field">
-              <label>number of regulons</label>
-              <input type="number" formControlName="nRegulons" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-          </div>
+
+      <div class="subsection" style="margin-top:12px;">
+        <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
+        <div class="file">
+          <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv">
+          <label for="spongeNA" class="file-control">
+            <span class="btn">Choose <br> networkanalysis</span>
+            <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
+              {{ spongeNAFile?.name || 'No file selected' }}
+            </span>
+          </label>
         </div>
-
-
-        <div class="subsection" style="margin-top:12px;">
-          <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
-          <div class="file">
-            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv">
-            <label for="spongeNA" class="file-control">
-              <span class="btn">Choose <br> networkanalysis</span>
-              <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
-                {{ spongeNAFile?.name || 'No file selected' }}
-              </span>
-            </label>
-          </div>
-          <div class="file" style="margin-top:8px;">
-            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv">
-            <label for="spongeNI" class="file-control">
-              <span class="btn">Choose <br> networkinteractions</span>
-              <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
-                {{ spongeNIFile?.name || 'No file selected' }}
-              </span>
-            </label>
-          </div>
-          <small>Please upload either a Genie3 network or both SPONGE files.</small>
+        <div class="file" style="margin-top:8px;">
+          <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv">
+          <label for="spongeNI" class="file-control">
+            <span class="btn">Choose <br> networkinteractions</span>
+            <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
+              {{ spongeNIFile?.name || 'No file selected' }}
+            </span>
+          </label>
         </div>
+        <small>Please upload either a Genie3 network or both SPONGE files.</small>
       </div>
       <!-- Show SPONGE parameters only if both SPONGE input files are provided -->
       <div class="section" *ngIf="usingSponge" formGroupName="params">
@@ -407,13 +405,13 @@
       </div>
       <br>
       <div class="field">
-      <label class="field-label">one-tailed or two-tailed</label>
-      <div class="select">
-        <select formControlName="tails">
-          <option value="oneTailed">one-tailed</option>
-          <option value="twoTailed">two-tailed</option>
-        </select>
-      </div>
+        <label class="field-label">one-tailed or two-tailed</label>
+        <div class="select">
+          <select formControlName="tails">
+            <option value="oneTailed">one-tailed</option>
+            <option value="twoTailed">two-tailed</option>
+          </select>
+        </div>
       </div>
       <br>
       <div class="field">
@@ -437,13 +435,13 @@
       </div>
       <br>
       <div class="field">
-      <label class="field-label">one-tailed or two-tailed</label>
-      <div class="select">
-        <select formControlName="tails">
-          <option value="oneTailed">one-tailed</option>
-          <option value="twoTailed">two-tailed</option>
-        </select>
-      </div>
+        <label class="field-label">one-tailed or two-tailed</label>
+        <div class="select">
+          <select formControlName="tails">
+            <option value="oneTailed">one-tailed</option>
+            <option value="twoTailed">two-tailed</option>
+          </select>
+        </div>
       </div>
       <br>
       <div class="field">
