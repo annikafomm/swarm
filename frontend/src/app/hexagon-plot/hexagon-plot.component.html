@@ -113,13 +113,7 @@
         </button>
       </div>
 
-      <div *ngIf="selectedView === 'gene_expression' || (selectedCompareView === 'gene_expression' && compareMode)" class="hx-toolbar">
-        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
-          (click)="showMoranI = !showMoranI">
-          Show
-          {{ showMoranI ? "Geary’s C" : "Moran’s I" }}
-        </button>
-      </div>
+
 
     </div>
 
@@ -310,6 +304,22 @@
 
         <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
           <div *ngIf="selectedView === 'regulatory_scores'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: {{ selectedRegulatoryScore || 'None' }}<br>
+              <ng-container *ngIf="selectedRegulatoryScore?.endsWith('genie3'); else spongeSelectionMain">
+                Gene set (Genie3): {{ selectedGeneSetGenie3 || 'None' }}
+              </ng-container>
+              <ng-template #spongeSelectionMain>
+                <ng-container *ngIf="selectedRegulatoryScore?.endsWith('sponge'); else noNetworkSelectionMain">
+                  Gene set (Sponge): {{ selectedGeneSetSponge || 'None' }}
+                </ng-container>
+                <ng-template #noNetworkSelectionMain>
+                  Gene set: None
+                </ng-template>
+              </ng-template>
+            </div>
+
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
               <div class="gene-set-top">
@@ -341,130 +351,134 @@
             <mat-expansion-panel>
               <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
 
-              <div class="gene-set-body">
-                <section class="graph-block genie3-block">
-                  <div class="gene-set-header">
-                    <h3>Genie3 Network</h3>
-                    <mat-form-field appearance="fill" class="gene-selector">
-                      <mat-label>Gene Set</mat-label>
-                      <mat-select [(ngModel)]="selectedGeneSetGenie3" (selectionChange)="onGeneSetChange()">
-                        <mat-option [value]="null">None</mat-option>
-                        <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
-                          {{ gene }}
-                        </mat-option>
-                      </mat-select>
-                    </mat-form-field>
-                  </div>
-                  <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
-                    Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
-                  </div>
-                  <div *ngIf="!selectedGeneSetGenie3" class="network-message">
-                    No Genie3 network selected
-                  </div>
+              <ng-template matExpansionPanelContent>
+                <div class="gene-set-body">
+                  <section class="graph-block genie3-block">
+                    <div class="gene-set-header">
+                      <h3>Genie3 Network</h3>
+                      <mat-form-field appearance="fill" class="gene-selector">
+                        <mat-label>Gene Set</mat-label>
+                        <mat-select [(ngModel)]="selectedGeneSetGenie3" (selectionChange)="onGeneSetChange()">
+                          <mat-option [value]="null">None</mat-option>
+                          <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
+                            {{ gene }}
+                          </mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                    <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
+                      Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
+                    </div>
+                    <div *ngIf="!selectedGeneSetGenie3" class="network-message">
+                      No Genie3 network selected
+                    </div>
 
-                  <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
-                    <div class="control-row">
-                      <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
-                      <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
-                        [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
-                        [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
-                        [(ngModel)]="genie3WeightCutoff" />
-                      <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                    <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
+                      <div class="control-row">
+                        <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+                        <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
+                          [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
+                          [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
+                          [(ngModel)]="genie3WeightCutoff" />
+                        <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border
+                          }}
+                        </div>
                       </div>
-                    </div>
 
-                    <div class="control-row">
-                      <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
-                      <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
-                        (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
-                      <div class="helper small">1 ←→ 50</div>
-                    </div>
-                  </div>
-
-
-
-                  <div *ngIf="isLoadingGenie3" class="loading-container">
-                    <div class="loading-spinner"></div>
-                    <div class="loading-text">Loading Genie3 network...</div>
-                  </div>
-
-                  <div id="aucell_graph_genie3" #aucell_graph_genie3
-                    [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
-
-                  <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
-                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                      [disabled]="!selectedGeneSetGenie3">
-                      🧬 Analyze All Genie3 Genes in gProfiler
-                    </button>
-                  </div>
-
-                  <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
-                    Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{
-                    genie3MinEdges
-                    }}
-                  </div>
-                </section>
-
-                <section class="graph-block sponge-block">
-                  <div class="gene-set-header">
-                    <h3>Sponge Network</h3>
-                    <mat-form-field appearance="fill" class="gene-selector">
-                      <mat-label>Gene Set</mat-label>
-                      <mat-select [(ngModel)]="selectedGeneSetSponge" (selectionChange)="onGeneSetChange()">
-                        <mat-option [value]="null">None</mat-option>
-                        <mat-option *ngFor="let gene of spongeElements" [value]="gene">
-                          {{ gene }}
-                        </mat-option>
-                      </mat-select>
-                    </mat-form-field>
-                  </div>
-                  <div *ngIf="selectedGeneSetSponge" class="selected-gene-info">
-                    Selected: <strong>{{ selectedGeneSetSponge }}</strong>
-                  </div>
-                  <div *ngIf="!selectedGeneSetSponge" class="network-message">
-                    No Sponge network selected
-                  </div>
-
-                  <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
-                    <div class="control-row">
-                      <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
-                      <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
-                        [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
-                        [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
-                        (input)="onSliderChangeSponge()" />
-                      <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                      <div class="control-row">
+                        <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                        <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
+                          (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
+                        <div class="helper small">1 ←→ 50</div>
                       </div>
                     </div>
 
 
-                    <div class="control-row">
-                      <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
-                      <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
-                        (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
-                      <div class="helper small">1 ←→ 50</div>
+
+                    <div *ngIf="isLoadingGenie3" class="loading-container">
+                      <div class="loading-spinner"></div>
+                      <div class="loading-text">Loading Genie3 network...</div>
                     </div>
-                  </div>
 
-                  <div *ngIf="isLoadingSponge" class="loading-container">
-                    <div class="loading-spinner"></div>
-                    <div class="loading-text">Loading Sponge network...</div>
-                  </div>
+                    <div id="aucell_graph_genie3" #aucell_graph_genie3
+                      [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
 
-                  <div id="aucell_graph_sponge" #aucell_graph_sponge
-                    [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+                    <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3">
+                      <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                        [disabled]="!selectedGeneSetGenie3">
+                        🧬 Analyze All Genie3 Genes in gProfiler
+                      </button>
+                    </div>
 
-                  <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
-                    <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
-                      [disabled]="!selectedGeneSetSponge">
-                      🧬 Analyze All Sponge Genes in gProfiler
-                    </button>
-                  </div>
+                    <div *ngIf="!isLoadingGenie3 && genie3WeightCutoff !== null" class="graph-summary">
+                      Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{
+                      genie3MinEdges
+                      }}
+                    </div>
+                  </section>
 
-                  <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
-                    P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
-                  </div>
-                </section>
-              </div>
+                  <section class="graph-block sponge-block">
+                    <div class="gene-set-header">
+                      <h3>Sponge Network</h3>
+                      <mat-form-field appearance="fill" class="gene-selector">
+                        <mat-label>Gene Set</mat-label>
+                        <mat-select [(ngModel)]="selectedGeneSetSponge" (selectionChange)="onGeneSetChange()">
+                          <mat-option [value]="null">None</mat-option>
+                          <mat-option *ngFor="let gene of spongeElements" [value]="gene">
+                            {{ gene }}
+                          </mat-option>
+                        </mat-select>
+                      </mat-form-field>
+                    </div>
+                    <div *ngIf="selectedGeneSetSponge" class="selected-gene-info">
+                      Selected: <strong>{{ selectedGeneSetSponge }}</strong>
+                    </div>
+                    <div *ngIf="!selectedGeneSetSponge" class="network-message">
+                      No Sponge network selected
+                    </div>
+
+                    <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
+                      <div class="control-row">
+                        <label for="max-pvalue-slider">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+                        <input type="range" id="max-pvalue-slider" class="slider" [min]="spongeSliderData.min_border"
+                          [max]="spongeSliderData.max_border" [step]="spongeSliderData.step"
+                          [value]="spongeSliderData.default_value" [(ngModel)]="spongePValueCutoff"
+                          (input)="onSliderChangeSponge()" />
+                        <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border
+                          }}
+                        </div>
+                      </div>
+
+
+                      <div class="control-row">
+                        <label for="max-edges-slider-sponge">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+                        <input type="range" id="max-edges-slider-sponge" class="slider" min="1" max="50" step="1"
+                          (input)="onSliderChangeSponge()" [(ngModel)]="spongeMinEdges" />
+                        <div class="helper small">1 ←→ 50</div>
+                      </div>
+                    </div>
+
+                    <div *ngIf="isLoadingSponge" class="loading-container">
+                      <div class="loading-spinner"></div>
+                      <div class="loading-text">Loading Sponge network...</div>
+                    </div>
+
+                    <div id="aucell_graph_sponge" #aucell_graph_sponge
+                      [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+
+                    <div class="gprofiler-button-container" *ngIf="!isLoadingSponge">
+                      <button class="gprofiler-btn" (click)="analyzeGeneSetInGProfiler()"
+                        [disabled]="!selectedGeneSetSponge">
+                        🧬 Analyze All Sponge Genes in gProfiler
+                      </button>
+                    </div>
+
+                    <div *ngIf="!isLoadingSponge && spongePValueCutoff !== null" class="graph-summary">
+                      P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
+                    </div>
+                  </section>
+                </div>
+              </ng-template>
             </mat-expansion-panel>
           </div>
 
@@ -579,6 +593,11 @@
 
         <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
           <div *ngIf="selectedView === 'ligand_receptor_relationships'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }}
+            </div>
+
             <div *ngIf="
           showGlobalLigandReceptorScores;
           then global_scores;
@@ -610,6 +629,12 @@
 
         <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
           <div *ngIf="selectedView === 'gene_expression'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
+              Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || 'None' }}
+            </div>
+
             <div *ngIf="showMoranI; then moranI; else gearyC"></div>
             <ng-template #moranI>
               <h4>Moran's I</h4>
@@ -628,12 +653,27 @@
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
+
+            <div class="moran-geary-toggle"
+              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
+                (click)="showMoranI = !showMoranI"
+                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;">
+                Show
+                {{ showMoranI ? "Geary's C" : "Moran's I" }}
+              </button>
+            </div>
           </div>
         </mat-tab>
 
         <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
           [disabled]="!propertyAvailable('chromvar_total_sum')">
           <div>
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: {{ showChromvarMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
+            </div>
+
             <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
               (click)="showChromvarMoranI = !showChromvarMoranI">
               Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
@@ -750,6 +790,11 @@
         <mat-tab label="Cell Composition TF Activity"
           [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
           <div *ngIf="selectedView === 'cell_comp_tf_activity_similarity'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: Cell composition TF activity similarity
+            </div>
+
             <h4>Cell Composition TF Activity Global Scores</h4>
             <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
@@ -762,6 +807,11 @@
 
         <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
           <div *ngIf="selectedView === 'tf_activity'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: TF activity (ULM)
+            </div>
+
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
@@ -772,6 +822,11 @@
 
         <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
           <div *ngIf="selectedView === 'pathway_activity'">
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: Pathway activity (MLM)
+            </div>
+
             <h4>Pathway Activity</h4>
             <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
@@ -995,6 +1050,23 @@
 
           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score: {{ selectedRegulatoryScoreCompare || 'None' }}<br>
+                <ng-container *ngIf="selectedRegulatoryScoreCompare?.endsWith('genie3'); else spongeSelectionCompare">
+                  Gene set (Genie3): {{ selectedGeneSetGenie3Compare || 'None' }}
+                </ng-container>
+                <ng-template #spongeSelectionCompare>
+                  <ng-container
+                    *ngIf="selectedRegulatoryScoreCompare?.endsWith('sponge'); else noNetworkSelectionCompare">
+                    Gene set (Sponge): {{ selectedGeneSetSpongeCompare || 'None' }}
+                  </ng-container>
+                  <ng-template #noNetworkSelectionCompare>
+                    Gene set: None
+                  </ng-template>
+                </ng-template>
+              </div>
+
               <h4>Aggregated Regulatory Scores</h4>
               <mat-form-field appearance="fill" class="dataset-dropdown">
                 <mat-label>Show Regulatory Statistic</mat-label>
@@ -1012,7 +1084,8 @@
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (featuresUpdated)="repaintBothViews()"></app-table>
+                [isLoading]="isLoadingRegulatoryScoresFetch" (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onGeneSelectedFromTable($event, 'sponge', 'compare')"></app-table>
             </div>
 
             <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
@@ -1049,6 +1122,12 @@
 
           <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', 'compare')">
             <div *ngIf="selectedCompareView === 'gene_expression'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
+                Gene: {{ selectedGeneExpressionCompare || selectedGeneExpressionMain || 'None' }}
+              </div>
+
               <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
 
@@ -1069,6 +1148,16 @@
                   (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
+
+              <div class="moran-geary-toggle"
+                style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+                <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
+                  (click)="showMoranI = !showMoranI"
+                  style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;">
+                  Show
+                  {{ showMoranI ? "Geary's C" : "Moran's I" }}
+                </button>
+              </div>
             </div>
           </mat-tab>
 
@@ -1154,6 +1243,11 @@
           <mat-tab label="Compare - Ligand-Receptor Relationships"
             [disabled]="!propertyAvailable('ligand_receptor_relationships', 'compare')">
             <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }}
+              </div>
+
               <div *ngIf="
           showGlobalLigandReceptorScores;
           then global_scores;
@@ -1184,6 +1278,11 @@
           <mat-tab label="Compare - Cell Composition TF Activity"
             [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity', 'compare')">
             <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score: Cell composition TF activity similarity
+              </div>
+
               <h4>Cell Composition TF Activity Global Scores</h4>
               <app-table [data]="this.metaCompare['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
@@ -1197,6 +1296,11 @@
           <mat-tab label="Compare - TF Activity" *ngIf="selectedCell"
             [disabled]="!propertyAvailable('tf_activity', 'compare')">
             <div *ngIf="selectedCompareView === 'tf_activity'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score: TF activity (ULM)
+              </div>
+
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.metaCompare['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
@@ -1207,6 +1311,11 @@
 
           <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', 'compare')">
             <div *ngIf="selectedCompareView === 'pathway_activity'">
+              <div class="selected-gene-info">
+                <strong>Comparison selection</strong><br>
+                Score: Pathway activity (MLM)
+              </div>
+
               <h4>Pathway Activity Comparison</h4>
               <app-table [data]="this.metaCompare['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',

@@ -14,6 +14,18 @@
   backdrop-filter: blur(4px);
 }
 
+// Transparent overlay to block interactions during fetch (no visual change)
+.fetch-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: transparent;
+  z-index: 9998;
+  pointer-events: auto;
+}
+
 .initialization-spinner-container {
   display: flex;
   flex-direction: column;
