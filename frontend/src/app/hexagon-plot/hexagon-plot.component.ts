@@ -180,6 +180,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3Compare: string | null = null;
   private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+  private regulatoryFetchTokenMain: number = 0;
+  private regulatoryFetchTokenCompare: number = 0;
+  private activeRegulatoryTabSource: 'main' | 'compare' = 'main';
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -349,7 +352,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       '#ff8a65',
       '#4caf50',
     ]);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
     '#ff9800',
@@ -362,7 +365,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     '#4caf50',
   ]);
   // Yellow continuous color palette
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
@@ -1752,6 +1755,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return merged;
   }
 
+  private shouldUseComparablePairedDomain(): boolean {
+    return this.compareMode && this.colorByProperty === this.selectedCompareView;
+  }
+
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
     if (token !== this.geneDomainToken) return;
     this.sharedGeneExpressionDomain = domain;
@@ -2050,11 +2057,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
       const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
         ? this.getSharedDomainForGeneExpressionView()
-        : null);
+        : null;
 
-      const domainSource = compareSharedDomain
-        ? 'paired-compare-domain'
-        : (sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain');
+      const domainSource = sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain';
 
       let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
       let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
@@ -2081,22 +2086,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         max += eps;
       }
 
-      if (sharedDomain) {
-        this.continuousColorScale.domain([min, max]);
-        this.continuousColorScaleCompare.domain([min, max]);
+      // Always normalize to [0, 1] for consistent color usage across all views
+      this.continuousColorScale.domain([0, 1]);
+      this.continuousColorScaleCompare.domain([0, 1]);
+      viewVariablesToUpdate.continuous.domain([0, 1]);
 
-        const syncBothLegends = !!compareSharedDomain || useSharedGeneExpressionDomain;
-        if (syncBothLegends) {
-          this.currentLegendDomain = [min, max];
-          this.currentLegendDomainCompare = [min, max];
-          this.currentLegendType = 'continuous';
-          this.currentCompareLegendType = 'continuous';
-        }
-      } else {
-        viewVariablesToUpdate.continuous.domain([min, max]);
-      }
-
-      viewVariablesToUpdate.setLegendDomain([min, max]);
+      // Legend always shows [0, 1]
+      this.currentLegendDomain = [0, 1];
+      this.currentLegendDomainCompare = [0, 1];
+      this.currentLegendType = 'continuous';
+      this.currentCompareLegendType = 'continuous';
+      viewVariablesToUpdate.setLegendDomain([0, 1]);
       viewVariablesToUpdate.setLegendType('continuous');
 
       sel
@@ -2263,7 +2263,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     slicedEdges.forEach((edge) => {
       if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
-        console.log("Adding edge nodes:", edge.source, edge.target);
         nodeSet.add(edge.source);
         nodeSet.add(edge.target);
       }
