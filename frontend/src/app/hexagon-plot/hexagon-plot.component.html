@@ -348,9 +348,8 @@
               </div>
             </mat-expansion-panel>
 
-            <mat-expansion-panel>
+            <mat-expansion-panel (opened)="onRegulatoryGraphsPanelOpened()">
               <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
-
               <ng-template matExpansionPanelContent>
                 <div class="gene-set-body">
                   <section class="graph-block genie3-block">
@@ -395,9 +394,10 @@
 
 
 
-                    <div *ngIf="isLoadingGenie3" class="loading-container">
-                      <div class="loading-spinner"></div>
-                      <div class="loading-text">Loading Genie3 network...</div>
+                    <div *ngIf="isLoadingGenie3" class="loading-container graph-loading-container">
+                      <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                        aria-label="Loading Genie3 network">
+                      </mat-progress-spinner>
                     </div>
 
                     <div id="aucell_graph_genie3" #aucell_graph_genie3
@@ -458,9 +458,10 @@
                       </div>
                     </div>
 
-                    <div *ngIf="isLoadingSponge" class="loading-container">
-                      <div class="loading-spinner"></div>
-                      <div class="loading-text">Loading Sponge network...</div>
+                    <div *ngIf="isLoadingSponge" class="loading-container graph-loading-container">
+                      <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                        aria-label="Loading Sponge network">
+                      </mat-progress-spinner>
                     </div>
 
                     <div id="aucell_graph_sponge" #aucell_graph_sponge
@@ -1162,7 +1163,8 @@
                 </ng-template>
               </div>
 
-              <h4>Aggregated Regulatory Scores</h4>
+              <mat-expansion-panel [expanded]="true">
+                <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
               <mat-form-field appearance="fill" class="dataset-dropdown">
                 <mat-label>Show Regulatory Statistic</mat-label>
                 <mat-select [(ngModel)]="regulatoryScoreDisplayMode">
@@ -1171,7 +1173,7 @@
                   <mat-option [value]="'gearyC'">Geary's C</mat-option>
                 </mat-select>
               </mat-form-field>
-              <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
+                <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
                 [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
                 (featuresUpdated)="repaintBothViews()"></app-table>
@@ -1181,6 +1183,132 @@
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                 [isLoading]="isLoadingRegulatoryScoresFetch" (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneSelectedFromTable($event, 'sponge', 'compare')"></app-table>
+
+                </div>
+              </mat-expansion-panel>
+
+              <mat-expansion-panel (opened)="onRegulatoryGraphsPanelOpenedCompare()">
+                <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
+                <ng-template matExpansionPanelContent>
+                  <div class="gene-set-body">
+                    <section class="graph-block genie3-block">
+                      <div class="gene-set-header">
+                        <h3>Genie3 Network (Comparison)</h3>
+                        <mat-form-field appearance="fill" class="gene-selector">
+                          <mat-label>Gene Set</mat-label>
+                          <mat-select [(ngModel)]="selectedGeneSetGenie3Compare"
+                            (selectionChange)="onGeneSetChangeCompare('genie3')">
+                            <mat-option [value]="null">None</mat-option>
+                            <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
+                              {{ gene }}
+                            </mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                      <div *ngIf="selectedGeneSetGenie3Compare" class="selected-gene-info">
+                        Selected: <strong>{{ selectedGeneSetGenie3Compare }}</strong>
+                      </div>
+                      <div *ngIf="!selectedGeneSetGenie3Compare" class="network-message">
+                        No Genie3 network selected
+                      </div>
+
+                      <div *ngIf="selectedGeneSetGenie3Compare && genie3SliderDataCompare" class="genie3-controls">
+                        <div class="control-row">
+                          <label for="min-weight-slider-compare">Minimum Genie3 Weight: {{ genie3WeightCutoffCompare
+                            }}</label>
+                          <input type="range" id="min-weight-slider-compare" class="slider"
+                            [min]="genie3SliderDataCompare.min_border" [max]="genie3SliderDataCompare.max_border"
+                            [step]="genie3SliderDataCompare.step" [value]="genie3SliderDataCompare.default_value"
+                            (input)="onGeneSetChangeCompare('genie3')" [(ngModel)]="genie3WeightCutoffCompare" />
+                          <div class="helper small">{{ genie3SliderDataCompare.min_border }} ← → {{
+                            genie3SliderDataCompare.max_border }}
+                          </div>
+                        </div>
+
+                        <div class="control-row">
+                          <label for="max-edges-slider-compare">Minimum Edges in Graph: {{ genie3MinEdgesCompare
+                            }}</label>
+                          <input type="range" id="max-edges-slider-compare" class="slider" min="1" max="50" step="1"
+                            (input)="onGeneSetChangeCompare('genie3')" [(ngModel)]="genie3MinEdgesCompare" />
+                          <div class="helper small">1 ←→ 50</div>
+                        </div>
+                      </div>
+
+                      <div *ngIf="isLoadingGenie3Compare" class="loading-container graph-loading-container">
+                        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                          aria-label="Loading Genie3 network compare">
+                        </mat-progress-spinner>
+                      </div>
+
+                      <div id="aucell_graph_genie3_compare" #aucell_graph_genie3_compare
+                        [style.display]="isLoadingGenie3Compare ? 'none' : 'block'"></div>
+
+                      <div class="graph-summary" *ngIf="!isLoadingGenie3Compare && selectedGeneSetGenie3Compare">
+                        Genie3 Weight Cutoff: {{ genie3WeightCutoffCompare | number: '1.2-5' }} · Number of edges: {{
+                        genie3MinEdgesCompare }}
+                      </div>
+                    </section>
+
+                    <section class="graph-block sponge-block">
+                      <div class="gene-set-header">
+                        <h3>Sponge Network (Comparison)</h3>
+                        <mat-form-field appearance="fill" class="gene-selector">
+                          <mat-label>Gene Set</mat-label>
+                          <mat-select [(ngModel)]="selectedGeneSetSpongeCompare"
+                            (selectionChange)="onGeneSetChangeCompare('sponge')">
+                            <mat-option [value]="null">None</mat-option>
+                            <mat-option *ngFor="let gene of spongeElements" [value]="gene">
+                              {{ gene }}
+                            </mat-option>
+                          </mat-select>
+                        </mat-form-field>
+                      </div>
+                      <div *ngIf="selectedGeneSetSpongeCompare" class="selected-gene-info">
+                        Selected: <strong>{{ selectedGeneSetSpongeCompare }}</strong>
+                      </div>
+                      <div *ngIf="!selectedGeneSetSpongeCompare" class="network-message">
+                        No Sponge network selected
+                      </div>
+
+                      <div *ngIf="selectedGeneSetSpongeCompare && spongeSliderDataCompare" class="sponge-controls">
+                        <div class="control-row">
+                          <label for="max-pvalue-slider-compare">Max Sponge P-value Cutoff: {{ spongePValueCutoffCompare
+                            }}</label>
+                          <input type="range" id="max-pvalue-slider-compare" class="slider"
+                            [min]="spongeSliderDataCompare.min_border" [max]="spongeSliderDataCompare.max_border"
+                            [step]="spongeSliderDataCompare.step" [value]="spongeSliderDataCompare.default_value"
+                            [(ngModel)]="spongePValueCutoffCompare" (input)="onGeneSetChangeCompare('sponge')" />
+                          <div class="helper small">{{ spongeSliderDataCompare.min_border }} ← → {{
+                            spongeSliderDataCompare.max_border }}
+                          </div>
+                        </div>
+
+                        <div class="control-row">
+                          <label for="max-edges-slider-sponge-compare">Minimum Edges in Graph: {{ spongeMinEdgesCompare
+                            }}</label>
+                          <input type="range" id="max-edges-slider-sponge-compare" class="slider" min="1" max="50"
+                            step="1" (input)="onGeneSetChangeCompare('sponge')" [(ngModel)]="spongeMinEdgesCompare" />
+                          <div class="helper small">1 ←→ 50</div>
+                        </div>
+                      </div>
+
+                      <div *ngIf="isLoadingSpongeCompare" class="loading-container graph-loading-container">
+                        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                          aria-label="Loading Sponge network compare">
+                        </mat-progress-spinner>
+                      </div>
+
+                      <div id="aucell_graph_sponge_compare" #aucell_graph_sponge_compare
+                        [style.display]="isLoadingSpongeCompare ? 'none' : 'block'"></div>
+
+                      <div class="graph-summary" *ngIf="!isLoadingSpongeCompare && selectedGeneSetSpongeCompare">
+                        P-value cutoff: {{ spongePValueCutoffCompare | number: '1.2-4' }} · Number of edges: {{
+                        spongeMinEdgesCompare }}
+                      </div>
+                    </section>
+                  </div>
+                </ng-template>
+              </mat-expansion-panel>
             </div>
 
             <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">

@@ -541,6 +541,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  public onRegulatoryGraphsPanelOpened(): void {
+    // Wait for lazy expansion-panel content to be attached to the DOM.
+    setTimeout(() => {
+      this.updateGraphWidths();
+
+      if (this.selectedGeneSetGenie3) {
+        this.updateSubgraphGenie3();
+      }
+
+      if (this.selectedGeneSetSponge) {
+        this.updateSubgraphSponge();
+      }
+    }, 0);
+  }
+
   // Handle tangram dataset selection - use tangram_adata_path if available
   onDatasetTangramSelected(dataset: Dataset | null, isCompare: boolean = false): void {
     if (!dataset || !dataset.tangram_adata_path) return;
