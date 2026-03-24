@@ -209,7 +209,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   public clusterCells: CellFeature[] = [];
+  public clusterCellsCompare: CellFeature[] = [];
   public clusterCellTypes: {
+    type: string;
+    count: number;
+    percentage: string;
+  }[] = [];
+  public clusterCellTypesCompare: {
     type: string;
     count: number;
     percentage: string;
@@ -223,6 +229,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       average_clustering: 0,
       closeness_centrality: 0,
     };
+  public clusterCentralityAvgCompare: {
+    degree_centrality: number;
+    average_clustering: number;
+    closeness_centrality: number;
+  } = {
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
+
 
   public compareClusterCells: CellFeature[] = [];
   public compareClusterCellTypes: {
@@ -290,8 +306,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
+  public coOccurrenceDataCompare: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
+  public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
