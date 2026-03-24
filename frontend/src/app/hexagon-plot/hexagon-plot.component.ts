@@ -181,6 +181,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3Compare: string | null = null;
   private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+  private regulatoryFetchTokenMain: number = 0;
+  private regulatoryFetchTokenCompare: number = 0;
+  private activeRegulatoryTabSource: 'main' | 'compare' = 'main';
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -351,7 +354,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       '#ff8a65',
       '#4caf50',
     ]);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
     '#ff9800',
@@ -364,7 +367,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     '#4caf50',
   ]);
   // Yellow continuous color palette
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
