@@ -208,7 +208,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   public clusterCells: CellFeature[] = [];
+  public clusterCellsCompare: CellFeature[] = [];
   public clusterCellTypes: {
+    type: string;
+    count: number;
+    percentage: string;
+  }[] = [];
+  public clusterCellTypesCompare: {
     type: string;
     count: number;
     percentage: string;
@@ -222,6 +228,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       average_clustering: 0,
       closeness_centrality: 0,
     };
+  public clusterCentralityAvgCompare: {
+    degree_centrality: number;
+    average_clustering: number;
+    closeness_centrality: number;
+  } = {
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
+
 
   public compareClusterCells: CellFeature[] = [];
   public compareClusterCellTypes: {
@@ -289,8 +305,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
+  public coOccurrenceDataCompare: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
+  public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
@@ -2880,15 +2898,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.calculateClusterStats();
 
     // Initialize co-occurrence table for this cluster
-    this.updateCoOccurrenceTable();
+    this.updateCoOccurrenceTable(isCompare);
 
-    if (this.clusterCells.length > 0) {
-      this.selectedCell = this.clusterCells[0];
-      // Neighborhood enrichment will render when the Cluster Information tab is viewed
-      // via onTabChange handler
-      setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-      // setTimeout(() => this.renderFootprintPlots(), 0);
+    const targetClusterCells = isCompare ? this.clusterCellsCompare : this.clusterCells;
+    if (targetClusterCells.length > 0) {
+      if (isCompare) {
+        this.selectedCellCompare = targetClusterCells[0];
+      } else {
+        this.selectedCell = targetClusterCells[0];
+        // Neighborhood enrichment will render when the Cluster Information tab is viewed
+        // via onTabChange handler
+        setTimeout(() => this.updateSubgraphGenie3(), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      }
     }
   }
 
@@ -3131,7 +3153,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
     const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
@@ -3141,7 +3163,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
