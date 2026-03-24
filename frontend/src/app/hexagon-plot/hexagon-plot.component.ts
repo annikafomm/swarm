@@ -539,6 +539,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  public onRegulatoryGraphsPanelOpened(): void {
+    // Wait for lazy expansion-panel content to be attached to the DOM.
+    setTimeout(() => {
+      this.updateGraphWidths();
+
+      if (this.selectedGeneSetGenie3) {
+        this.updateSubgraphGenie3();
+      }
+
+      if (this.selectedGeneSetSponge) {
+        this.updateSubgraphSponge();
+      }
+    }, 0);
+  }
+
   // Handle tangram dataset selection - use tangram_adata_path if available
   onDatasetTangramSelected(dataset: Dataset | null, isCompare: boolean = false): void {
     if (!dataset || !dataset.tangram_adata_path) return;
@@ -3006,7 +3021,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  public selectGeneSetFromTable(gene: string, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
+  public selectGeneSetFromTable(gene: string, networkType: 'genie3' | 'sponge'): void {
     if (networkType === 'genie3') {
       compare ? this.selectedGeneSetGenie3Compare = gene : this.selectedGeneSetGenie3 = gene;
       compare ? this.previousGeneSetGenie3Compare = null : this.previousGeneSetGenie3 = null; // Force update
@@ -3274,8 +3289,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     };
 
-    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
-    const container = document.getElementById(containerId);
+    const container = document.getElementById('cluster-nhood-heatmap');
     if (!container) {
       console.error(`Container ${containerId} not found for rendering heatmap`);
       return;
