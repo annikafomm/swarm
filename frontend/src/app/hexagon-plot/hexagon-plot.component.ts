@@ -839,6 +839,121 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  private buildGroupedPropertiesFromKeys(keys: string[]): { key: string; value: string[] }[] {
+    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+    const lianaKeys = [
+      'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity',
+      'tf_activity',
+      'pathway_activity',
+    ];
+    const chromvarKeys = ['chromvar_total_sum'];
+
+    return [
+      { key: 'Scores', value: keys.filter((p) => scoreKeys.includes(p)) },
+      { key: 'LIANA+', value: keys.filter((p) => lianaKeys.includes(p)) },
+      { key: 'ChromVAR', value: keys.filter((p) => chromvarKeys.includes(p)) },
+      {
+        key: 'Other', value: keys.filter(
+          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+        )
+      },
+    ];
+  }
+
+  private computePropertyAvailability(
+    features: CellFeature[],
+    candidates: Set<string>,
+    context: 'main' | 'compare'
+  ): { [prop: string]: boolean } {
+    const availability: { [prop: string]: boolean } = {};
+
+    candidates.forEach((prop) => {
+      if (prop === 'regulatory_scores') {
+        const hasFeatureData = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+        availability[prop] = context === 'main'
+          ? this.hasRegulatoryScoresData() || hasFeatureData
+          : hasFeatureData;
+      } else if (this.leidenCentralityProps.includes(prop)) {
+        availability[prop] = features.some((f) => {
+          const annotationVal = this.getLeidenClusterAnnotation(f.properties.leiden, context)?.centrality?.[prop];
+          const featureVal = f?.properties ? f.properties[prop] : undefined;
+          const val = annotationVal ?? featureVal;
+          return val !== undefined && val !== null && val !== '';
+        });
+      } else {
+        availability[prop] = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+      }
+    });
+
+    return availability;
+  }
+
+  private updateComparePropertyOptions(): void {
+    const firstProps = this.compareFeatures[0]?.properties || {};
+    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+    const lianaKeys = [
+      'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity',
+      'tf_activity',
+      'pathway_activity',
+    ];
+
+    const compareKeys = new Set<string>(
+      Object.keys(firstProps).filter((k) => {
+        const val = firstProps[k];
+        return typeof val === 'string' || typeof val === 'number';
+      })
+    );
+
+    scoreKeys.forEach((k) => compareKeys.add(k));
+    lianaKeys.forEach((k) => compareKeys.add(k));
+    this.leidenCentralityProps.forEach((k) => compareKeys.add(k));
+
+    const compareColorableProps = Array.from(compareKeys).sort((a, b) => a.localeCompare(b));
+    this.groupedPropertiesCompare = this.buildGroupedPropertiesFromKeys(compareColorableProps);
+
+    const candidates = new Set(compareColorableProps);
+    candidates.add('regulatory_scores');
+    this.propertyAvailabilityCompare = this.computePropertyAvailability(this.compareFeatures, candidates, 'compare');
+
+    this.selectedCompareView = this.resolveCompareView(
+      this.selectedCompareView || this.colorByProperty || 'regulatory_scores'
+    );
+  }
+
+  private resolveCompareView(preferredView?: string | null): string {
+    const preferredOrder = [
+      preferredView || '',
+      'regulatory_scores',
+      'gene_expression',
+      'leiden',
+      'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity',
+      'tf_activity',
+      'pathway_activity',
+    ].filter((v, idx, arr) => !!v && arr.indexOf(v) === idx);
+
+    for (const view of preferredOrder) {
+      if (this.propertyAvailable(view, 'compare')) {
+        return view;
+      }
+    }
+
+    const grouped = this.groupedPropertiesCompare || this.groupedProperties || [];
+    const availableFromGroups = grouped
+      .flatMap((g) => g.value)
+      .find((view) => this.propertyAvailable(view, 'compare'));
+
+    return availableFromGroups || 'regulatory_scores';
+  }
+
   private createHexagonPlot(containerName?: string): void {
     if (!containerName) containerName = '#hexbin';
 
@@ -971,6 +1086,62 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           updateCompare: true,
         });
       }
+    }
+  }
+
+  private getDefaultRegulatoryScoreForNetwork(network: 'genie3' | 'sponge'): string | null {
+    const scoreNames = (this.meta?.['grn_score_names'] || []) as string[];
+    return scoreNames.find((name) => typeof name === 'string' && name.endsWith(network)) || null;
+  }
+
+  private getCurrentCompareRegulatoryGene(): string | null {
+    if (this.selectedRegulatoryScoreCompare?.endsWith('genie3')) {
+      return this.selectedGeneSetGenie3Compare || null;
+    }
+    if (this.selectedRegulatoryScoreCompare?.endsWith('sponge')) {
+      return this.selectedGeneSetSpongeCompare || null;
+    }
+    return null;
+  }
+
+  private ensureCompareRegulatorySelections(): void {
+    const firstGenie3Gene =
+      this.selectedGeneSetGenie3 ||
+      this.genie3Elements[0] ||
+      Object.keys(this.geneSetsGenie3 || {})[0] ||
+      null;
+
+    const firstSpongeGene =
+      this.selectedGeneSetSponge ||
+      this.spongeElements[0] ||
+      Object.keys(this.geneSetsSponge || {})[0] ||
+      null;
+
+    if (!this.selectedRegulatoryScoreCompare) {
+      if (firstGenie3Gene) {
+        this.selectedRegulatoryScoreCompare =
+          this.getDefaultRegulatoryScoreForNetwork('genie3') ||
+          this.selectedRegulatoryScore ||
+          this.meta?.['grn_score_names']?.[0] ||
+          null;
+      } else if (firstSpongeGene) {
+        this.selectedRegulatoryScoreCompare =
+          this.getDefaultRegulatoryScoreForNetwork('sponge') ||
+          this.selectedRegulatoryScore ||
+          this.meta?.['grn_score_names']?.[0] ||
+          null;
+      } else {
+        this.selectedRegulatoryScoreCompare =
+          this.selectedRegulatoryScore || this.meta?.['grn_score_names']?.[0] || null;
+      }
+    }
+
+    if (this.selectedRegulatoryScoreCompare?.endsWith('genie3') && !this.selectedGeneSetGenie3Compare) {
+      this.selectedGeneSetGenie3Compare = firstGenie3Gene;
+    }
+
+    if (this.selectedRegulatoryScoreCompare?.endsWith('sponge') && !this.selectedGeneSetSpongeCompare) {
+      this.selectedGeneSetSpongeCompare = firstSpongeGene;
     }
   }
 
@@ -1697,21 +1868,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return data;
   }
 
-  private extractViewValue(feature: CellFeature, view: string): unknown {
+  private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
     if (this.leidenCentralityProps.includes(view)) {
-      return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
+      return this.getLeidenClusterAnnotation(feature.properties.leiden, context)?.centrality?.[view];
     }
     return feature.properties[view];
   }
 
-  private collectFiniteValuesForView(features: CellFeature[], view: string): number[] {
+  private collectFiniteValuesForView(
+    features: CellFeature[],
+    view: string,
+    context: 'main' | 'compare' = 'main'
+  ): number[] {
     return features
-      .map((f) => this.toNumber(this.extractViewValue(f, view)))
+      .map((f) => this.toNumber(this.extractViewValue(f, view, context)))
       .filter((n) => Number.isFinite(n));
   }
 
-  private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
-    const values = this.collectFiniteValuesForView(features, view);
+  private getMinMaxForView(
+    features: CellFeature[],
+    view: string,
+    context: 'main' | 'compare' = 'main'
+  ): { min: number; max: number } | null {
+    const values = this.collectFiniteValuesForView(features, view, context);
     if (!values.length) {
       console.log('[domain:getMinMaxForView] no finite values', {
         view,
@@ -1761,7 +1940,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
-    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, 'compare');
     if (!mainMinMax || !compareMinMax) {
       console.log('[domain:getPaired] skipped: missing min/max', {
         mainView,
