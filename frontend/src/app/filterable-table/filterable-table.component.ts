@@ -24,6 +24,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() features!: any;
   @Input() updateColumn!: string;
   @Input() datasetId?: string;
+  @Input() isLoading: boolean = false;
   @Input() emptyMessage: string = '';
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
@@ -371,7 +372,6 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       });
   }
 
-
   /**
    * Retrieve the computed CSS variable value for --ftable-min-width
    */
@@ -406,7 +406,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.updateChromvarCombinedIfReady();
   }
 
-  onShowAction(action: string, row: any): void {
+  async onShowAction(action: string, row: any): Promise<void> {
     const geneName = String(row.index);
 
     if (action === 'show_on_plot') {
@@ -417,6 +417,8 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (action === 'chromvar_spot_scores') {
       this.chromvarBaseMotif = this.getMotifId(row);
       this.updateChromvarCombinedIfReady(true);
+      // Emit event to parent component for gene selection
+      this.geneSelected.emit({ gene: geneName, action: action });
       return;
     }
 
@@ -436,7 +438,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (!force && motifs.size === 0) return;
 
     const index = Array.from(motifs).join(','); // backend will split and sum
-    this.fetchAndUpdate('chromvar_spot_scores', index);
+    void this.fetchAndUpdate('chromvar_spot_scores', index);
   }
 
   get selectedSumCount(): number {
@@ -448,7 +450,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (!motifs.length) return;
 
     //  sum-only (ignores base motif)
-    this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
+    void this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
 
   }
 
