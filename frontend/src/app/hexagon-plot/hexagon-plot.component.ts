@@ -2838,9 +2838,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     if (
       this.selectedCellCompare &&
-      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
-        (this.selectedCompareView === 'leiden' &&
-          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+      d.properties.barcode === this.selectedCellCompare.properties.barcode
     )
       return;
     d3.selectAll('.Country')
