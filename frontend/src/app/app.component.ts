@@ -113,28 +113,25 @@ export class AppComponent implements OnInit, OnDestroy {
           console.log('[DEBUG] Got response:', response);
           const datasets = response.datasets || [];
           console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
-          if (datasets.length > 0) {
-            console.log('[DEBUG] Opening unregistered datasets dialog');
-            const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
-              width: '1000px',
-              maxHeight: '80vh',
-              disableClose: false,
-              autoFocus: 'first-button',
-            });
+          // Always show dialog on new session, regardless of dataset count
+          console.log('[DEBUG] Opening unregistered datasets dialog on new session');
+          const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
+            width: '1000px',
+            maxHeight: '80vh',
+            disableClose: false,
+            autoFocus: 'first-button',
+          });
 
-            // Reload datasets when dialog closes
-            dialogRef.afterClosed()
-              .pipe(takeUntil(this.destroy$))
-              .subscribe((result) => {
-                if (result?.datasetsChanged) {
-                  // Reload available datasets to reflect any registrations/deletions
-                  this.datasetService.loadAvailableDatasets();
-                  console.log('✓ Datasets list refreshed after dataset management');
-                }
-              });
-          } else {
-            console.log('[DEBUG] No unregistered datasets found');
-          }
+          // Reload datasets when dialog closes
+          dialogRef.afterClosed()
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((result) => {
+              if (result?.datasetsChanged) {
+                // Reload available datasets to reflect any registrations/deletions
+                this.datasetService.loadAvailableDatasets();
+                console.log('✓ Datasets list refreshed after dataset management');
+              }
+            });
         },
         error: (error) => {
           console.error('[DEBUG] Error loading unregistered datasets:', error);

@@ -9,11 +9,12 @@
 
         <div *ngIf="isLoading" class="loading-container">
             <mat-spinner [diameter]="40"></mat-spinner>
-            <p>Loading unregistered datasets...</p>
+            <p>Loading datasets...</p>
         </div>
 
         <div *ngIf="!isLoading && datasets.length === 0" class="empty-state">
-            <p>No unregistered datasets found. All uploads are registered.</p>
+            <p>No datasets available in the uploads folder. All your previous uploads have been registered or removed.
+            </p>
         </div>
 
         <div *ngIf="!isLoading && datasets.length > 0" class="datasets-table-container">
