@@ -746,6 +746,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public propertyAvailable(prop: string, scope: 'main' | 'compare' = 'main'): boolean {
     if (prop === 'gene_expression') return this.hasGeneExpressionData(scope)
     if (prop === 'regulatory_scores') return this.hasRegulatoryScoresData(scope);
+    if (prop === 'co_occurrence') return this.hasCoOccurrenceData(scope);
+
 
     const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
 
@@ -755,6 +757,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     return false;
+  }
+
+  private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
+    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+
+    if (!meta || !meta['leiden_cluster_annotations']) return false;
+
+    const annotations = meta['leiden_cluster_annotations'];
+
+    // Check if at least one cluster has a valid 2D co_occurrence array
+    return Object.values(annotations).some((ann: any) =>
+      ann &&
+      Array.isArray(ann.co_occurrence) &&
+      ann.co_occurrence.length > 0 &&
+      Array.isArray(ann.co_occurrence[0]) // verify it's a 2D array
+    );
   }
 
   private updatePropertyAvailability(scope: 'main' | 'compare' = 'main') {
@@ -1365,7 +1383,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                 const num = this.toNumber(value);
                 return Number.isFinite(num)
                   ? compare ? this.continuousColorScaleCompare(num)
-                  : this.continuousColorScale(num)
+                    : this.continuousColorScale(num)
                   : '#ccc';
               }
             })
@@ -2965,61 +2983,63 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public updateCoOccurrenceTable(compare: boolean = false): void {
     const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
-    if (selectedCluster === null) {
-      if (compare) {
-        this.compareCoOccurrenceData = [];
-      } else {
-        this.coOccurrenceData = [];
-      }
-      return;
+
+    // 1. Clear state immediately
+    if (compare) {
+      this.compareCoOccurrenceData = [];
+    } else {
+      this.coOccurrenceData = [];
     }
+
+    if (selectedCluster === null || selectedCluster === undefined) return;
 
     const clusterAnnotation = this.getLeidenClusterAnnotation(selectedCluster, compare);
-    const coOccurrenceMatrix = clusterAnnotation?.co_occurrence;
 
-    if (!Array.isArray(coOccurrenceMatrix)) {
-      console.warn('No co-occurrence data found for cluster', selectedCluster);
-      if (compare) {
-        this.compareCoOccurrenceData = [];
-      } else {
-        this.coOccurrenceData = [];
-      }
+    // 2. Validate the 2D array exists for this specific cluster
+    if (!clusterAnnotation || !Array.isArray(clusterAnnotation.co_occurrence)) {
+      console.warn(`[Co-occurrence] No data matrix found for Cluster ${selectedCluster}`);
       return;
     }
 
+    // This is your [[2.54, 2.10...], [...]] array
+    const matrix = clusterAnnotation.co_occurrence;
+    const interval = compare ? this.selectedIntervalCompare : this.selectedInterval;
     const data: number[] = [];
+
+    // 3. Safely extract the data
     try {
-      for (let j = 0; j < this.clusterCount; j++) {
-        if (
-          Array.isArray(coOccurrenceMatrix[j]) &&
-          typeof coOccurrenceMatrix[j][compare? this.selectedIntervalCompare : this.selectedInterval] === 'number'
-        ) {
-          data.push(coOccurrenceMatrix[j][compare? this.selectedIntervalCompare : this.selectedInterval]);
+      // We rely on the actual length of the matrix rather than a hardcoded cluster count
+      const numTargetClusters = matrix.length;
+
+      for (let j = 0; j < numTargetClusters; j++) {
+        const targetClusterIntervals = matrix[j];
+
+        if (Array.isArray(targetClusterIntervals) && targetClusterIntervals.length > interval) {
+          const val = targetClusterIntervals[interval];
+          // Guarantee a clean number goes into the array
+          data.push(typeof val === 'number' && !isNaN(val) ? val : 0);
         } else {
-          data.push(0);
+          data.push(0); // Safe fallback
         }
       }
     } catch (error) {
-      console.error('Error extracting co-occurrence data:', error);
-      data.fill(0, 0, this.clusterCount);
+      console.error('[Co-occurrence] Error parsing 2D matrix:', error);
+      data.length = 0; // Wipe on critical failure
     }
 
+    // 4. Update the component state
     if (compare) {
       this.compareCoOccurrenceData = data;
+      // Sync the cluster count so the HTML table headers match the data length
+      this.clusterCountCompare = data.length;
     } else {
       this.coOccurrenceData = data;
+      this.clusterCount = data.length;
     }
 
-    this.calculateCoOccurrenceThreshold(compare);
-
-    console.log(
-      'Co-occurrence data for cluster',
-      selectedCluster,
-      'at interval',
-      compare ? this.selectedIntervalCompare : this.selectedInterval,
-      ':',
-      data,
-    );
+    if (data.length > 0) {
+      this.calculateCoOccurrenceThreshold(compare);
+    }
   }
 
   private calculateCoOccurrenceThreshold(compare: boolean = false): void {
