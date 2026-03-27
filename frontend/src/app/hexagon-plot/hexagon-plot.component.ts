@@ -173,7 +173,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public genie3ElementsCompare: string[] = [];
   public spongeElementsCompare: string[] = [];
 
-
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
   private previousGeneSetGenie3Compare: string | null = null;
@@ -424,9 +423,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
         if (hexagonPath) {
-          // Update the component's dataPath
+          this.isLoadingHexagons = true; // Still explicitly needed for main view!
           this.dataPath = hexagonPath;
-          console.log('✓ Loading hexagon data from', this.dataPath);
 
           // Clear hexagon-plot container
           d3.select('#hexbin').selectAll('svg').remove();
@@ -439,11 +437,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.motifSearchQuery = '';
           this.footprintComputeError = '';
 
-          // Load and render new data
-          this.createHexagonPlot();
-          this.loadAndRenderData(this.dataPath);
-
-          this.renderFootprintPlots(this.selectedDataset);
+          // Yield to the browser's paint cycle so the spinner appears
+          setTimeout(() => {
+            this.createHexagonPlot();
+            this.loadAndRenderData(this.dataPath);
+            this.renderFootprintPlots(this.selectedDataset);
+          }, 50);
         } else {
           console.warn('✗ No hexagon path available');
         }
@@ -475,33 +474,33 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   onDatasetSelected(dataset: Dataset | null, isCompare: boolean = false): void {
     if (dataset) {
       if (isCompare) {
-        this.datasetService.selectDatasetCompare(dataset);
-        this.updatePathsFromDataset(dataset, true);
+        // 1. Update state first
         this.compareDataPath = dataset.geojson_path || '';
         this.compareFeatures = [];
         this.metaCompare = {};
         this.regulatoryObsmKeysCompare = [];
-        this.reloadComparisonView();
+
+        // 2. Emit to subjects
+        this.datasetService.selectDatasetCompare(dataset);
+        this.updatePathsFromDataset(dataset, true);
         this.refreshCompareRegulatoryAvailability();
+        // (Note: reloadComparisonView() is safely handled by the selectedDatasetCompare$ subscription)
       } else {
-        this.datasetService.selectDataset(dataset);
-        // Set dataPath for main view
+        // 1. Update state first
         this.dataPath = dataset.geojson_path || '';
-        this.updatePathsFromDataset(dataset);
         this.features = [];
         this.meta = {};
+
+        // 2. Emit to subjects
+        this.datasetService.selectDataset(dataset);
+        // (Note: updatePathsFromDataset is handled safely by the selectedDataset$ subscription)
       }
     } else {
-      // If dataset is null, clear this.reloadComparisonView(); paths
       if (isCompare) {
-        this.pathsService.updatePaths({
-          adataPath: undefined
-        }, true);
+        this.pathsService.updatePaths({ adataPath: undefined }, true);
         this.compareDataPath = '';
       } else {
-        this.pathsService.updatePaths({
-          adataPath: undefined
-        }, false);
+        this.pathsService.updatePaths({ adataPath: undefined }, false);
         this.dataPath = '';
       }
     }
@@ -560,8 +559,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isLoadingCompare = true;
       // Clear existing compare hexagons
       d3.select('#hexbin-compare').selectAll('svg').remove();
-      // Load and render new compare data
-      this.loadAndRenderData(this.compareDataPath, true);
+
+      // Yield to the browser's paint cycle so the spinner appears
+      setTimeout(() => {
+        this.loadAndRenderData(this.compareDataPath, true);
+      }, 50);
     }
   }
 
