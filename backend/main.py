@@ -349,6 +349,38 @@ def _resolve_adata_path(session_data: SessionData, dataset_id: Optional[str] = N
     return session_data.adata_path
 
 
+def _resolve_dataset_dict(session_data: SessionData, dataset_id: str) -> Dict[str, Any]:
+    """Resolve and authorize a dataset record by id for current user."""
+    all_datasets = dataset_registry.get_all_datasets(as_dict=True)
+
+    builtin = all_datasets.get("builtin", {}).get(dataset_id)
+    if builtin:
+        return builtin
+
+    uploaded = all_datasets.get("uploaded", {}).get(dataset_id)
+    if not uploaded:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+
+    owner = uploaded.get("user")
+    if owner not in {session_data.username, "__shared__"}:
+        raise HTTPException(status_code=403, detail=f"Dataset '{dataset_id}' is not visible")
+
+    return uploaded
+
+
+def _resolve_network_path(
+    session_data: SessionData,
+    dataset_id: Optional[str],
+    network_key: str,
+    fallback_session_path: Optional[str],
+) -> Optional[str]:
+    """Resolve dataset-specific network path, falling back to session path."""
+    if dataset_id:
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        return dataset_dict.get(network_key)
+    return fallback_session_path
+
+
 def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, float]]:
     """
     Return min/max for one gene from an AnnData object.
@@ -1508,19 +1540,27 @@ async def read_network_sponge(sponge_network_path: SpongeNetworksPath, session_i
 
 
 @app.get("/geneset_connections_genie", dependencies=[Depends(cookie)])
-async def get_geneset_connections(
-    gene_set_name: str, session_data: SessionData = Depends(verifier)
+async def get_geneset_connections_genie(
+    gene_set_name: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    genie_network_path = _resolve_network_path(
+        session_data,
+        dataset_id,
+        "genie_network_path",
+        session_data.genie_network_path,
+    )
 
-    if not session_data.genie_network_path:
+    if not genie_network_path:
         return {"connections": [], "slider_data": {}}
 
-
     # Get the geneset from the name
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
 
     # Check if genie_genesets exists in adata.uns
     if "genie_genesets" not in adata.uns:
@@ -1533,7 +1573,7 @@ async def get_geneset_connections(
 
     # Get connections from genie_network
     connections, slider_data = get_subnetwork_data(
-        session_data.genie_network_path, gene_set, "genie"
+        genie_network_path, gene_set, "genie"
     )
 
     # Write to dict
@@ -1543,17 +1583,27 @@ async def get_geneset_connections(
 
 
 @app.get("/geneset_connections_sponge", dependencies=[Depends(cookie)])
-async def get_geneset_connections(
-    gene_set_name: str, session_data: SessionData = Depends(verifier)
+async def get_geneset_connections_sponge(
+    gene_set_name: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    sponge_network_path = _resolve_network_path(
+        session_data,
+        dataset_id,
+        "sponge_network_path",
+        session_data.sponge_network_path,
+    )
+
     # Get the geneset from the name
-    if not session_data.sponge_network_path:
+    if not sponge_network_path:
         return {"connections": [], "slider_data": {}}
 
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     gene_set = adata.uns["sponge_genesets"].get(
         gene_set_name, None
     )
@@ -1561,11 +1611,33 @@ async def get_geneset_connections(
 
     # Get connections from sponge_network
     connections, slider_data = get_subnetwork_data(
-        session_data.sponge_network_path, gene_set, "sponge"
+        sponge_network_path, gene_set, "sponge"
     )
     connections = connections.to_dict(orient="records")
 
     return {"connections": connections, "slider_data": slider_data}
+
+
+@app.get("/api/obsm_tables", dependencies=[Depends(cookie)])
+async def get_obsm_tables(
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    """Return available obsm table names for the selected dataset."""
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+        adata = _load_adata_cached(adata_path)
+        obsm_keys = sorted(list(adata.obsm.keys()))
+        regulatory_obsm_keys = [k for k in obsm_keys if k.endswith("_genie3") or k.endswith("_sponge")]
+        return {
+            "dataset_id": dataset_id,
+            "obsm_keys": obsm_keys,
+            "regulatory_obsm_keys": regulatory_obsm_keys,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read obsm keys: {e}")
 
 
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
@@ -1672,7 +1744,7 @@ async def get_obsm_column(
         print(f"[ERROR] Table '{table}' not found in adata.obsm")
         print(f"[DEBUG] Available obsm keys: {list(adata.obsm.keys())}")
         raise HTTPException(status_code=404, detail=f"Table '{table}' not found in adata.obsm. Available tables: {', '.join(adata.obsm.keys())}")
-    
+
     obsm_data = adata.obsm[table]
     if not isinstance(obsm_data, pd.DataFrame):
         obsm_data = pd.DataFrame(obsm_data, index=adata.obs_names)

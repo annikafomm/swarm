@@ -9,13 +9,23 @@ import { BehaviorSubject } from 'rxjs';
 @Injectable({ providedIn: 'root' })
 export class GeoDataService {
   private dataSource = new BehaviorSubject<any | null>(null);
+  private dataSourceCompare = new BehaviorSubject<any | null>(null);
   data$ = this.dataSource.asObservable();
+  dataCompare$ = this.dataSourceCompare.asObservable();
 
   setData(data: any) {
     this.dataSource.next(data);
   }
 
+  setCompareData(data: any) {
+    this.dataSourceCompare.next(data);
+  }
+
   getData() {
     return this.dataSource.value;
+  }
+
+  getCompareData() {
+    return this.dataSourceCompare.value;
   }
 }
