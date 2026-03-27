@@ -395,21 +395,45 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
+    // --- MAIN DATASET LISTENER ---
     this.datasetService.selectedDataset$
       .pipe(takeUntil(this.destroy$))
       .subscribe(dataset => {
         this.selectedDataset = dataset;
         if (dataset) {
-          this.updatePathsFromDataset(dataset);
+          this.dataPath = dataset.geojson_path || '';
+          this.features = [];
+          this.meta = {};
+          this.updatePathsFromDataset(dataset, false);
+          // Note: updatePathsFromDataset triggers the pathsService listener,
+          // which handles the actual D3 loading for the main view.
+        } else {
+          this.pathsService.updatePaths({ adataPath: undefined }, false);
+          this.dataPath = '';
         }
       });
 
+    // --- COMPARE DATASET LISTENER ---
     this.datasetService.selectedDatasetCompare$
       .pipe(takeUntil(this.destroy$))
       .subscribe(dataset => {
         this.selectedDatasetCompare = dataset;
         if (dataset && this.compareMode) {
+          // Prepare the state
+          this.compareDataPath = dataset.geojson_path || '';
+          this.compareFeatures = [];
+          this.metaCompare = {};
+          this.regulatoryObsmKeysCompare = [];
+
+          this.updatePathsFromDataset(dataset, true);
+          this.refreshCompareRegulatoryAvailability();
+
+          // Trigger the reload
           this.reloadComparisonView();
+        } else if (!dataset && this.compareMode) {
+          this.pathsService.updatePaths({ adataPath: undefined }, true);
+          this.compareDataPath = '';
+          d3.select('#hexbin-compare').selectAll('svg').remove();
         }
       });
 
@@ -423,12 +447,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
         if (hexagonPath) {
-          this.isLoadingHexagons = true; // Still explicitly needed for main view!
+          this.isLoadingHexagons = true; // 1. Turn on spinner
           this.dataPath = hexagonPath;
 
-          // Clear hexagon-plot container
           d3.select('#hexbin').selectAll('svg').remove();
-
           this.footprintPlotUrls = [];
           this.onDemandFootprintUrls = [];
           this.availableMotifs = [];
@@ -437,7 +459,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.motifSearchQuery = '';
           this.footprintComputeError = '';
 
-          // Yield to the browser's paint cycle so the spinner appears
+          // 2. Yield to browser to paint spinner, then do the heavy lifting
           setTimeout(() => {
             this.createHexagonPlot();
             this.loadAndRenderData(this.dataPath);
@@ -472,37 +494,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   onDatasetSelected(dataset: Dataset | null, isCompare: boolean = false): void {
-    if (dataset) {
-      if (isCompare) {
-        // 1. Update state first
-        this.compareDataPath = dataset.geojson_path || '';
-        this.compareFeatures = [];
-        this.metaCompare = {};
-        this.regulatoryObsmKeysCompare = [];
-
-        // 2. Emit to subjects
-        this.datasetService.selectDatasetCompare(dataset);
-        this.updatePathsFromDataset(dataset, true);
-        this.refreshCompareRegulatoryAvailability();
-        // (Note: reloadComparisonView() is safely handled by the selectedDatasetCompare$ subscription)
-      } else {
-        // 1. Update state first
-        this.dataPath = dataset.geojson_path || '';
-        this.features = [];
-        this.meta = {};
-
-        // 2. Emit to subjects
-        this.datasetService.selectDataset(dataset);
-        // (Note: updatePathsFromDataset is handled safely by the selectedDataset$ subscription)
-      }
+    if (isCompare) {
+      // Just emit to the service. The listener in ngOnInit will catch it.
+      this.datasetService.selectDatasetCompare(dataset);
     } else {
-      if (isCompare) {
-        this.pathsService.updatePaths({ adataPath: undefined }, true);
-        this.compareDataPath = '';
-      } else {
-        this.pathsService.updatePaths({ adataPath: undefined }, false);
-        this.dataPath = '';
-      }
+      // Just emit to the service.
+      this.datasetService.selectDataset(dataset);
     }
   }
 
@@ -854,46 +851,42 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onCompareMode(): void {
-
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
       this.isLoadingCompare = true;
-      this.selectedDatasetCompare = this.selectedDataset; // default to same dataset for compare view
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
-      this.refreshCompareRegulatoryAvailability();
-      // schedule a single init attempt so Angular has time to render the compare container
-      setTimeout(() => this.reloadComparisonView(), 100);
+      // Emit the main dataset to the compare stream.
+      // This will automatically trigger the listener in ngOnInit!
+      if (this.selectedDataset) {
+        this.datasetService.selectDatasetCompare(this.selectedDataset);
+      }
       this.refreshSharedGeneExpressionDomain();
 
-
     } else {
-      // remove compare svg and clear references
+      // Teardown logic stays exactly the same
       d3.select('#hexbin-compare').selectAll('*').remove();
       try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
       this.svg_compare = null as any;
       this.g_compare = null as any;
 
-      // Reset compare legend / scales so reopening starts fresh
       try {
         this.currentLegendDomainCompare = [];
         this.currentCompareLegendType = 'categorical';
-        // reset compare ordinal domain
         if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
           this.colorScaleCompare.domain([] as any);
         }
-        // reset compare continuous domain
         if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
           this.continuousColorScaleCompare.domain([0, 1]);
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) { }
+
+      // Clear the service state
+      this.datasetService.selectDatasetCompare(null);
       this.refreshSharedGeneExpressionDomain();
     }
   }
-
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   getSelectedDgeaHeatmap(): any | null {
     const cmp = this.getSelectedDgeaComparison();
