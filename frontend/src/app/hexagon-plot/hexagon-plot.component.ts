@@ -1636,7 +1636,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * the main `this.features` is used.
    */
   isContinuousScale(view?: string, features?: CellFeature[], compare: boolean = false): boolean {
-    // Determine which property and features to use
     const property = view ?? (compare ? this.selectedCompareView : this.selectedView);
     const sourceFeatures = Array.isArray(features)
       ? features
@@ -1650,7 +1649,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return f.properties[property];
     });
 
-    const numericValues = valuesRaw.map((v) => this.toNumber(v));
+    // FILTER OUT undefined/null values so they don't evaluate to NaN and break the check
+    const validRaw = valuesRaw.filter(v => v !== undefined && v !== null && v !== '');
+
+    // If completely empty (e.g., initial state), default to continuous
+    if (validRaw.length === 0) return true;
+
+    const numericValues = validRaw.map((v) => this.toNumber(v));
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
     const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
@@ -1690,16 +1695,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     } as const;
   }
 
+  // This function checks if the selected view/property is available in the features. If not, it falls back to a default property or the first available property.
+
   private getAvailableView(selectedView: string, features: CellFeature[], fallback: string = 'cell_type'): string {
+
     if (!features.length) return fallback;
+
+    // 1. Always trust dynamically fetched properties (even if sparse/empty on cell 0)
+    const dynamicProps = [
+      'gene_expression', 'regulatory_scores', 'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity', 'chromvar_total_sum'
+    ];
+    if (dynamicProps.includes(selectedView)) {
+      return selectedView;
+    }
+
+    // 2. For static properties, check if it exists on the first feature
     const firstFeature = features[0];
     const hasProperty = this.leidenCentralityProps.includes(selectedView)
       ? true
       : selectedView in (firstFeature.properties || {});
+
     if (hasProperty) return selectedView;
-    // Try fallback
     if (fallback in (firstFeature.properties || {})) return fallback;
-    // Try any available property
+
     const keys = Object.keys(firstFeature.properties || {});
     return keys.length ? keys[0] : fallback;
   }
@@ -3170,25 +3189,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           if (token !== this.requestTokens[tokenType]) return;
           const data = res as { [barcode: string]: any };
 
-          if (this.features) {
+          // 1. Update ONLY the main view if compare is false
+          if (!compare && this.features) {
             for (const feature of this.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                feature.properties[this.selectedView] = data[barcode];
+                // HARDCODE the property name. Never use this.selectedView here!
+                feature.properties['regulatory_scores'] = data[barcode];
               }
             }
+            console.log(`[Backend] Updated main view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
           }
-          console.log('Features:', this.features);
+
+          // 2. Update ONLY the compare view if compare is true
           if (compare && this.compareMode && this.compareFeatures) {
             for (const feature of this.compareFeatures) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                feature.properties[this.selectedCompareView] = data[barcode];
+                // HARDCODE the property name. Never use this.selectedCompareView here!
+                feature.properties['regulatory_scores'] = data[barcode];
               }
             }
-            console.log(`[Backend] Also updated compare view property '${this.selectedCompareView}' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated compare view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
           }
-          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+
           this.repaintBothViews();
 
           // Mark regulatory scores fetch as complete if during initialization
@@ -3198,11 +3222,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         },
         error: (err) => {
-          console.error(
-            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
-            err,
-          );
-          // Mark as complete even on error
+          console.error(`[Backend] Failed to load adata.obsm["${columnName}][${index}]`, err);
           if (isInitializing) {
             this.isLoadingRegulatoryScores = false;
             this.checkInitializationComplete(compare);

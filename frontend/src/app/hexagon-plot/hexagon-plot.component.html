@@ -317,12 +317,14 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
+                  [datasetId]="selectedDataset?.id"
                   (featuresUpdated)="repaintBothViews()"
                   (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                   [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="repaintBothViews()"
+                  [datasetId]="selectedDataset?.id"
                   (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)"></app-table>
               </div>
             </mat-expansion-panel>
@@ -467,6 +469,8 @@
               <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -475,6 +479,8 @@
               <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -578,6 +584,7 @@
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor global scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
@@ -586,6 +593,7 @@
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor NMF factors loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
@@ -598,6 +606,7 @@
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
@@ -606,6 +615,7 @@
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
