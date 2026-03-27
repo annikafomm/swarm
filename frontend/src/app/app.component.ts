@@ -87,7 +87,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
         // Load paths sequentially to avoid race conditions
         const promises: Promise<any>[] = [];
-        if (paths.adataMainPath) promises.push(loadPath('read_adata', paths.adataMainPath, 'adata'));
+        if (paths.adataPath) promises.push(loadPath('read_adata', paths.adataPath, 'adata'));
         if (paths.genieFiltPath) promises.push(loadPath('read_network_genie', paths.genieFiltPath, 'network_genie'));
         if (paths.spongeFiltPath) promises.push(loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge'));
 
@@ -103,18 +103,14 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private showUnregisteredDatasetsDialog(): void {
-    console.log('[DEBUG] Checking for unregistered datasets...');
     this.sessionService.callWithSession(() =>
       this.datasetService.loadUnregisteredDatasets()
     )
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
-          console.log('[DEBUG] Got response:', response);
           const datasets = response.datasets || [];
           console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
-          // Always show dialog on new session, regardless of dataset count
-          console.log('[DEBUG] Opening unregistered datasets dialog on new session');
           const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
             width: '1000px',
             maxHeight: '80vh',
@@ -129,7 +125,6 @@ export class AppComponent implements OnInit, OnDestroy {
               if (result?.datasetsChanged) {
                 // Reload available datasets to reflect any registrations/deletions
                 this.datasetService.loadAvailableDatasets();
-                console.log('✓ Datasets list refreshed after dataset management');
               }
             });
         },
