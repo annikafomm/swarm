@@ -15,6 +15,6 @@ hexagons["meta"]["dgea"] = dgea["meta"]["dgea"]
 
 # save new file
 with open("hexagons_with_dgea.geojson", "w") as f:
-    json.dump(hexagons, f)
+    json.dump(hexagons, f, indent=4)
 
 print("Ready: hexagons_with_dgea.geojson created")

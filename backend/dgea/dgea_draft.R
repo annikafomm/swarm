@@ -9,10 +9,11 @@ suppressPackageStartupMessages({
 in_dir   <- "/workspaces/mopitas-mapra/backend/dgea/export_for_seurat"
 out_json <- "/workspaces/mopitas-mapra/backend/dgea/results/dgea_results.json"
 
-wanted_obs_cols <- c("cell_type", "seurat_clusters", "niche_cluster")
+wanted_obs_cols <- c("cell_type", "leiden", "niche_cluster")
 
 # Compare all group pairs within each obs column
 do_all_vs_all <- TRUE
+do_one_vs_all <- TRUE
 
 # FindMarkers Parameter
 min_cells <- 3
@@ -146,6 +147,188 @@ build_heatmap_context <- function(
   list(
     groups = as.list(colnames(mat_raw)),
     rows = rows
+  )
+}
+
+build_heatmap_context_vs_all <- function(
+  seu,
+  obs_col,
+  group1,
+  table_df,
+  assay = "RNA",
+  slot = "data",
+  n_top = 10,
+  padj_cutoff = 0.05,
+  logfc_cutoff = 0.5
+) {
+  fc_col <- NULL
+  if ("avg_log2FC" %in% colnames(table_df)) {
+    fc_col <- "avg_log2FC"
+  } else if ("avg_logFC" %in% colnames(table_df)) {
+    fc_col <- "avg_logFC"
+  } else {
+    return(list(groups = list(), rows = list()))
+  }
+
+  df <- table_df
+
+  if ("p_val_adj" %in% colnames(df)) {
+    df <- df[is.na(df$p_val_adj) | df$p_val_adj < padj_cutoff, , drop = FALSE]
+  }
+
+  df <- df[abs(df[[fc_col]]) >= logfc_cutoff, , drop = FALSE]
+
+  if (nrow(df) == 0) {
+    return(list(groups = list(), rows = list()))
+  }
+
+  pos <- df[df[[fc_col]] > 0, , drop = FALSE]
+  neg <- df[df[[fc_col]] < 0, , drop = FALSE]
+
+  pos <- pos[order(-pos[[fc_col]]), , drop = FALSE]
+  neg <- neg[order(neg[[fc_col]]), , drop = FALSE]
+
+  top_pos <- head(pos$gene, n_top)
+  top_neg <- head(neg$gene, n_top)
+
+  genes_use <- unique(c(top_pos, top_neg))
+
+  if (length(genes_use) == 0) {
+    return(list(groups = list(), rows = list()))
+  }
+
+  expr_mat <- GetAssayData(seu, assay = assay, slot = slot)
+  group_values <- as.character(seu[[obs_col, drop = TRUE]])
+
+  all_groups <- sort(unique(group_values))
+  all_groups <- all_groups[!is.na(all_groups)]
+
+  other_groups <- setdiff(all_groups, group1)
+  groups_ordered <- c(group1, other_groups)
+
+  mat_raw <- sapply(groups_ordered, function(g) {
+    cells <- colnames(seu)[group_values == g]
+    if (length(cells) == 0) {
+      rep(NA_real_, length(genes_use))
+    } else {
+      Matrix::rowMeans(expr_mat[genes_use, cells, drop = FALSE])
+    }
+  })
+
+  mat_raw <- as.matrix(mat_raw)
+  rownames(mat_raw) <- genes_use
+  colnames(mat_raw) <- groups_ordered
+
+  mat_scaled <- t(scale(t(mat_raw)))
+  mat_scaled[is.na(mat_scaled)] <- 0
+
+  rows <- lapply(seq_len(nrow(mat_raw)), function(i) {
+    list(
+      gene = rownames(mat_raw)[i],
+      scaled = unname(as.numeric(mat_scaled[i, ])),
+      raw = unname(as.numeric(mat_raw[i, ]))
+    )
+  })
+
+  list(
+    groups = as.list(colnames(mat_raw)),
+    rows = rows
+  )
+}
+
+compute_one_vs_all_tabledata <- function(seu, obs_col, g1) {
+  Idents(seu) <- obs_col
+  sizes <- table(Idents(seu))
+  n1 <- as.integer(sizes[[g1]]); if (is.na(n1)) n1 <- 0L
+  n2 <- as.integer(sum(sizes)) - n1
+
+  cmp_id <- paste0(safe_id(g1), "__vs__all")
+  g2_label <- "all"
+
+  if (n1 < min_cells || n2 < min_cells) {
+    return(list(
+      id = cmp_id,
+      name = paste(g1, "vs", g2_label),
+      group1 = g1,
+      group2 = g2_label,
+      n1 = n1,
+      n2 = n2,
+      skipped = TRUE,
+      skip_reason = sprintf("min_cells=%d not met", min_cells),
+      table = list(),
+      heatmap_context = list(groups = list(), rows = list())
+    ))
+  }
+
+  others <- setdiff(levels(Idents(seu)), g1)
+
+  res <- tryCatch({
+    FindMarkers(
+      seu,
+      ident.1 = g1,
+      ident.2 = others,
+      test.use = "wilcox",
+      min.pct = min_pct,
+      logfc.threshold = logfc_threshold
+    )
+  }, error = function(e) {
+    structure(NULL, error_msg = e$message)
+  })
+
+  if (is.null(res)) {
+    return(list(
+      id = cmp_id,
+      name = paste(g1, "vs", g2_label),
+      group1 = g1,
+      group2 = g2_label,
+      n1 = n1,
+      n2 = n2,
+      skipped = TRUE,
+      skip_reason = paste0("FindMarkers error: ", attr(res, "error_msg")),
+      table = list(),
+      heatmap_context = list(groups = list(), rows = list())
+    ))
+  }
+
+  res$gene <- rownames(res)
+
+  if ("p_val_adj" %in% colnames(res)) {
+    res <- res[order(res$p_val_adj, res$p_val), , drop = FALSE]
+  } else if ("p_val" %in% colnames(res)) {
+    res <- res[order(res$p_val), , drop = FALSE]
+  }
+  if (nrow(res) > top_n) res <- res[1:top_n, , drop = FALSE]
+
+  if ("pct.1" %in% colnames(res)) res$pct1 <- res[["pct.1"]]
+  if ("pct.2" %in% colnames(res)) res$pct2 <- res[["pct.2"]]
+
+  keep <- intersect(wanted_marker_cols, colnames(res))
+  table_df <- res[, c("gene", keep), drop = FALSE]
+
+  for (c in keep) table_df[[c]] <- to_num(table_df[[c]])
+
+  heatmap_context <- build_heatmap_context_vs_all(
+    seu = seu,
+    obs_col = obs_col,
+    group1 = g1,
+    table_df = table_df,
+    assay = DefaultAssay(seu),
+    slot = heatmap_slot,
+    n_top = heatmap_n_top,
+    padj_cutoff = heatmap_padj_cutoff,
+    logfc_cutoff = heatmap_logfc_cutoff
+  )
+
+  list(
+    id = cmp_id,
+    name = paste(g1, "vs", g2_label),
+    group1 = g1,
+    group2 = g2_label,
+    n1 = n1,
+    n2 = n2,
+    skipped = FALSE,
+    table = df_to_tabledata(table_df, index_col = "gene"),
+    heatmap_context = heatmap_context
   )
 }
 
@@ -297,10 +480,18 @@ run_for_obs_col <- function(seu, obs_col) {
   sizes <- sort(table(Idents(seu)), decreasing = TRUE)
 
   pairs <- if (do_all_vs_all) combn(lvls, 2, simplify = FALSE) else list()
+  pair_comps <- lapply(pairs, function(p) {
+    compute_one_comparison_tabledata(seu, obs_col, p[[1]], p[[2]])
+  })
 
-  comps_list <- lapply(pairs, function(p) compute_one_comparison_tabledata(seu, obs_col, p[[1]], p[[2]]))
+  one_vs_all_comps <- if (do_one_vs_all) {
+    lapply(lvls, function(g) compute_one_vs_all_tabledata(seu, obs_col, g))
+  } else {
+    list()
+  }
 
-  # Store comparisons as a named map: comparisons[[cmp_id]] = {...}
+  comps_list <- c(pair_comps, one_vs_all_comps)
+
   comparisons <- list()
   for (c in comps_list) comparisons[[c$id]] <- c
 
