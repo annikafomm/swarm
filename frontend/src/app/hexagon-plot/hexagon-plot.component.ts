@@ -976,7 +976,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public showDgeaGeneOnMainPlot(gene: string): void {
     this.shownGeneOnPlot = gene;
-    this.colorByProperty = 'gene_expression';
+    this.selectedView = 'gene_expression';
     this.fetchAndUpdate('gene_expression', gene);
   }
 
@@ -1094,17 +1094,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const flippedHeatmap = cmp?.heatmap_context
       ? {
-          ...cmp.heatmap_context,
-          groups: Array.isArray(cmp.heatmap_context.groups)
-            ? [
-                this.selectedDgeaGroup1,
-                this.selectedDgeaGroup2,
-                ...cmp.heatmap_context.groups.filter(
-                  (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
-                )
-              ]
-            : cmp.heatmap_context.groups
-        }
+        ...cmp.heatmap_context,
+        groups: Array.isArray(cmp.heatmap_context.groups)
+          ? [
+            this.selectedDgeaGroup1,
+            this.selectedDgeaGroup2,
+            ...cmp.heatmap_context.groups.filter(
+              (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
+            )
+          ]
+          : cmp.heatmap_context.groups
+      }
       : null;
 
     return {
@@ -1212,6 +1212,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               .on('mouseleave', (event, d) => this.mouseLeave(event, d))
               .on('click', (event, d) => this.displayCellDetails(event, d, true));
           }
+
         } else {
           this.features = data.features;
         }
@@ -1237,75 +1238,78 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
               // window only for xenium
               if (this.isXenium) {
-              this.initDetailWindow();
-              this.hideDetailWindow();
-              this.bindDetailWindowInteractions();
+                this.initDetailWindow();
+                this.hideDetailWindow();
+                this.bindDetailWindowInteractions();
+              }
+
+            } else {
+              this.features = this.fullFeatures;
             }
 
-          } else {
-            this.features = this.fullFeatures;
-          }
-          if (compare) {
-            this.metaCompare = data.meta;
-            this.updatePropertyAvailability('compare');
-          } else {
-            this.meta = data.meta;
-            this.updatePropertyAvailability('main');
-          }
+            if (compare) {
+              this.metaCompare = data.meta;
+              this.updatePropertyAvailability('compare');
+            } else {
+              this.meta = data.meta;
+              this.updatePropertyAvailability('main');
+            }
 
-          const availableObsCols = this.getDgeaObsCols();
-                    if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
-                      this.selectedDgeaObsCol = availableObsCols[0];
-                    }
-          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
-          if (this.dgeaReady) {
-            this.initDgeaSelection();
-          }
-          const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
-          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
-          }
+            const availableObsCols = this.getDgeaObsCols();
+            if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
+              this.selectedDgeaObsCol = availableObsCols[0];
+            }
+            this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+            if (this.dgeaReady) {
+              this.initDgeaSelection();
+            }
 
-          const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
-          if (Array.isArray(interval) && interval.length > 0) {
-            this.maxInterval = interval.length - 1;
-          }
-          this.selectedRegulatoryScore =
-            compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
-          if (compare) {
-            this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
-            this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
-            this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
-          } else {
-            this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
-            this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
-            this.geneSetsSponge = this.meta['sponge_genesets'] || {};
-          }
-          // Populate dropdown options from gene set keys
-          this.genie3Elements = Object.keys(this.geneSetsGenie3);
-          this.spongeElements = Object.keys(this.geneSetsSponge);
-          this.selectedGeneSetGenie3 =
-            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-          this.selectedGeneSetSponge =
-            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+            const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
+            if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+            }
 
-          if (compare) {
-            this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
-            this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
-            this.previousGeneSetGenie3Compare = null;
-            this.previousGeneSetSpongeCompare = null;
-            this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
-          } else {
-            this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
-            this.isLoadingSponge = !!this.selectedGeneSetSponge;
-            this.previousGeneSetGenie3 = null;
-            this.previousGeneSetSponge = null;
-            this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+            const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
+            if (Array.isArray(interval) && interval.length > 0) {
+              this.maxInterval = interval.length - 1;
+            }
+            this.selectedRegulatoryScore =
+              compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
+            if (compare) {
+              this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
+              this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
+              this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
+            } else {
+              this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
+              this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+              this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+            }
+            // Populate dropdown options from gene set keys
+            this.genie3Elements = Object.keys(this.geneSetsGenie3);
+            this.spongeElements = Object.keys(this.geneSetsSponge);
+            this.selectedGeneSetGenie3 =
+              Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
+            this.selectedGeneSetSponge =
+              Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+
+            if (compare) {
+              this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
+              this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
+              this.previousGeneSetGenie3Compare = null;
+              this.previousGeneSetSpongeCompare = null;
+              this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
+            } else {
+              this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+              this.isLoadingSponge = !!this.selectedGeneSetSponge;
+              this.previousGeneSetGenie3 = null;
+              this.previousGeneSetSponge = null;
+              this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+            }
+            // Trigger initial graph visualization
+            setTimeout(() => {
+              this.onGeneSetChange(compare);
+            }, 100);
           }
-          // Trigger initial graph visualization
-          setTimeout(() => {
-            this.onGeneSetChange(compare);
-          }, 100);
         }
         const featuresForProps = compare ? this.compareFeatures : this.features;
         const firstProps = featuresForProps?.[0]?.properties || {};

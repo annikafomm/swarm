@@ -97,14 +97,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   filterAvailableActionColumns() {
-  if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
-    this.availableActionColumns = [];
-    return;
-  }
     if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
       this.availableActionColumns = [];
       return;
     }
+
     if ('motif_id' in this.data) {
       this.availableActionColumns = this.actionColumns;
     } else if (!Array.isArray(this.data)) {
@@ -140,23 +137,23 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     // }
 
 
-  if (Array.isArray(this.data)) {
-    this.availableActionColumns = this.actionColumns;
-    return;
+    if (Array.isArray(this.data)) {
+      this.availableActionColumns = this.actionColumns;
+      return;
+    }
+
+    const tableData = this.data as {
+      [col: string]: { [index: string]: string | number };
+    };
+
+    this.availableActionColumns = this.actionColumns.filter((col) => {
+      if (col === 'show_on_plot') return true;
+      if (col === 'gene_expression') return true;
+      if (col === 'chromvar_spot_scores') return true;
+
+      return col in tableData;
+    });
   }
-
-  const tableData = this.data as {
-    [col: string]: { [index: string]: string | number };
-  };
-
-  this.availableActionColumns = this.actionColumns.filter((col) => {
-    if (col === 'show_on_plot') return true;
-    if (col === 'gene_expression') return true;
-    if (col === 'chromvar_spot_scores') return true;
-
-    return col in tableData;
-  });
-}
 
   hasData(): boolean {
     return this.rows && this.rows.length > 0;
