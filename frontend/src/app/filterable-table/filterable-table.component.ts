@@ -97,6 +97,10 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   filterAvailableActionColumns() {
+  if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
+    this.availableActionColumns = [];
+    return;
+  }
     if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
       this.availableActionColumns = [];
       return;
@@ -135,7 +139,24 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     //   this.availableActionColumns = this.actionColumns;
     // }
 
+
+  if (Array.isArray(this.data)) {
+    this.availableActionColumns = this.actionColumns;
+    return;
   }
+
+  const tableData = this.data as {
+    [col: string]: { [index: string]: string | number };
+  };
+
+  this.availableActionColumns = this.actionColumns.filter((col) => {
+    if (col === 'show_on_plot') return true;
+    if (col === 'gene_expression') return true;
+    if (col === 'chromvar_spot_scores') return true;
+
+    return col in tableData;
+  });
+}
 
   hasData(): boolean {
     return this.rows && this.rows.length > 0;
@@ -391,17 +412,17 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   onShowAction(action: string, row: any): void {
     const geneName = String(row.index);
 
-    // Emit event to parent component for gene selection
-    this.geneSelected.emit({ gene: geneName, action: action });
+    if (action === 'show_on_plot') {
+      this.geneSelected.emit({ gene: geneName, action });
+      return;
+    }
 
     if (action === 'chromvar_spot_scores') {
-      // base motif comes from motif_id column
       this.chromvarBaseMotif = this.getMotifId(row);
       this.updateChromvarCombinedIfReady(true);
       return;
     }
 
-    // default behavior (non-chromvar actions)
     this.fetchAndUpdate(action, geneName);
   }
 

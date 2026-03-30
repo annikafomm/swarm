@@ -771,7 +771,7 @@
               [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"></app-table>
           </div>
         </mat-tab>
-        <mat-tab label="DGEA">
+        <mat-tab label="DGEA" [disabled]="!hasDgeaData()">
           <ng-template #noDgeaTpl>
             <div class="no-data">No DGEA data available.</div>
           </ng-template>
@@ -783,41 +783,69 @@
           </ng-template>
 
           <ng-container *ngIf="dgeaReady; else noDgeaTpl">
-            <h4>DGEA Comparison (cell_type)</h4>
+            <h4>DGEA Comparison</h4>
 
-            <div class="row-container" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+            <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
+
+              <!-- GROUPING -->
               <mat-form-field appearance="fill">
-                <mat-label>Cell type 1</mat-label>
-                <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange()">
-                  <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
-                    {{ level }}
+                <mat-label>Grouping</mat-label>
+                <mat-select [(ngModel)]="selectedDgeaObsCol" (selectionChange)="onDgeaObsColChange()">
+                  <mat-option *ngFor="let col of getDgeaObsCols()" [value]="col">
+                    {{ getDgeaObsColLabel(col) }}
                   </mat-option>
                 </mat-select>
               </mat-form-field>
 
-              <mat-form-field appearance="fill">
-                <mat-label>Cell type 2</mat-label>
-                <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange()">
-                  <mat-option *ngFor="let level of getDgeaCellTypeLevels()" [value]="level">
-                    {{ level }}
-                  </mat-option>
-                </mat-select>
-              </mat-form-field>
+              <!-- GROUPS -->
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+
+                <mat-form-field appearance="fill">
+                  <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 1' : 'Group 1' }}</mat-label>
+                  <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange()">
+                    <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                      {{ level }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field appearance="fill" *ngIf="!dgeaVsAll">
+                  <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 2' : 'Group 2' }}</mat-label>
+                  <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange()">
+                    <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                      {{ level }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <mat-checkbox [(ngModel)]="dgeaVsAll" (change)="onDgeaVsAllChange()">
+                    Compare Group 1 vs all others
+                  </mat-checkbox>
+              </div>
+
             </div>
 
             <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparisonTpl">
-              <p>
-                <strong>Comparison:</strong>
-                {{ cmp['group1'] }} vs {{ cmp['group2'] }}
-                (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
-              </p>
+              <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                <div>
+                  <strong>Grouping:</strong>
+                  {{ getDgeaObsColLabel(selectedDgeaObsCol) }}
+                  <br>
+                  <strong>Comparison:</strong>
+                  {{ cmp['group1'] }} vs {{ cmp['group2'] }}
+                  (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+                </div>
+              </div>
 
               <div *ngIf="cmp['skipped']" class="no-data">
                 This comparison was skipped: {{ cmp['skip_reason'] }}
               </div>
-
-              <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="[]" [features]="features"
-                [updateColumn]="'dgea'">
+              <app-table
+                *ngIf="!cmp['skipped']"
+                [data]="cmp['table']"
+                [actionColumns]="['show_on_plot']"
+                [features]="features"
+                [updateColumn]="'dgea'"
+                (geneSelected)="onDgeaGeneSelected($event)">
               </app-table>
             </div>
 

@@ -39,12 +39,13 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTabChangeEvent, MatTabGroup } from '@angular/material/tabs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 
 
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -125,6 +126,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Nested g elements that contain the actual paths
   private g_paths!: d3.Selection<SVGGElement, any, any, any>;
   private g_paths_compare!: d3.Selection<SVGGElement, any, any, any>;
+
   // ======= Xenium performance state =======
   private fullFeatures: CellFeature[] = [];
   private isXenium = false;
@@ -195,10 +197,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public metaCompare: { [key: string]: any } = {};
 
   // Selected groups for the DGEA comparison (bound to the dropdowns)
+  public selectedDgeaObsCol: string = 'cell_type';
   public selectedDgeaGroup1: string | null = null;
   public selectedDgeaGroup2: string | null = null;
-
   private hiddenPropKeys = new Set<string>([]);
+  public dgeaVsAll: boolean = false;
 
 
   public clusterCells: CellFeature[] = [];
@@ -645,7 +648,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (!compare && tabLabel === 'DGEA') {
-      this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+      this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
       if (this.dgeaReady) {
         this.initDgeaSelection();
         setTimeout(() => this.renderDgeaHeatmap(), 100);
@@ -913,19 +916,43 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   // Returns all available cell type levels for the dropdown selectors
-  getDgeaCellTypeLevels(): string[] {
-    return this.meta?.['dgea']?.['cell_type']?.['levels'] ?? [];
+  getDgeaLevels(): string[] {
+    return this.meta?.['dgea']?.[this.selectedDgeaObsCol]?.['levels'] ?? [];
   }
 
   // Returns the map of all DGEA comparisons
   getDgeaComparisonMap(): { [key: string]: any } {
-    return this.meta?.['dgea']?.['cell_type']?.['comparisons'] ?? {};
+    return this.meta?.['dgea']?.[this.selectedDgeaObsCol]?.['comparisons'] ?? {};
   }
 
   // Re-render the DGEA heatmap when the user changes the group selections
   public onDgeaSelectionChange(): void {
     setTimeout(() => this.renderDgeaHeatmap(), 0);
   }
+
+  getDgeaObsCols(): string[] {
+    return Object.keys(this.meta?.['dgea'] ?? {});
+  }
+
+  public onDgeaObsColChange(): void {
+    this.selectedDgeaGroup1 = null;
+    this.selectedDgeaGroup2 = null;
+    this.dgeaVsAll = false;
+    this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
+    this.initDgeaSelection();
+    setTimeout(() => this.renderDgeaHeatmap(), 0);
+  }
+
+  getDgeaObsColLabel(col: string): string {
+    if (col === 'cell_type') return 'Cell type';
+    if (col === 'leiden') return 'Leiden';
+    return col;
+  }
+
+  public hasDgeaData(): boolean {
+    return !!this.meta?.['dgea'] && Object.keys(this.meta['dgea']).length > 0;
+  }
+
 
   private getLeidenClusterAnnotation(clusterId: number | null | undefined, compare: boolean = false): any | null {
     if (clusterId === null || clusterId === undefined) return null;
@@ -939,6 +966,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return `${safe(group1)}__vs__${safe(group2)}`;
   }
 
+  public shownGeneOnPlot: string | null = null;
+
+  public onDgeaGeneSelected(event: { gene: string; action: string }): void {
+    if (event.action === 'show_on_plot') {
+      this.showDgeaGeneOnMainPlot(event.gene);
+    }
+  }
+
+  public showDgeaGeneOnMainPlot(gene: string): void {
+    this.shownGeneOnPlot = gene;
+    this.colorByProperty = 'gene_expression';
+    this.fetchAndUpdate('gene_expression', gene);
+  }
+
+
   // Render the context heatmap
   private renderDgeaHeatmap(): void {
     const container = this.dgeaHeatmapElement?.nativeElement;
@@ -951,7 +993,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    const x = hm.groups as string[];
+    const x = (hm.groups as any[]).map(g => String(g));
     const y = hm.rows.map((r: any) => r.gene);
     const z = hm.rows.map((r: any) => r.scaled);
     const raw = hm.rows.map((r: any) => r.raw);
@@ -973,13 +1015,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     ];
 
+    const xAxisTitle = this.getDgeaObsColLabel(this.selectedDgeaObsCol);
+
     const layout: Partial<Plotly.Layout> = {
       margin: { t: 30, l: 140, r: 20, b: 100 },
       height: Math.max(420, y.length * 22),
       xaxis: {
-        title: { text: 'Cell type' },
+        title: { text: xAxisTitle },
         tickangle: -45,
-        automargin: true
+        automargin: true,
+        type: 'category'
       },
       yaxis: {
         title: { text: 'Genes' },
@@ -995,29 +1040,97 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  public onDgeaVsAllChange(): void {
+    this.initDgeaSelection();
+    setTimeout(() => this.renderDgeaHeatmap(), 0);
+  }
+
   // Returns all available cell type levels for the dropdown selectors
   getSelectedDgeaComparison(): any | null {
-    if (!this.selectedDgeaGroup1 || !this.selectedDgeaGroup2) return null;
-    if (this.selectedDgeaGroup1 === this.selectedDgeaGroup2) return null;
+    if (!this.selectedDgeaGroup1) return null;
 
     const comps = this.getDgeaComparisonMap();
 
+    if (this.dgeaVsAll) {
+      const vsAllId = this.makeComparisonId(this.selectedDgeaGroup1, 'all');
+      return comps[vsAllId] ?? null;
+    }
+
+    if (!this.selectedDgeaGroup2) return null;
+    if (this.selectedDgeaGroup1 === this.selectedDgeaGroup2) return null;
+
     const directId = this.makeComparisonId(this.selectedDgeaGroup1, this.selectedDgeaGroup2);
-    if (comps[directId]) return comps[directId];
+    if (comps[directId]) {
+      return comps[directId];
+    }
 
     const reverseId = this.makeComparisonId(this.selectedDgeaGroup2, this.selectedDgeaGroup1);
-    if (comps[reverseId]) return comps[reverseId];
+    const reverseCmp = comps[reverseId];
+    if (!reverseCmp) return null;
 
-    return null;
+    return this.flipDgeaComparison(reverseCmp);
+  }
+
+  private flipDgeaComparison(cmp: any): any {
+    const flippedTable: any = {};
+
+    if (cmp?.table) {
+      for (const col of Object.keys(cmp.table)) {
+        if (col === 'avg_log2FC' || col === 'avg_logFC') {
+          flippedTable[col] = {};
+          for (const gene of Object.keys(cmp.table[col])) {
+            const val = Number(cmp.table[col][gene]);
+            flippedTable[col][gene] = Number.isFinite(val) ? -val : cmp.table[col][gene];
+          }
+        } else if (col === 'pct1') {
+          flippedTable['pct1'] = cmp.table['pct2'] ? { ...cmp.table['pct2'] } : {};
+        } else if (col === 'pct2') {
+          flippedTable['pct2'] = cmp.table['pct1'] ? { ...cmp.table['pct1'] } : {};
+        } else {
+          flippedTable[col] = { ...cmp.table[col] };
+        }
+      }
+    }
+
+    const flippedHeatmap = cmp?.heatmap_context
+      ? {
+          ...cmp.heatmap_context,
+          groups: Array.isArray(cmp.heatmap_context.groups)
+            ? [
+                this.selectedDgeaGroup1,
+                this.selectedDgeaGroup2,
+                ...cmp.heatmap_context.groups.filter(
+                  (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
+                )
+              ]
+            : cmp.heatmap_context.groups
+        }
+      : null;
+
+    return {
+      ...cmp,
+      group1: this.selectedDgeaGroup1,
+      group2: this.selectedDgeaGroup2,
+      n1: cmp.n2,
+      n2: cmp.n1,
+      name: `${this.selectedDgeaGroup1} vs ${this.selectedDgeaGroup2}`,
+      table: flippedTable,
+      heatmap_context: flippedHeatmap
+    };
   }
 
   // Initialize default selections for the DGEA comparison dropdowns
   initDgeaSelection(): void {
-    const levels = this.getDgeaCellTypeLevels();
+    const levels = this.getDgeaLevels();
     if (!levels.length) return;
 
     if (!this.selectedDgeaGroup1) {
       this.selectedDgeaGroup1 = levels[0];
+    }
+
+    if (this.dgeaVsAll) {
+      this.selectedDgeaGroup2 = null;
+      return;
     }
 
     if (!this.selectedDgeaGroup2) {
@@ -1124,15 +1237,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
               // window only for xenium
               if (this.isXenium) {
-
-                this.initDetailWindow();
-                this.hideDetailWindow();
-                this.bindDetailWindowInteractions();
-              }
-
-            } else {
-              this.features = this.fullFeatures;
+              this.initDetailWindow();
+              this.hideDetailWindow();
+              this.bindDetailWindowInteractions();
             }
+
+          } else {
+            this.features = this.fullFeatures;
           }
           if (compare) {
             this.metaCompare = data.meta;
@@ -1141,11 +1252,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.meta = data.meta;
             this.updatePropertyAvailability('main');
           }
-          this.dgeaReady = !!compare ? this.metaCompare?.['dgea']?.['cell_type'] : this.meta?.['dgea']?.['cell_type'];
+
+          const availableObsCols = this.getDgeaObsCols();
+                    if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
+                      this.selectedDgeaObsCol = availableObsCols[0];
+                    }
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
           if (this.dgeaReady) {
             this.initDgeaSelection();
           }
-          const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
+          const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
           if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
             this.clusterCount = Object.keys(leidenClusterAnnotations).length;
           }
@@ -3159,11 +3275,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   async fetchAndUpdate(columnName: string, index: string, compare: boolean = false) {
     const tokenType = compare ? 'obsm_compare' : 'obsm_main';
     const token = this.nextRequestToken(tokenType);
-    // Track regulatory scores fetches during initialization
-    const isInitializing = this.isAppInitializing;
-    if (isInitializing) {
-      this.isLoadingRegulatoryScores = true;
-    }
+    const safeIndex = encodeURIComponent(index);
+    const isGeneExpression = columnName === 'gene_expression';
+
+    const baseRequest = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
 
     // Change query dataset based on whether we're updating the main view or compare view
 
@@ -3175,12 +3292,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
         : '';
 
-
+    const request = `${baseRequest}${datasetQuery}`;
 
     this.sessionService
       .callWithSession(() =>
         this.http.get(
-          `${this.sessionService.apiUrl}/obsm/${columnName}/${index}${datasetQuery}`,
+          request,
           { withCredentials: true },
         ),
       )
@@ -3216,14 +3333,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.repaintBothViews();
 
           // Mark regulatory scores fetch as complete if during initialization
-          if (isInitializing) {
+          if (this.isInitializing) {
             this.isLoadingRegulatoryScores = false;
             this.checkInitializationComplete(compare);
           }
         },
         error: (err) => {
-          console.error(`[Backend] Failed to load adata.obsm["${columnName}][${index}]`, err);
-          if (isInitializing) {
+          console.error(
+            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
+            err,
+          );
+          // Mark as complete even on error
+          if (this.isInitializing) {
             this.isLoadingRegulatoryScores = false;
             this.checkInitializationComplete(compare);
           }
