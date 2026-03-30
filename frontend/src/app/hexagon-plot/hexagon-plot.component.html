@@ -23,10 +23,10 @@
       <div class="centered-row-container" style="width: 100%;">
         <mat-form-field appearance="fill" id="color-by-property">
           <mat-label>Color hexagons by</mat-label>
-          <mat-select [(ngModel)]="colorByProperty" (selectionChange)="onColorbyPropertyChange()"
+          <mat-select [(ngModel)]="selectedView" (selectionChange)="onColorbyPropertyChange()"
             [disabled]="isInitializing">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-              <mat-option *ngFor="let prop of group.value" [value]="prop">
+              <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!propertyAvailable(prop)">
                 {{ prop | translate | async }}
               </mat-option>
             </mat-optgroup>
@@ -75,9 +75,10 @@
       <div class="row-container" *ngIf="compareMode">
         <mat-form-field appearance="fill" *ngIf="compareMode">
           <mat-label>Compare hexagons by</mat-label>
-          <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange()">
+          <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange(true)">
             <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-              <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!propertyAvailable(prop)">
+              <mat-option *ngFor="let prop of group.value" [value]="prop"
+                [disabled]="!propertyAvailable(prop, 'compare')">
                 {{ prop | translate | async }}
               </mat-option>
             </mat-optgroup>
@@ -86,7 +87,7 @@
 
         <mat-form-field appearance="fill" class="dataset-dropdown">
           <mat-label>Compare with Dataset</mat-label>
-          <mat-select [(ngModel)]="selectedDatasetCompare" (selectionChange)="onDatasetCompareSelected($event.value)">
+          <mat-select [(ngModel)]="selectedDatasetCompare" (selectionChange)="onDatasetSelected($event.value, true)">
             <mat-option [value]="null">None</mat-option>
             <mat-optgroup label="Built-in Datasets">
               <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
@@ -102,7 +103,7 @@
         </mat-form-field>
       </div>
 
-      <div *ngIf="colorByProperty === 'ligand_receptor_relationships'" class="hx-toolbar">
+      <div *ngIf="selectedView === 'ligand_receptor_relationships'" class="hx-toolbar">
         <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
           [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
             showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
@@ -112,7 +113,7 @@
         </button>
       </div>
 
-      <div *ngIf="colorByProperty === 'gene_expression'">
+      <div *ngIf="selectedView === 'gene_expression' || (selectedCompareView === 'gene_expression' && compareMode)" class="hx-toolbar">
         <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
           (click)="showMoranI = !showMoranI">
           Show
@@ -127,7 +128,7 @@
         class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
         <mat-tab label="Cell Information" *ngIf="selectedCell">
-          <div *ngIf="selectedCell && colorByProperty !== 'leiden'">
+          <div *ngIf="selectedCell && selectedView !== 'leiden'">
             <h2>Cell Details</h2>
             <div class="cell-details-container">
               <div *ngIf="selectedCell as cell">
@@ -260,7 +261,7 @@
         </mat-tab>
 
         <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null">
-          <div class="cluster-info-container" *ngIf="colorByProperty === 'leiden' && selectedCluster !== null">
+          <div class="cluster-info-container" *ngIf="selectedView === 'leiden' && selectedCluster !== null">
             <div class="cluster-header">
               <h3>Cluster {{ selectedCluster }}</h3>
             </div>
@@ -308,7 +309,7 @@
         </mat-tab>
 
         <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
-          <div *ngIf="colorByProperty === 'regulatory_scores'">
+          <div *ngIf="selectedView === 'regulatory_scores'">
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
               <div class="gene-set-top">
@@ -316,13 +317,15 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
+                  [datasetId]="selectedDataset?.id"
                   (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
+                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                   [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
+                  [datasetId]="selectedDataset?.id"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)"></app-table>
               </div>
             </mat-expansion-panel>
 
@@ -456,7 +459,7 @@
             </mat-expansion-panel>
           </div>
 
-          <div *ngIf="colorByProperty === 'regulatory_scores' && selectedCell">
+          <div *ngIf="selectedView === 'regulatory_scores' && selectedCell">
             <h4> Cell Regulatory Scores</h4>
 
             <div class="cell-reg-scores">
@@ -466,6 +469,8 @@
               <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -474,6 +479,8 @@
               <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -562,7 +569,7 @@
         </mat-tab>
 
         <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
-          <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+          <div *ngIf="selectedView === 'ligand_receptor_relationships'">
             <div *ngIf="
           showGlobalLigandReceptorScores;
           then global_scores;
@@ -577,6 +584,7 @@
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor global scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
@@ -585,18 +593,20 @@
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor NMF factors loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
         </mat-tab>
 
         <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
-          <div *ngIf="colorByProperty === 'gene_expression'">
+          <div *ngIf="selectedView === 'gene_expression'">
             <div *ngIf="showMoranI; then moranI; else gearyC"></div>
             <ng-template #moranI>
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
@@ -605,6 +615,7 @@
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
+                [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
@@ -729,7 +740,7 @@
 
         <mat-tab label="Cell Composition TF Activity"
           [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
-          <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
+          <div *ngIf="selectedView === 'cell_comp_tf_activity_similarity'">
             <h4>Cell Composition TF Activity Global Scores</h4>
             <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
@@ -741,7 +752,7 @@
         </mat-tab>
 
         <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
-          <div *ngIf="colorByProperty === 'tf_activity'">
+          <div *ngIf="selectedView === 'tf_activity'">
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
@@ -751,7 +762,7 @@
         </mat-tab>
 
         <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
-          <div *ngIf="colorByProperty === 'pathway_activity'">
+          <div *ngIf="selectedView === 'pathway_activity'">
             <h4>Pathway Activity</h4>
             <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
@@ -848,7 +859,7 @@
       <div *ngIf="compareMode">
         <mat-divider style="margin: 20px 0;"></mat-divider>
         <h3 style="margin: 10px 0;">Comparison View</h3>
-        <mat-tab-group (selectedTabChange)="onCompareTabChange($event)" preserveContent="true" dynamicHeight="false"
+        <mat-tab-group (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false"
           class="metadata-tables-compare">
 
           <mat-tab label="Compare - Cell Information" *ngIf="selectedCellCompare">
@@ -972,14 +983,14 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
+          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <h4>Aggregated Regulatory Scores</h4>
-              <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="compareFeatures"
+              <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
                 [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
                 (featuresUpdated)="repaintBothViews()"></app-table>
-              <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="compareFeatures"
+              <app-table [data]="this.metaCompare['global_regulatory_scores_sponge']" [features]="compareFeatures"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
@@ -997,6 +1008,7 @@
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
@@ -1006,6 +1018,7 @@
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', true)"
                   (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
@@ -1016,48 +1029,51 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
+          <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', 'compare')">
             <div *ngIf="selectedCompareView === 'gene_expression'">
               <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+
               <ng-template #moranI>
                 <h4>Moran's I</h4>
-                <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']"
+                <app-table [data]="this.metaCompare['moranI']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"></app-table>
+                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"
+                  [emptyMessage]="'No Moran\'s I scores loaded'"></app-table>
               </ng-template>
 
               <ng-template #gearyC>
                 <h4>Geary's C</h4>
-                <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']"
+                <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"></app-table>
+                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id" (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"
+                  [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Co-occurence" *ngIf="selectedCluster !== null"
-            [disabled]="!propertyAvailable('leiden_co_occurrence')">
-            <div class="co-occurrence-section" *ngIf="selectedCluster !== null">
+          <mat-tab label="Compare - Co-occurence" *ngIf="selectedClusterCompare !== null"
+            [disabled]="!propertyAvailable('leiden_co_occurrence', 'compare')">
+            <div class="co-occurrence-section" *ngIf="selectedClusterCompare !== null">
               <div class="co-occurrence-controls">
-                <h3>Cluster {{ selectedCluster }} Co-occurrence Matrix</h3>
+                <h3>Cluster {{ selectedClusterCompare }} Co-occurrence Matrix</h3>
                 <div class="controls-row">
                   <div class="interval-selector">
                     <label for="interval-select">Interval:</label>
-                    <select id="interval-select" [(ngModel)]="selectedInterval" (change)="updateCoOccurrenceTable()">
+                    <select id="interval-select" [(ngModel)]="selectedIntervalCompare" (change)="updateCoOccurrenceTable(true)">
                       <option *ngFor="
-                  let i of [].constructor(maxInterval + 1);
+                  let i of [].constructor(maxIntervalCompare + 1);
                   let idx = index
                 " [ngValue]="idx">
                         Interval {{ idx }}
                       </option>
                     </select>
-                    <span class="interval-info">(0-{{ maxInterval }})</span>
+                    <span class="interval-info">(0-{{ maxIntervalCompare }})</span>
                   </div>
 
-                  <div class="stats-display" *ngIf="coOccurrenceData.length > 0">
+                  <div class="stats-display" *ngIf="compareCoOccurrenceData.length > 0">
                     <span class="stat-item">Min: {{ getIntervalStats().min }}</span>
                     <span class="stat-item">Max: {{ getIntervalStats().max }}</span>
                     <span class="stat-item">Avg: {{ getIntervalStats().avg }}</span>
@@ -1066,7 +1082,7 @@
               </div>
 
               <div class="co-occurrence-table-container">
-                <table class="co-occurrence-table" *ngIf="coOccurrenceData.length > 0">
+                <table class="co-occurrence-table" *ngIf="compareCoOccurrenceData.length > 0">
                   <thead>
                     <tr>
                       <th>Target Cluster</th>
@@ -1077,10 +1093,10 @@
                   </thead>
                   <tbody>
                     <tr>
-                      <td class="cluster-header">Cluster {{ selectedCluster }}</td>
-                      <td *ngFor="let value of coOccurrenceData; let j = index" (click)="selectCluster(j)"
-                        [class.high-cooccurrence]="value > coOccurrenceThreshold"
-                        [class.diagonal]="selectedCluster === j" [style.background-color]="getCoOccurrenceColor(value)"
+                      <td class="cluster-header">Cluster {{ selectedClusterCompare }}</td>
+                      <td *ngFor="let value of compareCoOccurrenceData; let j = index" (click)="selectCluster(j)"
+                        [class.high-cooccurrence]="value > compareCoOccurrenceThreshold"
+                        [class.diagonal]="selectedClusterCompare === j" [style.background-color]="getCoOccurrenceColor(value)"
                         [title]="
                   'Cluster ' +
                   selectedCluster +
@@ -1093,24 +1109,24 @@
                     </tr>
                   </tbody>
                 </table>
-                <div *ngIf="coOccurrenceData.length === 0" class="no-data">
-                  No co-occurrence data available for Cluster {{ selectedCluster }} at
-                  interval {{ selectedInterval }}
+                <div *ngIf="compareCoOccurrenceData.length === 0" class="no-data">
+                  No co-occurrence data available for Cluster {{ selectedClusterCompare }} at
+                  interval {{ selectedIntervalCompare }}
                 </div>
               </div>
 
               <div class="interval-navigation">
                 <button class="nav-btn" (click)="
-            selectedInterval = Math.max(0, selectedInterval - 1);
-            updateCoOccurrenceTable()
-          " [disabled]="selectedInterval === 0">
+            selectedIntervalCompare = Math.max(0, selectedIntervalCompare - 1);
+            updateCoOccurrenceTable(true)
+          " [disabled]="selectedIntervalCompare === 0">
                   ← Previous
                 </button>
-                <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval }}</span>
+                <span class="current-interval">Interval {{ selectedIntervalCompare }} of {{ maxIntervalCompare }}</span>
                 <button class="nav-btn" (click)="
-            selectedInterval = Math.min(maxInterval, selectedInterval + 1);
-            updateCoOccurrenceTable()
-          " [disabled]="selectedInterval === maxInterval">
+            selectedIntervalCompare = Math.min(maxIntervalCompare, selectedIntervalCompare + 1);
+            updateCoOccurrenceTable(true)
+          " [disabled]="selectedIntervalCompare === maxIntervalCompare">
                   Next →
                 </button>
               </div>
@@ -1118,8 +1134,8 @@
           </mat-tab>
 
           <mat-tab label="Compare - Ligand-Receptor Relationships"
-            [disabled]="!propertyAvailable('ligand_receptor_relationships')">
-            <div *ngIf="colorByProperty === 'ligand_receptor_relationships'">
+            [disabled]="!propertyAvailable('ligand_receptor_relationships', 'compare')">
+            <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
               <div *ngIf="
           showGlobalLigandReceptorScores;
           then global_scores;
@@ -1128,7 +1144,7 @@
 
               <ng-template #global_scores>
                 <h4>Ligand–Receptor Global Scores</h4>
-                <app-table [data]="this.meta['ligand_receptor_global_scores']" [actionColumns]="[
+                <app-table [data]="this.metaCompare" [actionColumns]="[
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
@@ -1139,41 +1155,42 @@
 
               <ng-template #nmf_scores>
                 <h4>Ligand-Receptor NMF Scores</h4>
-                <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
+                <app-table [data]="this.metaCompare['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                   [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
                   (featuresUpdated)="repaintBothViews()"></app-table>
               </ng-template>
             </div>
           </mat-tab>
 
           <mat-tab label="Compare - Cell Composition TF Activity"
-            [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
-            <div *ngIf="colorByProperty === 'cell_comp_tf_activity_similarity'">
+            [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity', 'compare')">
+            <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
               <h4>Cell Composition TF Activity Global Scores</h4>
-              <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
+              <app-table [data]="this.metaCompare['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
                 (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell" [disabled]="!propertyAvailable('tf_activity')">
-            <div *ngIf="colorByProperty === 'tf_activity'">
+          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell"
+            [disabled]="!propertyAvailable('tf_activity', 'compare')">
+            <div *ngIf="selectedCompareView === 'tf_activity'">
               <h4>TF Activity Comparison</h4>
-              <app-table [data]="this.meta['tf_names']"
+              <app-table [data]="this.metaCompare['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
-                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
                 (featuresUpdated)="repaintBothViews()"></app-table>
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
-            <div *ngIf="colorByProperty === 'pathway_activity'">
+          <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', 'compare')">
+            <div *ngIf="selectedCompareView === 'pathway_activity'">
               <h4>Pathway Activity Comparison</h4>
-              <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
+              <app-table [data]="this.metaCompare['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'"

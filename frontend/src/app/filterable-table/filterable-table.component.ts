@@ -40,6 +40,10 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   sortColumn: string | null = null;
   sortAsc: boolean = true;
   availableActionColumns: string[] = [];
+  private readonly virtualActionColumns = new Set<string>([
+    'gene_expression',
+    'chromvar_spot_scores',
+  ]);
 
   // Pagination
   pageSize = 6; // number of rows per page
@@ -93,14 +97,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   filterAvailableActionColumns() {
-  if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
-    this.availableActionColumns = [];
-    return;
-  }
     if (!this.data || (Array.isArray(this.data) && this.data.length === 0)) {
       this.availableActionColumns = [];
       return;
     }
+
     if ('motif_id' in this.data) {
       this.availableActionColumns = this.actionColumns;
     } else if (!Array.isArray(this.data)) {
@@ -110,11 +111,14 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       const matchingColumns = this.actionColumns.filter(
         (col) => col in tableData
       );
-      // Some actions (e.g. gene_expression) are virtual actions and are not literal
-      // table column names. Keep configured actions as fallback in that case.
-      this.availableActionColumns = matchingColumns.length > 0
-        ? matchingColumns
-        : this.actionColumns;
+      const virtualColumns = this.actionColumns.filter(
+        (col) => this.virtualActionColumns.has(col)
+      );
+
+      // Show only actually available columns, plus known virtual actions.
+      this.availableActionColumns = Array.from(
+        new Set([...matchingColumns, ...virtualColumns])
+      );
     } else {
       this.availableActionColumns = this.actionColumns;
     }
@@ -133,31 +137,26 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     // }
 
 
-  if (Array.isArray(this.data)) {
-    this.availableActionColumns = this.actionColumns;
-    return;
-  }
+    if (Array.isArray(this.data)) {
+      this.availableActionColumns = this.actionColumns;
+      return;
+    }
 
-  const tableData = this.data as {
-    [col: string]: { [index: string]: string | number };
-  };
-
-  this.availableActionColumns = this.actionColumns.filter((col) => {
-    if (col === 'show_on_plot') return true;
-    if (col === 'gene_expression') return true;
-    if (col === 'chromvar_spot_scores') return true;
-
-    return col in tableData;
-  });
-}
-
-  hasData(): boolean {
-    if (!this.data) return false;
-    if (Array.isArray(this.data)) return this.data.length > 0;
     const tableData = this.data as {
       [col: string]: { [index: string]: string | number };
     };
-    return Object.keys(tableData).length > 0;
+
+    this.availableActionColumns = this.actionColumns.filter((col) => {
+      if (col === 'show_on_plot') return true;
+      if (col === 'gene_expression') return true;
+      if (col === 'chromvar_spot_scores') return true;
+
+      return col in tableData;
+    });
+  }
+
+  hasData(): boolean {
+    return this.rows && this.rows.length > 0;
   }
 
   displayColumnName(col: string): string {
@@ -354,6 +353,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
           this.featuresUpdated.emit();
         },
         error: (err) => {
+          if (this.features) {
+            for (const feature of this.features) {
+              feature.properties[this.updateColumn] = undefined;
+            }
+            this.featuresUpdated.emit();
+          }
+
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
           } else if (isChromvar) {
