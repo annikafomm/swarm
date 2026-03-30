@@ -1162,7 +1162,7 @@
 
               <ng-template #global_scores>
                 <h4>Ligand–Receptor Global Scores</h4>
-                <app-table [data]="this.meta['ligand_receptor_global_scores']" [actionColumns]="[
+                <app-table [data]="this.metaCompare" [actionColumns]="[
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
@@ -1208,7 +1208,7 @@
           <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', 'compare')">
             <div *ngIf="selectedCompareView === 'pathway_activity'">
               <h4>Pathway Activity Comparison</h4>
-              <app-table [data]="this.meta['pathway_names']" [actionColumns]="[
+              <app-table [data]="this.metaCompare['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'"
