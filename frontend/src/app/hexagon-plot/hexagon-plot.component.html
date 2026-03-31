@@ -336,8 +336,7 @@
                 <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
-                  [datasetId]="selectedDataset?.id"
-                  (featuresUpdated)="repaintBothViews()"
+                  [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
                   (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)"></app-table>
                 <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
                   [updateColumn]="'regulatory_scores'"
@@ -493,8 +492,7 @@
               <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                [datasetId]="selectedDataset?.id"
-                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+                [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -503,8 +501,7 @@
               <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                [datasetId]="selectedDataset?.id"
-                [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+                [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
                 (featuresUpdated)="updateHexColors()">
               </app-table>
 
@@ -612,8 +609,7 @@
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                [emptyMessage]="'No ligand-receptor global scores loaded'"
-                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No ligand-receptor global scores loaded'" [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
 
@@ -621,8 +617,7 @@
               <h4>Ligand-Receptor NMF Scores</h4>
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
-                [emptyMessage]="'No ligand-receptor NMF factors loaded'"
-                [datasetId]="selectedDataset?.id"
+                [emptyMessage]="'No ligand-receptor NMF factors loaded'" [datasetId]="selectedDataset?.id"
                 (featuresUpdated)="updateHexColors()"></app-table>
             </ng-template>
           </div>
@@ -641,8 +636,7 @@
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
-                [datasetId]="selectedDataset?.id"
-                (featuresUpdated)="repaintBothViews()"
+                [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
 
@@ -650,8 +644,7 @@
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
-                [datasetId]="selectedDataset?.id"
-                (featuresUpdated)="repaintBothViews()"
+                [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
 
@@ -883,8 +876,8 @@
                   </mat-select>
                 </mat-form-field>
                 <mat-checkbox [(ngModel)]="dgeaVsAll" (change)="onDgeaVsAllChange()">
-                    Compare Group 1 vs all others
-                  </mat-checkbox>
+                  Compare Group 1 vs all others
+                </mat-checkbox>
               </div>
 
             </div>
@@ -1144,7 +1137,7 @@
             </div>
           </mat-tab>
 
-           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
+          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
@@ -1174,20 +1167,19 @@
                 </mat-select>
               </mat-form-field>
                 <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
-                [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
-                (featuresUpdated)="repaintBothViews()"></app-table>
-              <app-table [data]="this.metaCompare['global_regulatory_scores_sponge']" [features]="compareFeatures"
-                [updateColumn]="'regulatory_scores'"
-                [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                [isLoading]="isLoadingRegulatoryScoresFetch" (featuresUpdated)="repaintBothViews()"
-                (geneSelected)="onGeneSelectedFromTable($event, 'sponge', 'compare')"></app-table>
-
-                </div>
+                  [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
+                  (featuresUpdated)="repaintBothViews()"></app-table>
+                <app-table [data]="this.metaCompare['global_regulatory_scores_sponge']" [features]="compareFeatures"
+                  [updateColumn]="'regulatory_scores'"
+                  [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', true)">
+                </app-table>
               </mat-expansion-panel>
 
-              <mat-expansion-panel (opened)="onRegulatoryGraphsPanelOpenedCompare()">
+              <mat-expansion-panel>
                 <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
                 <ng-template matExpansionPanelContent>
                   <div class="gene-set-body">
@@ -1197,7 +1189,7 @@
                         <mat-form-field appearance="fill" class="gene-selector">
                           <mat-label>Gene Set</mat-label>
                           <mat-select [(ngModel)]="selectedGeneSetGenie3Compare"
-                            (selectionChange)="onGeneSetChangeCompare('genie3')">
+                            (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
                             <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
                               {{ gene }}
@@ -1219,7 +1211,7 @@
                           <input type="range" id="min-weight-slider-compare" class="slider"
                             [min]="genie3SliderDataCompare.min_border" [max]="genie3SliderDataCompare.max_border"
                             [step]="genie3SliderDataCompare.step" [value]="genie3SliderDataCompare.default_value"
-                            (input)="onGeneSetChangeCompare('genie3')" [(ngModel)]="genie3WeightCutoffCompare" />
+                            (input)="onGeneSetChange(true)" [(ngModel)]="genie3WeightCutoffCompare" />
                           <div class="helper small">{{ genie3SliderDataCompare.min_border }} ← → {{
                             genie3SliderDataCompare.max_border }}
                           </div>
@@ -1229,7 +1221,7 @@
                           <label for="max-edges-slider-compare">Minimum Edges in Graph: {{ genie3MinEdgesCompare
                             }}</label>
                           <input type="range" id="max-edges-slider-compare" class="slider" min="1" max="50" step="1"
-                            (input)="onGeneSetChangeCompare('genie3')" [(ngModel)]="genie3MinEdgesCompare" />
+                            (input)="onGeneSetChange(true)" [(ngModel)]="genie3MinEdgesCompare" />
                           <div class="helper small">1 ←→ 50</div>
                         </div>
                       </div>
@@ -1255,7 +1247,7 @@
                         <mat-form-field appearance="fill" class="gene-selector">
                           <mat-label>Gene Set</mat-label>
                           <mat-select [(ngModel)]="selectedGeneSetSpongeCompare"
-                            (selectionChange)="onGeneSetChangeCompare('sponge')">
+                            (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
                             <mat-option *ngFor="let gene of spongeElements" [value]="gene">
                               {{ gene }}
@@ -1277,7 +1269,7 @@
                           <input type="range" id="max-pvalue-slider-compare" class="slider"
                             [min]="spongeSliderDataCompare.min_border" [max]="spongeSliderDataCompare.max_border"
                             [step]="spongeSliderDataCompare.step" [value]="spongeSliderDataCompare.default_value"
-                            [(ngModel)]="spongePValueCutoffCompare" (input)="onGeneSetChangeCompare('sponge')" />
+                            [(ngModel)]="spongePValueCutoffCompare" (input)="onGeneSetChange(true)" />
                           <div class="helper small">{{ spongeSliderDataCompare.min_border }} ← → {{
                             spongeSliderDataCompare.max_border }}
                           </div>
@@ -1287,7 +1279,7 @@
                           <label for="max-edges-slider-sponge-compare">Minimum Edges in Graph: {{ spongeMinEdgesCompare
                             }}</label>
                           <input type="range" id="max-edges-slider-sponge-compare" class="slider" min="1" max="50"
-                            step="1" (input)="onGeneSetChangeCompare('sponge')" [(ngModel)]="spongeMinEdgesCompare" />
+                            step="1" (input)="onGeneSetChange(true)" [(ngModel)]="spongeMinEdgesCompare" />
                           <div class="helper small">1 ←→ 50</div>
                         </div>
                       </div>
@@ -1367,8 +1359,8 @@
                 <h4>Geary's C</h4>
                 <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
+                  (featuresUpdated)="repaintBothViews()" (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
 
@@ -1392,7 +1384,8 @@
                 <div class="controls-row">
                   <div class="interval-selector">
                     <label for="interval-select">Interval:</label>
-                    <select id="interval-select" [(ngModel)]="selectedIntervalCompare" (change)="updateCoOccurrenceTable(true)">
+                    <select id="interval-select" [(ngModel)]="selectedIntervalCompare"
+                      (change)="updateCoOccurrenceTable(true)">
                       <option *ngFor="
                   let i of [].constructor(maxIntervalCompare + 1);
                   let idx = index
@@ -1416,7 +1409,7 @@
                   <thead>
                     <tr>
                       <th>Target Cluster</th>
-                      <th *ngFor="let i of [].constructor(compareClusterCount); let idx = index">
+                      <th *ngFor="let i of [].constructor(this.clusterCountCompare); let idx = index">
                         {{ idx }}
                       </th>
                     </tr>
@@ -1426,8 +1419,8 @@
                       <td class="cluster-header">Cluster {{ selectedClusterCompare }}</td>
                       <td *ngFor="let value of compareCoOccurrenceData; let j = index" (click)="selectCluster(j)"
                         [class.high-cooccurrence]="value > compareCoOccurrenceThreshold"
-                        [class.diagonal]="selectedClusterCompare === j" [style.background-color]="getCoOccurrenceColor(value)"
-                        [title]="
+                        [class.diagonal]="selectedClusterCompare === j"
+                        [style.background-color]="getCoOccurrenceColor(value)" [title]="
                   'Cluster ' +
                   selectedClusterCompare +
                   ' → Cluster ' +
