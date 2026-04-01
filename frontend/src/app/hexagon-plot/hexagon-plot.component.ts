@@ -180,9 +180,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3Compare: string | null = null;
   private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
-  private regulatoryFetchTokenMain: number = 0;
-  private regulatoryFetchTokenCompare: number = 0;
-  private activeRegulatoryTabSource: 'main' | 'compare' = 'main';
+
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -450,10 +448,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.regulatoryObsmKeysCompare = [];
 
           this.updatePathsFromDataset(dataset, true);
-          this.refreshCompareRegulatoryAvailability();
-
           // Trigger the reload
           this.reloadComparisonView();
+
         } else if (!dataset && this.compareMode) {
           this.pathsService.updatePaths({ adataPath: undefined }, true);
           this.compareDataPath = '';
@@ -730,7 +727,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   private hasRegulatoryScoresData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasGenie3 = meta['global_regulatory_scores_genie3'] &&
       Object.keys(meta['global_regulatory_scores_genie3']).length > 0;
@@ -746,17 +743,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private hasGeneExpressionData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasMoranI = meta['moranI'] && Object.keys(meta['moranI']).length > 0;
     const hasGearyC = meta['gearyC'] && Object.keys(meta['gearyC']).length > 0;
 
-    return !!(hasMoranI || hasGearyC);
-  }
-
-  private async refreshCompareRegulatoryAvailability(): Promise<void> {
-    const compareDatasetId = this.selectedDatasetCompare?.id || this.selectedDataset?.id;
-    this.regulatoryObsmKeysCompare = await this.fetchRegulatoryObsmKeys(compareDatasetId);
+    return (hasMoranI || hasGearyC);
   }
 
   private async fetchRegulatoryObsmKeys(datasetId?: string): Promise<string[]> {
@@ -790,7 +782,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
 
-    // Use the carefully calculated map if it exists for this property
     if (map && prop in map) {
       return map[prop];
     }
@@ -801,7 +792,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
 
-    if (!meta || !meta['leiden_cluster_annotations']) return false;
+    if (!meta || Object.keys(meta).length === 0 || !meta['leiden_cluster_annotations']) return false;
 
     const annotations = meta['leiden_cluster_annotations'];
 
@@ -823,6 +814,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       for (const prop of currentColorableProps) {
         if (prop === 'regulatory_scores') {
           map[prop] = this.hasRegulatoryScoresData(scope);
+        }
+        else if (prop === 'gene_expression') {
+          map[prop] = this.hasGeneExpressionData(scope);
+        }
+        else if (prop === 'co_occurrence') {
+          map[prop] = this.hasCoOccurrenceData(scope);
+
         } else {
           map[prop] = keys.includes(prop);
         }
@@ -967,7 +965,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
-      this.syncCompareSelectionsFromMain();
       this.isLoadingCompare = true;
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
@@ -1000,56 +997,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.datasetService.selectDatasetCompare(null);
       this.refreshSharedGeneExpressionDomain();
     }
-  }
-
-  private async syncCompareSelectionsFromMain(): Promise<void> {
-    // Sync the selected property/view
-    this.selectedCompareView = this.selectedView;
-
-    // Sync gene expression selection
-    if (this.selectedView === 'gene_expression') {
-      this.selectedGeneExpressionCompare = this.selectedGeneExpressionMain;
-      this.refreshSharedGeneExpressionDomain();
-      return;
-    }
-
-    // Sync regulatory scores selection
-    if (this.selectedView === 'regulatory_scores') {
-      this.selectedRegulatoryScoreCompare = this.selectedRegulatoryScore;
-
-      // Sync the gene set for genie3
-      if (
-        this.selectedRegulatoryScore?.endsWith('genie3') &&
-        this.selectedGeneSetGenie3
-      ) {
-        this.selectedGeneSetGenie3Compare = this.selectedGeneSetGenie3;
-        // Update both main and compare
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, false); // main
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, true);  // compare
-        return;
-      }
-
-      // Sync the gene set for sponge
-      if (
-        this.selectedRegulatoryScore?.endsWith('sponge') &&
-        this.selectedGeneSetSponge
-      ) {
-        this.selectedGeneSetSpongeCompare = this.selectedGeneSetSponge;
-        // Update both main and compare
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, false); // main
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, true);  // compare
-        return;
-      }
-    }
-
-    // For all other views, just sync the view property
-    // (add more logic here if you want to sync other view-specific selections)
-  }
-
-
-  private getDefaultRegulatoryScoreForNetwork(network: 'genie3' | 'sponge'): string | null {
-    const scoreNames = (this.meta?.['grn_score_names'] || []) as string[];
-    return scoreNames.find((name) => typeof name === 'string' && name.endsWith(network)) || null;
   }
 
   // Selected groups for the DGEA comparison (bound to the dropdowns)
@@ -1390,70 +1337,74 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             } else {
               this.features = this.fullFeatures;
             }
-
-            if (compare) {
-              this.metaCompare = data.meta;
-              this.updatePropertyAvailability('compare');
-            } else {
-              this.meta = data.meta;
-              this.updatePropertyAvailability('main');
-            }
-
-            const availableObsCols = this.getDgeaObsCols();
-            if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
-              this.selectedDgeaObsCol = availableObsCols[0];
-            }
-            this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
-            if (this.dgeaReady) {
-              this.initDgeaSelection();
-            }
-
-            const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
-            if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
-            }
-
-            const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
-            if (Array.isArray(interval) && interval.length > 0) {
-              this.maxInterval = interval.length - 1;
-            }
-            this.selectedRegulatoryScore =
-              compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
-            if (compare) {
-              this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
-              this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
-              this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
-            } else {
-              this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
-              this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
-              this.geneSetsSponge = this.meta['sponge_genesets'] || {};
-            }
-            // Populate dropdown options from gene set keys
-            this.genie3Elements = Object.keys(this.geneSetsGenie3);
-            this.spongeElements = Object.keys(this.geneSetsSponge);
-            this.selectedGeneSetGenie3 =
-              Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-            this.selectedGeneSetSponge =
-              Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
-
-            if (compare) {
-              this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
-              this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
-              this.previousGeneSetGenie3Compare = null;
-              this.previousGeneSetSpongeCompare = null;
-              this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
-            } else {
-              this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
-              this.isLoadingSponge = !!this.selectedGeneSetSponge;
-              this.previousGeneSetGenie3 = null;
-              this.previousGeneSetSponge = null;
-              this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
-            }
-            // Trigger initial graph visualization
-            setTimeout(() => {
-              this.onGeneSetChange(compare);
-            }, 100);
           }
+
+
+
+          if (compare) {
+            this.metaCompare = data.meta;
+            console.log('Compare meta loaded:', this.metaCompare, data.meta);
+            this.updatePropertyAvailability('compare');
+          } else {
+            this.meta = data.meta;
+            this.updatePropertyAvailability('main');
+          }
+
+          const availableObsCols = this.getDgeaObsCols();
+          if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
+            this.selectedDgeaObsCol = availableObsCols[0];
+          }
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+          if (this.dgeaReady) {
+            this.initDgeaSelection();
+          }
+
+          const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
+          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+          }
+
+          const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
+          if (Array.isArray(interval) && interval.length > 0) {
+            this.maxInterval = interval.length - 1;
+          }
+          this.selectedRegulatoryScore =
+            compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
+          if (compare) {
+            this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
+            this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
+          } else {
+            this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+            this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+          }
+          // Populate dropdown options from gene set keys
+          this.genie3Elements = Object.keys(this.geneSetsGenie3);
+          this.spongeElements = Object.keys(this.geneSetsSponge);
+          this.selectedGeneSetGenie3 =
+            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
+          this.selectedGeneSetSponge =
+            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+
+          if (compare) {
+            this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
+            this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
+            this.previousGeneSetGenie3Compare = null;
+            this.previousGeneSetSpongeCompare = null;
+            this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
+          } else {
+            this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+            this.isLoadingSponge = !!this.selectedGeneSetSponge;
+            this.previousGeneSetGenie3 = null;
+            this.previousGeneSetSponge = null;
+            this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+          }
+          // Trigger initial graph visualization
+          setTimeout(() => {
+            this.onGeneSetChange(compare);
+          }, 100);
+
         }
         const featuresForProps = compare ? this.compareFeatures : this.features;
         const firstProps = featuresForProps?.[0]?.properties || {};
@@ -1517,6 +1468,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
           } else if (prop === 'gene_expression') {
             targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
+          }
+          else if (prop === 'co_occurrence') {
+            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare ? 'compare' : 'main');
+
           } else if (this.leidenCentralityProps.includes(prop)) {
             targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
               // FIX: Added 'compare' argument to getLeidenClusterAnnotation
@@ -1795,9 +1750,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private getMinMaxForView(
     features: CellFeature[],
     view: string,
-    context: 'main' | 'compare' = 'main'
+    compare: boolean = false
   ): { min: number; max: number } | null {
-    const values = this.collectFiniteValuesForView(features, view, context);
+    const values = this.collectFiniteValuesForView(features, view, compare ? 'compare' : 'main');
     if (!values.length) {
       console.log('[domain:getMinMaxForView] no finite values', {
         view,
@@ -1805,12 +1760,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
       return null;
     }
-
     const result = {
       min: Math.min(...values),
       max: Math.max(...values),
     };
-
     console.log('[domain:getMinMaxForView] computed', {
       view,
       featureCount: features.length,
@@ -1818,60 +1771,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       min: result.min,
       max: result.max,
     });
-
     return result;
   }
 
-  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
-    if (!this.compareMode) {
-      console.log('[domain:getPaired] skipped: compare mode is off');
-      return null;
-    }
-
-    const mainView = this.selectedView;
-    const compareView = this.selectedCompareView;
+  private getMergedMinMaxForView(view: string): { min: number; max: number } | null {
+    // Generalized: always merges min/max for both main and compare for a given view
     const mainFeatures = this.features || [];
     const compareFeatures = this.compareFeatures || [];
-    if (!mainFeatures.length || !compareFeatures.length) return null;
-
-    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
-    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
-    if (!mainIsContinuous || !compareIsContinuous) {
-      console.log('[domain:getPaired] skipped: one side is not continuous', {
-        mainView,
-        compareView,
-        mainIsContinuous,
-        compareIsContinuous,
-      });
-      return null;
-    }
-
-    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
-    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, 'compare');
-    if (!mainMinMax || !compareMinMax) {
-      console.log('[domain:getPaired] skipped: missing min/max', {
-        mainView,
-        compareView,
-        mainMinMax,
-        compareMinMax,
-      });
-      return null;
-    }
-
-    const merged = {
-      min: Math.min(mainMinMax.min, compareMinMax.min),
-      max: Math.max(mainMinMax.max, compareMinMax.max),
-    };
-
-    console.log('[domain:getPaired] merged domain', {
-      mainView,
-      compareView,
-      mainMinMax,
-      compareMinMax,
-      merged,
-    });
-
-    return merged;
+    if (!mainFeatures.length && !compareFeatures.length) return null;
+    const mainMinMax = mainFeatures.length ? this.getMinMaxForView(mainFeatures, view, false) : null;
+    const compareMinMax = compareFeatures.length ? this.getMinMaxForView(compareFeatures, view, true) : null;
+    if (!mainMinMax && !compareMinMax) return null;
+    const min = [mainMinMax?.min, compareMinMax?.min].filter(x => x !== undefined).reduce((a, b) => Math.min(a as number, b as number));
+    const max = [mainMinMax?.max, compareMinMax?.max].filter(x => x !== undefined).reduce((a, b) => Math.max(a as number, b as number));
+    return { min, max };
   }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
@@ -1902,16 +1815,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return !cached || cached.expiresAt <= now;
     });
 
+    // Fetch pending gene stats if needed
     if (pending.length > 0) {
       const results = await Promise.allSettled(
-        pending.map((r) => firstValueFrom(
-          this.sessionService.callWithSession(() =>
-            this.http.get<GeneStatsResponse>(
-              `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
-              { withCredentials: true },
+        pending.map((r) =>
+          firstValueFrom(
+            this.sessionService.callWithSession(() =>
+              this.http.get<GeneStatsResponse>(
+                `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+                { withCredentials: true },
+              )
             )
           )
-        ))
+        )
       );
 
       if (token !== this.geneDomainToken) {
@@ -1932,6 +1848,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
+    // Gather all valid cached domains
     const valid = requests
       .map((r) => this.geneDomainCache.get(r.cacheKey))
       .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
@@ -2321,6 +2238,66 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         },
       });
+  }
+
+  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
+    if (!this.compareMode) {
+      console.log('[domain:getPaired] skipped: compare mode is off');
+      return null;
+    }
+
+    const mainView = this.selectedView;
+    const compareView = this.selectedCompareView;
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.compareFeatures || [];
+    if (!mainFeatures.length || !compareFeatures.length) {
+      console.log('[domain:getPaired] skipped: missing features', {
+        mainView,
+        compareView,
+        mainFeatureCount: mainFeatures.length,
+        compareFeatureCount: compareFeatures.length,
+      });
+      return null;
+    }
+
+    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
+    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
+    if (!mainIsContinuous || !compareIsContinuous) {
+      console.log('[domain:getPaired] skipped: one side is not continuous', {
+        mainView,
+        compareView,
+        mainIsContinuous,
+        compareIsContinuous,
+      });
+      return null;
+    }
+
+    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, true);
+    if (!mainMinMax || !compareMinMax) {
+      console.log('[domain:getPaired] skipped: missing min/max', {
+        mainView,
+        compareView,
+        mainMinMax,
+        compareMinMax,
+      });
+      return null;
+    }
+
+    const merged = {
+      min: Math.min(mainMinMax.min, compareMinMax.min),
+      max: Math.max(mainMinMax.max, compareMinMax.max),
+    };
+
+    console.log('[domain:getPaired] merged domain', {
+      mainView,
+      compareView,
+      mainMinMax,
+      compareMinMax,
+      merged,
+    });
+
+    return merged;
   }
 
   public visualizeGenie3Subgraph(compare: boolean = false): void {

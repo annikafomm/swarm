@@ -1354,7 +1354,7 @@
           </mat-tab>
 
           <mat-tab label="Compare - Co-occurence" *ngIf="selectedClusterCompare !== null"
-            [disabled]="!propertyAvailable('leiden_co_occurrence', 'compare')">
+            [disabled]="!propertyAvailable('co_occurrence', 'compare')">
             <div class="co-occurrence-section" *ngIf="selectedClusterCompare !== null">
               <div class="co-occurrence-controls">
                 <h3>Cluster {{ selectedClusterCompare }} Co-occurrence Matrix</h3>
