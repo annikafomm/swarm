@@ -181,9 +181,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3Compare: string | null = null;
   private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
-  private regulatoryFetchTokenMain: number = 0;
-  private regulatoryFetchTokenCompare: number = 0;
-  private activeRegulatoryTabSource: 'main' | 'compare' = 'main';
+
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -452,10 +450,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.regulatoryObsmKeysCompare = [];
 
           this.updatePathsFromDataset(dataset, true);
-          this.refreshCompareRegulatoryAvailability();
-
           // Trigger the reload
           this.reloadComparisonView();
+
         } else if (!dataset && this.compareMode) {
           this.pathsService.updatePaths({ adataPath: undefined }, true);
           this.compareDataPath = '';
@@ -740,7 +737,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   private hasRegulatoryScoresData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasGenie3 = meta['global_regulatory_scores_genie3'] &&
       Object.keys(meta['global_regulatory_scores_genie3']).length > 0;
@@ -756,17 +753,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private hasGeneExpressionData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasMoranI = meta['moranI'] && Object.keys(meta['moranI']).length > 0;
     const hasGearyC = meta['gearyC'] && Object.keys(meta['gearyC']).length > 0;
 
-    return !!(hasMoranI || hasGearyC);
-  }
-
-  private async refreshCompareRegulatoryAvailability(): Promise<void> {
-    const compareDatasetId = this.selectedDatasetCompare?.id || this.selectedDataset?.id;
-    this.regulatoryObsmKeysCompare = await this.fetchRegulatoryObsmKeys(compareDatasetId);
+    return (hasMoranI || hasGearyC);
   }
 
   private async fetchRegulatoryObsmKeys(datasetId?: string): Promise<string[]> {
@@ -800,7 +792,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
 
-    // Use the carefully calculated map if it exists for this property
     if (map && prop in map) {
       return map[prop];
     }
@@ -811,7 +802,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
 
-    if (!meta || !meta['leiden_cluster_annotations']) return false;
+    if (!meta || Object.keys(meta).length === 0 || !meta['leiden_cluster_annotations']) return false;
 
     const annotations = meta['leiden_cluster_annotations'];
 
@@ -833,6 +824,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       for (const prop of currentColorableProps) {
         if (prop === 'regulatory_scores') {
           map[prop] = this.hasRegulatoryScoresData(scope);
+        }
+        else if (prop === 'gene_expression') {
+          map[prop] = this.hasGeneExpressionData(scope);
+        }
+        else if (prop === 'co_occurrence') {
+          map[prop] = this.hasCoOccurrenceData(scope);
+
         } else {
           map[prop] = keys.includes(prop);
         }
@@ -977,7 +975,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
-      this.syncCompareSelectionsFromMain();
       this.isLoadingCompare = true;
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
@@ -1010,56 +1007,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.datasetService.selectDatasetCompare(null);
       this.refreshSharedGeneExpressionDomain();
     }
-  }
-
-  private async syncCompareSelectionsFromMain(): Promise<void> {
-    // Sync the selected property/view
-    this.selectedCompareView = this.selectedView;
-
-    // Sync gene expression selection
-    if (this.selectedView === 'gene_expression') {
-      this.selectedGeneExpressionCompare = this.selectedGeneExpressionMain;
-      this.refreshSharedGeneExpressionDomain();
-      return;
-    }
-
-    // Sync regulatory scores selection
-    if (this.selectedView === 'regulatory_scores') {
-      this.selectedRegulatoryScoreCompare = this.selectedRegulatoryScore;
-
-      // Sync the gene set for genie3
-      if (
-        this.selectedRegulatoryScore?.endsWith('genie3') &&
-        this.selectedGeneSetGenie3
-      ) {
-        this.selectedGeneSetGenie3Compare = this.selectedGeneSetGenie3;
-        // Update both main and compare
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, false); // main
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetGenie3, true);  // compare
-        return;
-      }
-
-      // Sync the gene set for sponge
-      if (
-        this.selectedRegulatoryScore?.endsWith('sponge') &&
-        this.selectedGeneSetSponge
-      ) {
-        this.selectedGeneSetSpongeCompare = this.selectedGeneSetSponge;
-        // Update both main and compare
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, false); // main
-        await this.fetchAndUpdate(this.selectedRegulatoryScore, this.selectedGeneSetSponge, true);  // compare
-        return;
-      }
-    }
-
-    // For all other views, just sync the view property
-    // (add more logic here if you want to sync other view-specific selections)
-  }
-
-
-  private getDefaultRegulatoryScoreForNetwork(network: 'genie3' | 'sponge'): string | null {
-    const scoreNames = (this.meta?.['grn_score_names'] || []) as string[];
-    return scoreNames.find((name) => typeof name === 'string' && name.endsWith(network)) || null;
   }
 
   // Selected groups for the DGEA comparison (bound to the dropdowns)
@@ -2216,6 +2163,66 @@ this.sessionService
       }
     },
   });
+  }
+
+  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
+    if (!this.compareMode) {
+      console.log('[domain:getPaired] skipped: compare mode is off');
+      return null;
+    }
+
+    const mainView = this.selectedView;
+    const compareView = this.selectedCompareView;
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.compareFeatures || [];
+    if (!mainFeatures.length || !compareFeatures.length) {
+      console.log('[domain:getPaired] skipped: missing features', {
+        mainView,
+        compareView,
+        mainFeatureCount: mainFeatures.length,
+        compareFeatureCount: compareFeatures.length,
+      });
+      return null;
+    }
+
+    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
+    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
+    if (!mainIsContinuous || !compareIsContinuous) {
+      console.log('[domain:getPaired] skipped: one side is not continuous', {
+        mainView,
+        compareView,
+        mainIsContinuous,
+        compareIsContinuous,
+      });
+      return null;
+    }
+
+    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, true);
+    if (!mainMinMax || !compareMinMax) {
+      console.log('[domain:getPaired] skipped: missing min/max', {
+        mainView,
+        compareView,
+        mainMinMax,
+        compareMinMax,
+      });
+      return null;
+    }
+
+    const merged = {
+      min: Math.min(mainMinMax.min, compareMinMax.min),
+      max: Math.max(mainMinMax.max, compareMinMax.max),
+    };
+
+    console.log('[domain:getPaired] merged domain', {
+      mainView,
+      compareView,
+      mainMinMax,
+      compareMinMax,
+      merged,
+    });
+
+    return merged;
   }
 
   public visualizeGenie3Subgraph(compare: boolean = false): void {
