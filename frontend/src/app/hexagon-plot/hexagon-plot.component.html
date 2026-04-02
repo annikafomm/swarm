@@ -1396,7 +1396,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Co-occurence" *ngIf="selectedClusterCompare !== null"
+          <mat-tab label="Compare - Co-occurence"
             [disabled]="!propertyAvailable('co_occurrence', 'compare')">
             <div class="co-occurrence-section" *ngIf="selectedClusterCompare !== null">
               <div class="co-occurrence-controls">
@@ -1417,9 +1417,9 @@
                   </div>
 
                   <div class="stats-display" *ngIf="compareCoOccurrenceData.length > 0">
-                    <span class="stat-item">Min: {{ getIntervalStats().min }}</span>
-                    <span class="stat-item">Max: {{ getIntervalStats().max }}</span>
-                    <span class="stat-item">Avg: {{ getIntervalStats().avg }}</span>
+                    <span class="stat-item">Min: {{ getIntervalStats(true).min }}</span>
+                    <span class="stat-item">Max: {{ getIntervalStats(true).max }}</span>
+                    <span class="stat-item">Avg: {{ getIntervalStats(true).avg }}</span>
                   </div>
                 </div>
               </div>
