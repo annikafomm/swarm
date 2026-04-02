@@ -151,6 +151,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedView = 'regulatory_scores';
   public selectedCompareView: string = 'regulatory_scores';
 
+  public selectedItemByView: { [view: string]: string | null } = {};
+  public selectedItemByViewCompare: { [view: string]: string | null } = {};
+
 
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetGenie3Compare: string | null = null;
@@ -1817,6 +1820,12 @@ this.applySharedDomainAndRepaint({ min, max }, contextKey, token);
 }
 
 this.refreshSharedGeneExpressionDomain();
+  }
+
+  public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
+    const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    selectedMap[view] = event.gene;
+    this.fetchAndUpdate(event.action, event.gene, compare, view);
   }
 
   public onColorbyPropertyChange(compare: boolean = false): void {
