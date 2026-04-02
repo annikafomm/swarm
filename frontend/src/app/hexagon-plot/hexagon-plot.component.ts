@@ -154,6 +154,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
+  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
+  public regulatoryScoreDisplayModeCompare: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetGenie3Compare: string | null = null;
@@ -3408,7 +3410,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     };
 
-    const container = document.getElementById(containerId); 
+    const container = document.getElementById(containerId);
     if (!container) {
       console.error(`Container ${containerId} not found for rendering heatmap`);
       return;
@@ -3670,26 +3672,81 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const selectedGeneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
     const selectedGeneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
 
-    if (
-      selectedRegulatoryScore?.endsWith('genie3') &&
-      selectedGeneSetGenie3 &&
-      selectedGeneSetSponge
-    ) {
-      this.fetchAndUpdate(
-        selectedRegulatoryScore,
-        selectedGeneSetGenie3,
-        compare
-      );
-    } else if (
-      selectedRegulatoryScore?.endsWith('sponge') &&
-      selectedGeneSetSponge
-    ) {
-      this.fetchAndUpdate(
-        selectedRegulatoryScore,
-        selectedGeneSetSponge,
-        compare
+    if (selectedRegulatoryScore?.endsWith('genie3') && selectedGeneSetGenie3) {
+      this.fetchAndUpdate(selectedRegulatoryScore, selectedGeneSetGenie3, compare);
+    } else if (selectedRegulatoryScore?.endsWith('sponge') && selectedGeneSetSponge) {
+      this.fetchAndUpdate(selectedRegulatoryScore, selectedGeneSetSponge, compare);
+    }
+  }
+
+
+  public onRegulatoryDisplayModeChange(compare: boolean = false): void {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    const meta = compare ? this.metaCompare : this.meta;
+
+    // Validate that data exists for the selected display mode
+    const genie3Key = displayMode === 'raw'
+      ? 'global_regulatory_scores_genie3'
+      : displayMode === 'moranI'
+        ? 'global_regulatory_moranI_genie3'
+        : 'global_regulatory_gearyC_genie3';
+
+    const spongeKey = displayMode === 'raw'
+      ? 'global_regulatory_scores_sponge'
+      : displayMode === 'moranI'
+        ? 'global_regulatory_moranI_sponge'
+        : 'global_regulatory_gearyC_sponge';
+
+    const hasGenie3Data = meta?.[genie3Key] && Object.keys(meta[genie3Key]).length > 0;
+    const hasSpongeData = meta?.[spongeKey] && Object.keys(meta[spongeKey]).length > 0;
+
+    if (!hasGenie3Data && !hasSpongeData) {
+      console.warn(
+        `[RegulatoryScores] No ${displayMode} data available for ${compare ? 'compare' : 'main'} view. Available keys:`,
+        Object.keys(meta || {}).filter(k => k.includes('regulatory'))
       );
     }
+
+    console.log(
+      `[RegulatoryScores] Display mode changed to '${displayMode}' for ${compare ? 'compare' : 'main'} view`
+    );
+  }
+
+  public getRegulatoryActionColumns(networkType: 'genie3' | 'sponge', compare: boolean): string[] {
+    const meta = compare ? this.metaCompare : this.meta;
+    const scoreNames = meta?.['grn_score_names'];
+    if (!Array.isArray(scoreNames)) {
+      return [];
+    }
+    return scoreNames.filter((name: string) => name.endsWith(`_${networkType}`));
+  }
+
+  public getRegulatoryTableData(networkType: 'genie3' | 'sponge', compare: boolean): TableData {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    const meta = compare ? this.metaCompare : this.meta;
+    const key =
+      displayMode === 'raw'
+        ? `global_regulatory_scores_${networkType}`
+        : displayMode === 'moranI'
+          ? `global_regulatory_moranI_${networkType}`
+          : `global_regulatory_gearyC_${networkType}`;
+
+    const table = meta?.[key];
+    if (!table || typeof table !== 'object') {
+      return {};
+    }
+    return table as TableData;
+  }
+
+  public getRegulatoryEmptyMessage(networkType: 'genie3' | 'sponge', compare: boolean): string {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    if (displayMode === 'moranI') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Moran's I regulatory scores loaded`;
+    }
+    if (displayMode === 'gearyC') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Geary's C regulatory scores loaded`;
+    }
+    return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} global regulatory scores loaded`;
   }
   keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
     return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });

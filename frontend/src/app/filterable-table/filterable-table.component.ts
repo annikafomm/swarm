@@ -424,14 +424,8 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   async onShowAction(action: string, row: any): Promise<void> {
     const geneName = String(row.index);
 
-    if (action === 'show_on_plot') {
-      if (this.isCompare) {
-        this.geneSelectedCompare.emit({ gene: geneName, action });
-      } else {
-        this.geneSelected.emit({ gene: geneName, action });
-      }
-      return;
-    }
+    // Emit event to parent component for gene selection
+    this.geneSelected.emit({ gene: geneName, action: action });
 
     if (action === 'chromvar_spot_scores') {
       this.chromvarBaseMotif = this.getMotifId(row);

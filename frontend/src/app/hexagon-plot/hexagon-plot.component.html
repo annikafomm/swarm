@@ -314,20 +314,26 @@
 
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
-              <div class="gene-set-top">
-                <h4>Aggregated Regulatory Scores</h4>
-                <app-table [data]="this.meta['global_regulatory_scores_genie3']" [features]="features"
-                  [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                  [updateColumn]="'regulatory_scores'" [emptyMessage]="'No Genie3 global regulatory scores loaded'"
-                  [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)"></app-table>
-                <app-table [data]="this.meta['global_regulatory_scores_sponge']" [features]="features"
-                  [updateColumn]="'regulatory_scores'"
-                  [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [emptyMessage]="'No Sponge global regulatory scores loaded'" (featuresUpdated)="repaintBothViews()"
-                  [datasetId]="selectedDataset?.id"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)"></app-table>
-              </div>
+
+                <mat-form-field appearance="fill" class="dataset-dropdown">
+                  <mat-label>Show Regulatory Statistic</mat-label>
+                  <mat-select [(ngModel)]="regulatoryScoreDisplayMode"
+                    (selectionChange)="onRegulatoryDisplayModeChange(false)">
+                    <mat-option [value]="'raw'">Raw scores</mat-option>
+                    <mat-option [value]="'moranI'">Moran's I</mat-option>
+                    <mat-option [value]="'gearyC'">Geary's C</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <app-table [data]="getRegulatoryTableData('genie3', false)" [features]="features"
+                  [actionColumns]="getRegulatoryActionColumns('genie3', false)" [updateColumn]="'regulatory_scores'"
+                  [emptyMessage]="getRegulatoryEmptyMessage('genie3', false)" (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
+                <app-table [data]="getRegulatoryTableData('sponge', false)" [features]="features"
+                  [updateColumn]="'regulatory_scores'" [actionColumns]="getRegulatoryActionColumns('sponge', false)"
+                  [emptyMessage]="getRegulatoryEmptyMessage('sponge', false)" (featuresUpdated)="updateHexColors()"
+                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
+
             </mat-expansion-panel>
 
             <mat-expansion-panel (opened)="onRegulatoryGraphsPanelOpened()">
@@ -466,8 +472,10 @@
             </mat-expansion-panel>
           </div>
 
-          <div *ngIf="selectedView === 'regulatory_scores' && selectedCell">
-            <h4> Cell Regulatory Scores</h4>
+          <mat-expansion-panel *ngIf="selectedView === 'regulatory_scores' && selectedCell">
+            <mat-expansion-panel-header>
+              <h4> Cell Regulatory Scores</h4>
+            </mat-expansion-panel-header>
 
             <div class="cell-reg-scores">
               <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
@@ -495,7 +503,7 @@
                 No regulatory scores available or still loading.
               </div>
             </div>
-          </div>
+          </mat-expansion-panel>
         </mat-tab>
 
         <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('co_occurrence')">
@@ -903,6 +911,7 @@
               <div *ngIf="cmp['skipped']" class="no-data">
                 This comparison was skipped: {{ cmp['skip_reason'] }}
               </div>
+
               <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
                 [features]="features" [updateColumn]="'dgea'" (geneSelected)="onDgeaGeneSelected($event)">
               </app-table>
@@ -1095,6 +1104,8 @@
 
           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
+              <h4>Aggregated Regulatory Scores</h4>
+
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
                 Score: {{ this.selectedRegulatoryScoreCompare || 'None' }}<br>
@@ -1115,16 +1126,25 @@
 
               <mat-expansion-panel [expanded]="true">
                 <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
-                <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
-                  [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
+                <mat-form-field appearance="fill" class="dataset-dropdown">
+                  <mat-label>Show Regulatory Statistic</mat-label>
+                  <mat-select [(ngModel)]="regulatoryScoreDisplayModeCompare"
+                    (selectionChange)="onRegulatoryDisplayModeChange(true)">
+                    <mat-option [value]="'raw'">Raw scores</mat-option>
+                    <mat-option [value]="'moranI'">Moran's I</mat-option>
+                    <mat-option [value]="'gearyC'">Geary's C</mat-option>
+                  </mat-select>
+                </mat-form-field>
+                <app-table [data]="getRegulatoryTableData('genie3', true)" [features]="compareFeatures"
+                  [actionColumns]="getRegulatoryActionColumns('genie3', true)"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
-                  [isCompare]="true" (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
+                  [isCompare]="true" [emptyMessage]="getRegulatoryEmptyMessage('genie3', true)"
+                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()"></app-table>
-                <app-table [data]="this.metaCompare['global_regulatory_scores_sponge']" [features]="compareFeatures"
-                  [updateColumn]="'regulatory_scores'"
-                  [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                <app-table [data]="getRegulatoryTableData('sponge', true)" [features]="compareFeatures"
+                  [updateColumn]="'regulatory_scores'" [actionColumns]="getRegulatoryActionColumns('sponge', true)"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
-                  (featuresUpdated)="repaintBothViews()"
+                  [emptyMessage]="getRegulatoryEmptyMessage('sponge', true)" (featuresUpdated)="repaintBothViews()"
                   (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)">
                 </app-table>
               </mat-expansion-panel>
@@ -1273,12 +1293,10 @@
 
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-                <app-table *ngIf="spongeElementsCompare.length > 0" [data]="spongeRawDataCompare"
-                  [features]="compareFeatures" [updateColumn]="'regulatory_scores'"
+                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
-                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)"
-                  (featuresUpdated)="repaintBothViews()">
+                  (featuresUpdated)="updateHexColors()">
                 </app-table>
 
                 <div *ngIf="genie3ElementsCompare.length === 0 && spongeElementsCompare.length === 0">
@@ -1361,7 +1379,7 @@
                   <thead>
                     <tr>
                       <th>Target Cluster</th>
-                      <th *ngFor="let i of [].constructor(this.clusterCountCompare); let idx = index">
+                      <th *ngFor="let i of [].constructor(clusterCount); let idx = index">
                         {{ idx }}
                       </th>
                     </tr>

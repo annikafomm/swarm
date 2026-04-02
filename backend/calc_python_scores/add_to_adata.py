@@ -5,6 +5,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="xarray_schema")
 import argparse
 import os
 import scanpy as sc
+import squidpy as sq
 import pandas as pd
 import numpy as np
 import json
@@ -15,6 +16,107 @@ import anndata as ad
 ad.settings.allow_write_nullable_strings = True
 
 from calc_scores import log_message, format_runtime
+
+
+def _ensure_spatial_neighbors(adata: ad.AnnData, logfile: str) -> bool:
+    if "spatial" not in adata.obsm:
+        log_message("Skipping regulatory autocorrelation: adata.obsm['spatial'] is missing.", logfile, 2)
+        return False
+
+    if "spatial_connectivities" in adata.obsp:
+        return True
+
+    t0 = time.time()
+    sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True)
+    log_message(
+        f"Spatial neighbors computed for regulatory autocorrelation in {format_runtime(t0)}",
+        logfile,
+        2,
+    )
+    return True
+
+
+def _pick_stat_column(df: pd.DataFrame, preferred: str) -> str | None:
+    if preferred in df.columns:
+        return preferred
+
+    numeric_cols = [c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])]
+    if numeric_cols:
+        return numeric_cols[0]
+
+    return None
+
+
+def compute_regulatory_autocorr(adata: ad.AnnData, logfile: str) -> None:
+    regulatory_keys = [
+        key
+        for key in adata.obsm.keys()
+        if key.endswith("_genie3") or key.endswith("_sponge")
+    ]
+
+    if len(regulatory_keys) == 0:
+        log_message("No regulatory score matrices found for autocorrelation.", logfile, 2)
+        return
+
+    if not _ensure_spatial_neighbors(adata, logfile):
+        return
+
+    spatial_connectivities = adata.obsp.get("spatial_connectivities", None)
+    spatial_distances = adata.obsp.get("spatial_distances", None)
+
+    if spatial_connectivities is None:
+        log_message("Skipping regulatory autocorrelation: spatial connectivities missing.", logfile, 2)
+        return
+
+    log_message(
+        f"Computing Moran's I / Geary's C for {len(regulatory_keys)} regulatory score matrices ...",
+        logfile,
+        2,
+    )
+
+    for key in regulatory_keys:
+        try:
+            score_df = adata.obsm[key]
+            if not isinstance(score_df, pd.DataFrame):
+                score_df = pd.DataFrame(score_df, index=adata.obs_names)
+
+            if score_df.shape[1] == 0:
+                log_message(f"Skipping {key}: matrix has no columns.", logfile, 4)
+                continue
+
+            tmp = ad.AnnData(X=score_df.to_numpy(dtype=np.float32))
+            tmp.obs_names = adata.obs_names.copy()
+            tmp.var_names = pd.Index(score_df.columns.astype(str))
+            tmp.obsp["spatial_connectivities"] = spatial_connectivities.copy()
+            if spatial_distances is not None:
+                tmp.obsp["spatial_distances"] = spatial_distances.copy()
+
+            t0 = time.time()
+            sq.gr.spatial_autocorr(
+                tmp,
+                mode="moran",
+                n_perms=None,
+                corr_method="fdr_bh",
+                show_progress_bar=False,
+            )
+            moran_df = tmp.uns.get("moranI", None)
+            if isinstance(moran_df, pd.DataFrame):
+                adata.uns[f"{key}_moranI"] = moran_df
+
+            sq.gr.spatial_autocorr(
+                tmp,
+                mode="geary",
+                n_perms=None,
+                corr_method="fdr_bh",
+                show_progress_bar=False,
+            )
+            geary_df = tmp.uns.get("gearyC", None)
+            if isinstance(geary_df, pd.DataFrame):
+                adata.uns[f"{key}_gearyC"] = geary_df
+
+            log_message(f"Autocorrelation for {key} computed in {format_runtime(t0)}", logfile, 4)
+        except Exception as e:
+            log_message(f"Failed autocorrelation for {key}: {str(e)}", logfile, 4)
 
 
 def combine_files(filename, description, args, logfile):
@@ -29,6 +131,13 @@ def combine_files(filename, description, args, logfile):
     elif description == "st":
         scores_path = os.path.join(args.indir, "Rscores_st")
 
+    if not os.path.isdir(scores_path):
+        log_message(f"Scores directory not found: {scores_path}", logfile, 1)
+        return
+
+    merged_csv_keys = []
+    merged_json_keys = []
+
     for filename in os.listdir(scores_path):
         if filename.endswith('.csv'):
             file_path = os.path.join(scores_path, filename)
@@ -38,6 +147,7 @@ def combine_files(filename, description, args, logfile):
             if df_name in adata.obsm.keys():
                 log_message(f"The element with name {df_name} in obsm is overwritten.", logfile, 2)
             adata.obsm[df_name] = df.T
+            merged_csv_keys.append(df_name)
 
         elif filename.endswith('.json'):
             file_path = os.path.join(scores_path, filename)
@@ -48,10 +158,36 @@ def combine_files(filename, description, args, logfile):
             if df_name in adata.uns.keys():
                 log_message(f"The element with name {df_name} in uns is overwritten.", logfile, 2)
             adata.uns[df_name] = data_dict
+            merged_json_keys.append(df_name)
+
+    if len(merged_csv_keys) == 0 and len(merged_json_keys) == 0:
+        log_message(f"No R score files found in {scores_path}.", logfile, 1)
+        return
+
+    missing_csv = [k for k in merged_csv_keys if k not in adata.obsm.keys()]
+    if len(missing_csv) > 0:
+        raise RuntimeError(
+            "R score merge failed: missing key(s) in adata.obsm after merge: "
+            + ", ".join(missing_csv)
+        )
+
+    log_message(
+        f"Merged {len(merged_csv_keys)} CSV and {len(merged_json_keys)} JSON score file(s) into AnnData.",
+        logfile,
+        2,
+    )
 
     log_message(f"R score files loaded and added to the AnnData object in {format_runtime(t0)}", logfile, 2)
 
     print(adata)
+
+    t0 = time.time()
+    compute_regulatory_autocorr(adata, logfile)
+    log_message(
+        f"Regulatory autocorrelation post-processing finished in {format_runtime(t0)}",
+        logfile,
+        2,
+    )
 
     # save AnnData object in file
     log_message("Saving AnnData object ...", logfile, 2)
@@ -109,7 +245,7 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
             adata.uns["differential_motif_activity"] = data_dict
             log_message(f"differential_motif_activity added to adata.uns", logfile, 2)
 
-    
+
         if filename.lower().startswith("diff_motif_activity_top_motifs_") and filename.lower().endswith(".csv"):
             file_path = os.path.join(scores_path, filename)
             df = pd.read_csv(file_path)
@@ -169,15 +305,14 @@ def main():
     # Load the data
     log_message("Loading score data ...", logfile)
 
-    adatas = []
-    for filename in os.listdir(args.indir):
-        if filename.endswith('st_scores.h5ad') or filename.endswith('tg_scores.h5ad'):
-            adatas.append(filename)
+    adatas = sorted([
+        filename
+        for filename in os.listdir(args.indir)
+        if filename.endswith('st_scores.h5ad') or filename.endswith('tg_scores.h5ad')
+    ])
 
     if len(adatas) <= 0:
         log_message(f"The network scores could not be added to the AnnData object, because there are no .h5ad files in {args.indir}.", logfile)
-    if len(adatas) > 2:
-        log_message(f"The network scores could not be added to the AnnData object, because there are too many .h5ad files in {args.indir}.", logfile)
     else:
         if args.multiome:
             adata_map_path = os.path.join(args.indir, "adata_map.h5ad")
