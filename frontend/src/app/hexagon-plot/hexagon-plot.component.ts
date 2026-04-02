@@ -154,15 +154,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
+  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetGenie3Compare: string | null = null;
   public selectedGeneSetSpongeCompare: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
-  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public selectedRegulatoryScoreCompare: string | null = null;
-  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public selectedGeneExpressionMain: string | null = null;
   public selectedGeneExpressionCompare: string | null = null;
   private regulatoryObsmKeysMain: string[] = [];
@@ -351,7 +350,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     'average_clustering',
     'closeness_centrality',
   ];
-
 
   public groupedProperties: { key: string; value: string[] }[] | null = null;
   public groupedPropertiesCompare: { key: string; value: string[] }[] | null = null;
@@ -685,16 +683,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       setTimeout(() => this.renderNhoodHeatmap(), 300);
       return;
     }
-    if (tabLabel === 'Cell Information') {
-      // Render neighborhood enrichment when cell info tab is opened
-      // Use longer timeout to ensure Angular has rendered the template
-      setTimeout(() => this.renderNhoodHeatmap(), 300);
+    if (compare && (tabLabel === 'Compare - Cluster Information' || tabLabel === 'Compare - Cell Information')) {
+      setTimeout(() => this.renderNhoodHeatmap(true), 300);
       return;
     }
 
-    if (tabLabel === 'DGEA') {
+    if (!compare && tabLabel === 'DGEA') {
       this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
-
       if (this.dgeaReady) {
         this.initDgeaSelection();
         setTimeout(() => this.renderDgeaHeatmap(), 100);
@@ -1342,7 +1337,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
               // window only for xenium
               if (this.isXenium) {
-
                 this.initDetailWindow();
                 this.hideDetailWindow();
                 this.bindDetailWindowInteractions();
@@ -1352,21 +1346,25 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               this.features = this.fullFeatures;
             }
           }
+
+
+
           if (compare) {
             this.metaCompare = data.meta;
+            console.log('Compare meta loaded:', this.metaCompare, data.meta);
             this.updatePropertyAvailability('compare');
           } else {
             this.meta = data.meta;
             this.updatePropertyAvailability('main');
           }
-          this.dgeaReady = !!compare ? this.metaCompare?.['dgea']?.['cell_type'] : this.meta?.['dgea']?.['cell_type'];
-          if (this.dgeaReady) {
-            this.initDgeaSelection();
-          }
 
           const availableObsCols = this.getDgeaObsCols();
           if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
             this.selectedDgeaObsCol = availableObsCols[0];
+          }
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+          if (this.dgeaReady) {
+            this.initDgeaSelection();
           }
 
           const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
@@ -1423,412 +1421,477 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           setTimeout(() => {
             this.onGeneSetChange(compare);
           }, 100);
+
         }
-      }
         const featuresForProps = compare ? this.compareFeatures : this.features;
-    const firstProps = featuresForProps?.[0]?.properties || {};
+        const firstProps = featuresForProps?.[0]?.properties || {};
 
 
-    // start with whatever is available on the first feature, but also make
-    // sure that the set contains the "known" columns we care about so that
-    // they are present (albeit disabled) until the corresponding data
-    // arrives.  This mirrors the behaviour you wanted for regulatory scores
-    // without hardcoding a single property.
-    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
-    const lianaKeys = [
-      'ligand_receptor_relationships',
-      'cell_comp_tf_activity_similarity',
-      'tf_activity',
-      'pathway_activity',
-    ];
+        // start with whatever is available on the first feature, but also make
+        // sure that the set contains the "known" columns we care about so that
+        // they are present (albeit disabled) until the corresponding data
+        // arrives.  This mirrors the behaviour you wanted for regulatory scores
+        // without hardcoding a single property.
+        const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+        const lianaKeys = [
+          'ligand_receptor_relationships',
+          'cell_comp_tf_activity_similarity',
+          'tf_activity',
+          'pathway_activity',
+        ];
 
-    const allKeys = new Set<string>(
-      Object.keys(firstProps).filter((k) => {
-        const val = firstProps[k];
-        return typeof val === 'string' || typeof val === 'number';
-      })
-    );
-    scoreKeys.forEach((k) => allKeys.add(k));
-    lianaKeys.forEach((k) => allKeys.add(k));
-
-
-
-    this.leidenCentralityProps.forEach((k) => allKeys.add(k));
-    compare ? this.colorablePropertiesCompare = Array.from(allKeys) : this.colorableProperties = Array.from(allKeys);
-    console.log('Initial colourable properties (including potential ones):',
-      compare ? this.colorablePropertiesCompare : this.colorableProperties);
-
-    // Alphabetical order
-    compare ? this.colorablePropertiesCompare.sort((a, b) => a.localeCompare(b)) : this.colorableProperties.sort((a, b) => a.localeCompare(b));
-
-    // Group similar properties together
-    const chromvarKeys = ['chromvar_total_sum'];
-    const currentgroupedProperties = [
-      { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-      { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-      { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
-      {
-        key: 'Other', value: this.colorableProperties.filter(
-          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
-        )
-      },
-    ];
-
-    compare ? this.groupedPropertiesCompare = currentgroupedProperties : this.groupedProperties = currentgroupedProperties;
+        const allKeys = new Set<string>(
+          Object.keys(firstProps).filter((k) => {
+            const val = firstProps[k];
+            return typeof val === 'string' || typeof val === 'number';
+          })
+        );
+        scoreKeys.forEach((k) => allKeys.add(k));
+        lianaKeys.forEach((k) => allKeys.add(k));
 
 
-    // compute availability for everything we've decided to show
-    const candidates = new Set(compare ? this.colorablePropertiesCompare : this.colorableProperties);
 
-    const targetAvailabilityMap: { [prop: string]: boolean } = {};
+        this.leidenCentralityProps.forEach((k) => allKeys.add(k));
+        compare ? this.colorablePropertiesCompare = Array.from(allKeys) : this.colorableProperties = Array.from(allKeys);
+        console.log('Initial colourable properties (including potential ones):',
+          compare ? this.colorablePropertiesCompare : this.colorableProperties);
 
-    candidates.forEach((prop) => {
-      if (prop === 'regulatory_scores') {
-        targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
-      } else if (prop === 'gene_expression') {
-        targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
-      } else if (this.leidenCentralityProps.includes(prop)) {
-        targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
-          // FIX: Added 'compare' argument to getLeidenClusterAnnotation
-          const val = this.getLeidenClusterAnnotation(f.properties.leiden, compare)?.centrality?.[prop];
-          return val !== undefined && val !== null && val !== '';
+        // Alphabetical order
+        compare ? this.colorablePropertiesCompare.sort((a, b) => a.localeCompare(b)) : this.colorableProperties.sort((a, b) => a.localeCompare(b));
+
+        // Group similar properties together
+        const chromvarKeys = ['chromvar_total_sum'];
+        const currentgroupedProperties = [
+          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
+          {
+            key: 'Other', value: this.colorableProperties.filter(
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+            )
+          },
+        ];
+
+        compare ? this.groupedPropertiesCompare = currentgroupedProperties : this.groupedProperties = currentgroupedProperties;
+
+
+        // compute availability for everything we've decided to show
+        const candidates = new Set(compare ? this.colorablePropertiesCompare : this.colorableProperties);
+
+        const targetAvailabilityMap: { [prop: string]: boolean } = {};
+
+        candidates.forEach((prop) => {
+          if (prop === 'regulatory_scores') {
+            targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
+          } else if (prop === 'gene_expression') {
+            targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
+          }
+          else if (prop === 'co_occurrence') {
+            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare ? 'compare' : 'main');
+
+          } else if (this.leidenCentralityProps.includes(prop)) {
+            targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
+              // FIX: Added 'compare' argument to getLeidenClusterAnnotation
+              const val = this.getLeidenClusterAnnotation(f.properties.leiden, compare)?.centrality?.[prop];
+              return val !== undefined && val !== null && val !== '';
+            });
+          } else {
+            targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
+              const val = f.properties ? f.properties[prop] : undefined;
+              return val !== undefined && val !== null && val !== '';
+            });
+          }
         });
-      } else {
-        targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
-          const val = f.properties ? f.properties[prop] : undefined;
-          return val !== undefined && val !== null && val !== '';
-        });
-      }
-    });
 
-    // Conditionally assign the calculated map to the correct view
-    if (compare) {
-      this.propertyAvailabilityCompare = targetAvailabilityMap;
-    } else {
-      this.propertyAvailability = targetAvailabilityMap;
-    }
-    console.log(`Property availability map (${compare ? 'compare' : 'main'}):`, targetAvailabilityMap);
-
-    // rebuild grouped properties with full property list; template handles disabled state
-    this.groupedProperties = [
-      { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-      { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-      { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
-      {
-        key: 'Other', value: this.colorableProperties.filter(
-          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
-        ),
-      },
-    ];
-
-    const firstAvailableProperty = compare
-      ? this.colorablePropertiesCompare.find((p) => this.propertyAvailable(p, 'compare'))
-      : this.colorableProperties.find((p) => this.propertyAvailable(p, 'main'));
-
-    if (compare) {
-      if (this.propertyAvailable('regulatory_scores', 'compare')) {
-        this.selectedCompareView = 'regulatory_scores';
-      } else if (this.propertyAvailable('cell_type', 'compare')) {
-        this.selectedCompareView = 'cell_type';
-      } else if (firstAvailableProperty) {
-        this.selectedCompareView = firstAvailableProperty;
-      } else {
-        // Keep empty when nothing is available.
-        this.selectedCompareView = this.colorablePropertiesCompare[0] || '';
-      }
-      this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
-    } else {
-
-      if (this.propertyAvailable('regulatory_scores', 'main')) {
-        this.selectedView = 'regulatory_scores';
-      } else if (this.propertyAvailable('cell_type', 'main')) {
-        this.selectedView = 'cell_type';
-      } else if (firstAvailableProperty) {
-        this.selectedView = firstAvailableProperty;
-      } else {
-        // Keep empty when nothing is available.
-        this.selectedView = this.colorableProperties[0] || '';
-      }
-      this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
-    }
-
-
-
-    const width = 1200;
-    const height = 1000;
-
-    const projection = d3.geoIdentity().fitSize([width, height], {
-      type: 'FeatureCollection',
-      features: compare ? this.compareFeatures : (this.isXenium ? this.fullFeatures : this.features),
-    });
-
-    // Create a geoPath generator with the projection
-    this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
-    const pathGenerator = this.currentPathGenerator;
-
-    // Precompute projected centroids for Xenium detail window (performance)
-    if (this.isXenium) {
-      this.fullFeatures.forEach((f) => {
-        if (!(f.properties as any).__centroidProjected) {
-          const c = this.currentPathGenerator!.centroid(f as any);
-          (f.properties as any).__centroidProjected = c;
+        // Conditionally assign the calculated map to the correct view
+        if (compare) {
+          this.propertyAvailabilityCompare = targetAvailabilityMap;
+        } else {
+          this.propertyAvailability = targetAvailabilityMap;
         }
-      });
-    }
+        console.log(`Property availability map (${compare ? 'compare' : 'main'}):`, targetAvailabilityMap);
 
-    // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
-    if (this.isXenium) {
-      this.baseLayer
-        .style('cursor', 'default')
-        .style('pointer-events', 'none')
-        .selectAll<SVGPathElement, CellFeature>('path')
-        .data(this.features, (d: any) => d.properties.barcode)
-        .join('path')
-        .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-        .attr('fill', (d: CellFeature) => {
-          const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
-            ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
-            : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
-          if (this.currentLegendType === 'categorical') {
-            return this.colorScale(String(value));
-          } else {
-            const num = this.toNumber(value);
-            return Number.isFinite(num)
-              ? this.continuousColorScale(num)
-              : '#ccc';
-          }
-        })
-        .style('opacity', 0.8);
-    } else {
-      (compare ? this.g_compare : this.g)
-        .style('cursor', 'pointer')
-        .style('pointer-events', null)
-        .selectAll<SVGPathElement, CellFeature>('path')
-        .data(compare ? this.compareFeatures : this.features, (d: any) => d.properties.barcode)
-        .join('path')
-        .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-        .attr('fill', (d: CellFeature) => {
-          const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
-            ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
-            : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
-          if (compare ? this.currentCompareLegendType === 'categorical' : this.currentLegendType === 'categorical') {
-            return this.colorScale(String(value));
-          } else {
-            const num = this.toNumber(value);
-            return Number.isFinite(num)
-              ? compare ? this.continuousColorScaleCompare(num)
-                : this.continuousColorScale(num)
-              : '#ccc';
-          }
-        })
-        .style('opacity', 0.8)
-        .on('mouseover', (event, d) => this.mouseOver(event, d))
-        .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-        .on('click', (event, d) => this.displayCellDetails(event, d, compare));
-    }
+        // rebuild grouped properties with full property list; template handles disabled state
+        this.groupedProperties = [
+          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
+          {
+            key: 'Other', value: this.colorableProperties.filter(
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+            ),
+          },
+        ];
 
-    this.onColorbyPropertyChange(compare);
-    setTimeout(() => {
-      if (compare) {
-        this.isLoadingCompare = false;
-      } else {
-        this.isLoadingHexagons = false;
-      }
-      this.checkInitializationComplete(compare);
-    }, 0);
-  })
+        const firstAvailableProperty = compare
+          ? this.colorablePropertiesCompare.find((p) => this.propertyAvailable(p, 'compare'))
+          : this.colorableProperties.find((p) => this.propertyAvailable(p, 'main'));
+
+        if (compare) {
+          if (this.propertyAvailable('regulatory_scores', 'compare')) {
+            this.selectedCompareView = 'regulatory_scores';
+          } else if (this.propertyAvailable('cell_type', 'compare')) {
+            this.selectedCompareView = 'cell_type';
+          } else if (firstAvailableProperty) {
+            this.selectedCompareView = firstAvailableProperty;
+          } else {
+            // Keep empty when nothing is available.
+            this.selectedCompareView = this.colorablePropertiesCompare[0] || '';
+          }
+          this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
+        } else {
+
+          if (this.propertyAvailable('regulatory_scores', 'main')) {
+            this.selectedView = 'regulatory_scores';
+          } else if (this.propertyAvailable('cell_type', 'main')) {
+            this.selectedView = 'cell_type';
+          } else if (firstAvailableProperty) {
+            this.selectedView = firstAvailableProperty;
+          } else {
+            // Keep empty when nothing is available.
+            this.selectedView = this.colorableProperties[0] || '';
+          }
+          this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
+        }
+
+
+
+        const width = 1200;
+        const height = 1000;
+
+        const projection = d3.geoIdentity().fitSize([width, height], {
+          type: 'FeatureCollection',
+          features: compare ? this.compareFeatures : (this.isXenium ? this.fullFeatures : this.features),
+        });
+
+        // Create a geoPath generator with the projection
+        this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
+        const pathGenerator = this.currentPathGenerator;
+
+        // Precompute projected centroids for Xenium detail window (performance)
+        if (this.isXenium) {
+          this.fullFeatures.forEach((f) => {
+            if (!(f.properties as any).__centroidProjected) {
+              const c = this.currentPathGenerator!.centroid(f as any);
+              (f.properties as any).__centroidProjected = c;
+            }
+          });
+        }
+
+        // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
+        if (this.isXenium) {
+          this.baseLayer
+            .style('cursor', 'default')
+            .style('pointer-events', 'none')
+            .selectAll<SVGPathElement, CellFeature>('path')
+            .data(this.features, (d: any) => d.properties.barcode)
+            .join('path')
+            .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+            .attr('fill', (d: CellFeature) => {
+              const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
+                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
+                : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
+              if (this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+              } else {
+                const num = this.toNumber(value);
+                return Number.isFinite(num)
+                  ? this.continuousColorScale(num)
+                  : '#ccc';
+              }
+            })
+            .style('opacity', 0.8);
+        } else {
+          (compare ? this.g_compare : this.g)
+            .style('cursor', 'pointer')
+            .style('pointer-events', null)
+            .selectAll<SVGPathElement, CellFeature>('path')
+            .data(compare ? this.compareFeatures : this.features, (d: any) => d.properties.barcode)
+            .join('path')
+            .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+            .attr('fill', (d: CellFeature) => {
+              const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
+                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
+                : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
+              if (compare ? this.currentCompareLegendType === 'categorical' : this.currentLegendType === 'categorical') {
+                return this.colorScale(String(value));
+              } else {
+                const num = this.toNumber(value);
+                return Number.isFinite(num)
+                  ? compare ? this.continuousColorScaleCompare(num)
+                    : this.continuousColorScale(num)
+                  : '#ccc';
+              }
+            })
+            .style('opacity', 0.8)
+            .on('mouseover', (event, d) => this.mouseOver(event, d))
+            .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+            .on('click', (event, d) => this.displayCellDetails(event, d, compare));
+        }
+
+        this.onColorbyPropertyChange(compare);
+        setTimeout(() => {
+          if (compare) {
+            this.isLoadingCompare = false;
+          } else {
+            this.isLoadingHexagons = false;
+          }
+          this.checkInitializationComplete(compare);
+        }, 0);
+      })
       .catch((error) => {
-  console.error('Error loading or rendering data:', error);
-  if (compare) {
-    this.isLoadingCompare = false;
-  } else {
-    this.isLoadingHexagons = false;
-  }
-  this.checkInitializationComplete(compare);
-});
+        console.error('Error loading or rendering data:', error);
+        if (compare) {
+          this.isLoadingCompare = false;
+        } else {
+          this.isLoadingHexagons = false;
+        }
+        this.checkInitializationComplete(compare);
+      });
   }
 
 
   private toNumber(v: unknown): number {
-  if (typeof v === 'number') return v;
-  if (typeof v === 'string') {
-    const n = parseFloat(v);
-    return Number.isFinite(n) ? n : NaN;
+    if (typeof v === 'number') return v;
+    if (typeof v === 'string') {
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : NaN;
+    }
+    return NaN;
   }
-  return NaN;
-}
 
   private normalizeGeneKey(gene: string): string {
-  return gene.trim().toLowerCase();
-}
+    return gene.trim().toLowerCase();
+  }
 
   private buildGeneDomainCacheKey(datasetId: string, gene: string): string {
-  return `${datasetId}::${this.normalizeGeneKey(gene)}`;
-}
+    return `${datasetId}::${this.normalizeGeneKey(gene)}`;
+  }
 
-  private getGeneDomainRequests(): Array < { datasetId: string; gene: string; cacheKey: string } > {
-  const requests: Array<{ datasetId: string; gene: string; cacheKey: string }> =[];
-const seen = new Set<string>();
+  private getGeneDomainRequests(): Array<{ datasetId: string; gene: string; cacheKey: string }> {
+    const requests: Array<{ datasetId: string; gene: string; cacheKey: string }> = [];
+    const seen = new Set<string>();
 
-const add = (datasetId: string | undefined, gene: string | null) => {
-  const cleanGene = (gene ?? '').trim();
-  if (!datasetId || !cleanGene) return;
-  const cacheKey = this.buildGeneDomainCacheKey(datasetId, cleanGene);
-  if (seen.has(cacheKey)) return;
-  seen.add(cacheKey);
-  requests.push({ datasetId, gene: cleanGene, cacheKey });
-};
+    const add = (datasetId: string | undefined, gene: string | null) => {
+      const cleanGene = (gene ?? '').trim();
+      if (!datasetId || !cleanGene) return;
+      const cacheKey = this.buildGeneDomainCacheKey(datasetId, cleanGene);
+      if (seen.has(cacheKey)) return;
+      seen.add(cacheKey);
+      requests.push({ datasetId, gene: cleanGene, cacheKey });
+    };
 
-if (this.selectedView === 'gene_expression') {
-  add(this.selectedDataset?.id, this.selectedGeneExpressionMain);
-}
+    if (this.selectedView === 'gene_expression') {
+      add(this.selectedDataset?.id, this.selectedGeneExpressionMain);
+    }
 
-if (this.compareMode && this.selectedCompareView === 'gene_expression') {
-  const compareDatasetId = this.selectedDatasetCompare?.id ?? this.selectedDataset?.id;
-  const compareGene = this.selectedGeneExpressionCompare ?? this.selectedGeneExpressionMain;
-  add(compareDatasetId, compareGene);
-}
+    if (this.compareMode && this.selectedCompareView === 'gene_expression') {
+      const compareDatasetId = this.selectedDatasetCompare?.id ?? this.selectedDataset?.id;
+      const compareGene = this.selectedGeneExpressionCompare ?? this.selectedGeneExpressionMain;
+      add(compareDatasetId, compareGene);
+    }
 
-return requests;
+    return requests;
   }
 
   private getGeneDomainContextKey(requests: Array<{ cacheKey: string }>): string {
-  return requests.map(r => r.cacheKey).sort().join('|');
-}
+    return requests.map(r => r.cacheKey).sort().join('|');
+  }
 
   private getSharedDomainForGeneExpressionView(): { min: number; max: number } | null {
-  return this.sharedGeneExpressionDomain;
-}
-
-  private extractViewValue(feature: CellFeature, view: string): unknown {
-  if (this.leidenCentralityProps.includes(view)) {
-    return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
+    return this.sharedGeneExpressionDomain;
   }
-  return feature.properties[view];
-}
 
-  private collectFiniteValuesForView(features: CellFeature[], view: string): number[] {
-  return features
-    .map((f) => this.toNumber(this.extractViewValue(f, view)))
-    .filter((n) => Number.isFinite(n));
-}
+  private cloneGeoJsonData(data: GeoJsonData | null): GeoJsonData | null {
+    if (!data) return null;
 
-  private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
-  const values = this.collectFiniteValuesForView(features, view);
-  if (!values.length) return null;
-  return {
-    min: Math.min(...values),
-    max: Math.max(...values),
-  };
-}
+    try {
+      if (typeof structuredClone === 'function') {
+        return structuredClone(data);
+      }
+    } catch (e) {
+      console.warn('[compare:data] structuredClone failed, falling back to JSON clone', e);
+    }
 
-  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
-  if (!this.compareMode) return null;
+    return JSON.parse(JSON.stringify(data)) as GeoJsonData;
+  }
 
-  const mainView = this.selectedView;
-  const compareView = this.selectedCompareView;
-  const mainFeatures = this.features || [];
-  const compareFeatures = this.compareFeatures || [];
-  if (!mainFeatures.length || !compareFeatures.length) return null;
+  private async loadCompareGeoJsonData(): Promise<GeoJsonData | null> {
+    const comparePath = this.selectedDatasetCompare?.geojson_path
+      ?? this.selectedDataset?.geojson_path
+      ?? this.dataPath;
 
-  const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
-  const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
-  if (!mainIsContinuous || !compareIsContinuous) return null;
+    if (!comparePath) {
+      console.warn('[compare init] no compare geojson path available');
+      return null;
+    }
 
-  const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
-  const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
-  if (!mainMinMax || !compareMinMax) return null;
+    const fullUrl = comparePath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${comparePath}`
+      : comparePath;
 
-  return {
-    min: Math.min(mainMinMax.min, compareMinMax.min),
-    max: Math.max(mainMinMax.max, compareMinMax.max),
-  };
-}
+    const response = await fetch(fullUrl, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText} (${fullUrl})`);
+    }
+
+    const data = await response.json() as GeoJsonData;
+    console.log('[compare init] loaded geojson from path', {
+      comparePath,
+      fullUrl,
+      featureCount: data?.features?.length ?? 0,
+      selectedCompareDatasetId: this.selectedDatasetCompare?.id ?? null,
+      selectedMainDatasetId: this.selectedDataset?.id ?? null,
+    });
+
+    return data;
+  }
+
+  private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
+    if (this.leidenCentralityProps.includes(view)) {
+      return this.getLeidenClusterAnnotation(feature.properties.leiden, context == 'compare' ? true : false)?.centrality?.[view];
+    }
+    return feature.properties[view];
+  }
+
+  private collectFiniteValuesForView(
+    features: CellFeature[],
+    view: string,
+    context: 'main' | 'compare' = 'main'
+  ): number[] {
+    return features
+      .map((f) => this.toNumber(this.extractViewValue(f, view, context)))
+      .filter((n) => Number.isFinite(n));
+  }
+
+  private getMinMaxForView(
+    features: CellFeature[],
+    view: string,
+    compare: boolean = false
+  ): { min: number; max: number } | null {
+    const values = this.collectFiniteValuesForView(features, view, compare ? 'compare' : 'main');
+    if (!values.length) {
+      console.log('[domain:getMinMaxForView] no finite values', {
+        view,
+        featureCount: features.length,
+      });
+      return null;
+    }
+    const result = {
+      min: Math.min(...values),
+      max: Math.max(...values),
+    };
+    console.log('[domain:getMinMaxForView] computed', {
+      view,
+      featureCount: features.length,
+      finiteCount: values.length,
+      min: result.min,
+      max: result.max,
+    });
+    return result;
+  }
+
+  private getMergedMinMaxForView(view: string): { min: number; max: number } | null {
+    // Generalized: always merges min/max for both main and compare for a given view
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.compareFeatures || [];
+    if (!mainFeatures.length && !compareFeatures.length) return null;
+    const mainMinMax = mainFeatures.length ? this.getMinMaxForView(mainFeatures, view, false) : null;
+    const compareMinMax = compareFeatures.length ? this.getMinMaxForView(compareFeatures, view, true) : null;
+    if (!mainMinMax && !compareMinMax) return null;
+    const min = [mainMinMax?.min, compareMinMax?.min].filter(x => x !== undefined).reduce((a, b) => Math.min(a as number, b as number));
+    const max = [mainMinMax?.max, compareMinMax?.max].filter(x => x !== undefined).reduce((a, b) => Math.max(a as number, b as number));
+    return { min, max };
+  }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
-  if(token !== this.geneDomainToken) return;
-this.sharedGeneExpressionDomain = domain;
-this.sharedGeneExpressionContextKey = domain ? contextKey : null;
+    if (token !== this.geneDomainToken) return;
+    this.sharedGeneExpressionDomain = domain;
+    this.sharedGeneExpressionContextKey = domain ? contextKey : null;
 
-this.updateHexColors();
-if (this.compareMode) {
-  this.updateHexColors('#hexbin-compare');
-}
-  }
-
-  private async refreshSharedGeneExpressionDomain(): Promise < void> {
-  const requests = this.getGeneDomainRequests();
-  if(!requests.length) {
-  this.sharedGeneExpressionDomain = null;
-  this.sharedGeneExpressionContextKey = null;
-  return;
-}
-
-const contextKey = this.getGeneDomainContextKey(requests);
-const token = ++this.geneDomainToken;
-const now = Date.now();
-
-const pending = requests.filter((r) => {
-  const cached = this.geneDomainCache.get(r.cacheKey);
-  return !cached || cached.expiresAt <= now;
-});
-
-if (pending.length > 0) {
-  const results = await Promise.allSettled(
-    pending.map((r) => firstValueFrom(
-      this.sessionService.callWithSession(() =>
-        this.http.get<GeneStatsResponse>(
-          `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
-          { withCredentials: true },
-        )
-      )
-    ))
-  );
-
-  if (token !== this.geneDomainToken) {
-    return;
-  }
-
-  results.forEach((result, idx) => {
-    const req = pending[idx];
-    if (result.status === 'fulfilled') {
-      this.geneDomainCache.set(req.cacheKey, {
-        min: result.value.global_min,
-        max: result.value.global_max,
-        expiresAt: now + this.geneDomainCacheTtlMs,
-      });
-    } else {
-      console.warn('[gene-domain] failed to fetch global stats', req, result.reason);
+    this.updateHexColors();
+    if (this.compareMode) {
+      this.updateHexColors('#hexbin-compare');
     }
-  });
-}
+  }
 
-const valid = requests
-  .map((r) => this.geneDomainCache.get(r.cacheKey))
-  .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
+  private async refreshSharedGeneExpressionDomain(): Promise<void> {
+    const requests = this.getGeneDomainRequests();
+    if (!requests.length) {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
+      return;
+    }
 
-if (!valid.length) {
-  this.applySharedDomainAndRepaint(null, contextKey, token);
-  return;
-}
+    const contextKey = this.getGeneDomainContextKey(requests);
+    const token = ++this.geneDomainToken;
+    const now = Date.now();
 
-const min = Math.min(...valid.map((v) => v.min));
-const max = Math.max(...valid.map((v) => v.max));
-this.applySharedDomainAndRepaint({ min, max }, contextKey, token);
+    const pending = requests.filter((r) => {
+      const cached = this.geneDomainCache.get(r.cacheKey);
+      return !cached || cached.expiresAt <= now;
+    });
+
+    // Fetch pending gene stats if needed
+    if (pending.length > 0) {
+      const results = await Promise.allSettled(
+        pending.map((r) =>
+          firstValueFrom(
+            this.sessionService.callWithSession(() =>
+              this.http.get<GeneStatsResponse>(
+                `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+                { withCredentials: true },
+              )
+            )
+          )
+        )
+      );
+
+      if (token !== this.geneDomainToken) {
+        return;
+      }
+
+      results.forEach((result, idx) => {
+        const req = pending[idx];
+        if (result.status === 'fulfilled') {
+          this.geneDomainCache.set(req.cacheKey, {
+            min: result.value.global_min,
+            max: result.value.global_max,
+            expiresAt: now + this.geneDomainCacheTtlMs,
+          });
+        } else {
+          console.warn('[gene-domain] failed to fetch global stats', req, result.reason);
+        }
+      });
+    }
+
+    // Gather all valid cached domains
+    const valid = requests
+      .map((r) => this.geneDomainCache.get(r.cacheKey))
+      .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
+
+    if (!valid.length) {
+      this.applySharedDomainAndRepaint(null, contextKey, token);
+      return;
+    }
+
+    const min = Math.min(...valid.map((v) => v.min));
+    const max = Math.max(...valid.map((v) => v.max));
+    this.applySharedDomainAndRepaint({ min, max }, contextKey, token);
   }
 
   public onGeneExpressionSelected(event: { gene: string; action: string }, panel: 'main' | 'compare'): void {
-  if(event.action !== 'gene_expression') return;
-  const selectedGene = String(event.gene ?? '').trim();
-  if(!selectedGene) return;
+    if (event.action !== 'gene_expression') return;
+    const selectedGene = String(event.gene ?? '').trim();
+    if (!selectedGene) return;
 
-  if(panel === 'main') {
-  this.selectedGeneExpressionMain = selectedGene;
-} else {
-  this.selectedGeneExpressionCompare = selectedGene;
-}
+    if (panel === 'main') {
+      this.selectedGeneExpressionMain = selectedGene;
+    } else {
+      this.selectedGeneExpressionCompare = selectedGene;
+    }
 
-this.refreshSharedGeneExpressionDomain();
+    this.refreshSharedGeneExpressionDomain();
   }
 
   public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
@@ -1838,349 +1901,373 @@ this.refreshSharedGeneExpressionDomain();
   }
 
   public onColorbyPropertyChange(compare: boolean = false): void {
-  const colorProp = compare ? this.selectedCompareView : this.selectedView;
-  const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
-  const geneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
-  const geneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const colorProp = compare ? this.selectedCompareView : this.selectedView;
+    const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const geneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
 
-  console.log('[onColorbyPropertyChange] colorByProperty changed to:', colorProp);
+    console.log('[onColorbyPropertyChange] colorByProperty changed to:', colorProp);
 
-  if(colorProp === 'gene_expression') {
-  this.refreshSharedGeneExpressionDomain();
-}
+    const dualGeneExpressionCompare =
+      this.compareMode &&
+      this.selectedView === 'gene_expression' &&
+      this.selectedCompareView === 'gene_expression';
 
-if (colorProp === 'regulatory_scores') {
-  if (regulatoryScore?.endsWith('genie3') && geneSetGenie3) {
-    this.fetchAndUpdate(regulatoryScore, geneSetGenie3, compare);
-    this.updateSubgraphGenie3(compare);
-    this.updateSubgraphSponge(compare);
-  } else if (regulatoryScore?.endsWith('sponge') && geneSetSponge) {
-    this.fetchAndUpdate(regulatoryScore, geneSetSponge, compare);
-    this.updateSubgraphGenie3(compare);
-    this.updateSubgraphSponge(compare);
-  }
-}
-
-if (compare) {
-  console.log('[onColorbyPropertyChange] Updating compare hexagons');
-  this.updateHexColors('#hexbin-compare');
-} else {
-  console.log('[onColorbyPropertyChange] Updating main hexagons');
-  this.updateHexColors();
-}
-  }
-
-/**
- * Determine whether the given view/property should be treated as a continuous numeric scale.
- * If `features` is provided, that dataset is used for the test (used for compare view). Otherwise
- * the main `this.features` is used.
- */
-isContinuousScale(view ?: string, features ?: CellFeature[], compare: boolean = false): boolean {
-  const property = view ?? (compare ? this.selectedCompareView : this.selectedView);
-  const sourceFeatures = Array.isArray(features)
-    ? features
-    : (compare ? this.compareFeatures : this.features) || [];
-
-  const valuesRaw = sourceFeatures.map((f) => {
-    if (this.leidenCentralityProps.includes(property)) {
-      const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden);
-      return clusterAnnotation?.centrality?.[property];
+    if (dualGeneExpressionCompare) {
+      this.refreshSharedGeneExpressionDomain();
+    } else {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
     }
-    return f.properties[property];
-  });
 
-  // FILTER OUT undefined/null values so they don't evaluate to NaN and break the check
-  const validRaw = valuesRaw.filter(v => v !== undefined && v !== null && v !== '');
+    if (colorProp === 'regulatory_scores') {
+      if (regulatoryScore?.endsWith('genie3') && geneSetGenie3) {
+        this.fetchAndUpdate(regulatoryScore, geneSetGenie3, compare);
+        this.updateSubgraphGenie3(compare);
+        this.updateSubgraphSponge(compare);
+      } else if (regulatoryScore?.endsWith('sponge') && geneSetSponge) {
+        this.fetchAndUpdate(regulatoryScore, geneSetSponge, compare);
+        this.updateSubgraphGenie3(compare);
+        this.updateSubgraphSponge(compare);
+      }
+    }
 
-  // If completely empty (e.g., initial state), default to continuous
-  if (validRaw.length === 0) return true;
+    if (compare) {
+      console.log('[onColorbyPropertyChange] Updating compare hexagons');
+      this.updateHexColors('#hexbin-compare');
+    } else {
+      console.log('[onColorbyPropertyChange] Updating main hexagons');
+      this.updateHexColors();
+    }
+  }
 
-  const numericValues = validRaw.map((v) => this.toNumber(v));
-  const allNumbers = numericValues.every((n) => Number.isFinite(n));
-  const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
-  const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
-  const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
+  /**
+   * Determine whether the given view/property should be treated as a continuous numeric scale.
+   * If `features` is provided, that dataset is used for the test (used for compare view). Otherwise
+   * the main `this.features` is used.
+   */
+  isContinuousScale(view?: string, features?: CellFeature[], compare: boolean = false): boolean {
+    const property = view ?? (compare ? this.selectedCompareView : this.selectedView);
+    const sourceFeatures = Array.isArray(features)
+      ? features
+      : (compare ? this.compareFeatures : this.features) || [];
 
-  return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
-}
+    const valuesRaw = sourceFeatures.map((f) => {
+      if (this.leidenCentralityProps.includes(property)) {
+        const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden);
+        return clusterAnnotation?.centrality?.[property];
+      }
+      return f.properties[property];
+    });
+
+    // FILTER OUT undefined/null values so they don't evaluate to NaN and break the check
+    const validRaw = valuesRaw.filter(v => v !== undefined && v !== null && v !== '');
+
+    // If completely empty (e.g., initial state), default to continuous
+    if (validRaw.length === 0) return true;
+
+    const numericValues = validRaw.map((v) => this.toNumber(v));
+    const allNumbers = numericValues.every((n) => Number.isFinite(n));
+    const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
+    const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
+    const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
+
+    return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
+  }
+
 
   private getViewVariablesToUpdate(containerName: string) {
-  const isMainView = containerName === '#hexbin';
-  const viewToUpdate = isMainView ? this.selectedView : this.selectedCompareView;
-  const featuresToUpdate = isMainView ? this.features : (this.compareFeatures || []);
-  const gToUpdate = isMainView ? this.g : this.g_compare;
-  const gPathsToUpdate = isMainView ? this.g_paths : this.g_paths_compare;
-  const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
-  const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
-  // Pass the compare flag to isContinuousScale for correct logic
-  const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate, !isMainView);
-  const legendContainerName = isMainView ? 'svg-legend' : 'svg-legend-compare';
-  const legendGradientName = isMainView ? 'svg-legend-gradient' : 'svg-legend-gradient-compare';
-  return {
-    isMainView,
-    view: viewToUpdate,
-    svg: isMainView ? this.svg : this.svg_compare,
-    features: featuresToUpdate,
-    g: gToUpdate,
-    g_paths: gPathsToUpdate,
-    ordinal: ordinalScaleToUpdate,
-    continuous: continuousScaleToUpdate,
-    isContinuous,
-    legendContainerName,
-    legendGradientName,
-    getLegendDomain: () => isMainView ? this.currentLegendDomain : this.currentLegendDomainCompare,
-    setLegendDomain: (v: any[]) => { if (isMainView) this.currentLegendDomain = v; else this.currentLegendDomainCompare = v; },
-    getLegendType: () => isMainView ? this.currentLegendType : this.currentCompareLegendType,
-    setLegendType: (t: 'continuous' | 'categorical') => { if (isMainView) this.currentLegendType = t; else this.currentCompareLegendType = t; }
-  } as const;
-}
+    const isMainView = containerName === '#hexbin';
+    const viewToUpdate = isMainView ? this.selectedView : this.selectedCompareView;
+    const featuresToUpdate = isMainView ? this.features : (this.compareFeatures || []);
+    const gToUpdate = isMainView ? this.g : this.g_compare;
+    const gPathsToUpdate = isMainView ? this.g_paths : this.g_paths_compare;
+    const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
+    const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
+    // Pass the compare flag to isContinuousScale for correct logic
+    const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate, !isMainView);
+    const legendContainerName = isMainView ? 'svg-legend' : 'svg-legend-compare';
+    const legendGradientName = isMainView ? 'svg-legend-gradient' : 'svg-legend-gradient-compare';
+    return {
+      isMainView,
+      view: viewToUpdate,
+      svg: isMainView ? this.svg : this.svg_compare,
+      features: featuresToUpdate,
+      g: gToUpdate,
+      g_paths: gPathsToUpdate,
+      ordinal: ordinalScaleToUpdate,
+      continuous: continuousScaleToUpdate,
+      isContinuous,
+      legendContainerName,
+      legendGradientName,
+      getLegendDomain: () => isMainView ? this.currentLegendDomain : this.currentLegendDomainCompare,
+      setLegendDomain: (v: any[]) => { if (isMainView) this.currentLegendDomain = v; else this.currentLegendDomainCompare = v; },
+      getLegendType: () => isMainView ? this.currentLegendType : this.currentCompareLegendType,
+      setLegendType: (t: 'continuous' | 'categorical') => { if (isMainView) this.currentLegendType = t; else this.currentCompareLegendType = t; }
+    } as const;
+  }
 
   // This function checks if the selected view/property is available in the features. If not, it falls back to a default property or the first available property.
 
   private getAvailableView(selectedView: string, features: CellFeature[], fallback: string = 'cell_type'): string {
 
-  if (!features.length) return fallback;
+    if (!features.length) return fallback;
 
-  // 1. Always trust dynamically fetched properties (even if sparse/empty on cell 0)
-  const dynamicProps = [
-    'gene_expression', 'regulatory_scores', 'ligand_receptor_relationships',
-    'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity', 'chromvar_total_sum'
-  ];
-  if (dynamicProps.includes(selectedView)) {
-    return selectedView;
+    // 1. Always trust dynamically fetched properties (even if sparse/empty on cell 0)
+    const dynamicProps = [
+      'gene_expression', 'regulatory_scores', 'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity', 'chromvar_total_sum'
+    ];
+    if (dynamicProps.includes(selectedView)) {
+      return selectedView;
+    }
+
+    // 2. For static properties, check if it exists on the first feature
+    const firstFeature = features[0];
+    const hasProperty = this.leidenCentralityProps.includes(selectedView)
+      ? true
+      : selectedView in (firstFeature.properties || {});
+
+    if (hasProperty) return selectedView;
+    if (fallback in (firstFeature.properties || {})) return fallback;
+
+    const keys = Object.keys(firstFeature.properties || {});
+    return keys.length ? keys[0] : fallback;
   }
 
-  // 2. For static properties, check if it exists on the first feature
-  const firstFeature = features[0];
-  const hasProperty = this.leidenCentralityProps.includes(selectedView)
-    ? true
-    : selectedView in (firstFeature.properties || {});
-
-  if (hasProperty) return selectedView;
-  if (fallback in (firstFeature.properties || {})) return fallback;
-
-  const keys = Object.keys(firstFeature.properties || {});
-  return keys.length ? keys[0] : fallback;
-}
-
-  public updateHexColors(containerName ?: string): void {
-  if(!containerName) {
-    containerName = '#hexbin';
-  }
+  public updateHexColors(containerName?: string): void {
+    if (!containerName) {
+      containerName = '#hexbin';
+    }
 
     // Determine which features and selected view to use
     const isMainView = containerName === '#hexbin';
-  const features = isMainView ? this.features : this.compareFeatures;
-  const selectedView = isMainView ? this.selectedView : this.selectedCompareView;
+    const features = isMainView ? this.features : this.compareFeatures;
+    const selectedView = isMainView ? this.selectedView : this.selectedCompareView;
+    // Use getAvailableView to ensure the property exists
+    const viewToUse = this.getAvailableView(selectedView, features, 'cell_type');
+    if (viewToUse !== selectedView) {
+      console.warn(`[updateHexColors] Property "${selectedView}" not found, falling back to "${viewToUse}".`);
+      // Optionally, update the selectedView variable here if you want the UI to reflect the fallback
+      // if (isMainView) this.selectedView = viewToUse; else this.selectedCompareView = viewToUse;
+    }
 
-  // Use getAvailableView to ensure the property exists
-  const viewToUse = this.getAvailableView(selectedView, features, 'cell_type');
-  if(viewToUse !== selectedView) {
-  console.warn(`[updateHexColors] Property "${selectedView}" not found, falling back to "${viewToUse}".`);
-  // Optionally, update the selectedView variable here if you want the UI to reflect the fallback
-  // if (isMainView) this.selectedView = viewToUse; else this.selectedCompareView = viewToUse;
-}
+    // Get the rest of the view variables (scales, g, etc.)
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
 
-// Get the rest of the view variables (scales, g, etc.)
-const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
+    // Overwrite the view property for this rendering
+    // (since viewVariablesToUpdate.view is readonly, just use viewToUse in all logic below)
+    let valuesRaw: any[] = [];
+    if (features.length > 0) {
+      const firstFeature = features[0];
+      const hasProperty = this.leidenCentralityProps.includes(viewToUse)
+        ? true
+        : viewToUse in (firstFeature.properties || {});
 
-// Overwrite the view property for this rendering
-// (since viewVariablesToUpdate.view is readonly, just use viewToUse in all logic below)
-let valuesRaw: any[] = [];
-if (features.length > 0) {
-  const firstFeature = features[0];
-  const hasProperty = this.leidenCentralityProps.includes(viewToUse)
-    ? true
-    : viewToUse in (firstFeature.properties || {});
-  console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
-  console.log('[updateHexColors] Looking for property:', viewToUse, '- Exists:', hasProperty);
-  if (!hasProperty) {
-    console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
-    // Optionally, show a user-facing message here
-  }
-}
+      if (!hasProperty) {
+        console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+        // Optionally, show a user-facing message here
+      }
+    }
 
-this.resetClusterExtension();
+    if (viewToUse !== (isMainView ? this.selectedView : this.selectedCompareView)) {
+      this.resetClusterExtension();
+    }
 
-if (this.selectedCell && this.selectedCluster) {
-  this.selectedCluster = null;
-  this.clusterCells = [];
-  this.clusterCellTypes = [];
-  this.clusterCentralityAvg = {
-    degree_centrality: 0,
-    average_clustering: 0,
-    closeness_centrality: 0,
-  };
-}
-if (this.selectedCell) this.selectedCell = null;
+    if (this.selectedCell && this.selectedCluster) {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.clusterCentralityAvg = {
+        degree_centrality: 0,
+        average_clustering: 0,
+        closeness_centrality: 0,
+      };
+    }
+    if (this.selectedCell) this.selectedCell = null;
 
-const layerToColor = (
-  (containerName === '#hexbin' && this.isXenium)
-    ? this.baseLayer
-    : viewVariablesToUpdate.g
-) as unknown as d3.Selection<SVGGElement, any, any, any>;
+    const layerToColor = (
+      (containerName === '#hexbin' && this.isXenium)
+        ? this.baseLayer
+        : viewVariablesToUpdate.g
+    ) as unknown as d3.Selection<SVGGElement, any, any, any>;
 
-const sel = layerToColor
-  .selectAll('path')
-  .data(features);
+    // Safety check: if layerToColor is null/undefined, skip the color update
+    if (!layerToColor) {
+      console.warn(`[updateHexColors] Layer not found for ${containerName}`);
+      return;
+    }
 
-if (containerName === '#hexbin-compare' && this.compareMode && sel.size() === 0) {
-  console.warn('[updateHexColors] Compare layer has no paths; re-initializing compare plot');
-  this.loadAndRenderData(this.selectedDatasetCompare?.geojson_path || '', true);
-  return;
-}
+    const sel = layerToColor
+      .selectAll('path')
+      .data(features);
 
-valuesRaw = features.map((f) => this.extractViewValue(f, viewToUse));
-const numericValues = valuesRaw.map((v) => this.toNumber(v));
+    if (containerName === '#hexbin-compare' && this.compareMode && sel.size() === 0) {
+      console.warn('[updateHexColors] Compare layer has no paths; re-initializing compare plot');
+      this.loadAndRenderData(this.selectedDatasetCompare?.geojson_path || '', true);
+      return;
+    }
 
-// Determine if the property is continuous
-const isContinuous = this.isContinuousScale(viewToUse, features, !isMainView);
+    valuesRaw = features.map((f) => this.extractViewValue(f, viewToUse));
+    const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
-if (isContinuous) {
-  const compareSharedDomain = this.getPairedContinuousDomainForCompare();
-  const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
-    ? this.getSharedDomainForGeneExpressionView()
-    : null);
+    // Determine if the property is continuous
+    const isContinuous = this.isContinuousScale(viewToUse, features, !isMainView);
 
-  let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
-  let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
-  if (min === max) {
-    const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
-    min -= eps;
-    max += eps;
-  }
+    if (isContinuous) {
+      const compareSharedDomain = this.getPairedContinuousDomainForCompare();
+      console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
+      const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
+        ? this.getSharedDomainForGeneExpressionView()
+        : null);
 
-  if (sharedDomain) {
-    this.continuousColorScale.domain([min, max]);
-    this.continuousColorScaleCompare.domain([min, max]);
-    this.currentLegendDomain = [min, max];
-    this.currentLegendDomainCompare = [min, max];
-    this.currentLegendType = 'continuous';
-    this.currentCompareLegendType = 'continuous';
-  } else {
-    viewVariablesToUpdate.continuous.domain([min, max]);
-  }
+      const domainSource = sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain';
 
-  viewVariablesToUpdate.setLegendDomain([min, max]);
-  viewVariablesToUpdate.setLegendType('continuous');
+      let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
+      let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
 
-  sel
-    .transition()
-    .duration(300)
-    .attr('stroke-width', 1)
-    .attr('stroke', 'transparent')
-    .attr('fill', (d) => {
-      const raw = this.extractViewValue(d, viewToUse);
-      const n = this.toNumber(raw);
-      return Number.isFinite(n)
-        ? viewVariablesToUpdate.continuous(n)
-        : '#ccc';
-    });
-} else {
-  // categorical scale
-  const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
+      if (!Number.isFinite(min) || !Number.isFinite(max)) {
+        min = 0;
+        max = 1;
+      }
 
-  viewVariablesToUpdate.ordinal.domain(domain);
-  viewVariablesToUpdate.setLegendDomain(domain);
-  viewVariablesToUpdate.setLegendType('categorical');
+      if (min === max) {
+        const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
+        min -= eps;
+        max += eps;
+      }
 
-  sel
-    .transition()
-    .duration(300)
-    .attr('stroke-width', 1)
-    .attr('stroke', 'transparent')
-    .attr('fill', (d) => {
-      const raw = this.extractViewValue(d, viewToUse);
-      return viewVariablesToUpdate.ordinal(String(raw));
-    });
-}
+      // Always normalize to [0, 1] for consistent color usage across all views
+      this.continuousColorScale.domain([0, 1]);
+      this.continuousColorScaleCompare.domain([0, 1]);
+      viewVariablesToUpdate.continuous.domain([0, 1]);
 
-if (
-  containerName === '#hexbin' &&
-  this.isXenium &&
-  this.detailVisible &&
-  this.detailScreenPos
-) {
-  this.showDetailWindowAt(this.detailScreenPos.x, this.detailScreenPos.y);
-  this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
-}
-this.renderLegend(containerName);
+      // Legend always shows [0, 1]
+      this.currentLegendDomain = [0, 1];
+      this.currentLegendDomainCompare = [0, 1];
+      this.currentLegendType = 'continuous';
+      this.currentCompareLegendType = 'continuous';
+      viewVariablesToUpdate.setLegendDomain([0, 1]);
+      viewVariablesToUpdate.setLegendType('continuous');
+
+      sel
+        .transition()
+        .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
+        .attr('fill', (d) => {
+          const raw = this.extractViewValue(d, viewToUse);
+          const n = this.toNumber(raw);
+          return Number.isFinite(n)
+            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
+            : '#ccc';
+        });
+    } else {
+      // categorical scale
+      const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
+
+      viewVariablesToUpdate.ordinal.domain(domain);
+      viewVariablesToUpdate.setLegendDomain(domain);
+      viewVariablesToUpdate.setLegendType('categorical');
+
+      sel
+        .transition()
+        .duration(300)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'transparent')
+        .attr('fill', (d) => {
+          const raw = this.extractViewValue(d, viewToUse);
+          return viewVariablesToUpdate.ordinal(String(raw));
+        });
+    }
+
+    if (
+      containerName === '#hexbin' &&
+      this.isXenium &&
+      this.detailVisible &&
+      this.detailScreenPos
+    ) {
+      this.showDetailWindowAt(this.detailScreenPos.x, this.detailScreenPos.y);
+      this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
+    }
+    this.renderLegend(containerName);
+
   }
 
   public updateSubgraphGenie3(compare: boolean = false): void {
-  const token = this.nextRequestToken('genie3');
-  console.log('Updating AUCELL graph for Genie3...');
-  compare? this.isLoadingGenie3 = true : this.isLoadingGenie3Compare = true;
-  const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
-  const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
-  const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
-  d3.select(graphContainerId).selectAll('*').remove();
+    const token = this.nextRequestToken('genie3');
+    console.log('Updating AUCELL graph for Genie3...');
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+    const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    d3.select(graphContainerId).selectAll('*').remove();
 
-  if(!geneSet || !datasetId) {
-  compare ? this.isLoadingGenie3 = false : this.isLoadingGenie3Compare = false;
-  return;
-}
+    if (!geneSet || !datasetId) {
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+      return;
+    }
 
-this.sessionService
-  .callWithSession(() =>
-    this.http.get(
-      `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
-      { withCredentials: true },
-    ),
-  )
-  .subscribe({
-    next: (res) => {
-      if (token !== this.requestTokens['genie3']) return;
-      {
-        const payload: any = res;
-        const data = payload['connections'] as { regulatoryGene: string; targetGene: string; weight: number }[];
-        compare ? this.genie3NetworkCompare = data.map((d) => ({
-          source: d.regulatoryGene,
-          target: d.targetGene,
-          weight: d.weight,
-        })) : this.genie3Network = data.map((d) => ({
-          source: d.regulatoryGene,
-          target: d.targetGene,
-          weight: d.weight,
-        }));
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          if (token !== this.requestTokens['genie3']) return;
+          {
+            const payload: any = res;
+            const data = payload['connections'] as { regulatoryGene: string; targetGene: string; weight: number }[];
+            compare ? this.genie3NetworkCompare = data.map((d) => ({
+              source: d.regulatoryGene,
+              target: d.targetGene,
+              weight: d.weight,
+            })) : this.genie3Network = data.map((d) => ({
+              source: d.regulatoryGene,
+              target: d.targetGene,
+              weight: d.weight,
+            }));
 
-        // slider_data may be returned as an object or an array; handle both safely
-        const sliderData: any = payload['slider_data'];
+            // slider_data may be returned as an object or an array; handle both safely
+            const sliderData: any = payload['slider_data'];
 
-        if (sliderData && typeof sliderData === 'object') {
-          if (compare) {
-            this.genie3SliderDataCompare = {
-              step: sliderData.step || 1,
-              min_border: sliderData.min_border || 0,
-              max_border: sliderData.max_border || 100,
-              default_value: sliderData.default_value || 50,
-            };
-            this.genie3WeightCutoffCompare = this.genie3SliderDataCompare.default_value;
+            if (sliderData && typeof sliderData === 'object') {
+              if (compare) {
+                this.genie3SliderDataCompare = {
+                  step: sliderData.step || 1,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.genie3WeightCutoffCompare = this.genie3SliderDataCompare.default_value;
+              }
+              else {
+                this.genie3SliderData = {
+                  step: sliderData.step || 1,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.genie3WeightCutoff = this.genie3SliderData.default_value;
+              }
+            }
+
+            this.visualizeGenie3Subgraph(compare);
+
           }
-          else {
-            this.genie3SliderData = {
-              step: sliderData.step || 1,
-              min_border: sliderData.min_border || 0,
-              max_border: sliderData.max_border || 100,
-              default_value: sliderData.default_value || 50,
-            };
-            this.genie3WeightCutoff = this.genie3SliderData.default_value;
+        },
+        error: (err) => {
+          if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
+            console.error(
+              `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+              err,
+            );
           }
-        }
-
-        this.visualizeGenie3Subgraph(compare);
-
-      }
-    },
-    error: (err) => {
-      if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
-        console.error(
-          `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
-          err,
-        );
-      }
-    },
-  });
+        },
+      });
   }
 
   private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
@@ -2244,792 +2331,825 @@ this.sessionService
   }
 
   public visualizeGenie3Subgraph(compare: boolean = false): void {
-  const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
-  const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
 
 
-  compare? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
-  d3.select(graphContainerId).html('');
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+    d3.select(graphContainerId).html('');
 
-  if(!geneSet || compare ? !this.genie3NetworkCompare : !this.genie3Network || compare ? this.genie3NetworkCompare.length === 0 : this.genie3Network.length === 0) {
-  compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
-  this.checkInitializationComplete(compare);
-  return;
-}
-
-let regulator = geneSet ?? '';
-let targets = this.geneSetsGenie3[regulator] || [];
-
-let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
-let edges: { source: string; target: string; weight: number }[] = [];
-
-let candidateEdges: { source: string; target: string; weight: number }[] = [];
-let slicedEdges: { source: string; target: string; weight: number }[] = [];
-
-if (compare) {
-  candidateEdges = this.genie3NetworkCompare.filter((edge) => edge.weight > this.genie3WeightCutoffCompare).map((e) => ({
-    source: String(e.source),
-    target: String(e.target),
-    weight: e.weight,
-  }));
-}
-else {
-  candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
-    source: String(e.source),
-    target: String(e.target),
-    weight: e.weight,
-  }));
-}
-candidateEdges.sort((a, b) => b.weight - a.weight);
-slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
-
-// Infer nodes from edges
-const nodeSet = new Set<string>();
-
-slicedEdges.forEach((edge) => {
-  if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
-    console.log("Adding edge nodes:", edge.source, edge.target);
-    nodeSet.add(edge.source);
-    nodeSet.add(edge.target);
-  }
-});
-
-// Add regulator to node set
-nodeSet.add(regulator);
-
-// Readd edges that passed the cutoff
-candidateEdges.forEach((edge) => {
-  if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
-    edges.push(edge);
-  }
-});
-
-// Add nodes with groups
-nodeSet.forEach((nodeId) => {
-  if (nodeId === regulator) {
-    nodes.push({ id: nodeId, group: 0 });
-  } else if (targets.includes(nodeId)) {
-    nodes.push({ id: nodeId, group: 1 });
-  } else {
-    nodes.push({ id: nodeId, group: 2 });
-  }
-});
-
-console.log(nodes);
-
-edges.push(...candidateEdges);
-
-// Create the graph
-let graph = {
-  nodes: nodes.filter((node) => node.id && node.id.length > 0),
-  edges: edges.filter(
-    (edge) =>
-      nodes.some((node) => node.id === edge.source) &&
-      nodes.some((node) => node.id === edge.target),
-  ),
-};
-
-console.log(graph)
-
-// Create the graph visualization
-const width = this.genie3Width;
-const height = 300;
-
-const svg = d3
-  .select(graphContainerId)
-  .append('svg')
-  .attr('width', width)
-  .attr('height', height)
-  .style('background-color', '#f8f9fa');
-
-// Draw links (edges)
-const link = svg
-  .append('g')
-  .attr('stroke', '#999')
-  .attr('stroke-opacity', 0.6)
-  .selectAll('line')
-  .data(graph.edges)
-  .enter()
-  .append('line')
-  .attr('stroke-width', (d: any) =>
-    Math.max(1, Math.sqrt(d.weight) * 10),
-  )
-  .attr('stroke', (d: any) => {
-    // Color edges based on weight
-    const intensity = Math.min(d.weight * 10, 1);
-    return d3.interpolateReds(0.3 + intensity * 0.7);
-  });
-
-// Draw nodes
-const node = svg
-  .append('g')
-  .attr('stroke', '#fff')
-  .attr('stroke-width', 1.5)
-  .selectAll('circle')
-  .data(graph.nodes)
-  .enter()
-  .append('circle')
-  .attr('r', (d: any) => {
-    switch (d.group) {
-      case 0:
-        return 15; // regulator
-      case 1:
-        return 12; // targets
-      case 2:
-        return 8; // neighbors
-      case 3:
-        return 6;
-      default:
-        return 10;
+    if (!geneSet || compare ? !this.genie3NetworkCompare : !this.genie3Network || compare ? this.genie3NetworkCompare.length === 0 : this.genie3Network.length === 0) {
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+      this.checkInitializationComplete(compare);
+      return;
     }
-  })
-  .attr('fill', (d: any) => {
-    switch (d.group) {
-      case 0:
-        return '#e41a1c'; // regulator - red
-      case 1:
-        return '#377eb8'; // targets - blue
-      case 2:
-        return '#4daf4a'; // neighbors - green
-      case 3:
-        return '#ff7f00'; // high-weight - orange
-      default:
-        return '#999';
+
+    let regulator = geneSet ?? '';
+    let targets = this.geneSetsGenie3[regulator] || [];
+
+    let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    let edges: { source: string; target: string; weight: number }[] = [];
+
+    let candidateEdges: { source: string; target: string; weight: number }[] = [];
+    let slicedEdges: { source: string; target: string; weight: number }[] = [];
+
+    if (compare) {
+      candidateEdges = this.genie3NetworkCompare.filter((edge) => edge.weight > this.genie3WeightCutoffCompare).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        weight: e.weight,
+      }));
     }
-  });
+    else {
+      candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        weight: e.weight,
+      }));
+    }
+    candidateEdges.sort((a, b) => b.weight - a.weight);
+    slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
 
-// Add labels
-const labels = svg
-  .append('g')
-  .selectAll('text')
-  .data(graph.nodes)
-  .enter()
-  .append('text')
-  .attr('text-anchor', 'middle')
-  .attr('dy', '.35em')
-  .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-  .style('font-weight', (d: any) =>
-    d.group === 0 ? 'bold' : 'normal',
-  )
-  .style('fill', '#333')
-  .text((d: any) =>
-    d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-  );
+    // Infer nodes from edges
+    const nodeSet = new Set<string>();
 
-// Initialize simulation with stronger forces
-const simulation = d3
-  .forceSimulation(graph.nodes)
-  .force(
-    'link',
-    d3
-      .forceLink(graph.edges)
-      .id((d: any) => d.id)
-      .distance(30)
-      .strength(0.5),
-  )
-  .force('charge', d3.forceManyBody().strength(-500))
-  .force('center', d3.forceCenter(width / 2, height / 2))
-  .force('collision', d3.forceCollide().radius(30))
-  .force('boundary', () => {
-    graph.nodes.forEach((node: any) => {
-      const radius =
-        node.group === 0
-          ? 15
-          : node.group === 1
-            ? 12
-            : node.group === 2
-              ? 8
-              : 6;
-
-      node.x = Math.max(radius, Math.min(width - radius, node.x));
-
-      node.y = Math.max(radius, Math.min(height - radius, node.y));
+    slicedEdges.forEach((edge) => {
+      if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
+        nodeSet.add(edge.source);
+        nodeSet.add(edge.target);
+      }
     });
-  });
 
-simulation.on('tick', () => {
-  link
-    .attr('x1', (d: any) => d.source.x)
-    .attr('y1', (d: any) => d.source.y)
-    .attr('x2', (d: any) => d.target.x)
-    .attr('y2', (d: any) => d.target.y);
+    // Add regulator to node set
+    nodeSet.add(regulator);
 
-  node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+    // Readd edges that passed the cutoff
+    candidateEdges.forEach((edge) => {
+      if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
+        edges.push(edge);
+      }
+    });
 
-  labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
-});
+    // Add nodes with groups
+    nodeSet.forEach((nodeId) => {
+      if (nodeId === regulator) {
+        nodes.push({ id: nodeId, group: 0 });
+      } else if (targets.includes(nodeId)) {
+        nodes.push({ id: nodeId, group: 1 });
+      } else {
+        nodes.push({ id: nodeId, group: 2 });
+      }
+    });
 
-setTimeout(() => this.updateGraphWidths(), 50);
+    console.log(nodes);
 
-compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
-this.checkInitializationComplete(compare);
+    edges.push(...candidateEdges);
+
+    // Create the graph
+    let graph = {
+      nodes: nodes.filter((node) => node.id && node.id.length > 0),
+      edges: edges.filter(
+        (edge) =>
+          nodes.some((node) => node.id === edge.source) &&
+          nodes.some((node) => node.id === edge.target),
+      ),
+    };
+
+    console.log(graph)
+
+    // Create the graph visualization
+    const width = this.genie3Width;
+    const height = 300;
+
+    const svg = d3
+      .select(graphContainerId)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('background-color', '#f8f9fa');
+
+    // Draw links (edges)
+    const link = svg
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(graph.edges)
+      .enter()
+      .append('line')
+      .attr('stroke-width', (d: any) =>
+        Math.max(1, Math.sqrt(d.weight) * 10),
+      )
+      .attr('stroke', (d: any) => {
+        // Color edges based on weight
+        const intensity = Math.min(d.weight * 10, 1);
+        return d3.interpolateReds(0.3 + intensity * 0.7);
+      });
+
+    // Draw nodes
+    const node = svg
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .selectAll('circle')
+      .data(graph.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return 15; // regulator
+          case 1:
+            return 12; // targets
+          case 2:
+            return 8; // neighbors
+          case 3:
+            return 6;
+          default:
+            return 10;
+        }
+      })
+      .attr('fill', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return '#e41a1c'; // regulator - red
+          case 1:
+            return '#377eb8'; // targets - blue
+          case 2:
+            return '#4daf4a'; // neighbors - green
+          case 3:
+            return '#ff7f00'; // high-weight - orange
+          default:
+            return '#999';
+        }
+      });
+
+    // Add labels
+    const labels = svg
+      .append('g')
+      .selectAll('text')
+      .data(graph.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+      .style('font-weight', (d: any) =>
+        d.group === 0 ? 'bold' : 'normal',
+      )
+      .style('fill', '#333')
+      .text((d: any) =>
+        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+      );
+
+    // Initialize simulation with stronger forces
+    const simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(graph.edges)
+          .id((d: any) => d.id)
+          .distance(30)
+          .strength(0.5),
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius =
+            node.group === 0
+              ? 15
+              : node.group === 1
+                ? 12
+                : node.group === 2
+                  ? 8
+                  : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - radius, node.y));
+        });
+      });
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+    });
+
+    setTimeout(() => this.updateGraphWidths(), 50);
+
+    compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+    this.checkInitializationComplete(compare);
 
 
   }
 
 
   public updateSubgraphSponge(compare: boolean = false): void {
-  const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
-  const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
-  const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
 
-  const token = this.nextRequestToken('sponge');
-  console.log('Updating AUCELL graph for Sponge...');
-  d3.select(graphContainerId).selectAll('*').remove();
+    const token = this.nextRequestToken('sponge');
+    console.log('Updating AUCELL graph for Sponge...');
+    d3.select(graphContainerId).selectAll('*').remove();
 
-  if(!geneSet || !datasetId) {
-  return;
-}
+    if (!geneSet || !datasetId) {
+      return;
+    }
 
-compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
-this.sessionService
-  .callWithSession(() =>
-    this.http.get(
-      `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
-      { withCredentials: true },
-    ),
-  )
-  .subscribe({
-    next: (res) => {
-      if (token !== this.requestTokens['sponge']) return;
-      {
-        const payload: any = res;
+    compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          if (token !== this.requestTokens['sponge']) return;
+          {
+            const payload: any = res;
 
-        const data = payload['connections'] as {
-          geneA: string;
-          geneB: string;
-          'p.adj': number;
-          mscor: number;
-        }[];
-        const sliderData: any = payload['slider_data'];
+            const data = payload['connections'] as {
+              geneA: string;
+              geneB: string;
+              'p.adj': number;
+              mscor: number;
+            }[];
+            const sliderData: any = payload['slider_data'];
 
-        if (sliderData && typeof sliderData === 'object') {
-          this.spongeSliderData = {
-            step: sliderData.step || 0.01,
-            min_border: sliderData.min_border || 0,
-            max_border: sliderData.max_border || 100,
-            default_value: sliderData.default_value || 50,
-          };
-        }
+            if (sliderData && typeof sliderData === 'object') {
+              if (compare) {
+                this.spongeSliderDataCompare = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoffCompare = this.spongeSliderDataCompare.default_value;
+              } else {
+                this.spongeSliderData = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoff = this.spongeSliderData.default_value;
+              }
+            }
 
-        this.isLoadingSponge = true;
+            console.log('Sponge Network:', data);
 
-        console.log('Sponge Network:', data);
+            compare ? this.spongeNetworkCompare = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            })) : this.spongeNetwork = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            }));
 
-        this.spongeNetwork = data.map((d) => ({
-          source: d.geneA,
-          target: d.geneB,
-          p_adjusted: d['p.adj'],
-          mscore: d['mscor'],
-        }));
-
-        this.visualizeSpongeSubgraph(compare);
-      }
-    },
-    error: (err) => {
-      if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
-        console.error(
-          `[Backend] Failed to load Sponge Connections for["${geneSet}"]`,
-          err,
-        );
-      }
-    },
-  });
+            this.visualizeSpongeSubgraph(compare);
+          }
+        },
+        error: (err) => {
+          if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
+            console.error(
+              `[Backend] Failed to load Sponge Connections for["${geneSet}"]`,
+              err,
+            );
+          }
+        },
+      });
   }
 
   public visualizeSpongeSubgraph(compare: boolean = false): void {
-  const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
-  const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
-  const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
-  compare? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
-  d3.select(graphContainerId).html('');
+    compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
+    d3.select(graphContainerId).html('');
 
-  if(!geneSet || !datasetId || compare ? !this.spongeNetworkCompare || this.spongeNetworkCompare.length === 0 : !this.spongeNetwork || this.spongeNetwork.length === 0) {
-  compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
-  this.checkInitializationComplete(compare);
-  return;
-}
-
-let regulator = geneSet ?? '';
-let targets = this.geneSetsGenie3[regulator] || [];
-
-
-let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
-let edges: { source: string; target: string; p_adjusted: number }[] = [];
-
-let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
-let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
-
-if (compare) {
-  candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
-    source: String(e.source),
-    target: String(e.target),
-    p_adjusted: e.p_adjusted,
-  }));
-}
-else {
-  candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
-    source: String(e.source),
-    target: String(e.target),
-    p_adjusted: e.p_adjusted,
-  }));
-}
-
-candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
-
-// Infer nodes from edges
-const nodeSet = new Set<string>();
-
-slicedEdges.forEach((edge) => {
-  if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
-    console.log("Adding edge nodes:", edge.source, edge.target);
-    nodeSet.add(edge.source);
-    nodeSet.add(edge.target);
-  }
-});
-
-// Add regulator to node set
-nodeSet.add(regulator);
-
-// Add nodes with groups
-nodeSet.forEach((nodeId) => {
-  if (nodeId === regulator) {
-    nodes.push({ id: nodeId, group: 0 });
-  } else if (targets.includes(nodeId)) {
-    nodes.push({ id: nodeId, group: 1 });
-  } else {
-    nodes.push({ id: nodeId, group: 2 });
-  }
-});
-
-// Readd edges of the nodes that passed the cutoff
-candidateEdges.forEach((edge) => {
-  if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
-    edges.push(edge);
-  }
-});
-
-edges.push(...candidateEdges);
-
-// Create the graph
-let graph = {
-  nodes: nodes.filter((node) => node.id && node.id.length > 0),
-  edges: edges.filter(
-    (edge) =>
-      nodes.some((node) => node.id === edge.source) &&
-      nodes.some((node) => node.id === edge.target),
-  ),
-};
-
-// Create the graph visualization
-const width = this.spongeWidth;
-const height = 300;
-
-const svg = d3
-  .select(graphContainerId)
-  .append('svg')
-  .attr('width', width)
-  .attr('height', height)
-  .style('background-color', '#f8f9fa');
-
-// Draw links (edges)
-const link = svg
-  .append('g')
-  .attr('stroke', '#999')
-  .attr('stroke-opacity', 0.6)
-  .selectAll('line')
-  .data(graph.edges)
-  .enter()
-  .append('line')
-  .attr('stroke-width', (d: any) =>
-    Math.max(1, Math.sqrt(d.p_adjusted) * 10),
-  )
-  .attr('stroke', (d: any) => {
-    // Color edges based on p_adjusted
-    const intensity = Math.min(d.p_adjusted * 10, 1);
-    return d3.interpolateReds(0.3 + intensity * 0.7);
-  });
-
-// Draw nodes
-const node = svg
-  .append('g')
-  .attr('stroke', '#fff')
-  .attr('stroke-width', 1.5)
-  .selectAll('circle')
-  .data(graph.nodes)
-  .enter()
-  .append('circle')
-  .attr('r', (d: any) => {
-    switch (d.group) {
-      case 0:
-        return 15; // regulator
-      case 1:
-        return 12; // targets
-      case 2:
-        return 8; // neighbors
-      case 3:
-        return 6;
-      default:
-        return 10;
+    if (!geneSet || !datasetId || compare ? !this.spongeNetworkCompare || this.spongeNetworkCompare.length === 0 : !this.spongeNetwork || this.spongeNetwork.length === 0) {
+      compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+      this.checkInitializationComplete(compare);
+      return;
     }
-  })
-  .attr('fill', (d: any) => {
-    switch (d.group) {
-      case 0:
-        return '#e41a1c'; // regulator - red
-      case 1:
-        return '#377eb8'; // targets - blue
-      case 2:
-        return '#4daf4a'; // neighbors - green
-      case 3:
-        return '#ff7f00'; // high-weight - orange
-      default:
-        return '#999';
+
+    let regulator = geneSet ?? '';
+    let targets = this.geneSetsGenie3[regulator] || [];
+
+
+    let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
+    let edges: { source: string; target: string; p_adjusted: number }[] = [];
+
+    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
+    let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
+
+    if (compare) {
+      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        p_adjusted: e.p_adjusted,
+      }));
     }
-  });
+    else {
+      candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        p_adjusted: e.p_adjusted,
+      }));
+    }
 
-// Add labels
-const labels = svg
-  .append('g')
-  .selectAll('text')
-  .data(graph.nodes)
-  .enter()
-  .append('text')
-  .attr('text-anchor', 'middle')
-  .attr('dy', '.35em')
-  .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
-  .style('font-weight', (d: any) =>
-    d.group === 0 ? 'bold' : 'normal',
-  )
-  .style('fill', '#333')
-  .text((d: any) =>
-    d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-  );
+    candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
+    slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
 
-// Initialize simulation with stronger forces
-const simulation = d3
-  .forceSimulation(graph.nodes)
-  .force(
-    'link',
-    d3
-      .forceLink(graph.edges)
-      .id((d: any) => d.id)
-      .distance(20)
-      .strength(0.5),
-  )
-  .force('charge', d3.forceManyBody().strength(-500))
-  .force('center', d3.forceCenter(width / 2, height / 2))
-  .force('collision', d3.forceCollide().radius(30))
-  .force('boundary', () => {
-    graph.nodes.forEach((node: any) => {
-      const radius =
-        node.group === 0
-          ? 15
-          : node.group === 1
-            ? 12
-            : node.group === 2
-              ? 8
-              : 6;
+    // Infer nodes from edges
+    const nodeSet = new Set<string>();
 
-      node.x = Math.max(radius, Math.min(width - radius, node.x));
-
-      node.y = Math.max(radius, Math.min(height - radius, node.y));
+    slicedEdges.forEach((edge) => {
+      if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
+        console.log("Adding edge nodes:", edge.source, edge.target);
+        nodeSet.add(edge.source);
+        nodeSet.add(edge.target);
+      }
     });
-  });
 
-simulation.on('tick', () => {
-  link
-    .attr('x1', (d: any) => d.source.x)
-    .attr('y1', (d: any) => d.source.y)
-    .attr('x2', (d: any) => d.target.x)
-    .attr('y2', (d: any) => d.target.y);
+    // Add regulator to node set
+    nodeSet.add(regulator);
 
-  node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+    // Add nodes with groups
+    nodeSet.forEach((nodeId) => {
+      if (nodeId === regulator) {
+        nodes.push({ id: nodeId, group: 0 });
+      } else if (targets.includes(nodeId)) {
+        nodes.push({ id: nodeId, group: 1 });
+      } else {
+        nodes.push({ id: nodeId, group: 2 });
+      }
+    });
 
-  labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
-});
+    // Readd edges of the nodes that passed the cutoff
+    candidateEdges.forEach((edge) => {
+      if (nodeSet.has(edge.source) && nodeSet.has(edge.target)) {
+        edges.push(edge);
+      }
+    });
 
-compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
-this.checkInitializationComplete(compare);
+    edges.push(...candidateEdges);
 
-setTimeout(() => this.updateGraphWidths(), 50);
+    // Create the graph
+    let graph = {
+      nodes: nodes.filter((node) => node.id && node.id.length > 0),
+      edges: edges.filter(
+        (edge) =>
+          nodes.some((node) => node.id === edge.source) &&
+          nodes.some((node) => node.id === edge.target),
+      ),
+    };
 
-console.log('Network visualization complete');
+    // Create the graph visualization
+    const width = this.spongeWidth;
+    const height = 300;
+
+    const svg = d3
+      .select(graphContainerId)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .style('background-color', '#f8f9fa');
+
+    // Draw links (edges)
+    const link = svg
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.6)
+      .selectAll('line')
+      .data(graph.edges)
+      .enter()
+      .append('line')
+      .attr('stroke-width', (d: any) =>
+        Math.max(1, Math.sqrt(d.p_adjusted) * 10),
+      )
+      .attr('stroke', (d: any) => {
+        // Color edges based on p_adjusted
+        const intensity = Math.min(d.p_adjusted * 10, 1);
+        return d3.interpolateReds(0.3 + intensity * 0.7);
+      });
+
+    // Draw nodes
+    const node = svg
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .selectAll('circle')
+      .data(graph.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return 15; // regulator
+          case 1:
+            return 12; // targets
+          case 2:
+            return 8; // neighbors
+          case 3:
+            return 6;
+          default:
+            return 10;
+        }
+      })
+      .attr('fill', (d: any) => {
+        switch (d.group) {
+          case 0:
+            return '#e41a1c'; // regulator - red
+          case 1:
+            return '#377eb8'; // targets - blue
+          case 2:
+            return '#4daf4a'; // neighbors - green
+          case 3:
+            return '#ff7f00'; // high-weight - orange
+          default:
+            return '#999';
+        }
+      });
+
+    // Add labels
+    const labels = svg
+      .append('g')
+      .selectAll('text')
+      .data(graph.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .style('font-size', (d: any) => (d.group === 0 ? '12px' : '10px'))
+      .style('font-weight', (d: any) =>
+        d.group === 0 ? 'bold' : 'normal',
+      )
+      .style('fill', '#333')
+      .text((d: any) =>
+        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
+      );
+
+    // Initialize simulation with stronger forces
+    const simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(graph.edges)
+          .id((d: any) => d.id)
+          .distance(20)
+          .strength(0.5),
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30))
+      .force('boundary', () => {
+        graph.nodes.forEach((node: any) => {
+          const radius =
+            node.group === 0
+              ? 15
+              : node.group === 1
+                ? 12
+                : node.group === 2
+                  ? 8
+                  : 6;
+
+          node.x = Math.max(radius, Math.min(width - radius, node.x));
+
+          node.y = Math.max(radius, Math.min(height - radius, node.y));
+        });
+      });
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node.attr('cx', (d: any) => d.x).attr('cy', (d: any) => d.y);
+
+      labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
+    });
+
+    compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+    this.checkInitializationComplete(compare);
+
+    setTimeout(() => this.updateGraphWidths(), 50);
+
+    console.log('Network visualization complete');
   }
 
 
   public onSliderChangeSponge(): void {
-  if(this.selectedGeneSetSponge) {
-  this.isLoadingSponge = true;
-  setTimeout(() => this.visualizeSpongeSubgraph(), 50);
-}
+    if (this.selectedGeneSetSponge) {
+      this.isLoadingSponge = true;
+      setTimeout(() => this.visualizeSpongeSubgraph(), 50);
+    }
   }
 
 
   public onSliderChangeGenie3(): void {
-  if(this.selectedGeneSetGenie3) {
-  this.isLoadingGenie3 = true;
-  setTimeout(() => this.visualizeGenie3Subgraph(), 50);
-}
+    if (this.selectedGeneSetGenie3) {
+      this.isLoadingGenie3 = true;
+      setTimeout(() => this.visualizeGenie3Subgraph(), 50);
+    }
   }
 
   public analyzeGeneSetInGProfiler(): void {
-  if(!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
-  console.warn('No Genie3 gene set selected');
-  return;
-}
+    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
+      console.warn('No Genie3 gene set selected');
+      return;
+    }
 
-const regulator = this.selectedGeneSetGenie3;
-const targets = this.geneSetsGenie3[regulator] || [];
+    const regulator = this.selectedGeneSetGenie3;
+    const targets = this.geneSetsGenie3[regulator] || [];
 
-const allGenes = [regulator, ...targets];
+    const allGenes = [regulator, ...targets];
 
-console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
+    console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
 
-const gProfilerUrl = this.generateGProfilerUrl(allGenes);
+    const gProfilerUrl = this.generateGProfilerUrl(allGenes);
 
-if (gProfilerUrl) {
-  // Open in new tab/window
-  window.open(gProfilerUrl, '_blank');
-} else {
-  console.warn(
-    'Could not generate gProfiler URL for Genie3 gene set:',
-    this.selectedGeneSetGenie3,
-  );
-}
+    if (gProfilerUrl) {
+      // Open in new tab/window
+      window.open(gProfilerUrl, '_blank');
+    } else {
+      console.warn(
+        'Could not generate gProfiler URL for Genie3 gene set:',
+        this.selectedGeneSetGenie3,
+      );
+    }
   }
 
   // Make sure you also have the generateGProfilerUrl method
   private generateGProfilerUrl(geneIds: string[]): string | null {
-  if (!geneIds || geneIds.length === 0) {
-    return null;
+    if (!geneIds || geneIds.length === 0) {
+      return null;
+    }
+
+    // Join gene IDs with newlines (gProfiler expects one gene per line)
+    const geneList = geneIds.join('\n');
+
+    // Base gProfiler URL for functional enrichment analysis
+    const baseUrl = 'https://biit.cs.ut.ee/gprofiler/gost';
+
+    // URL encode the gene list
+    const encodedGenes = encodeURIComponent(geneList);
+
+    // Construct the full URL with parameters including auto-run
+    const gProfilerUrl = `${baseUrl}?organism=hsapiens&query=${encodedGenes}&sources=GO:MF,GO:BP,GO:CC,KEGG,REAC&user_threshold=0.05&significance_threshold_method=fdr&ordered=false&exclude_iea=false&measure_underrepresentation=false&evcodes=false&domain_scope=annotated&numeric_ns=ENTREZGENE_ACC&background=&run_query=1`;
+
+    return gProfilerUrl;
   }
 
-  // Join gene IDs with newlines (gProfiler expects one gene per line)
-  const geneList = geneIds.join('\n');
-
-  // Base gProfiler URL for functional enrichment analysis
-  const baseUrl = 'https://biit.cs.ut.ee/gprofiler/gost';
-
-  // URL encode the gene list
-  const encodedGenes = encodeURIComponent(geneList);
-
-  // Construct the full URL with parameters including auto-run
-  const gProfilerUrl = `${baseUrl}?organism=hsapiens&query=${encodedGenes}&sources=GO:MF,GO:BP,GO:CC,KEGG,REAC&user_threshold=0.05&significance_threshold_method=fdr&ordered=false&exclude_iea=false&measure_underrepresentation=false&evcodes=false&domain_scope=annotated&numeric_ns=ENTREZGENE_ACC&background=&run_query=1`;
-
-  return gProfilerUrl;
-}
-
   private mouseOver(event: MouseEvent, d: CellFeature): void {
-  d3.selectAll('.Country')
-    .transition()
-    .duration(200)
-    .style('opacity', 0.5)
-    .attr('stroke', 'transparent');
+    d3.selectAll('.Country')
+      .transition()
+      .duration(200)
+      .style('opacity', 0.5)
+      .attr('stroke', 'transparent');
 
-  d3.select(event.target as SVGElement)
-    .transition()
-    .duration(200)
-    .style('opacity', 0.8)
-    .attr('stroke', 'black');
-}
+    d3.select(event.target as SVGElement)
+      .transition()
+      .duration(200)
+      .style('opacity', 0.8)
+      .attr('stroke', 'black');
+  }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
-  if(
-    this.selectedCell &&
+    if (
+      this.selectedCell &&
       (d.properties.barcode === this.selectedCell.properties.barcode ||
         (this.selectedView === 'leiden' &&
           d.properties.leiden === this.selectedCell.properties.leiden))
     )
-  return;
-  if(
-    this.selectedCellCompare &&
-      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
-        (this.selectedCompareView === 'leiden' &&
-          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+      return;
+    if (
+      this.selectedCellCompare &&
+      d.properties.barcode === this.selectedCellCompare.properties.barcode
     )
-  return;
-  d3.selectAll('.Country')
-    .transition()
-    .duration(200)
-    .style('opacity', 0.8)
-    .attr('stroke', 'transparent');
+      return;
+    d3.selectAll('.Country')
+      .transition()
+      .duration(200)
+      .style('opacity', 0.8)
+      .attr('stroke', 'transparent');
 
-  d3.select(event.target as SVGElement)
-    .transition()
-    .duration(200)
-    .attr('stroke', 'transparent');
-}
+    d3.select(event.target as SVGElement)
+      .transition()
+      .duration(200)
+      .attr('stroke', 'transparent');
+  }
 
   public displayCellDetails(event: MouseEvent, cell: CellFeature, compare: boolean = false): void {
-  if(!compare) {
-    this.resetClusterExtension();
-    this.selectedCell = cell;
-    if (this.selectedView === 'regulatory_scores') {
-      this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
-    }
-    if (this.selectedView === 'leiden') {
-      this.displayClusterDetails(cell.properties.leiden);
-      this.extendCluster(cell.properties.leiden);
-    } else {
-      d3.select(event.target as SVGElement)
-        .transition()
-        .attr('stroke', 'black');
-    }
+    if (!compare) {
+      this.resetClusterExtension();
+      this.selectedCell = cell;
+      if (this.selectedView === 'regulatory_scores') {
+        this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
+      }
+      if (this.selectedView === 'leiden') {
+        this.displayClusterDetails(cell.properties.leiden);
+        this.extendCluster(cell.properties.leiden);
+      } else {
+        d3.select(event.target as SVGElement)
+          .transition()
+          .attr('stroke', 'black');
+      }
 
-    // Neighborhood enrichment will render when the tab is viewed
-    // via onTabChange handler
-    setTimeout(() => this.updateSubgraphGenie3(), 0);
-  }
+      setTimeout(() => this.updateSubgraphGenie3(), 0);
+    }
     else {
-    this.selectedCellCompare = cell;
-    if(this.selectedCompareView === 'regulatory_scores') {
-  this.getRegulatoryScoresforSpots(
-    cell.properties.barcode,
-    this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
-  )
-}
-d3.select(event.target as SVGElement)
-  .transition()
-  .attr('stroke', 'black');
+      this.resetClusterExtension(true);
+      this.selectedCellCompare = cell;
+      if (this.selectedCompareView === 'regulatory_scores') {
+        this.getRegulatoryScoresforSpots(
+          cell.properties.barcode,
+          this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
+        )
+      }
+      if (this.selectedCompareView === 'leiden') {
+        this.selectedClusterCompare = cell.properties.leiden;
+        this.compareClusterCells = this.compareFeatures.filter(
+          (c) => c.properties.leiden === cell.properties.leiden,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        this.extendCluster(cell.properties.leiden, true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
     }
   }
 
   public displayClusterDetails(clusterId: number): void {
-  this.selectedCluster = clusterId;
-  this.clusterCells = this.features.filter(
-    (cell) => cell.properties.leiden === clusterId,
-  );
-  this.calculateClusterStats();
-
-  // Initialize co-occurrence table for this cluster
-  this.updateCoOccurrenceTable();
-
-  if(this.clusterCells.length > 0) {
-  this.selectedCell = this.clusterCells[0];
-  // Neighborhood enrichment will render when the Cluster Information tab is viewed
-  // via onTabChange handler
-  setTimeout(() => this.updateSubgraphGenie3(), 100);
-  setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-  // setTimeout(() => this.renderFootprintPlots(), 0);
-}
-  }
-
-  public selectCluster(clusterId: number, compare: boolean = false): void {
-  if(compare) {
-    this.selectedCluster = clusterId;
-    this.clusterCells = this.compareFeatures.filter(
-      (cell) => cell.properties.leiden === clusterId,
-    );
-    this.calculateClusterStats(); // If this uses clusterCells, it's fine
-    this.updateCoOccurrenceTable(); // If this uses clusterCells, it's fine
-
-    if (this.clusterCells.length > 0) {
-      this.selectedCellCompare = this.clusterCells[0];
-      setTimeout(() => this.updateSubgraphGenie3(true), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
-    }
-  } else {
     this.selectedCluster = clusterId;
     this.clusterCells = this.features.filter(
       (cell) => cell.properties.leiden === clusterId,
     );
     this.calculateClusterStats();
+
+    // Initialize co-occurrence table for this cluster
     this.updateCoOccurrenceTable();
 
-    if(this.clusterCells.length > 0) {
-  this.selectedCell = this.clusterCells[0];
-  setTimeout(() => this.updateSubgraphGenie3(false), 100);
-  setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-}
+    if (this.clusterCells.length > 0) {
+      this.selectedCell = this.clusterCells[0];
+      // Neighborhood enrichment will render when the Cluster Information tab is viewed
+      // via onTabChange handler
+      setTimeout(() => this.updateSubgraphGenie3(), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      // setTimeout(() => this.renderFootprintPlots(), 0);
+    }
+  }
+
+  public selectCluster(clusterId: number, compare: boolean = false): void {
+    if (compare) {
+      this.selectedClusterCompare = clusterId;
+      this.clusterCellsCompare = this.compareFeatures.filter(
+        (cell) => cell.properties.leiden === clusterId,
+      );
+      this.calculateClusterStats(true);
+      this.updateCoOccurrenceTable(true);
+      this.extendCluster(clusterId, true);
+
+      if (this.clusterCellsCompare.length > 0) {
+        this.selectedCellCompare = this.clusterCellsCompare[0];
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
+    } else {
+      this.selectedCluster = clusterId;
+      this.clusterCells = this.features.filter(
+        (cell) => cell.properties.leiden === clusterId,
+      );
+      this.calculateClusterStats();
+      this.updateCoOccurrenceTable();
+      this.extendCluster(clusterId);
+
+      if (this.clusterCells.length > 0) {
+        this.selectedCell = this.clusterCells[0];
+        setTimeout(() => this.updateSubgraphGenie3(false), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      }
     }
   }
 
   public onGeneSetChange(compare: boolean = false): void {
-  const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3 : this.selectedGeneSetGenie3Compare;
-  const geneSetSpongeChanged = compare ? this.selectedGeneSetSponge : this.selectedGeneSetSpongeCompare;
-  const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3 : this.previousGeneSetGenie3Compare;
-  const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSponge : this.previousGeneSetSpongeCompare;
-  const regulatoryScoreChanged = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
-  const graphIdGenie3 = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
-  const graphIdSponge = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSpongeChanged = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3Compare : this.previousGeneSetGenie3;
+    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSpongeCompare : this.previousGeneSetSponge;
+    const regulatoryScoreChanged = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const graphIdGenie3 = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    const graphIdSponge = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
-  if(geneSetGenie3Changed !== previousGeneSetGenie3Changed) {
-  compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3 : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
-  if (geneSetGenie3Changed) {
+    if (geneSetGenie3Changed !== previousGeneSetGenie3Changed) {
+      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3Compare : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+      if (geneSetGenie3Changed) {
 
-    d3.select(graphIdGenie3).selectAll('*').remove();
-    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
-    setTimeout(() => {
-      this.updateSubgraphGenie3(compare);
-      if (
-        regulatoryScoreChanged?.endsWith('genie3') &&
-        geneSetGenie3Changed
-      ) {
-        this.fetchAndUpdate(
-          regulatoryScoreChanged,
-          geneSetGenie3Changed,
-        );
+        d3.select(graphIdGenie3).selectAll('*').remove();
+        compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+        setTimeout(() => {
+          this.updateSubgraphGenie3(compare);
+          if (
+            regulatoryScoreChanged?.endsWith('genie3') &&
+            geneSetGenie3Changed
+          ) {
+            this.fetchAndUpdate(
+              regulatoryScoreChanged,
+              geneSetGenie3Changed,
+              compare
+            );
+          }
+        }, 100);
+      } else {
+        // Clear Genie3 graph if no gene set is selected
+        d3.select(graphIdGenie3).selectAll('*').remove();
+        compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       }
-    }, 100);
-  } else {
-    // Clear Genie3 graph if no gene set is selected
-    d3.select(graphIdGenie3).selectAll('*').remove();
-    compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
-  }
-}
+    }
 
-if (geneSetSpongeChanged !== previousGeneSetSpongeChanged) {
-  compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSponge : this.previousGeneSetSponge = this.selectedGeneSetSponge;
-  if (geneSetSpongeChanged) {
-    d3.select(graphIdSponge).selectAll('*').remove();
-    console.log('Updating Sponge graph for:', geneSetSpongeChanged);
-    console.log(
-      'Sponge targets available:',
-      this.geneSetsSponge[geneSetSpongeChanged]?.length || 0,
-    );
-    compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
-    setTimeout(() => {
-      this.updateSubgraphSponge(compare);
-      if (
-        regulatoryScoreChanged?.endsWith('sponge') &&
-        geneSetSpongeChanged
-      ) {
-        this.fetchAndUpdate(
-          regulatoryScoreChanged,
-          geneSetSpongeChanged,
+    if (geneSetSpongeChanged !== previousGeneSetSpongeChanged) {
+      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSpongeCompare : this.previousGeneSetSponge = this.selectedGeneSetSponge;
+      if (geneSetSpongeChanged) {
+        d3.select(graphIdSponge).selectAll('*').remove();
+        console.log('Updating Sponge graph for:', geneSetSpongeChanged);
+        console.log(
+          'Sponge targets available:',
+          this.geneSetsSponge[geneSetSpongeChanged]?.length || 0,
         );
+        compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
+        setTimeout(() => {
+          this.updateSubgraphSponge(compare);
+          if (
+            regulatoryScoreChanged?.endsWith('sponge') &&
+            geneSetSpongeChanged
+          ) {
+            this.fetchAndUpdate(
+              regulatoryScoreChanged,
+              geneSetSpongeChanged,
+              compare
+            );
+          }
+        }, 100);
+      } else {
+        // Clear Sponge graph if no gene set is selected
+        d3.select(graphIdSponge).selectAll('*').remove();
+        compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
       }
-    }, 100);
-  } else {
-    // Clear Sponge graph if no gene set is selected
-    d3.select(graphIdSponge).selectAll('*').remove();
-    compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
-  }
-}
+    }
   }
 
   public selectGeneSetFromTable(gene: string, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
-  if(networkType === 'genie3') {
-  compare ? this.selectedGeneSetGenie3Compare = gene : this.selectedGeneSetGenie3 = gene;
-  compare ? this.previousGeneSetGenie3Compare = null : this.previousGeneSetGenie3 = null; // Force update
-} else if (networkType === 'sponge') {
-  compare ? this.selectedGeneSetSpongeCompare = gene : this.selectedGeneSetSponge = gene;
-  compare ? this.previousGeneSetSpongeCompare = null : this.previousGeneSetSponge = null; // Force update
-}
-// Trigger the graph update
-this.onGeneSetChange(compare);
+    if (networkType === 'genie3') {
+      compare ? this.selectedGeneSetGenie3Compare = gene : this.selectedGeneSetGenie3 = gene;
+      compare ? this.previousGeneSetGenie3Compare = null : this.previousGeneSetGenie3 = null; // Force update
+    } else if (networkType === 'sponge') {
+      compare ? this.selectedGeneSetSpongeCompare = gene : this.selectedGeneSetSponge = gene;
+      compare ? this.previousGeneSetSpongeCompare = null : this.previousGeneSetSponge = null; // Force update
+    }
+    // Trigger the graph update
+    this.onGeneSetChange(compare);
   }
 
   public onGeneSelectedFromTable(event: { gene: string; action: string }, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
-  // Only select if this action is for the corresponding network type
-  if(networkType === 'genie3' && event.action.includes('genie3')) {
-  this.selectGeneSetFromTable(event.gene, 'genie3', compare);
-} else if (networkType === 'sponge' && event.action.includes('sponge')) {
-  this.selectGeneSetFromTable(event.gene, 'sponge', compare);
-}
+    if (networkType === 'genie3' && event.action.includes('genie3')) {
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+
+      this.selectGeneSetFromTable(event.gene, 'genie3', compare);
+    } else if (networkType === 'sponge' && event.action.includes('sponge')) {
+
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+      this.selectGeneSetFromTable(event.gene, 'sponge', compare);
+    }
   }
 
   /**
@@ -3037,247 +3157,257 @@ this.onGeneSetChange(compare);
    * Sets isAppInitializing to false once all initial data fetches are done.
    */
   private checkInitializationComplete(compare: boolean = false): void {
-  if(compare) {
-    if (!this.isLoadingCompare && !this.isLoadingGenie3Compare && !this.isLoadingSpongeCompare && !this.isLoadingRegulatoryScoresCompare) {
-      this.isAppInitializing = false;
-      console.log('[Init] Compare view initialization complete - hiding loader');
+    if (compare) {
+      if (!this.isLoadingCompare && !this.isLoadingGenie3Compare && !this.isLoadingSpongeCompare && !this.isLoadingRegulatoryScoresCompare) {
+        this.isAppInitializing = false;
+        console.log('[Init] Compare view initialization complete - hiding loader');
+      }
     }
-  }
     else {
-    if(!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
-  this.isAppInitializing = false;
-  console.log('[Init] App initialization complete - hiding loader');
-}
+      if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
+        this.isAppInitializing = false;
+        console.log('[Init] App initialization complete - hiding loader');
+      }
     }
   }
 
   public selectCellFromCluster(cell: CellFeature, compare: boolean = false): void {
-  if(compare) {
-    this.selectedCellCompare = cell;
-    setTimeout(() => this.updateSubgraphGenie3(true), 0);
-  } else {
-    this.selectedCell = cell;
-    setTimeout(() => this.updateSubgraphGenie3(false), 0);
-}
+    if (compare) {
+      this.selectedCellCompare = cell;
+      setTimeout(() => this.updateSubgraphGenie3(true), 0);
+    } else {
+      this.selectedCell = cell;
+      setTimeout(() => this.updateSubgraphGenie3(false), 0);
+    }
   }
 
   public clearClusterData(compare: boolean = false): void {
-  this.selectedCluster = null;
-  this.clusterCells = [];
-  this.clusterCellTypes = [];
-  this.coOccurrenceData = []; // Clear co-occurrence data
+    if (compare) {
+      this.selectedClusterCompare = null;
+      this.compareClusterCells = [];
+      this.clusterCellTypesCompare = [];
+      this.compareCoOccurrenceData = [];
+      this.selectedCellCompare = null;
+    } else {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.coOccurrenceData = [];
+      this.selectedCell = null;
+    }
 
-  if(compare) {
-    this.selectedCellCompare = null;
-    // If you have compare-specific cluster state, clear it here as well
-  } else {
-    this.selectedCell = null;
+    this.resetClusterExtension(compare);
+    this.updateHexColors(compare ? '#hexbin-compare' : '#hexbin');
   }
-
-    this.resetClusterExtension();
-  this.updateHexColors();
-}
 
   private calculateClusterStats(compare: boolean = false): void {
-  const clusterCells = compare ? this.compareClusterCells : this.clusterCells;
-  if(!clusterCells || clusterCells.length === 0) return;
+    const clusterCells = compare ? this.compareClusterCells : this.clusterCells;
+    if (!clusterCells || clusterCells.length === 0) return;
 
-// Calculate cell type distribution using existing cell_type property
-const cellTypeMap = new Map<string, number>();
-clusterCells.forEach((cell) => {
-  const cellType = cell.properties.cell_type;
-  cellTypeMap.set(cellType, (cellTypeMap.get(cellType) || 0) + 1);
-});
+    // Calculate cell type distribution using existing cell_type property
+    const cellTypeMap = new Map<string, number>();
+    clusterCells.forEach((cell) => {
+      const cellType = cell.properties.cell_type;
+      cellTypeMap.set(cellType, (cellTypeMap.get(cellType) || 0) + 1);
+    });
 
-const clusterCellTypes = Array.from(cellTypeMap.entries())
-  .map(([type, count]) => ({
-    type,
-    count,
-    percentage: ((count / clusterCells.length) * 100).toFixed(1),
-  }))
-  .sort((a, b) => b.count - a.count);
+    const clusterCellTypes = Array.from(cellTypeMap.entries())
+      .map(([type, count]) => ({
+        type,
+        count,
+        percentage: ((count / clusterCells.length) * 100).toFixed(1),
+      }))
+      .sort((a, b) => b.count - a.count);
 
-if (compare) {
-  this.compareClusterCellTypes = clusterCellTypes;
-} else {
-  this.clusterCellTypes = clusterCellTypes;
-}
 
-const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster!);
 
-if (clusterCells.length > 0) {
-  const centralityAvg = {
-    degree_centrality: clusterAnnotation?.centrality?.['degree_centrality'] ?? 0,
-    average_clustering: clusterAnnotation?.centrality?.['average_clustering'] ?? 0,
-    closeness_centrality: clusterAnnotation?.centrality?.['closeness_centrality'] ?? 0,
-  };
-  if (compare) {
-    this.compareClusterCentralityAvg = centralityAvg;
-  } else {
-    this.clusterCentralityAvg = centralityAvg;
-  }
-}
+    if (compare) {
+      this.compareClusterCellTypes = clusterCellTypes;
+    } else {
+      this.clusterCellTypes = clusterCellTypes;
+    }
+
+    const clusterAnnotation = this.getLeidenClusterAnnotation(
+      compare ? this.selectedClusterCompare! : this.selectedCluster!,
+      compare
+    );
+
+    if (clusterCells.length > 0) {
+      const centralityAvg = {
+        degree_centrality: clusterAnnotation?.centrality?.['degree_centrality'] ?? 0,
+        average_clustering: clusterAnnotation?.centrality?.['average_clustering'] ?? 0,
+        closeness_centrality: clusterAnnotation?.centrality?.['closeness_centrality'] ?? 0,
+      };
+      if (compare) {
+        this.compareClusterCentralityAvg = centralityAvg;
+      } else {
+        this.clusterCentralityAvg = centralityAvg;
+      }
+    }
   }
 
   private extendCluster(selectedCluster: number, compare: boolean = false): void {
-  const features = compare ? this.compareFeatures : this.features;
+    const features = compare ? this.compareFeatures : this.features;
+    const currentGroup = compare ? this.g_compare : this.g;
 
-  this.g
-    .selectAll<SVGPathElement, CellFeature>('path')
-    .transition()
-    .duration(300)
-    .attr('d', (d: CellFeature) => {
-      // Return original path for non-selected hexagons
-      const projection = d3.geoIdentity().fitSize([1200, 1000], {
-        type: 'FeatureCollection',
-        features: features,
+    currentGroup
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .transition()
+      .duration(300)
+      .attr('d', (d: CellFeature) => {
+        // Return original path for non-selected hexagons
+        const projection = d3.geoIdentity().fitSize([1200, 1000], {
+          type: 'FeatureCollection',
+          features: features,
+        });
+        const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+        return pathGenerator(d) || '';
+      })
+      .attr('stroke-width', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? '3px' : '1px';
+      })
+      .attr('stroke', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
+      })
+      // Remove mouseleave event to prevent resetting outline
+      .on('mouseleave', null)
+      .style('opacity', (d: CellFeature) => {
+        return d.properties.leiden === selectedCluster ? 1.0 : 0.6;
       });
-      const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
-      return pathGenerator(d) || '';
-    })
-    .attr('stroke-width', (d: CellFeature) => {
-      return d.properties.leiden === selectedCluster ? '3px' : '1px';
-    })
-    .attr('stroke', (d: CellFeature) => {
-      return d.properties.leiden === selectedCluster ? '#000' : 'transparent';
-    })
-    // Remove mouseleave event to prevent resetting outline
-    .on('mouseleave', null)
-    .style('opacity', (d: CellFeature) => {
-      return d.properties.leiden === selectedCluster ? 1.0 : 0.6;
-    });
-}
+  }
 
   private resetClusterExtension(compare: boolean = false): void {
-  const features = compare ? this.compareFeatures : this.features;
-  const projection = d3.geoIdentity().fitSize([1200, 1000], {
-    type: 'FeatureCollection',
-    features: features,
-  });
-  const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+    const features = compare ? this.compareFeatures : this.features;
+    const targetGroup = compare ? this.g_compare : this.g;
+    const projection = d3.geoIdentity().fitSize([1200, 1000], {
+      type: 'FeatureCollection',
+      features: features,
+    });
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
-  this.g
-    .selectAll<SVGPathElement, CellFeature>('path')
-    .transition()
-    .duration(300)
-    .attr('d', (d: CellFeature) => pathGenerator(d) || '')
-    .attr('stroke-width', '1px')
-    .attr('stroke', 'transparent')
-    .style('opacity', 0.8);
+    targetGroup
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .transition()
+      .duration(300)
+      .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+      .attr('stroke-width', '1px')
+      .attr('stroke', 'transparent')
+      .style('opacity', 0.8);
 
-  // Reinitialize the mouseleave event
-  this.g
-    .selectAll<SVGPathElement, CellFeature>('path')
-    .on('mouseleave', (event, d) => this.mouseLeave(event, d));
-}
+    // Reinitialize the mouseleave event
+    targetGroup
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d));
+  }
 
   private renderFootprintPlots(dataset: Dataset | null): void {
-  this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
-    this.sanitizer.bypassSecurityTrustResourceUrl(
-      `${this.sessionService.apiUrl}/api/download/${relativePath}`
-    )
-  );
-  // Load available motifs for the on-demand compute form.
-  // Pass dataset_id so the backend can resolve the adata path even when
-  // /read_adata has not been called yet (e.g. rescanned datasets).
-  if(dataset) {
-    const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
-    this.http.get<{ motifs: string[] }>(
-      `${this.sessionService.apiUrl}/api/motifs${params}`,
-      { withCredentials: true }
-    ).subscribe({
-      next: resp => { this.availableMotifs = resp.motifs ?? []; },
-      error: () => { this.availableMotifs = []; }
-    });
-    this.http.get<{ cell_types: string[] }>(
-      `${this.sessionService.apiUrl}/api/cell_types${params}`,
-      { withCredentials: true }
-    ).subscribe({
-      next: resp => { this.availableCellTypes = resp.cell_types ?? []; },
-      error: () => { this.availableCellTypes = []; }
-    });
-  } else {
-    this.availableMotifs = [];
-    this.availableCellTypes = [];
-  }
-    console.log('availableCellTypes:', this.availableCellTypes);
-}
-
-  public computeFootprint(): void {
-  if(this.footprintMotifs.length === 0) return;
-  this.isComputingFootprint = true;
-  this.footprintComputeError = '';
-  const body = new FormData();
-  this.footprintMotifs.forEach(m => body.append('motif', m));
-  body.append('cluster_by', this.footprintClusterBy);
-  // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
-  if(this.selectedDataset?.id) {
-  body.append('dataset_id', this.selectedDataset.id);
-}
-this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
-  `${this.sessionService.apiUrl}/api/compute_footprint`,
-  body,
-  { withCredentials: true }
-).subscribe({
-  next: resp => {
-    this.isComputingFootprint = false;
-    const newUrls = (resp.results ?? []).map(r =>
+    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
       this.sanitizer.bypassSecurityTrustResourceUrl(
-        `${this.sessionService.apiUrl}${r.footprint_url}`
+        `${this.sessionService.apiUrl}/api/download/${relativePath}`
       )
     );
-    this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, ...newUrls];
-  },
-  error: err => {
-    this.isComputingFootprint = false;
-    this.footprintComputeError =
-      err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+    // Load available motifs for the on-demand compute form.
+    // Pass dataset_id so the backend can resolve the adata path even when
+    // /read_adata has not been called yet (e.g. rescanned datasets).
+    if (dataset) {
+      const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
+      this.http.get<{ motifs: string[] }>(
+        `${this.sessionService.apiUrl}/api/motifs${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableMotifs = resp.motifs ?? []; },
+        error: () => { this.availableMotifs = []; }
+      });
+      this.http.get<{ cell_types: string[] }>(
+        `${this.sessionService.apiUrl}/api/cell_types${params}`,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => { this.availableCellTypes = resp.cell_types ?? []; },
+        error: () => { this.availableCellTypes = []; }
+      });
+    } else {
+      this.availableMotifs = [];
+      this.availableCellTypes = [];
+    }
+    console.log('availableCellTypes:', this.availableCellTypes);
   }
-});
+
+  public computeFootprint(): void {
+    if (this.footprintMotifs.length === 0) return;
+    this.isComputingFootprint = true;
+    this.footprintComputeError = '';
+    const body = new FormData();
+    this.footprintMotifs.forEach(m => body.append('motif', m));
+    body.append('cluster_by', this.footprintClusterBy);
+    // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
+    if (this.selectedDataset?.id) {
+      body.append('dataset_id', this.selectedDataset.id);
+    }
+    this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
+      `${this.sessionService.apiUrl}/api/compute_footprint`,
+      body,
+      { withCredentials: true }
+    ).subscribe({
+      next: resp => {
+        this.isComputingFootprint = false;
+        const newUrls = (resp.results ?? []).map(r =>
+          this.sanitizer.bypassSecurityTrustResourceUrl(
+            `${this.sessionService.apiUrl}${r.footprint_url}`
+          )
+        );
+        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, ...newUrls];
+      },
+      error: err => {
+        this.isComputingFootprint = false;
+        this.footprintComputeError =
+          err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+      }
+    });
   }
 
   private renderNhoodHeatmap(compare: boolean = false): void {
-  const cell = compare ? this.selectedCellCompare : this.selectedCell;
-  const leiden = cell?.properties?.leiden;
-  const clusterAnnotation = this.getLeidenClusterAnnotation(leiden, compare);
-  const enrichment = clusterAnnotation?.neighborhood_enrichment;
+    const cell = compare ? this.selectedCellCompare : this.selectedCell;
+    const leiden = cell?.properties?.leiden;
+    const clusterAnnotation = this.getLeidenClusterAnnotation(leiden, compare);
+    const enrichment = clusterAnnotation?.neighborhood_enrichment;
+    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
 
-  if(!enrichment || !Array.isArray(enrichment)) return;
+    if (!enrichment || !Array.isArray(enrichment)) return;
 
-const n = enrichment.length;
-const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
+    const n = enrichment.length;
+    const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
 
-const minValue = Math.min(...enrichment);
-const maxValue = Math.max(...enrichment);
-const normalized = (maxValue > minValue)
-  ? enrichment.map((v: number) => (v - minValue) / (maxValue - minValue))
-  : enrichment.map(() => 0);
+    const minValue = Math.min(...enrichment);
+    const maxValue = Math.max(...enrichment);
+    const normalized = (maxValue > minValue)
+      ? enrichment.map((v: number) => (v - minValue) / (maxValue - minValue))
+      : enrichment.map(() => 0);
 
-const data: Partial<Plotly.PlotData>[] = [
-  {
-    x: clusterLabels,
-    y: normalized,
-    type: 'bar',
-    marker: { color: 'rgba(55, 128, 191, 0.7)' },
-    name: `Cluster ${leiden} Neighborhood Enrichment`,
-  }
-];
+    const data: Partial<Plotly.PlotData>[] = [
+      {
+        x: clusterLabels,
+        y: normalized,
+        type: 'bar',
+        marker: { color: 'rgba(55, 128, 191, 0.7)' },
+        name: `Cluster ${leiden} Neighborhood Enrichment`,
+      }
+    ];
 
-const layout = {
-  margin: { t: 30, l: 60, r: 10, b: 40 },
-  width: 300,
-  height: 170,
-  xaxis: {
-    title: { text: 'Cluster' },
-    automargin: true,
-    tickfont: { size: 10 },
-  },
-  yaxis: {
-    title: { text: 'Enrichment' },
-    automargin: true,
-    tickfont: { size: 10 },
-  },
-};
+    const layout = {
+      margin: { t: 30, l: 60, r: 10, b: 40 },
+      width: 300,
+      height: 170,
+      xaxis: {
+        title: { text: 'Cluster' },
+        automargin: true,
+        tickfont: { size: 10 },
+      },
+      yaxis: {
+        title: { text: 'Enrichment' },
+        automargin: true,
+        tickfont: { size: 10 },
+      },
+    };
 
     const container = document.getElementById(containerId);
     if (!container) {
@@ -3285,832 +3415,839 @@ const layout = {
       return;
     }
 
-Plotly.purge(container);
-Plotly.newPlot(container, data, layout, { displayModeBar: false });
+    Plotly.purge(container);
+    Plotly.newPlot(container, data, layout, { displayModeBar: false });
   }
 
   public closeSidenav(compare: boolean = false): void {
-  if(compare) {
-    this.selectedCellCompare = null;
-  } else {
-    this.selectedCell = null;
-  }
+    if (compare) {
+      this.selectedCellCompare = null;
+    } else {
+      this.selectedCell = null;
+    }
     this.updateHexColors();
-}
+  }
 
   public updateCoOccurrenceTable(compare: boolean = false): void {
-  const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
+    const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
 
-  // 1. Clear state immediately
-  if(compare) {
-    this.compareCoOccurrenceData = [];
-  } else {
-    this.coOccurrenceData = [];
-  }
-
-    if(selectedCluster === null || selectedCluster === undefined) return;
-
-const clusterAnnotation = this.getLeidenClusterAnnotation(selectedCluster, compare);
-
-// 2. Validate the 2D array exists for this specific cluster
-if (!clusterAnnotation || !Array.isArray(clusterAnnotation.co_occurrence)) {
-  console.warn(`[Co-occurrence] No data matrix found for Cluster ${selectedCluster}`);
-  return;
-}
-
-// This is your [[2.54, 2.10...], [...]] array
-const matrix = clusterAnnotation.co_occurrence;
-const interval = compare ? this.selectedIntervalCompare : this.selectedInterval;
-const data: number[] = [];
-
-// 3. Safely extract the data
-try {
-  // We rely on the actual length of the matrix rather than a hardcoded cluster count
-  const numTargetClusters = matrix.length;
-
-  for (let j = 0; j < numTargetClusters; j++) {
-    const targetClusterIntervals = matrix[j];
-
-    if (Array.isArray(targetClusterIntervals) && targetClusterIntervals.length > interval) {
-      const val = targetClusterIntervals[interval];
-      // Guarantee a clean number goes into the array
-      data.push(typeof val === 'number' && !isNaN(val) ? val : 0);
+    // 1. Clear state immediately
+    if (compare) {
+      this.compareCoOccurrenceData = [];
     } else {
-      data.push(0); // Safe fallback
+      this.coOccurrenceData = [];
     }
-  }
-} catch (error) {
-  console.error('[Co-occurrence] Error parsing 2D matrix:', error);
-  data.length = 0; // Wipe on critical failure
-}
 
-// 4. Update the component state
-if (compare) {
-  this.compareCoOccurrenceData = data;
-  // Sync the cluster count so the HTML table headers match the data length
-  this.clusterCountCompare = data.length;
-} else {
-  this.coOccurrenceData = data;
-  this.clusterCount = data.length;
-}
+    if (selectedCluster === null || selectedCluster === undefined) return;
 
-if (data.length > 0) {
-  this.calculateCoOccurrenceThreshold(compare);
-}
+    const clusterAnnotation = this.getLeidenClusterAnnotation(selectedCluster, compare);
+
+    // 2. Validate the 2D array exists for this specific cluster
+    if (!clusterAnnotation || !Array.isArray(clusterAnnotation.co_occurrence)) {
+      console.warn(`[Co-occurrence] No data matrix found for Cluster ${selectedCluster}`);
+      return;
+    }
+
+    // This is your [[2.54, 2.10...], [...]] array
+    const matrix = clusterAnnotation.co_occurrence;
+    const interval = compare ? this.selectedIntervalCompare : this.selectedInterval;
+    const data: number[] = [];
+
+    // 3. Safely extract the data
+    try {
+      // We rely on the actual length of the matrix rather than a hardcoded cluster count
+      const numTargetClusters = matrix.length;
+
+      for (let j = 0; j < numTargetClusters; j++) {
+        const targetClusterIntervals = matrix[j];
+
+        if (Array.isArray(targetClusterIntervals) && targetClusterIntervals.length > interval) {
+          const val = targetClusterIntervals[interval];
+          // Guarantee a clean number goes into the array
+          data.push(typeof val === 'number' && !isNaN(val) ? val : 0);
+        } else {
+          data.push(0); // Safe fallback
+        }
+      }
+    } catch (error) {
+      console.error('[Co-occurrence] Error parsing 2D matrix:', error);
+      data.length = 0; // Wipe on critical failure
+    }
+
+    // 4. Update the component state
+    if (compare) {
+      this.compareCoOccurrenceData = data;
+      // Sync the cluster count so the HTML table headers match the data length
+      this.clusterCountCompare = data.length;
+    } else {
+      this.coOccurrenceData = data;
+      this.clusterCount = data.length;
+    }
+
+    if (data.length > 0) {
+      this.calculateCoOccurrenceThreshold(compare);
+    }
   }
 
   private calculateCoOccurrenceThreshold(compare: boolean = false): void {
-  const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
 
-  const allValues = data.flat().filter((val) => val > 0);
-  if(allValues.length > 0) {
-  allValues.sort((a, b) => a - b);
-  const percentile75 = Math.floor(allValues.length * 0.75);
-  compare ? this.compareCoOccurrenceThreshold = allValues[percentile75] : this.coOccurrenceThreshold = allValues[percentile75];
-}
+    const allValues = data.flat().filter((val) => val > 0);
+    if (allValues.length > 0) {
+      allValues.sort((a, b) => a - b);
+      const percentile75 = Math.floor(allValues.length * 0.75);
+      compare ? this.compareCoOccurrenceThreshold = allValues[percentile75] : this.coOccurrenceThreshold = allValues[percentile75];
+    }
   }
 
   public getCoOccurrenceColor(value: number, compare: boolean = false): string {
-  if (value === 0) return '#f8f9fa';
+    if (value === 0) return '#f8f9fa';
 
-  const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
-  const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
-  const colorScale = compare ? this.continuousColorScaleCompare : this.continuousColorScale;
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+    const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
+    const colorScale = compare ? this.continuousColorScaleCompare : this.continuousColorScale;
 
-  const coOccurrenceWithoutSameCluster = data.filter(
-    (_, index) => index !== selectedCluster,
-  );
-  const maxValue = Math.max(...coOccurrenceWithoutSameCluster);
-  const intensity = Math.min(value / maxValue, 1);
-  return colorScale(intensity);
-}
-
-  public getIntervalStats(compare: boolean = false): { min: number; max: number; avg: number } {
-  const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
-  const allValues = data.flat().filter((val) => val > 0);
-  if (allValues.length === 0) return { min: 0, max: 0, avg: 0 };
-
-  const min = Math.min(...allValues);
-  const max = Math.max(...allValues);
-  const avg = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
-
-  return { min, max, avg: Math.round(avg * 100) / 100 };
-}
-
-  async getRegulatoryScoresforSpots(barcode: string, datasetId ?: string, compare: boolean = false) {
-  const datasetQuery = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
-  this.sessionService.callWithSession(() =>
-    this.http.get(
-      `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}${datasetQuery}`,
-      { withCredentials: true },
-    ),
-  ).subscribe({
-    next: (res) => {
-      const rawData = res as { [scoreType: string]: { [element: string]: number } };
-
-      const genie3Data: TableData = {};
-      const spongeData: TableData = {};
-      const genie3ElementsSet = new Set<string>();
-      const spongeElementsSet = new Set<string>();
-
-      for (const [scoreType, scores] of Object.entries(rawData)) {
-        if (scoreType.endsWith('_genie3')) {
-          genie3Data[scoreType] = scores;
-          Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
-        } else if (scoreType.endsWith('_sponge')) {
-          spongeData[scoreType] = scores;
-          Object.keys(scores).forEach(element => spongeElementsSet.add(element));
-        }
-      }
-      if (compare) {
-        this.genie3RawDataCompare = genie3Data;
-        this.spongeRawDataCompare = spongeData;
-        this.genie3ElementsCompare = Array.from(genie3ElementsSet);
-        this.spongeElementsCompare = Array.from(spongeElementsSet);
-      } else {
-        this.genie3RawData = genie3Data;
-        this.spongeRawData = spongeData;
-        this.genie3Elements = Array.from(genie3ElementsSet);
-        this.spongeElements = Array.from(spongeElementsSet);
-      }
-    },
-    error: (err) => {
-      if (compare) {
-        this.genie3RawDataCompare = {};
-        this.spongeRawDataCompare = {};
-        this.genie3ElementsCompare = [];
-        this.spongeElementsCompare = [];
-      } else {
-        this.genie3RawData = {};
-        this.spongeRawData = {};
-        this.genie3Elements = [];
-        this.spongeElements = [];
-      }
-      console.error(
-        `[Backend] Failed to load regulatory scores for ${barcode}`,
-        err,
-      );
-    }
-  });
-}
-
-  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false) {
-  const tokenType = compare ? 'obsm_compare' : 'obsm_main';
-  const token = this.nextRequestToken(tokenType);
-  // Track regulatory scores fetches during initialization
-  const isInitializing = this.isAppInitializing;
-  if (isInitializing) {
-    this.isLoadingRegulatoryScores = true;
+    const coOccurrenceWithoutSameCluster = data.filter(
+      (_, index) => index !== selectedCluster,
+    );
+    const maxValue = Math.max(...coOccurrenceWithoutSameCluster);
+    const intensity = Math.min(value / maxValue, 1);
+    return colorScale(intensity);
   }
 
-  // Change query dataset based on whether we're updating the main view or compare view
+  public getIntervalStats(compare: boolean = false): { min: number; max: number; avg: number } {
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+    const allValues = data.flat().filter((val) => val > 0);
+    if (allValues.length === 0) return { min: 0, max: 0, avg: 0 };
 
-  const datasetQuery = compare
-    ? this.selectedDatasetCompare?.id
-      ? `?dataset_id=${encodeURIComponent(this.selectedDatasetCompare.id)}`
-      : ''
-    : this.selectedDataset?.id
-      ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
-      : '';
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+    const avg = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
 
+    return { min, max, avg: Math.round(avg * 100) / 100 };
+  }
 
-
-  this.sessionService
-    .callWithSession(() =>
+  async getRegulatoryScoresforSpots(barcode: string, datasetId?: string, compare: boolean = false) {
+    const datasetQuery = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
+    this.sessionService.callWithSession(() =>
       this.http.get(
-        `${this.sessionService.apiUrl}/obsm/${columnName}/${index}${datasetQuery}`,
+        `${this.sessionService.apiUrl}/obsm/regulatory_scores/cell/${barcode}${datasetQuery}`,
         { withCredentials: true },
       ),
-    )
-    .subscribe({
+    ).subscribe({
       next: (res) => {
-        if (token !== this.requestTokens[tokenType]) return;
-        const data = res as { [barcode: string]: any };
+        const rawData = res as { [scoreType: string]: { [element: string]: number } };
 
-        // 1. Update ONLY the main view if compare is false
-        if (!compare && this.features) {
-          for (const feature of this.features) {
-            const barcode = feature.properties?.barcode;
-            if (barcode && data[barcode] !== undefined) {
-              // HARDCODE the property name. Never use this.selectedView here!
-              feature.properties['regulatory_scores'] = data[barcode];
-            }
+        const genie3Data: TableData = {};
+        const spongeData: TableData = {};
+        const genie3ElementsSet = new Set<string>();
+        const spongeElementsSet = new Set<string>();
+
+        for (const [scoreType, scores] of Object.entries(rawData)) {
+          if (scoreType.endsWith('_genie3')) {
+            genie3Data[scoreType] = scores;
+            Object.keys(scores).forEach(element => genie3ElementsSet.add(element));
+          } else if (scoreType.endsWith('_sponge')) {
+            spongeData[scoreType] = scores;
+            Object.keys(scores).forEach(element => spongeElementsSet.add(element));
           }
-          console.log(`[Backend] Updated main view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
         }
-
-        // 2. Update ONLY the compare view if compare is true
-        if (compare && this.compareMode && this.compareFeatures) {
-          for (const feature of this.compareFeatures) {
-            const barcode = feature.properties?.barcode;
-            if (barcode && data[barcode] !== undefined) {
-              // HARDCODE the property name. Never use this.selectedCompareView here!
-              feature.properties['regulatory_scores'] = data[barcode];
-            }
-          }
-          console.log(`[Backend] Updated compare view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
-        }
-
-        this.repaintBothViews();
-
-        // Mark regulatory scores fetch as complete if during initialization
-        if (isInitializing) {
-          this.isLoadingRegulatoryScores = false;
-          this.checkInitializationComplete(compare);
+        if (compare) {
+          this.genie3RawDataCompare = genie3Data;
+          this.spongeRawDataCompare = spongeData;
+          this.genie3ElementsCompare = Array.from(genie3ElementsSet);
+          this.spongeElementsCompare = Array.from(spongeElementsSet);
+        } else {
+          this.genie3RawData = genie3Data;
+          this.spongeRawData = spongeData;
+          this.genie3Elements = Array.from(genie3ElementsSet);
+          this.spongeElements = Array.from(spongeElementsSet);
         }
       },
       error: (err) => {
-        console.error(`[Backend] Failed to load adata.obsm["${columnName}][${index}]`, err);
-        if (isInitializing) {
-          this.isLoadingRegulatoryScores = false;
-          this.checkInitializationComplete(compare);
+        if (compare) {
+          this.genie3RawDataCompare = {};
+          this.spongeRawDataCompare = {};
+          this.genie3ElementsCompare = [];
+          this.spongeElementsCompare = [];
+        } else {
+          this.genie3RawData = {};
+          this.spongeRawData = {};
+          this.genie3Elements = [];
+          this.spongeElements = [];
         }
-      },
+        console.error(
+          `[Backend] Failed to load regulatory scores for ${barcode}`,
+          err,
+        );
+      }
     });
-}
+  }
+
+  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string) {
+    const tokenType = compare ? 'obsm_compare' : 'obsm_main';
+    const token = this.nextRequestToken(tokenType);
+    const safeIndex = encodeURIComponent(index);
+    const isGeneExpression = columnName === 'gene_expression';
+
+    // Determine the property name to update based on the view
+    // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
+    const propertyToUpdate = view || 'regulatory_scores';
+
+    const baseRequest = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+
+    // Change query dataset based on whether we're updating the main view or compare view
+
+    const datasetQuery = compare
+      ? this.selectedDatasetCompare?.id
+        ? `?dataset_id=${encodeURIComponent(this.selectedDatasetCompare.id)}`
+        : ''
+      : this.selectedDataset?.id
+        ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
+        : '';
+
+    const request = `${baseRequest}${datasetQuery}`;
+
+    this.sessionService
+      .callWithSession(() =>
+        this.http.get(
+          request,
+          { withCredentials: true },
+        ),
+      )
+      .subscribe({
+        next: (res) => {
+          if (token !== this.requestTokens[tokenType]) return;
+          const data = res as { [barcode: string]: any };
+
+          // 1. Update ONLY the main view if compare is false
+          if (!compare && this.features) {
+            for (const feature of this.features) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[propertyToUpdate] = data[barcode];
+              }
+            }
+            console.log(`[Backend] Updated main view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
+          }
+
+          // 2. Update ONLY the compare view if compare is true
+          if (compare && this.compareMode && this.compareFeatures) {
+            for (const feature of this.compareFeatures) {
+              const barcode = feature.properties?.barcode;
+              if (barcode && data[barcode] !== undefined) {
+                feature.properties[propertyToUpdate] = data[barcode];
+              }
+            }
+            console.log(`[Backend] Updated compare view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
+          }
+
+          this.repaintBothViews();
+
+          // Mark regulatory scores fetch as complete if during initialization
+          if (this.isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete(compare);
+          }
+        },
+        error: (err) => {
+          console.error(
+            `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
+            err,
+          );
+          // Mark as complete even on error
+          if (this.isInitializing) {
+            this.isLoadingRegulatoryScores = false;
+            this.checkInitializationComplete(compare);
+          }
+        },
+      });
+  }
 
   public onRegulatoryScoreChange(compare: boolean = false): void {
-  const selectedRegulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
-  const selectedGeneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
-  const selectedGeneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const selectedRegulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const selectedGeneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const selectedGeneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
 
-  if(
-    selectedRegulatoryScore?.endsWith('genie3') &&
-  selectedGeneSetGenie3 &&
-  selectedGeneSetSponge
+    if (
+      selectedRegulatoryScore?.endsWith('genie3') &&
+      selectedGeneSetGenie3 &&
+      selectedGeneSetSponge
     ) {
-  this.fetchAndUpdate(
-    selectedRegulatoryScore,
-    selectedGeneSetGenie3,
-    compare
-  );
-} else if (
-  selectedRegulatoryScore?.endsWith('sponge') &&
-  selectedGeneSetSponge
-) {
-  this.fetchAndUpdate(
-    selectedRegulatoryScore,
-    selectedGeneSetSponge,
-    compare
-  );
-}
+      this.fetchAndUpdate(
+        selectedRegulatoryScore,
+        selectedGeneSetGenie3,
+        compare
+      );
+    } else if (
+      selectedRegulatoryScore?.endsWith('sponge') &&
+      selectedGeneSetSponge
+    ) {
+      this.fetchAndUpdate(
+        selectedRegulatoryScore,
+        selectedGeneSetSponge,
+        compare
+      );
+    }
   }
-keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
-  return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
-};
+  keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
+    return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
+  };
 
   private expandedProps = new Set<string>();
 
-isArray(v: any): v is any[] {
-  return Array.isArray(v);
-}
+  isArray(v: any): v is any[] {
+    return Array.isArray(v);
+  }
 
-isNestedArray(v: any): v is any[][] {
-  return Array.isArray(v) && v.length > 0 && v.every(row => Array.isArray(row) || this.looksLikeArrayString(row));
-}
+  isNestedArray(v: any): v is any[][] {
+    return Array.isArray(v) && v.length > 0 && v.every(row => Array.isArray(row) || this.looksLikeArrayString(row));
+  }
 
-isNumberLike(v: unknown): v is number | string {
-  return (typeof v === 'number' && Number.isFinite(v)) ||
-    (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
-}
+  isNumberLike(v: unknown): v is number | string {
+    return (typeof v === 'number' && Number.isFinite(v)) ||
+      (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
+  }
 
-toNumberLike(v: number | string): number {
-  return typeof v === 'number' ? v : Number(v);
-}
+  toNumberLike(v: number | string): number {
+    return typeof v === 'number' ? v : Number(v);
+  }
 
-isNumericArray(arr: any): arr is(number | string)[] {
-  return Array.isArray(arr) && arr.length > 0 && arr.every(x => this.isNumberLike(x));
-}
+  isNumericArray(arr: any): arr is (number | string)[] {
+    return Array.isArray(arr) && arr.length > 0 && arr.every(x => this.isNumberLike(x));
+  }
 
-isPrimitive(v: unknown): v is string | number | boolean | null {
-  return v === null || ['string', 'number', 'boolean'].includes(typeof v as string);
-}
+  isPrimitive(v: unknown): v is string | number | boolean | null {
+    return v === null || ['string', 'number', 'boolean'].includes(typeof v as string);
+  }
 
-getArrayStats(arr: (number | string)[]) {
-  const nums = arr.map(x => Number(this.toNumberLike(x)));
-  const min = Math.min(...nums);
-  const max = Math.max(...nums);
-  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-  return { min, max, avg };
-}
+  getArrayStats(arr: (number | string)[]) {
+    const nums = arr.map(x => Number(this.toNumberLike(x)));
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    return { min, max, avg };
+  }
 
-formatValue(v: unknown): string {
-  if (Array.isArray(v)) return v.join(', ');
-  if (v && typeof v === 'object') return JSON.stringify(v, null, 2);
-  return String(v);
-}
+  formatValue(v: unknown): string {
+    if (Array.isArray(v)) return v.join(', ');
+    if (v && typeof v === 'object') return JSON.stringify(v, null, 2);
+    return String(v);
+  }
 
-label(key: string): string {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+  label(key: string): string {
+    return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
 
-toggleExpand(key: string) {
-  if (this.expandedProps.has(key)) this.expandedProps.delete(key);
-  else this.expandedProps.add(key);
-}
+  toggleExpand(key: string) {
+    if (this.expandedProps.has(key)) this.expandedProps.delete(key);
+    else this.expandedProps.add(key);
+  }
 
-isExpanded(key: string) {
-  return this.expandedProps.has(key);
-}
+  isExpanded(key: string) {
+    return this.expandedProps.has(key);
+  }
 
-trackByIndex(index: number) { return index; }
+  trackByIndex(index: number) { return index; }
 
-asArrayRow(row: any): any[] {
-  if (Array.isArray(row)) return row;
-  if (this.looksLikeArrayString(row)) {
+  asArrayRow(row: any): any[] {
+    if (Array.isArray(row)) return row;
+    if (this.looksLikeArrayString(row)) {
+      try {
+        const parsed = JSON.parse(row as string);
+        return Array.isArray(parsed) ? parsed : [row];
+      } catch {
+        return [row];
+      }
+    }
+    return [row];
+  }
+
+  looksLikeArrayString(v: any): v is string {
+    return typeof v === 'string' && /^\s*\[.*\]\s*$/.test(v);
+  }
+
+  toJsonCompact(obj: unknown, max = 120): string {
     try {
-      const parsed = JSON.parse(row as string);
-      return Array.isArray(parsed) ? parsed : [row];
+      const s = JSON.stringify(obj);
+      return s.length > max ? s.slice(0, max) + '…' : s;
     } catch {
-      return [row];
+      return String(obj);
     }
   }
-  return [row];
-}
 
-looksLikeArrayString(v: any): v is string {
-  return typeof v === 'string' && /^\s*\[.*\]\s*$/.test(v);
-}
 
-toJsonCompact(obj: unknown, max = 120): string {
-  try {
-    const s = JSON.stringify(obj);
-    return s.length > max ? s.slice(0, max) + '…' : s;
-  } catch {
-    return String(obj);
+  shouldShowProperty(key: string): boolean {
+    if (key == null) return true;
+    const k = String(key).toLowerCase();
+    return !this.hiddenPropKeys.has(k);
   }
-}
 
+  // ----- Dict/Object helpers -----
+  isPlainObject(v: any): v is Record<string, any> {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
 
-shouldShowProperty(key: string): boolean {
-  if (key == null) return true;
-  const k = String(key).toLowerCase();
-  return !this.hiddenPropKeys.has(k);
-}
+  objectKeyCount(obj: Record<string, any>): number {
+    return Object.keys(obj).length;
+  }
 
-// ----- Dict/Object helpers -----
-isPlainObject(v: any): v is Record < string, any > {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
-}
+  objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
+    return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
+  }
 
-objectKeyCount(obj: Record<string, any>): number {
-  return Object.keys(obj).length;
-}
+  prettyKey(k: string): string {
+    return k.replace(/[_-]+/g, ' ')
+      .replace(/\b\w/g, c => c.toUpperCase());
+  }
 
-objectEntries(obj: Record<string, any>): Array < { key: string; value: any } > {
-  return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
-}
-
-prettyKey(k: string): string {
-  return k.replace(/[_-]+/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase());
-}
-
-dictId(propLabel: string): string {
-  return `DICT::${propLabel}`;
-}
+  dictId(propLabel: string): string {
+    return `DICT::${propLabel}`;
+  }
 
   public selectViewTutorial(): void {
-  const tour = new Shepherd.Tour({
-    useModalOverlay: true,
-    defaultStepOptions: {
-      classes: 'shepherd-theme-custom'
-    }
-  });
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
 
-  tour.addStep({
-    id: 'info-btn-dropdown',
-    attachTo: { element: '#color-by-property', on: 'left' },
-    text: 'This button allows you to select the view you want to access. You can choose different regulatory scores, LIANA+ scores, Leiden Clustering and more. You can color by your obs columns in the view',
-    buttons: [{ text: "Done", action: tour.complete }]
-  });
+    tour.addStep({
+      id: 'info-btn-dropdown',
+      attachTo: { element: '#color-by-property', on: 'left' },
+      text: 'This button allows you to select the view you want to access. You can choose different regulatory scores, LIANA+ scores, Leiden Clustering and more. You can color by your obs columns in the view',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
 
-  tour.start();
-}
-
-  private renderLegend(containerName: string): void {
-  const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
-
-
-  viewVariablesToUpdate.svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
-
-  if(viewVariablesToUpdate.getLegendType() === 'continuous') {
-  const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
-  const legendX = 0;
-  const legendY = 50;
-  const width = 250;
-  const height = 30;
-  const fontSize = 24;
-  const padding = 15;
-
-  // Use standard <defs>
-  const defs = viewVariablesToUpdate.svg.select('defs').empty()
-    ? viewVariablesToUpdate.svg.append('defs')
-    : viewVariablesToUpdate.svg.select('defs');
-
-  defs.select(`#${viewVariablesToUpdate.legendGradientName}`).remove();
-
-  const gradient = defs
-    .append('linearGradient')
-    .attr('id', viewVariablesToUpdate.legendGradientName)
-    .attr('x1', '0%')
-    .attr('x2', '100%')
-    .attr('y1', '0%')
-    .attr('y2', '0%');
-
-  const numStops = 10;
-  for (let i = 0; i <= numStops; i++) {
-    const t = i / numStops;
-    const value = min + t * (max - min);
-    gradient
-      .append('stop')
-      .attr('offset', `${t * 100}%`)
-      .attr('stop-color', viewVariablesToUpdate.continuous(value));
+    tour.start();
   }
 
-  const legendG = viewVariablesToUpdate.svg
-    .append('g')
-    .attr('class', viewVariablesToUpdate.legendContainerName)
-    .attr('transform', `translate(${legendX},${legendY})`);
-
-  const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
-  // fallback if translation returns empty
-  const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
-
-  // measure sizes using svg_compare
-  const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
-  const titleWidth =
-    tempSvg
-      .append('text')
-      .text(titleText)
-      .style('font-size', `${fontSize}px`)
-      .style('font-weight', 'bold')
-      .node()
-      ?.getBBox().width || 0;
-
-  const minText = (min ?? 0).toFixed(2);
-  const minWidth =
-    tempSvg
-      .append('text')
-      .text(minText)
-      .style('font-size', `${fontSize}px`)
-      .node()
-      ?.getBBox().width || 0;
-
-  const maxText = (max ?? 0).toFixed(2);
-  const maxWidth =
-    tempSvg
-      .append('text')
-      .text(maxText)
-      .style('font-size', `${fontSize}px`)
-      .node()
-      ?.getBBox().width || 0;
-
-  tempSvg.remove();
-
-  const textHeight = fontSize * 1.2;
-  const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
-  const bgWidth = requiredWidth + padding * 2;
-  const bgHeight = height + textHeight * 2 + padding * 3;
-
-  legendG
-    .append('rect')
-    .attr('x', -padding)
-    .attr('y', -padding - textHeight)
-    .attr('width', bgWidth)
-    .attr('height', bgHeight)
-    .style('fill', 'rgba(255, 255, 255, 0.9)')
-    .attr('stroke', '#ccc')
-    .attr('stroke-width', 1)
-    .attr('rx', 5);
+  private renderLegend(containerName: string): void {
+    const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
 
 
-  legendG
-    .append('rect')
-    .attr('x', (bgWidth - width) / 2 - padding)
-    .attr('y', 0)
-    .attr('width', width)
-    .attr('height', height)
-    .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
-    .attr('stroke', '#ccc')
-    .attr('stroke-width', 1)
-    .attr('rx', 3);
+    viewVariablesToUpdate.svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
 
-  // Min label
-  legendG
-    .append('text')
-    .attr('x', (bgWidth - width) / 2 - padding)
-    .attr('y', height + textHeight)
-    .attr('text-anchor', 'start')
-    .style('font-size', `${fontSize}px`)
-    .style('fill', '#333')
-    .text(minText);
+    if (viewVariablesToUpdate.getLegendType() === 'continuous') {
+      const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
+      const legendX = 0;
+      const legendY = 50;
+      const width = 250;
+      const height = 30;
+      const fontSize = 24;
+      const padding = 15;
 
-  // Max label
-  legendG
-    .append('text')
-    .attr('x', (bgWidth - width) / 2 - padding + width)
-    .attr('y', height + textHeight)
-    .attr('text-anchor', 'end')
-    .style('font-size', `${fontSize}px`)
-    .style('fill', '#333')
-    .text(maxText);
+      // Use standard <defs>
+      const defs = viewVariablesToUpdate.svg.select('defs').empty()
+        ? viewVariablesToUpdate.svg.append('defs')
+        : viewVariablesToUpdate.svg.select('defs');
 
-  // Title (compare) — position inside background with padding so it's not clipped
-  const titleY = -padding + Math.round(fontSize / 2);
-  legendG
-    .append('text')
-    .attr('x', bgWidth / 2 - padding)
-    .attr('y', titleY)
-    .attr('text-anchor', 'middle')
-    .style('font-size', `${fontSize}px`)
-    .style('font-weight', 'bold')
-    .style('fill', '#333')
-    .text(legendTitle);
+      defs.select(`#${viewVariablesToUpdate.legendGradientName}`).remove();
 
-} else {
-  // Categorical legend
-  const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
-  categories.sort();
-  const legendX = 0;
-  const legendY = 50;
-  const itemHeight = 40;
-  const rectHeight = 20;
-  const rectWidth = 30;
-  const fontSize = 24;
-  const titlePadding = 15;
-  const padding = 15;
+      const gradient = defs
+        .append('linearGradient')
+        .attr('id', viewVariablesToUpdate.legendGradientName)
+        .attr('x1', '0%')
+        .attr('x2', '100%')
+        .attr('y1', '0%')
+        .attr('y2', '0%');
 
-  // Measure using svg
-  const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
-  const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
-  const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
-  const titleWidth =
-    tempSvg
-      .append('text')
-      .text(legendTitleCat)
-      .style('font-size', `${fontSize}px`)
-      .style('font-weight', 'bold')
-      .node()
-      ?.getBBox().width || 0;
+      const numStops = 10;
+      for (let i = 0; i <= numStops; i++) {
+        const t = i / numStops;
+        const value = min + t * (max - min);
+        gradient
+          .append('stop')
+          .attr('offset', `${t * 100}%`)
+          .attr('stop-color', viewVariablesToUpdate.continuous(value));
+      }
 
-  const textNodes = tempSvg
-    .selectAll('text')
-    .data(categories)
-    .enter()
-    .append('text')
-    .text((d) => d)
-    .style('font-size', `${fontSize}px`);
+      const legendG = viewVariablesToUpdate.svg
+        .append('g')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
+        .attr('transform', `translate(${legendX},${legendY})`);
 
-  const maxTextWidth = categories.length
-    ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
-    : 0;
-  tempSvg.remove();
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      // fallback if translation returns empty
+      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
 
-  const itemWidth = Math.max(200, maxTextWidth + rectWidth + 20, titleWidth + 40);
-  const backgroundWidth = itemWidth + padding * 2;
-  const categoryItemsHeight = categories.length * itemHeight;
-  const titleHeight = fontSize * 1.2 + titlePadding;
-  const backgroundHeight = titleHeight + categoryItemsHeight + padding * 2;
+      // measure sizes using svg_compare
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(titleText)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
 
-  const legendG = viewVariablesToUpdate.svg
-    .append('g')
-    .attr('class', viewVariablesToUpdate.legendContainerName)
-    .attr('transform', `translate(${legendX},${legendY})`);
+      const minText = (min ?? 0).toFixed(2);
+      const minWidth =
+        tempSvg
+          .append('text')
+          .text(minText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
 
-  // Background rectangle for categorical legend
-  legendG
-    .append('rect')
-    .attr('x', -padding)
-    .attr('y', -padding)
-    .attr('width', backgroundWidth)
-    .attr('height', backgroundHeight)
-    .style('fill', 'rgba(255, 255, 255, 0.9)')
-    .attr('stroke', '#ccc')
-    .attr('stroke-width', 1)
-    .attr('rx', 5);
+      const maxText = (max ?? 0).toFixed(2);
+      const maxWidth =
+        tempSvg
+          .append('text')
+          .text(maxText)
+          .style('font-size', `${fontSize}px`)
+          .node()
+          ?.getBBox().width || 0;
 
-  // Title (categorical)
-  legendG
-    .append('text')
-    .attr('x', backgroundWidth / 2 - padding)
-    .attr('y', titlePadding + fontSize / 2)
-    .attr('dy', '0.35em')
-    .attr('text-anchor', 'middle')
-    .style('font-size', `${fontSize}px`)
-    .style('font-weight', 'bold')
-    .style('fill', '#333')
-    .text(legendTitleCat);
+      tempSvg.remove();
 
-  categories.forEach((cat, i) => {
-    const yPosition = i * itemHeight + titleHeight;
-    const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
-    const rectY = (itemHeight - rectHeight) / 2;
-    legendItem
-      .append('rect')
-      .attr('y', rectY)
-      .attr('width', rectWidth)
-      .attr('height', rectHeight)
-      .style('fill', viewVariablesToUpdate.ordinal(cat))
-      .attr('stroke', '#333')
-      .attr('stroke-width', 0.5)
-      .attr('rx', 2);
-    const textY = rectY + rectHeight / 2;
-    legendItem
-      .append('text')
-      .attr('x', rectWidth + 10)
-      .attr('y', textY)
-      .attr('dy', '0.35em')
-      .style('font-size', `${fontSize}px`)
-      .style('fill', '#333')
-      .text(cat);
-    legendItem.append('title').text(cat);
-  });
-}
+      const textHeight = fontSize * 1.2;
+      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+      const bgWidth = requiredWidth + padding * 2;
+      const bgHeight = height + textHeight * 2 + padding * 3;
+
+      legendG
+        .append('rect')
+        .attr('x', -padding)
+        .attr('y', -padding - textHeight)
+        .attr('width', bgWidth)
+        .attr('height', bgHeight)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 5);
+
+
+      legendG
+        .append('rect')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', 0)
+        .attr('width', width)
+        .attr('height', height)
+        .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 3);
+
+      // Min label
+      legendG
+        .append('text')
+        .attr('x', (bgWidth - width) / 2 - padding)
+        .attr('y', height + textHeight)
+        .attr('text-anchor', 'start')
+        .style('font-size', `${fontSize}px`)
+        .style('fill', '#333')
+        .text(minText);
+
+      // Max label
+      legendG
+        .append('text')
+        .attr('x', (bgWidth - width) / 2 - padding + width)
+        .attr('y', height + textHeight)
+        .attr('text-anchor', 'end')
+        .style('font-size', `${fontSize}px`)
+        .style('fill', '#333')
+        .text(maxText);
+
+      // Title (compare) — position inside background with padding so it's not clipped
+      const titleY = -padding + Math.round(fontSize / 2);
+      legendG
+        .append('text')
+        .attr('x', bgWidth / 2 - padding)
+        .attr('y', titleY)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(legendTitle);
+
+    } else {
+      // Categorical legend
+      const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
+      categories.sort();
+      const legendX = 0;
+      const legendY = 50;
+      const itemHeight = 40;
+      const rectHeight = 20;
+      const rectWidth = 30;
+      const fontSize = 24;
+      const titlePadding = 15;
+      const padding = 15;
+
+      // Measure using svg
+      const tempSvg = viewVariablesToUpdate.svg.append('g').style('opacity', 0);
+      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
+      const titleWidth =
+        tempSvg
+          .append('text')
+          .text(legendTitleCat)
+          .style('font-size', `${fontSize}px`)
+          .style('font-weight', 'bold')
+          .node()
+          ?.getBBox().width || 0;
+
+      const textNodes = tempSvg
+        .selectAll('text')
+        .data(categories)
+        .enter()
+        .append('text')
+        .text((d) => d)
+        .style('font-size', `${fontSize}px`);
+
+      const maxTextWidth = categories.length
+        ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
+        : 0;
+      tempSvg.remove();
+
+      const itemWidth = Math.max(200, maxTextWidth + rectWidth + 20, titleWidth + 40);
+      const backgroundWidth = itemWidth + padding * 2;
+      const categoryItemsHeight = categories.length * itemHeight;
+      const titleHeight = fontSize * 1.2 + titlePadding;
+      const backgroundHeight = titleHeight + categoryItemsHeight + padding * 2;
+
+      const legendG = viewVariablesToUpdate.svg
+        .append('g')
+        .attr('class', viewVariablesToUpdate.legendContainerName)
+        .attr('transform', `translate(${legendX},${legendY})`);
+
+      // Background rectangle for categorical legend
+      legendG
+        .append('rect')
+        .attr('x', -padding)
+        .attr('y', -padding)
+        .attr('width', backgroundWidth)
+        .attr('height', backgroundHeight)
+        .style('fill', 'rgba(255, 255, 255, 0.9)')
+        .attr('stroke', '#ccc')
+        .attr('stroke-width', 1)
+        .attr('rx', 5);
+
+      // Title (categorical)
+      legendG
+        .append('text')
+        .attr('x', backgroundWidth / 2 - padding)
+        .attr('y', titlePadding + fontSize / 2)
+        .attr('dy', '0.35em')
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#333')
+        .text(legendTitleCat);
+
+      categories.forEach((cat, i) => {
+        const yPosition = i * itemHeight + titleHeight;
+        const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
+        const rectY = (itemHeight - rectHeight) / 2;
+        legendItem
+          .append('rect')
+          .attr('y', rectY)
+          .attr('width', rectWidth)
+          .attr('height', rectHeight)
+          .style('fill', viewVariablesToUpdate.ordinal(cat))
+          .attr('stroke', '#333')
+          .attr('stroke-width', 0.5)
+          .attr('rx', 2);
+        const textY = rectY + rectHeight / 2;
+        legendItem
+          .append('text')
+          .attr('x', rectWidth + 10)
+          .attr('y', textY)
+          .attr('dy', '0.35em')
+          .style('font-size', `${fontSize}px`)
+          .style('fill', '#333')
+          .text(cat);
+        legendItem.append('title').text(cat);
+      });
+    }
   }
 
   private updateDetailAtScreenPos(screenX: number, screenY: number) {
-  if (!this.isXenium || !this.currentPathGenerator) return;
+    if (!this.isXenium || !this.currentPathGenerator) return;
 
-  const half = this.detailSize / 2;
+    const half = this.detailSize / 2;
 
-  const x0s = screenX - half;
-  const x1s = screenX + half;
-  const y0s = screenY - half;
-  const y1s = screenY + half;
+    const x0s = screenX - half;
+    const x1s = screenX + half;
+    const y0s = screenY - half;
+    const y1s = screenY + half;
 
-  const [x0d, y0d] = this.currentTransform.invert([x0s, y0s]);
-  const [x1d, y1d] = this.currentTransform.invert([x1s, y1s]);
+    const [x0d, y0d] = this.currentTransform.invert([x0s, y0s]);
+    const [x1d, y1d] = this.currentTransform.invert([x1s, y1s]);
 
-  const centerX = (x0d + x1d) / 2;
-  const centerY = (y0d + y1d) / 2;
+    const centerX = (x0d + x1d) / 2;
+    const centerY = (y0d + y1d) / 2;
 
-  const [targetX, targetY] = this.currentTransform.invert([screenX, screenY]);
+    const [targetX, targetY] = this.currentTransform.invert([screenX, screenY]);
 
-  const localScale = 6;
+    const localScale = 6;
 
-  this.detailLayer.attr(
-    'transform',
-    `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
-  );
+    this.detailLayer.attr(
+      'transform',
+      `translate(${targetX},${targetY}) scale(${localScale}) translate(${-centerX},${-centerY})`
+    );
 
-  const subset = this.fullFeatures.filter((f) => {
-    const c = (f.properties as any).__centroidProjected;
-    if (!c || c.length < 2) return false;
+    const subset = this.fullFeatures.filter((f) => {
+      const c = (f.properties as any).__centroidProjected;
+      if (!c || c.length < 2) return false;
 
-    const [x, y] = c as [number, number];
-    return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
-  });
+      const [x, y] = c as [number, number];
+      return x >= x0d && x <= x1d && y >= y0d && y <= y1d;
+    });
 
-  this.detailLayer
-    .style('cursor', 'pointer')
-    .selectAll<SVGPathElement, CellFeature>('path')
-    .data(subset)
-    .join('path')
-    .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
-    .attr('fill', (d: CellFeature) => {
-      const value = this.leidenCentralityProps.includes(this.selectedView)
-        ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedView]
-        : d.properties?.[this.selectedView];
-      if (this.currentLegendType === 'categorical') {
-        return this.colorScale(String(value));
-      } else {
-        const num = this.toNumber(value);
-        return Number.isFinite(num)
-          ? this.continuousColorScale(num)
-          : '#ccc';
-      }
-    })
-    .attr('stroke', '#fff')
-    .attr('stroke-width', 0.4)
-    .style('opacity', 1)
-    .on('click', (event, d) => this.displayCellDetails(event, d));
-}
+    this.detailLayer
+      .style('cursor', 'pointer')
+      .selectAll<SVGPathElement, CellFeature>('path')
+      .data(subset)
+      .join('path')
+      .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
+      .attr('fill', (d: CellFeature) => {
+        const value = this.leidenCentralityProps.includes(this.selectedView)
+          ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedView]
+          : d.properties?.[this.selectedView];
+        if (this.currentLegendType === 'categorical') {
+          return this.colorScale(String(value));
+        } else {
+          const num = this.toNumber(value);
+          return Number.isFinite(num)
+            ? this.continuousColorScale(num)
+            : '#ccc';
+        }
+      })
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 0.4)
+      .style('opacity', 1)
+      .on('click', (event, d) => this.displayCellDetails(event, d));
+  }
 
 
   private initDetailWindow() {
-  // alte ClipPaths/Frames entfernen (falls vorhanden)
-  this.svg.select("#detail-frame").remove();
+    // alte ClipPaths/Frames entfernen (falls vorhanden)
+    this.svg.select("#detail-frame").remove();
 
-  // Clip-Fenster (immer in <defs>)
-  const defs = this.svg.select('defs').empty()
-    ? this.svg.append('defs')
-    : this.svg.select('defs');
+    // Clip-Fenster (immer in <defs>)
+    const defs = this.svg.select('defs').empty()
+      ? this.svg.append('defs')
+      : this.svg.select('defs');
 
-  defs.select("#detail-clip").remove();
+    defs.select("#detail-clip").remove();
 
-  defs.append("clipPath")
-    .attr("id", "detail-clip")
-    .append("rect")
-    .attr("id", "detail-window")
-    .attr("x", 30)
-    .attr("y", 30)
-    .attr("width", this.detailSize)
-    .attr("height", this.detailSize);
+    defs.append("clipPath")
+      .attr("id", "detail-clip")
+      .append("rect")
+      .attr("id", "detail-window")
+      .attr("x", 30)
+      .attr("y", 30)
+      .attr("width", this.detailSize)
+      .attr("height", this.detailSize);
 
 
-  // Weißer Hintergrund nur im Detail-Layer (Xenium)
-  this.detailLayer
-    .selectAll(".detail-bg")
-    .remove();
+    // Weißer Hintergrund nur im Detail-Layer (Xenium)
+    this.detailLayer
+      .selectAll(".detail-bg")
+      .remove();
 
-  this.detailLayer
-    .append("rect")
-    .attr("class", "detail-bg")
-    .attr("x", -10000)
-    .attr("y", -10000)
-    .attr("width", 20000)
-    .attr("height", 20000)
-    .attr("fill", "#ffffff")
-    .attr("pointer-events", "none");
+    this.detailLayer
+      .append("rect")
+      .attr("class", "detail-bg")
+      .attr("x", -10000)
+      .attr("y", -10000)
+      .attr("width", 20000)
+      .attr("height", 20000)
+      .attr("fill", "#ffffff")
+      .attr("pointer-events", "none");
 
-  // Rahmen des Fensters
-  this.svg.append("rect")
-    .attr("id", "detail-frame")
-    .attr("x", 30)
-    .attr("y", 30)
-    .attr("width", this.detailSize)
-    .attr("height", this.detailSize)
-    .attr("fill", "none")
-    .attr("stroke", "#111")
-    .attr("stroke-width", 1)
-    .style("pointer-events", "none");
-}
+    // Rahmen des Fensters
+    this.svg.append("rect")
+      .attr("id", "detail-frame")
+      .attr("x", 30)
+      .attr("y", 30)
+      .attr("width", this.detailSize)
+      .attr("height", this.detailSize)
+      .attr("fill", "none")
+      .attr("stroke", "#111")
+      .attr("stroke-width", 1)
+      .style("pointer-events", "none");
+  }
 
   private bindDetailWindowInteractions(): void {
-  if(!this.svg) return;
+    if (!this.svg) return;
 
-  // Alte Handler entfernen, damit bei Reloads nichts doppelt gebunden wird
-  this.svg.on('click.detail', null);
-  this.svg.on('dblclick.detail', null);
-  this.svg.on('contextmenu.detail', null);
+    // Alte Handler entfernen, damit bei Reloads nichts doppelt gebunden wird
+    this.svg.on('click.detail', null);
+    this.svg.on('dblclick.detail', null);
+    this.svg.on('contextmenu.detail', null);
 
-  // Doppelklick = explizit repositionieren
-  this.svg.on('dblclick.detail', (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
+    // Doppelklick = explizit repositionieren
+    this.svg.on('dblclick.detail', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
 
-    const [mx, my] = d3.pointer(event, this.svg.node());
-    this.setDetailWindow(mx, my);
-  });
+      const [mx, my] = d3.pointer(event, this.svg.node());
+      this.setDetailWindow(mx, my);
+    });
 
-  // Rechtsklick = entfernen
-  this.svg.on('contextmenu.detail', (event: MouseEvent) => {
-    event.preventDefault();
-    event.stopPropagation();
-    this.clearDetailWindow();
-  });
+    // Rechtsklick = entfernen
+    this.svg.on('contextmenu.detail', (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.clearDetailWindow();
+    });
 
-  // ESC = schließen
-  if(this.keydownHandler) {
-  window.removeEventListener('keydown', this.keydownHandler);
-}
+    // ESC = schließen
+    if (this.keydownHandler) {
+      window.removeEventListener('keydown', this.keydownHandler);
+    }
 
-this.keydownHandler = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') {
-    this.clearDetailWindow();
-  }
-};
+    this.keydownHandler = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        this.clearDetailWindow();
+      }
+    };
 
-window.addEventListener('keydown', this.keydownHandler);
+    window.addEventListener('keydown', this.keydownHandler);
   }
 
   private setDetailWindow(screenX: number, screenY: number): void {
-  this.detailVisible = true;
-  this.detailScreenPos = { x: screenX, y: screenY };
+    this.detailVisible = true;
+    this.detailScreenPos = { x: screenX, y: screenY };
 
-  this.showDetailWindowAt(screenX, screenY);
-  this.updateDetailAtScreenPos(screenX, screenY);
-}
+    this.showDetailWindowAt(screenX, screenY);
+    this.updateDetailAtScreenPos(screenX, screenY);
+  }
 
   private clearDetailWindow(): void {
-  this.detailVisible = false;
-  this.detailScreenPos = null;
-  this.hideDetailWindow();
+    this.detailVisible = false;
+    this.detailScreenPos = null;
+    this.hideDetailWindow();
 
-  // Optional: Detail-Layer Inhalte leeren
-  this.detailLayer.selectAll('path').remove();
-}
+    // Optional: Detail-Layer Inhalte leeren
+    this.detailLayer.selectAll('path').remove();
+  }
 
   private showDetailWindowAt(screenX: number, screenY: number): void {
-  this.svg.select('#detail-window')
-    .attr('x', screenX - this.detailSize / 2)
-    .attr('y', screenY - this.detailSize / 2)
-    .style('display', null);
+    this.svg.select('#detail-window')
+      .attr('x', screenX - this.detailSize / 2)
+      .attr('y', screenY - this.detailSize / 2)
+      .style('display', null);
 
-  this.svg.select('#detail-frame')
-    .attr('x', screenX - this.detailSize / 2)
-    .attr('y', screenY - this.detailSize / 2)
-    .style('display', null);
+    this.svg.select('#detail-frame')
+      .attr('x', screenX - this.detailSize / 2)
+      .attr('y', screenY - this.detailSize / 2)
+      .style('display', null);
 
-  this.detailLayer.style('display', null);
-}
+    this.detailLayer.style('display', null);
+  }
 
   private hideDetailWindow(): void {
-  this.svg.select('#detail-window').style('display', 'none');
-  this.svg.select('#detail-frame').style('display', 'none');
-  this.detailLayer.style('display', 'none');
-}
+    this.svg.select('#detail-window').style('display', 'none');
+    this.svg.select('#detail-frame').style('display', 'none');
+    this.detailLayer.style('display', 'none');
+  }
 }
 
 
