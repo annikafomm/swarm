@@ -2021,7 +2021,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const isMainView = containerName === '#hexbin';
     const features = isMainView ? this.features : this.compareFeatures;
     const selectedView = isMainView ? this.selectedView : this.selectedCompareView;
-
     // Use getAvailableView to ensure the property exists
     const viewToUse = this.getAvailableView(selectedView, features, 'cell_type');
     if (viewToUse !== selectedView) {
@@ -2041,15 +2040,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       const hasProperty = this.leidenCentralityProps.includes(viewToUse)
         ? true
         : viewToUse in (firstFeature.properties || {});
-      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
-      console.log('[updateHexColors] Looking for property:', viewToUse, '- Exists:', hasProperty);
+
       if (!hasProperty) {
         console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
         // Optionally, show a user-facing message here
       }
     }
 
-    this.resetClusterExtension();
+    if (viewToUse !== (isMainView ? this.selectedView : this.selectedCompareView)) {
+      this.resetClusterExtension();
+    }
 
     if (this.selectedCell && this.selectedCluster) {
       this.selectedCluster = null;
@@ -2068,6 +2068,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         ? this.baseLayer
         : viewVariablesToUpdate.g
     ) as unknown as d3.Selection<SVGGElement, any, any, any>;
+
+    // Safety check: if layerToColor is null/undefined, skip the color update
+    if (!layerToColor) {
+      console.warn(`[updateHexColors] Layer not found for ${containerName}`);
+      return;
+    }
 
     const sel = layerToColor
       .selectAll('path')
@@ -2162,19 +2168,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
     }
     this.renderLegend(containerName);
+
   }
 
   public updateSubgraphGenie3(compare: boolean = false): void {
     const token = this.nextRequestToken('genie3');
     console.log('Updating AUCELL graph for Genie3...');
-    compare ? this.isLoadingGenie3 = true : this.isLoadingGenie3Compare = true;
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
     const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
     const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
     const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     d3.select(graphContainerId).selectAll('*').remove();
 
     if (!geneSet || !datasetId) {
-      compare ? this.isLoadingGenie3 = false : this.isLoadingGenie3Compare = false;
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       return;
     }
 
@@ -2248,15 +2255,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const mainView = this.selectedView;
     const compareView = this.selectedCompareView;
+
+    if (mainView !== 'gene_expression' || compareView !== 'gene_expression') {
+      return null;
+    }
+
     const mainFeatures = this.features || [];
     const compareFeatures = this.compareFeatures || [];
+
     if (!mainFeatures.length || !compareFeatures.length) {
-      console.log('[domain:getPaired] skipped: missing features', {
-        mainView,
-        compareView,
-        mainFeatureCount: mainFeatures.length,
-        compareFeatureCount: compareFeatures.length,
-      });
       return null;
     }
 
@@ -2560,19 +2567,33 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const sliderData: any = payload['slider_data'];
 
             if (sliderData && typeof sliderData === 'object') {
-              this.spongeSliderData = {
-                step: sliderData.step || 0.01,
-                min_border: sliderData.min_border || 0,
-                max_border: sliderData.max_border || 100,
-                default_value: sliderData.default_value || 50,
-              };
+              if (compare) {
+                this.spongeSliderDataCompare = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoffCompare = this.spongeSliderDataCompare.default_value;
+              } else {
+                this.spongeSliderData = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoff = this.spongeSliderData.default_value;
+              }
             }
-
-            this.isLoadingSponge = true;
 
             console.log('Sponge Network:', data);
 
-            this.spongeNetwork = data.map((d) => ({
+            compare ? this.spongeNetworkCompare = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            })) : this.spongeNetwork = data.map((d) => ({
               source: d.geneA,
               target: d.geneB,
               p_adjusted: d['p.adj'],
@@ -3002,16 +3023,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onGeneSetChange(compare: boolean = false): void {
-    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3 : this.selectedGeneSetGenie3Compare;
-    const geneSetSpongeChanged = compare ? this.selectedGeneSetSponge : this.selectedGeneSetSpongeCompare;
-    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3 : this.previousGeneSetGenie3Compare;
-    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSponge : this.previousGeneSetSpongeCompare;
+    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSpongeChanged = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3Compare : this.previousGeneSetGenie3;
+    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSpongeCompare : this.previousGeneSetSponge;
     const regulatoryScoreChanged = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
     const graphIdGenie3 = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     const graphIdSponge = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
     if (geneSetGenie3Changed !== previousGeneSetGenie3Changed) {
-      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3 : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3Compare : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
       if (geneSetGenie3Changed) {
 
         d3.select(graphIdGenie3).selectAll('*').remove();
@@ -3025,6 +3046,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetGenie3Changed,
+              compare
             );
           }
         }, 100);
@@ -3036,7 +3058,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (geneSetSpongeChanged !== previousGeneSetSpongeChanged) {
-      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSponge : this.previousGeneSetSponge = this.selectedGeneSetSponge;
+      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSpongeCompare : this.previousGeneSetSponge = this.selectedGeneSetSponge;
       if (geneSetSpongeChanged) {
         d3.select(graphIdSponge).selectAll('*').remove();
         console.log('Updating Sponge graph for:', geneSetSpongeChanged);
@@ -3054,6 +3076,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetSpongeChanged,
+              compare
             );
           }
         }, 100);
@@ -3078,10 +3101,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onGeneSelectedFromTable(event: { gene: string; action: string }, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
-    // Only select if this action is for the corresponding network type
     if (networkType === 'genie3' && event.action.includes('genie3')) {
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+
       this.selectGeneSetFromTable(event.gene, 'genie3', compare);
     } else if (networkType === 'sponge' && event.action.includes('sponge')) {
+
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
       this.selectGeneSetFromTable(event.gene, 'sponge', compare);
     }
   }

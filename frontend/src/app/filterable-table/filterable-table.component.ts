@@ -26,9 +26,10 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() datasetId?: string;
   @Input() isLoading: boolean = false;
   @Input() emptyMessage: string = '';
+  @Input() isCompare: boolean = false;
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
-
+  @Output() geneSelectedCompare = new EventEmitter<{ gene: string; action: string }>();
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
@@ -44,6 +45,19 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   private readonly virtualActionColumns = new Set<string>([
     'gene_expression',
     'chromvar_spot_scores',
+    'tf_activity_score_ulm',
+    'tf_activity_padj_ulm',
+    'pathway_activity_score_mlm',
+    'pathway_activity_padj_mlm',
+    'cell_comp_tf_activity_cosine_similarity',
+    'cell_comp_tf_activity_category',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category',
+    'ligand_receptor_NMF_factors',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category'
   ]);
 
   // Pagination
@@ -151,6 +165,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       if (col === 'show_on_plot') return true;
       if (col === 'gene_expression') return true;
       if (col === 'chromvar_spot_scores') return true;
+      if (this.virtualActionColumns.has(col)) return true;  // ADD THIS LINE
 
       return col in tableData;
     });
@@ -410,16 +425,30 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const geneName = String(row.index);
 
     if (action === 'show_on_plot') {
-      this.geneSelected.emit({ gene: geneName, action });
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
       return;
     }
 
     if (action === 'chromvar_spot_scores') {
       this.chromvarBaseMotif = this.getMotifId(row);
       this.updateChromvarCombinedIfReady(true);
-      // Emit event to parent component for gene selection
-      this.geneSelected.emit({ gene: geneName, action: action });
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action: action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action: action });
+      }
       return;
+    }
+
+    // Emit the gene selection event for all score column actions
+    if (this.isCompare) {
+      this.geneSelectedCompare.emit({ gene: geneName, action });
+    } else {
+      this.geneSelected.emit({ gene: geneName, action });
     }
 
     this.fetchAndUpdate(action, geneName);
