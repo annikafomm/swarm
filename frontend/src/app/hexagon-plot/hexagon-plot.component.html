@@ -306,13 +306,13 @@
           <div *ngIf="selectedView === 'regulatory_scores'">
             <div class="selected-gene-info">
               <strong>Current selection</strong><br>
-              Score: {{ selectedRegulatoryScore || 'None' }}<br>
+              Score: {{ this.selectedRegulatoryScore || 'None' }}<br>
               <ng-container *ngIf="selectedRegulatoryScore?.endsWith('genie3'); else spongeSelectionMain">
-                Gene set (Genie3): {{ selectedGeneSetGenie3 || 'None' }}
+                Gene set (Genie3): {{ this.selectedGeneSetGenie3 || 'None' }}
               </ng-container>
               <ng-template #spongeSelectionMain>
                 <ng-container *ngIf="selectedRegulatoryScore?.endsWith('sponge'); else noNetworkSelectionMain">
-                  Gene set (Sponge): {{ selectedGeneSetSponge || 'None' }}
+                  Gene set (Sponge): {{ this.selectedGeneSetSponge || 'None' }}
                 </ng-container>
                 <ng-template #noNetworkSelectionMain>
                   Gene set: None
@@ -356,7 +356,7 @@
                       <h3>Genie3 Network</h3>
                       <mat-form-field appearance="fill" class="gene-selector">
                         <mat-label>Gene Set</mat-label>
-                        <mat-select [(ngModel)]="selectedGeneSetGenie3" (selectionChange)="onGeneSetChange()">
+                        <mat-select [(ngModel)]="this.selectedGeneSetGenie3" (selectionChange)="onGeneSetChange()">
                           <mat-option [value]="null">None</mat-option>
                           <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
                             {{ gene }}
@@ -364,29 +364,30 @@
                         </mat-select>
                       </mat-form-field>
                     </div>
-                    <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
-                      Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
+                    <div *ngIf="this.selectedGeneSetGenie3" class="selected-gene-info">
+                      Selected: <strong>{{ this.selectedGeneSetGenie3 }}</strong>
                     </div>
-                    <div *ngIf="!selectedGeneSetGenie3" class="network-message">
+                    <div *ngIf="!this.selectedGeneSetGenie3" class="network-message">
                       No Genie3 network selected
                     </div>
 
-                    <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
+                    <div *ngIf="this.selectedGeneSetGenie3 && this.genie3SliderData" class="genie3-controls">
                       <div class="control-row">
-                        <label for="min-weight-slider">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
-                        <input type="range" id="min-weight-slider" class="slider" [min]="genie3SliderData.min_border"
-                          [max]="genie3SliderData.max_border" [step]="genie3SliderData.step"
-                          [value]="genie3SliderData.default_value" (input)="onSliderChangeGenie3()"
-                          [(ngModel)]="genie3WeightCutoff" />
-                        <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border
+                        <label for="min-weight-slider">Minimum Genie3 Weight: {{ this.genie3WeightCutoff }}</label>
+                        <input type="range" id="min-weight-slider" class="slider"
+                          [min]="this.genie3SliderData.min_border" [max]="this.genie3SliderData.max_border"
+                          [step]="this.genie3SliderData.step" [value]="this.genie3SliderData.default_value"
+                          (input)="onSliderChangeGenie3()" [(ngModel)]="this.genie3WeightCutoff" />
+                        <div class="helper small">{{ this.genie3SliderData.min_border }} ← → {{
+                          this.genie3SliderData.max_border
                           }}
                         </div>
                       </div>
 
                       <div class="control-row">
-                        <label for="max-edges-slider">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                        <label for="max-edges-slider">Minimum Edges in Graph: {{ this.genie3MinEdges }}</label>
                         <input type="range" id="max-edges-slider" class="slider" min="1" max="50" step="1"
-                          (input)="onSliderChangeGenie3()" [(ngModel)]="genie3MinEdges" />
+                          (input)="onSliderChangeGenie3()" [(ngModel)]="this.genie3MinEdges" />
                         <div class="helper small">1 ←→ 50</div>
                       </div>
                     </div>
@@ -493,7 +494,8 @@
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                 [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
-                (featuresUpdated)="updateHexColors()">
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)">
               </app-table>
 
 
@@ -502,7 +504,8 @@
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                 [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
-                (featuresUpdated)="updateHexColors()">
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)">
               </app-table>
 
               <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
@@ -1141,14 +1144,15 @@
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
-                Score: {{ selectedRegulatoryScoreCompare || 'None' }}<br>
-                <ng-container *ngIf="selectedRegulatoryScoreCompare?.endsWith('genie3'); else spongeSelectionCompare">
-                  Gene set (Genie3): {{ selectedGeneSetGenie3Compare || 'None' }}
+                Score: {{ this.selectedRegulatoryScoreCompare || 'None' }}<br>
+                <ng-container
+                  *ngIf="this.selectedRegulatoryScoreCompare?.endsWith('genie3'); else spongeSelectionCompare">
+                  Gene set (Genie3): {{ this.selectedGeneSetGenie3Compare || 'None' }}
                 </ng-container>
                 <ng-template #spongeSelectionCompare>
                   <ng-container
-                    *ngIf="selectedRegulatoryScoreCompare?.endsWith('sponge'); else noNetworkSelectionCompare">
-                    Gene set (Sponge): {{ selectedGeneSetSpongeCompare || 'None' }}
+                    *ngIf="this.selectedRegulatoryScoreCompare?.endsWith('sponge'); else noNetworkSelectionCompare">
+                    Gene set (Sponge): {{ this.selectedGeneSetSpongeCompare || 'None' }}
                   </ng-container>
                   <ng-template #noNetworkSelectionCompare>
                     Gene set: None
@@ -1169,13 +1173,14 @@
                 <app-table [data]="this.metaCompare['global_regulatory_scores_genie3']" [features]="compareFeatures"
                   [actionColumns]="['aucell_scores_genie3','spongeffects_ssGSEA_scores_genie3', 'viper_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
+                  [isCompare]="true" (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()"></app-table>
                 <app-table [data]="this.metaCompare['global_regulatory_scores_sponge']" [features]="compareFeatures"
                   [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge','spongeffects_ssGSEA_scores_sponge', 'viper_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
                   (featuresUpdated)="repaintBothViews()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', true)">
+                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)">
                 </app-table>
               </mat-expansion-panel>
 
@@ -1188,23 +1193,24 @@
                         <h3>Genie3 Network (Comparison)</h3>
                         <mat-form-field appearance="fill" class="gene-selector">
                           <mat-label>Gene Set</mat-label>
-                          <mat-select [(ngModel)]="selectedGeneSetGenie3Compare"
+                          <mat-select [(ngModel)]="this.selectedGeneSetGenie3Compare"
                             (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
-                            <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
+                            <mat-option *ngFor="let gene of this.genie3Elements" [value]="gene">
                               {{ gene }}
                             </mat-option>
                           </mat-select>
                         </mat-form-field>
                       </div>
-                      <div *ngIf="selectedGeneSetGenie3Compare" class="selected-gene-info">
-                        Selected: <strong>{{ selectedGeneSetGenie3Compare }}</strong>
+                      <div *ngIf="this.selectedGeneSetGenie3Compare" class="selected-gene-info">
+                        Selected: <strong>{{ this.selectedGeneSetGenie3Compare }}</strong>
                       </div>
-                      <div *ngIf="!selectedGeneSetGenie3Compare" class="network-message">
+                      <div *ngIf="!this.selectedGeneSetGenie3Compare" class="network-message">
                         No Genie3 network selected
                       </div>
 
-                      <div *ngIf="selectedGeneSetGenie3Compare && genie3SliderDataCompare" class="genie3-controls">
+                      <div *ngIf="this.selectedGeneSetGenie3Compare && this.genie3SliderDataCompare"
+                        class="genie3-controls">
                         <div class="control-row">
                           <label for="min-weight-slider-compare">Minimum Genie3 Weight: {{ genie3WeightCutoffCompare
                             }}</label>
@@ -1246,7 +1252,7 @@
                         <h3>Sponge Network (Comparison)</h3>
                         <mat-form-field appearance="fill" class="gene-selector">
                           <mat-label>Gene Set</mat-label>
-                          <mat-select [(ngModel)]="selectedGeneSetSpongeCompare"
+                          <mat-select [(ngModel)]="this.selectedGeneSetSpongeCompare"
                             (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
                             <mat-option *ngFor="let gene of spongeElements" [value]="gene">
@@ -1269,7 +1275,7 @@
                           <input type="range" id="max-pvalue-slider-compare" class="slider"
                             [min]="spongeSliderDataCompare.min_border" [max]="spongeSliderDataCompare.max_border"
                             [step]="spongeSliderDataCompare.step" [value]="spongeSliderDataCompare.default_value"
-                            [(ngModel)]="spongePValueCutoffCompare" (input)="onGeneSetChange(true)" />
+                            [(ngModel)]="this.spongePValueCutoffCompare" (input)="onGeneSetChange(true)" />
                           <div class="helper small">{{ spongeSliderDataCompare.min_border }} ← → {{
                             spongeSliderDataCompare.max_border }}
                           </div>
@@ -1279,7 +1285,7 @@
                           <label for="max-edges-slider-sponge-compare">Minimum Edges in Graph: {{ spongeMinEdgesCompare
                             }}</label>
                           <input type="range" id="max-edges-slider-sponge-compare" class="slider" min="1" max="50"
-                            step="1" (input)="onGeneSetChange(true)" [(ngModel)]="spongeMinEdgesCompare" />
+                            step="1" (input)="onGeneSetChange(true)" [(ngModel)]="this.spongeMinEdgesCompare" />
                           <div class="helper small">1 ←→ 50</div>
                         </div>
                       </div>
@@ -1293,9 +1299,9 @@
                       <div id="aucell_graph_sponge_compare" #aucell_graph_sponge_compare
                         [style.display]="isLoadingSpongeCompare ? 'none' : 'block'"></div>
 
-                      <div class="graph-summary" *ngIf="!isLoadingSpongeCompare && selectedGeneSetSpongeCompare">
-                        P-value cutoff: {{ spongePValueCutoffCompare | number: '1.2-4' }} · Number of edges: {{
-                        spongeMinEdgesCompare }}
+                      <div class="graph-summary" *ngIf="!isLoadingSpongeCompare && this.selectedGeneSetSpongeCompare">
+                        P-value cutoff: {{ this.spongePValueCutoffCompare | number: '1.2-4' }} · Number of edges: {{
+                        this.spongeMinEdgesCompare }}
                       </div>
                     </section>
                   </div>
@@ -1303,36 +1309,38 @@
               </mat-expansion-panel>
             </div>
 
-            <div *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
-              <h4> Cell Regulatory Scores</h4>
+            <mat-expansion-panel *ngIf="selectedCompareView === 'regulatory_scores' && selectedCellCompare">
+              <mat-expansion-panel-header>
+                <h4> Cell Regulatory Scores</h4>
+              </mat-expansion-panel-header>
 
               <div class="cell-reg-scores">
                 <h4>Regulatory Scores for Selected Cell: {{ selectedCellCompare.properties.barcode }}</h4>
 
                 <h3>🧬 Genie3 Regulatory Scores (TFs)</h3>
-                <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="compareFeatures"
-                  [updateColumn]="'regulatory_scores'"
+                <app-table *ngIf="genie3ElementsCompare.length > 0" [data]="genie3RawDataCompare"
+                  [features]="compareFeatures" [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3', true)"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
+                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="compareFeatures"
-                  [updateColumn]="'regulatory_scores'"
+                <app-table *ngIf="spongeElementsCompare.length > 0" [data]="spongeRawDataCompare"
+                  [features]="compareFeatures" [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge', true)"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
+                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)"
                   (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
-                <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
+                <div *ngIf="genie3ElementsCompare.length === 0 && spongeElementsCompare.length === 0">
                   No regulatory scores available or still loading.
                 </div>
               </div>
-            </div>
+            </mat-expansion-panel>
           </mat-tab>
 
           <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', 'compare')">
@@ -1384,7 +1392,7 @@
                 <div class="controls-row">
                   <div class="interval-selector">
                     <label for="interval-select">Interval:</label>
-                    <select id="interval-select" [(ngModel)]="selectedIntervalCompare"
+                    <select id="interval-select" [(ngModel)]="this.selectedIntervalCompare"
                       (change)="updateCoOccurrenceTable(true)">
                       <option *ngFor="
                   let i of [].constructor(maxIntervalCompare + 1);

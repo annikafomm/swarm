@@ -2173,15 +2173,15 @@ this.sessionService
 
     const mainView = this.selectedView;
     const compareView = this.selectedCompareView;
+
+    if (mainView !== 'gene_expression' || compareView !== 'gene_expression') {
+      return null;
+    }
+
     const mainFeatures = this.features || [];
     const compareFeatures = this.compareFeatures || [];
+
     if (!mainFeatures.length || !compareFeatures.length) {
-      console.log('[domain:getPaired] skipped: missing features', {
-        mainView,
-        compareView,
-        mainFeatureCount: mainFeatures.length,
-        compareFeatureCount: compareFeatures.length,
-      });
       return null;
     }
 
