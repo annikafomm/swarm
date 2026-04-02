@@ -472,8 +472,10 @@
             </mat-expansion-panel>
           </div>
 
-          <div *ngIf="selectedView === 'regulatory_scores' && selectedCell">
-            <h4> Cell Regulatory Scores</h4>
+          <mat-expansion-panel *ngIf="selectedView === 'regulatory_scores' && selectedCell">
+            <mat-expansion-panel-header>
+              <h4> Cell Regulatory Scores</h4>
+            </mat-expansion-panel-header>
 
             <div class="cell-reg-scores">
               <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
@@ -501,7 +503,7 @@
                 No regulatory scores available or still loading.
               </div>
             </div>
-          </div>
+          </mat-expansion-panel>
         </mat-tab>
 
         <mat-tab label="Co-occurence" [disabled]="!propertyAvailable('co_occurrence')">
