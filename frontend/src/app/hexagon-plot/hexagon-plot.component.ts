@@ -151,6 +151,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedView = 'regulatory_scores';
   public selectedCompareView: string = 'regulatory_scores';
 
+  public selectedItemByView: { [view: string]: string | null } = {};
+  public selectedItemByViewCompare: { [view: string]: string | null } = {};
+
 
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetGenie3Compare: string | null = null;
@@ -180,6 +183,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private previousGeneSetGenie3Compare: string | null = null;
   private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -205,7 +209,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   public clusterCells: CellFeature[] = [];
+  public clusterCellsCompare: CellFeature[] = [];
   public clusterCellTypes: {
+    type: string;
+    count: number;
+    percentage: string;
+  }[] = [];
+  public clusterCellTypesCompare: {
     type: string;
     count: number;
     percentage: string;
@@ -219,6 +229,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       average_clustering: 0,
       closeness_centrality: 0,
     };
+  public clusterCentralityAvgCompare: {
+    degree_centrality: number;
+    average_clustering: number;
+    closeness_centrality: number;
+  } = {
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
+
 
   public compareClusterCells: CellFeature[] = [];
   public compareClusterCellTypes: {
@@ -286,8 +306,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
+  public coOccurrenceDataCompare: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
+  public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
 
@@ -349,7 +371,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       '#ff8a65',
       '#4caf50',
     ]);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
     '#ff9800',
@@ -362,7 +384,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     '#4caf50',
   ]);
   // Yellow continuous color palette
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
@@ -429,10 +451,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.regulatoryObsmKeysCompare = [];
 
           this.updatePathsFromDataset(dataset, true);
-          this.refreshCompareRegulatoryAvailability();
-
           // Trigger the reload
           this.reloadComparisonView();
+
         } else if (!dataset && this.compareMode) {
           this.pathsService.updatePaths({ adataPath: undefined }, true);
           this.compareDataPath = '';
@@ -516,6 +537,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     if (spongeEl) {
       this.spongeWidth = spongeEl.clientWidth || 600;
     }
+  }
+
+  public onRegulatoryGraphsPanelOpened(): void {
+    // Wait for lazy expansion-panel content to be attached to the DOM.
+    setTimeout(() => {
+      this.updateGraphWidths();
+
+      if (this.selectedGeneSetGenie3) {
+        this.updateSubgraphGenie3();
+      }
+
+      if (this.selectedGeneSetSponge) {
+        this.updateSubgraphSponge();
+      }
+    }, 0);
   }
 
   // Handle tangram dataset selection - use tangram_adata_path if available
@@ -641,9 +677,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let newView: string | null = null;
     const tabLabel = event.tab.textLabel;
 
-    // Handle info tabs that need async rendering (main view only)
+
     if (!compare && (tabLabel === 'Cluster Information' || tabLabel === 'Cell Information')) {
       setTimeout(() => this.renderNhoodHeatmap(), 300);
+      return;
+    }
+    if (compare && (tabLabel === 'Compare - Cluster Information' || tabLabel === 'Compare - Cell Information')) {
+      setTimeout(() => this.renderNhoodHeatmap(true), 300);
       return;
     }
 
@@ -694,7 +734,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   private hasRegulatoryScoresData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasGenie3 = meta['global_regulatory_scores_genie3'] &&
       Object.keys(meta['global_regulatory_scores_genie3']).length > 0;
@@ -710,17 +750,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private hasGeneExpressionData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
-    if (!meta) return false;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasMoranI = meta['moranI'] && Object.keys(meta['moranI']).length > 0;
     const hasGearyC = meta['gearyC'] && Object.keys(meta['gearyC']).length > 0;
 
-    return !!(hasMoranI || hasGearyC);
-  }
-
-  private async refreshCompareRegulatoryAvailability(): Promise<void> {
-    const compareDatasetId = this.selectedDatasetCompare?.id || this.selectedDataset?.id;
-    this.regulatoryObsmKeysCompare = await this.fetchRegulatoryObsmKeys(compareDatasetId);
+    return (hasMoranI || hasGearyC);
   }
 
   private async fetchRegulatoryObsmKeys(datasetId?: string): Promise<string[]> {
@@ -754,7 +789,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
 
-    // Use the carefully calculated map if it exists for this property
     if (map && prop in map) {
       return map[prop];
     }
@@ -765,7 +799,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
     const meta = scope === 'compare' ? this.metaCompare : this.meta;
 
-    if (!meta || !meta['leiden_cluster_annotations']) return false;
+    if (!meta || Object.keys(meta).length === 0 || !meta['leiden_cluster_annotations']) return false;
 
     const annotations = meta['leiden_cluster_annotations'];
 
@@ -787,6 +821,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       for (const prop of currentColorableProps) {
         if (prop === 'regulatory_scores') {
           map[prop] = this.hasRegulatoryScoresData(scope);
+        }
+        else if (prop === 'gene_expression') {
+          map[prop] = this.hasGeneExpressionData(scope);
+        }
+        else if (prop === 'co_occurrence') {
+          map[prop] = this.hasCoOccurrenceData(scope);
+
         } else {
           map[prop] = keys.includes(prop);
         }
@@ -801,6 +842,62 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     } else {
       this.propertyAvailabilityCompare = map;
     }
+  }
+
+  private buildGroupedPropertiesFromKeys(keys: string[]): { key: string; value: string[] }[] {
+    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+    const lianaKeys = [
+      'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity',
+      'tf_activity',
+      'pathway_activity',
+    ];
+    const chromvarKeys = ['chromvar_total_sum'];
+
+    return [
+      { key: 'Scores', value: keys.filter((p) => scoreKeys.includes(p)) },
+      { key: 'LIANA+', value: keys.filter((p) => lianaKeys.includes(p)) },
+      { key: 'ChromVAR', value: keys.filter((p) => chromvarKeys.includes(p)) },
+      {
+        key: 'Other', value: keys.filter(
+          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+        )
+      },
+    ];
+  }
+
+  private computePropertyAvailability(
+    features: CellFeature[],
+    candidates: Set<string>,
+    context: 'main' | 'compare'
+  ): { [prop: string]: boolean } {
+    const availability: { [prop: string]: boolean } = {};
+
+    candidates.forEach((prop) => {
+      if (prop === 'regulatory_scores') {
+        const hasFeatureData = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+        availability[prop] = context === 'main'
+          ? this.hasRegulatoryScoresData() || hasFeatureData
+          : hasFeatureData;
+      } else if (this.leidenCentralityProps.includes(prop)) {
+        availability[prop] = features.some((f) => {
+          const annotationVal = this.getLeidenClusterAnnotation(f.properties.leiden, context === 'compare' ? true : false)?.centrality?.[prop];
+          const featureVal = f?.properties ? f.properties[prop] : undefined;
+          const val = annotationVal ?? featureVal;
+          return val !== undefined && val !== null && val !== '';
+        });
+      } else {
+        availability[prop] = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+      }
+    });
+
+    return availability;
   }
 
   private createHexagonPlot(containerName?: string): void {
@@ -908,6 +1005,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.refreshSharedGeneExpressionDomain();
     }
   }
+
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   getSelectedDgeaHeatmap(): any | null {
     const cmp = this.getSelectedDgeaComparison();
@@ -1246,70 +1344,83 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             } else {
               this.features = this.fullFeatures;
             }
+          }
 
+
+
+          if (compare) {
+            this.metaCompare = data.meta;
+            console.log('Compare meta loaded:', this.metaCompare, data.meta);
+            this.updatePropertyAvailability('compare');
+          } else {
+            this.meta = data.meta;
+            this.updatePropertyAvailability('main');
+          }
+
+          const availableObsCols = this.getDgeaObsCols();
+          if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
+            this.selectedDgeaObsCol = availableObsCols[0];
+          }
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+          if (this.dgeaReady) {
+            this.initDgeaSelection();
+          }
+
+          const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
+          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
             if (compare) {
-              this.metaCompare = data.meta;
-              this.updatePropertyAvailability('compare');
+              this.clusterCountCompare = Object.keys(leidenClusterAnnotations).length;
             } else {
-              this.meta = data.meta;
-              this.updatePropertyAvailability('main');
-            }
-
-            const availableObsCols = this.getDgeaObsCols();
-            if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
-              this.selectedDgeaObsCol = availableObsCols[0];
-            }
-            this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
-            if (this.dgeaReady) {
-              this.initDgeaSelection();
-            }
-
-            const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
-            if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
               this.clusterCount = Object.keys(leidenClusterAnnotations).length;
             }
+          }
 
-            const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
-            if (Array.isArray(interval) && interval.length > 0) {
+          const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
+          if (Array.isArray(interval) && interval.length > 0) {
+            if (compare) {
+              this.maxIntervalCompare = interval.length - 1;
+            } else {
               this.maxInterval = interval.length - 1;
             }
-            this.selectedRegulatoryScore =
-              compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
-            if (compare) {
-              this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
-              this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
-              this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
-            } else {
-              this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
-              this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
-              this.geneSetsSponge = this.meta['sponge_genesets'] || {};
-            }
-            // Populate dropdown options from gene set keys
-            this.genie3Elements = Object.keys(this.geneSetsGenie3);
-            this.spongeElements = Object.keys(this.geneSetsSponge);
-            this.selectedGeneSetGenie3 =
-              Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-            this.selectedGeneSetSponge =
-              Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
-
-            if (compare) {
-              this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
-              this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
-              this.previousGeneSetGenie3Compare = null;
-              this.previousGeneSetSpongeCompare = null;
-              this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
-            } else {
-              this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
-              this.isLoadingSponge = !!this.selectedGeneSetSponge;
-              this.previousGeneSetGenie3 = null;
-              this.previousGeneSetSponge = null;
-              this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
-            }
-            // Trigger initial graph visualization
-            setTimeout(() => {
-              this.onGeneSetChange(compare);
-            }, 100);
           }
+
+          this.selectedRegulatoryScore =
+            compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
+          if (compare) {
+            this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
+            this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
+          } else {
+            this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+            this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+          }
+          // Populate dropdown options from gene set keys
+          this.genie3Elements = Object.keys(this.geneSetsGenie3);
+          this.spongeElements = Object.keys(this.geneSetsSponge);
+          this.selectedGeneSetGenie3 =
+            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
+          this.selectedGeneSetSponge =
+            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+
+          if (compare) {
+            this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
+            this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
+            this.previousGeneSetGenie3Compare = null;
+            this.previousGeneSetSpongeCompare = null;
+            this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
+          } else {
+            this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+            this.isLoadingSponge = !!this.selectedGeneSetSponge;
+            this.previousGeneSetGenie3 = null;
+            this.previousGeneSetSponge = null;
+            this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+          }
+          // Trigger initial graph visualization
+          setTimeout(() => {
+            this.onGeneSetChange(compare);
+          }, 100);
+
         }
         const featuresForProps = compare ? this.compareFeatures : this.features;
         const firstProps = featuresForProps?.[0]?.properties || {};
@@ -1373,6 +1484,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
           } else if (prop === 'gene_expression') {
             targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
+          }
+          else if (prop === 'co_occurrence') {
+            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare ? 'compare' : 'main');
+
           } else if (this.leidenCentralityProps.includes(prop)) {
             targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
               // FIX: Added 'compare' argument to getLeidenClusterAnnotation
@@ -1586,49 +1701,106 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.sharedGeneExpressionDomain;
   }
 
-  private extractViewValue(feature: CellFeature, view: string): unknown {
+  private cloneGeoJsonData(data: GeoJsonData | null): GeoJsonData | null {
+    if (!data) return null;
+
+    try {
+      if (typeof structuredClone === 'function') {
+        return structuredClone(data);
+      }
+    } catch (e) {
+      console.warn('[compare:data] structuredClone failed, falling back to JSON clone', e);
+    }
+
+    return JSON.parse(JSON.stringify(data)) as GeoJsonData;
+  }
+
+  private async loadCompareGeoJsonData(): Promise<GeoJsonData | null> {
+    const comparePath = this.selectedDatasetCompare?.geojson_path
+      ?? this.selectedDataset?.geojson_path
+      ?? this.dataPath;
+
+    if (!comparePath) {
+      console.warn('[compare init] no compare geojson path available');
+      return null;
+    }
+
+    const fullUrl = comparePath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${comparePath}`
+      : comparePath;
+
+    const response = await fetch(fullUrl, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText} (${fullUrl})`);
+    }
+
+    const data = await response.json() as GeoJsonData;
+    console.log('[compare init] loaded geojson from path', {
+      comparePath,
+      fullUrl,
+      featureCount: data?.features?.length ?? 0,
+      selectedCompareDatasetId: this.selectedDatasetCompare?.id ?? null,
+      selectedMainDatasetId: this.selectedDataset?.id ?? null,
+    });
+
+    return data;
+  }
+
+  private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
     if (this.leidenCentralityProps.includes(view)) {
-      return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
+      return this.getLeidenClusterAnnotation(feature.properties.leiden, context == 'compare' ? true : false)?.centrality?.[view];
     }
     return feature.properties[view];
   }
 
-  private collectFiniteValuesForView(features: CellFeature[], view: string): number[] {
+  private collectFiniteValuesForView(
+    features: CellFeature[],
+    view: string,
+    context: 'main' | 'compare' = 'main'
+  ): number[] {
     return features
-      .map((f) => this.toNumber(this.extractViewValue(f, view)))
+      .map((f) => this.toNumber(this.extractViewValue(f, view, context)))
       .filter((n) => Number.isFinite(n));
   }
 
-  private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
-    const values = this.collectFiniteValuesForView(features, view);
-    if (!values.length) return null;
-    return {
+  private getMinMaxForView(
+    features: CellFeature[],
+    view: string,
+    compare: boolean = false
+  ): { min: number; max: number } | null {
+    const values = this.collectFiniteValuesForView(features, view, compare ? 'compare' : 'main');
+    if (!values.length) {
+      console.log('[domain:getMinMaxForView] no finite values', {
+        view,
+        featureCount: features.length,
+      });
+      return null;
+    }
+    const result = {
       min: Math.min(...values),
       max: Math.max(...values),
     };
+    console.log('[domain:getMinMaxForView] computed', {
+      view,
+      featureCount: features.length,
+      finiteCount: values.length,
+      min: result.min,
+      max: result.max,
+    });
+    return result;
   }
 
-  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
-    if (!this.compareMode) return null;
-
-    const mainView = this.selectedView;
-    const compareView = this.selectedCompareView;
+  private getMergedMinMaxForView(view: string): { min: number; max: number } | null {
+    // Generalized: always merges min/max for both main and compare for a given view
     const mainFeatures = this.features || [];
     const compareFeatures = this.compareFeatures || [];
-    if (!mainFeatures.length || !compareFeatures.length) return null;
-
-    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
-    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
-    if (!mainIsContinuous || !compareIsContinuous) return null;
-
-    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
-    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
-    if (!mainMinMax || !compareMinMax) return null;
-
-    return {
-      min: Math.min(mainMinMax.min, compareMinMax.min),
-      max: Math.max(mainMinMax.max, compareMinMax.max),
-    };
+    if (!mainFeatures.length && !compareFeatures.length) return null;
+    const mainMinMax = mainFeatures.length ? this.getMinMaxForView(mainFeatures, view, false) : null;
+    const compareMinMax = compareFeatures.length ? this.getMinMaxForView(compareFeatures, view, true) : null;
+    if (!mainMinMax && !compareMinMax) return null;
+    const min = [mainMinMax?.min, compareMinMax?.min].filter(x => x !== undefined).reduce((a, b) => Math.min(a as number, b as number));
+    const max = [mainMinMax?.max, compareMinMax?.max].filter(x => x !== undefined).reduce((a, b) => Math.max(a as number, b as number));
+    return { min, max };
   }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
@@ -1659,16 +1831,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return !cached || cached.expiresAt <= now;
     });
 
+    // Fetch pending gene stats if needed
     if (pending.length > 0) {
       const results = await Promise.allSettled(
-        pending.map((r) => firstValueFrom(
-          this.sessionService.callWithSession(() =>
-            this.http.get<GeneStatsResponse>(
-              `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
-              { withCredentials: true },
+        pending.map((r) =>
+          firstValueFrom(
+            this.sessionService.callWithSession(() =>
+              this.http.get<GeneStatsResponse>(
+                `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+                { withCredentials: true },
+              )
             )
           )
-        ))
+        )
       );
 
       if (token !== this.geneDomainToken) {
@@ -1689,6 +1864,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
+    // Gather all valid cached domains
     const valid = requests
       .map((r) => this.geneDomainCache.get(r.cacheKey))
       .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
@@ -1717,6 +1893,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.refreshSharedGeneExpressionDomain();
   }
 
+  public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
+    const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    selectedMap[view] = event.gene;
+    this.fetchAndUpdate(event.action, event.gene, compare, view);
+  }
+
   public onColorbyPropertyChange(compare: boolean = false): void {
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
     const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
@@ -1725,8 +1907,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('[onColorbyPropertyChange] colorByProperty changed to:', colorProp);
 
-    if (colorProp === 'gene_expression') {
+    const dualGeneExpressionCompare =
+      this.compareMode &&
+      this.selectedView === 'gene_expression' &&
+      this.selectedCompareView === 'gene_expression';
+
+    if (dualGeneExpressionCompare) {
       this.refreshSharedGeneExpressionDomain();
+    } else {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
     }
 
     if (colorProp === 'regulatory_scores') {
@@ -1783,6 +1973,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
   }
+
 
   private getViewVariablesToUpdate(containerName: string) {
     const isMainView = containerName === '#hexbin';
@@ -1852,7 +2043,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const isMainView = containerName === '#hexbin';
     const features = isMainView ? this.features : this.compareFeatures;
     const selectedView = isMainView ? this.selectedView : this.selectedCompareView;
-
     // Use getAvailableView to ensure the property exists
     const viewToUse = this.getAvailableView(selectedView, features, 'cell_type');
     if (viewToUse !== selectedView) {
@@ -1872,15 +2062,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       const hasProperty = this.leidenCentralityProps.includes(viewToUse)
         ? true
         : viewToUse in (firstFeature.properties || {});
-      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
-      console.log('[updateHexColors] Looking for property:', viewToUse, '- Exists:', hasProperty);
+
       if (!hasProperty) {
         console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
         // Optionally, show a user-facing message here
       }
     }
 
-    this.resetClusterExtension();
+    if (viewToUse !== (isMainView ? this.selectedView : this.selectedCompareView)) {
+      this.resetClusterExtension();
+    }
 
     if (this.selectedCell && this.selectedCluster) {
       this.selectedCluster = null;
@@ -1900,6 +2091,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         : viewVariablesToUpdate.g
     ) as unknown as d3.Selection<SVGGElement, any, any, any>;
 
+    // Safety check: if layerToColor is null/undefined, skip the color update
+    if (!layerToColor) {
+      console.warn(`[updateHexColors] Layer not found for ${containerName}`);
+      return;
+    }
+
     const sel = layerToColor
       .selectAll('path')
       .data(features);
@@ -1918,30 +2115,38 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (isContinuous) {
       const compareSharedDomain = this.getPairedContinuousDomainForCompare();
+      console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
       const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
         ? this.getSharedDomainForGeneExpressionView()
         : null);
 
+      const domainSource = sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain';
+
       let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
       let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
+
+      if (!Number.isFinite(min) || !Number.isFinite(max)) {
+        min = 0;
+        max = 1;
+      }
+
       if (min === max) {
         const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
         min -= eps;
         max += eps;
       }
 
-      if (sharedDomain) {
-        this.continuousColorScale.domain([min, max]);
-        this.continuousColorScaleCompare.domain([min, max]);
-        this.currentLegendDomain = [min, max];
-        this.currentLegendDomainCompare = [min, max];
-        this.currentLegendType = 'continuous';
-        this.currentCompareLegendType = 'continuous';
-      } else {
-        viewVariablesToUpdate.continuous.domain([min, max]);
-      }
+      // Always normalize to [0, 1] for consistent color usage across all views
+      this.continuousColorScale.domain([0, 1]);
+      this.continuousColorScaleCompare.domain([0, 1]);
+      viewVariablesToUpdate.continuous.domain([0, 1]);
 
-      viewVariablesToUpdate.setLegendDomain([min, max]);
+      // Legend always shows [0, 1]
+      this.currentLegendDomain = [0, 1];
+      this.currentLegendDomainCompare = [0, 1];
+      this.currentLegendType = 'continuous';
+      this.currentCompareLegendType = 'continuous';
+      viewVariablesToUpdate.setLegendDomain([0, 1]);
       viewVariablesToUpdate.setLegendType('continuous');
 
       sel
@@ -1953,7 +2158,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
           return Number.isFinite(n)
-            ? viewVariablesToUpdate.continuous(n)
+            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
             : '#ccc';
         });
     } else {
@@ -1985,19 +2190,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
     }
     this.renderLegend(containerName);
+
   }
 
   public updateSubgraphGenie3(compare: boolean = false): void {
     const token = this.nextRequestToken('genie3');
     console.log('Updating AUCELL graph for Genie3...');
-    compare ? this.isLoadingGenie3 = true : this.isLoadingGenie3Compare = true;
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
     const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
     const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
     const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     d3.select(graphContainerId).selectAll('*').remove();
 
     if (!geneSet || !datasetId) {
-      compare ? this.isLoadingGenie3 = false : this.isLoadingGenie3Compare = false;
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       return;
     }
 
@@ -2063,6 +2269,66 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
+  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
+    if (!this.compareMode) {
+      console.log('[domain:getPaired] skipped: compare mode is off');
+      return null;
+    }
+
+    const mainView = this.selectedView;
+    const compareView = this.selectedCompareView;
+
+    if (mainView !== 'gene_expression' || compareView !== 'gene_expression') {
+      return null;
+    }
+
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.compareFeatures || [];
+
+    if (!mainFeatures.length || !compareFeatures.length) {
+      return null;
+    }
+
+    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
+    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
+    if (!mainIsContinuous || !compareIsContinuous) {
+      console.log('[domain:getPaired] skipped: one side is not continuous', {
+        mainView,
+        compareView,
+        mainIsContinuous,
+        compareIsContinuous,
+      });
+      return null;
+    }
+
+    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, true);
+    if (!mainMinMax || !compareMinMax) {
+      console.log('[domain:getPaired] skipped: missing min/max', {
+        mainView,
+        compareView,
+        mainMinMax,
+        compareMinMax,
+      });
+      return null;
+    }
+
+    const merged = {
+      min: Math.min(mainMinMax.min, compareMinMax.min),
+      max: Math.max(mainMinMax.max, compareMinMax.max),
+    };
+
+    console.log('[domain:getPaired] merged domain', {
+      mainView,
+      compareView,
+      mainMinMax,
+      compareMinMax,
+      merged,
+    });
+
+    return merged;
+  }
+
   public visualizeGenie3Subgraph(compare: boolean = false): void {
     const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
@@ -2108,7 +2374,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     slicedEdges.forEach((edge) => {
       if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
-        console.log("Adding edge nodes:", edge.source, edge.target);
         nodeSet.add(edge.source);
         nodeSet.add(edge.target);
       }
@@ -2324,19 +2589,33 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const sliderData: any = payload['slider_data'];
 
             if (sliderData && typeof sliderData === 'object') {
-              this.spongeSliderData = {
-                step: sliderData.step || 0.01,
-                min_border: sliderData.min_border || 0,
-                max_border: sliderData.max_border || 100,
-                default_value: sliderData.default_value || 50,
-              };
+              if (compare) {
+                this.spongeSliderDataCompare = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoffCompare = this.spongeSliderDataCompare.default_value;
+              } else {
+                this.spongeSliderData = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoff = this.spongeSliderData.default_value;
+              }
             }
-
-            this.isLoadingSponge = true;
 
             console.log('Sponge Network:', data);
 
-            this.spongeNetwork = data.map((d) => ({
+            compare ? this.spongeNetworkCompare = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            })) : this.spongeNetwork = data.map((d) => ({
               source: d.geneA,
               target: d.geneB,
               p_adjusted: d['p.adj'],
@@ -2666,9 +2945,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     if (
       this.selectedCellCompare &&
-      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
-        (this.selectedCompareView === 'leiden' &&
-          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+      d.properties.barcode === this.selectedCellCompare.properties.barcode
     )
       return;
     d3.selectAll('.Country')
@@ -2699,11 +2976,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           .attr('stroke', 'black');
       }
 
-      // Neighborhood enrichment will render when the tab is viewed
-      // via onTabChange handler
       setTimeout(() => this.updateSubgraphGenie3(), 0);
     }
     else {
+      this.resetClusterExtension(true);
       this.selectedCellCompare = cell;
       if (this.selectedCompareView === 'regulatory_scores') {
         this.getRegulatoryScoresforSpots(
@@ -2711,12 +2987,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
         )
       }
-      d3.select(event.target as SVGElement)
-        .transition()
-        .attr('stroke', 'black');
+      if (this.selectedCompareView === 'leiden') {
+        this.selectedClusterCompare = cell.properties.leiden;
+        this.compareClusterCells = this.compareFeatures.filter(
+          (c) => c.properties.leiden === cell.properties.leiden,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        this.extendCluster(cell.properties.leiden, true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
     }
   }
-
 
   public displayClusterDetails(clusterId: number): void {
     this.selectedCluster = clusterId;
@@ -2740,15 +3023,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public selectCluster(clusterId: number, compare: boolean = false): void {
     if (compare) {
-      this.selectedCluster = clusterId;
-      this.clusterCells = this.compareFeatures.filter(
+      this.selectedClusterCompare = clusterId;
+      this.clusterCellsCompare = this.compareFeatures.filter(
         (cell) => cell.properties.leiden === clusterId,
       );
-      this.calculateClusterStats(); // If this uses clusterCells, it's fine
-      this.updateCoOccurrenceTable(); // If this uses clusterCells, it's fine
+      this.calculateClusterStats(true);
+      this.updateCoOccurrenceTable(true);
+      this.extendCluster(clusterId, true);
 
-      if (this.clusterCells.length > 0) {
-        this.selectedCellCompare = this.clusterCells[0];
+      if (this.clusterCellsCompare.length > 0) {
+        this.selectedCellCompare = this.clusterCellsCompare[0];
         setTimeout(() => this.updateSubgraphGenie3(true), 100);
         setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
       }
@@ -2759,6 +3043,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       );
       this.calculateClusterStats();
       this.updateCoOccurrenceTable();
+      this.extendCluster(clusterId);
 
       if (this.clusterCells.length > 0) {
         this.selectedCell = this.clusterCells[0];
@@ -2769,16 +3054,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onGeneSetChange(compare: boolean = false): void {
-    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3 : this.selectedGeneSetGenie3Compare;
-    const geneSetSpongeChanged = compare ? this.selectedGeneSetSponge : this.selectedGeneSetSpongeCompare;
-    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3 : this.previousGeneSetGenie3Compare;
-    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSponge : this.previousGeneSetSpongeCompare;
+    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSpongeChanged = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3Compare : this.previousGeneSetGenie3;
+    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSpongeCompare : this.previousGeneSetSponge;
     const regulatoryScoreChanged = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
     const graphIdGenie3 = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     const graphIdSponge = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
     if (geneSetGenie3Changed !== previousGeneSetGenie3Changed) {
-      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3 : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3Compare : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
       if (geneSetGenie3Changed) {
 
         d3.select(graphIdGenie3).selectAll('*').remove();
@@ -2792,6 +3077,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetGenie3Changed,
+              compare
             );
           }
         }, 100);
@@ -2803,7 +3089,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (geneSetSpongeChanged !== previousGeneSetSpongeChanged) {
-      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSponge : this.previousGeneSetSponge = this.selectedGeneSetSponge;
+      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSpongeCompare : this.previousGeneSetSponge = this.selectedGeneSetSponge;
       if (geneSetSpongeChanged) {
         d3.select(graphIdSponge).selectAll('*').remove();
         console.log('Updating Sponge graph for:', geneSetSpongeChanged);
@@ -2821,6 +3107,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetSpongeChanged,
+              compare
             );
           }
         }, 100);
@@ -2845,10 +3132,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onGeneSelectedFromTable(event: { gene: string; action: string }, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
-    // Only select if this action is for the corresponding network type
     if (networkType === 'genie3' && event.action.includes('genie3')) {
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+
       this.selectGeneSetFromTable(event.gene, 'genie3', compare);
     } else if (networkType === 'sponge' && event.action.includes('sponge')) {
+
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
       this.selectGeneSetFromTable(event.gene, 'sponge', compare);
     }
   }
@@ -2883,20 +3181,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public clearClusterData(compare: boolean = false): void {
-    this.selectedCluster = null;
-    this.clusterCells = [];
-    this.clusterCellTypes = [];
-    this.coOccurrenceData = []; // Clear co-occurrence data
-
     if (compare) {
+      this.selectedClusterCompare = null;
+      this.compareClusterCells = [];
+      this.clusterCellTypesCompare = [];
+      this.compareCoOccurrenceData = [];
       this.selectedCellCompare = null;
-      // If you have compare-specific cluster state, clear it here as well
     } else {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.coOccurrenceData = [];
       this.selectedCell = null;
     }
 
-    this.resetClusterExtension();
-    this.updateHexColors();
+    this.resetClusterExtension(compare);
+    this.updateHexColors(compare ? '#hexbin-compare' : '#hexbin');
   }
 
   private calculateClusterStats(compare: boolean = false): void {
@@ -2918,13 +3218,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }))
       .sort((a, b) => b.count - a.count);
 
+
+
     if (compare) {
       this.compareClusterCellTypes = clusterCellTypes;
     } else {
       this.clusterCellTypes = clusterCellTypes;
     }
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster!);
+    const clusterAnnotation = this.getLeidenClusterAnnotation(
+      compare ? this.selectedClusterCompare! : this.selectedCluster!,
+      compare
+    );
 
     if (clusterCells.length > 0) {
       const centralityAvg = {
@@ -2942,8 +3247,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private extendCluster(selectedCluster: number, compare: boolean = false): void {
     const features = compare ? this.compareFeatures : this.features;
+    const currentGroup = compare ? this.g_compare : this.g;
 
-    this.g
+    currentGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
@@ -2971,13 +3277,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private resetClusterExtension(compare: boolean = false): void {
     const features = compare ? this.compareFeatures : this.features;
+    const targetGroup = compare ? this.g_compare : this.g;
     const projection = d3.geoIdentity().fitSize([1200, 1000], {
       type: 'FeatureCollection',
       features: features,
     });
     const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
@@ -2987,7 +3294,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
@@ -3062,6 +3369,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const leiden = cell?.properties?.leiden;
     const clusterAnnotation = this.getLeidenClusterAnnotation(leiden, compare);
     const enrichment = clusterAnnotation?.neighborhood_enrichment;
+    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
 
     if (!enrichment || !Array.isArray(enrichment)) return;
 
@@ -3100,8 +3408,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     };
 
-    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
-    const container = document.getElementById(containerId);
+    const container = document.getElementById(containerId); 
     if (!container) {
       console.error(`Container ${containerId} not found for rendering heatmap`);
       return;
@@ -3276,11 +3583,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false) {
+  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string) {
     const tokenType = compare ? 'obsm_compare' : 'obsm_main';
     const token = this.nextRequestToken(tokenType);
     const safeIndex = encodeURIComponent(index);
     const isGeneExpression = columnName === 'gene_expression';
+
+    // Determine the property name to update based on the view
+    // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
+    const propertyToUpdate = view || 'regulatory_scores';
 
     const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
@@ -3315,11 +3626,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             for (const feature of this.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                // HARDCODE the property name. Never use this.selectedView here!
-                feature.properties['regulatory_scores'] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
-            console.log(`[Backend] Updated main view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated main view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
 
           // 2. Update ONLY the compare view if compare is true
@@ -3327,11 +3637,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             for (const feature of this.compareFeatures) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                // HARDCODE the property name. Never use this.selectedCompareView here!
-                feature.properties['regulatory_scores'] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
-            console.log(`[Backend] Updated compare view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated compare view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
 
           this.repaintBothViews();
