@@ -679,12 +679,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let newView: string | null = null;
     const tabLabel = event.tab.textLabel;
 
-    // Handle info tabs that need async rendering (main view only)
+
     if (!compare && (tabLabel === 'Cluster Information' || tabLabel === 'Cell Information')) {
       setTimeout(() => this.renderNhoodHeatmap(), 300);
       return;
     }
-
     if (tabLabel === 'Cell Information') {
       // Render neighborhood enrichment when cell info tab is opened
       // Use longer timeout to ensure Angular has rendered the template
@@ -1371,13 +1370,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
           const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
           if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+            if (compare) {
+              this.clusterCountCompare = Object.keys(leidenClusterAnnotations).length;
+            } else {
+              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+            }
           }
 
           const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
           if (Array.isArray(interval) && interval.length > 0) {
-            this.maxInterval = interval.length - 1;
+            if (compare) {
+              this.maxIntervalCompare = interval.length - 1;
+            } else {
+              this.maxInterval = interval.length - 1;
+            }
           }
+
           this.selectedRegulatoryScore =
             compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
           if (compare) {
