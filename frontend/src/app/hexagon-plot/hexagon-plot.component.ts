@@ -3748,8 +3748,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} global regulatory scores loaded`;
   }
-
-
   keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
     return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
   };

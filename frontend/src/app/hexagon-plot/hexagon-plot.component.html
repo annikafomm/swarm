@@ -314,7 +314,7 @@
 
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
-              
+
                 <mat-form-field appearance="fill" class="dataset-dropdown">
                   <mat-label>Show Regulatory Statistic</mat-label>
                   <mat-select [(ngModel)]="regulatoryScoreDisplayMode"
@@ -1291,12 +1291,10 @@
 
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-                <app-table *ngIf="spongeElementsCompare.length > 0" [data]="spongeRawDataCompare"
-                  [features]="compareFeatures" [updateColumn]="'regulatory_scores'"
+                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                  [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
-                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)"
-                  (featuresUpdated)="repaintBothViews()">
+                  (featuresUpdated)="updateHexColors()">
                 </app-table>
 
                 <div *ngIf="genie3ElementsCompare.length === 0 && spongeElementsCompare.length === 0">
@@ -1379,7 +1377,7 @@
                   <thead>
                     <tr>
                       <th>Target Cluster</th>
-                      <th *ngFor="let i of [].constructor(this.clusterCountCompare); let idx = index">
+                      <th *ngFor="let i of [].constructor(clusterCount); let idx = index">
                         {{ idx }}
                       </th>
                     </tr>
