@@ -151,6 +151,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedView = 'regulatory_scores';
   public selectedCompareView: string = 'regulatory_scores';
 
+  public selectedItemByView: { [view: string]: string | null } = {};
+  public selectedItemByViewCompare: { [view: string]: string | null } = {};
+
 
   public selectedGeneSetGenie3: string | null = null;
   public selectedGeneSetGenie3Compare: string | null = null;
@@ -1877,6 +1880,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.refreshSharedGeneExpressionDomain();
   }
 
+  public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
+    const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    selectedMap[view] = event.gene;
+    this.fetchAndUpdate(event.action, event.gene, compare, view);
+  }
+
   public onColorbyPropertyChange(compare: boolean = false): void {
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
     const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
@@ -3544,11 +3553,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false) {
+  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string) {
     const tokenType = compare ? 'obsm_compare' : 'obsm_main';
     const token = this.nextRequestToken(tokenType);
     const safeIndex = encodeURIComponent(index);
     const isGeneExpression = columnName === 'gene_expression';
+
+    // Determine the property name to update based on the view
+    // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
+    const propertyToUpdate = view || 'regulatory_scores';
 
     const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
@@ -3583,11 +3596,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             for (const feature of this.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                // HARDCODE the property name. Never use this.selectedView here!
-                feature.properties['regulatory_scores'] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
-            console.log(`[Backend] Updated main view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated main view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
 
           // 2. Update ONLY the compare view if compare is true
@@ -3595,11 +3607,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             for (const feature of this.compareFeatures) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                // HARDCODE the property name. Never use this.selectedCompareView here!
-                feature.properties['regulatory_scores'] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
-            console.log(`[Backend] Updated compare view property 'regulatory_scores' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated compare view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
 
           this.repaintBothViews();

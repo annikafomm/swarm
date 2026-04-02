@@ -103,15 +103,7 @@
         </mat-form-field>
       </div>
 
-      <div *ngIf="selectedView === 'ligand_receptor_relationships'" class="hx-toolbar">
-        <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
-          [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
-            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
-          ">
-          Show
-          {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
-        </button>
-      </div>
+
 
 
 
@@ -587,7 +579,21 @@
           <div *ngIf="selectedView === 'ligand_receptor_relationships'">
             <div class="selected-gene-info">
               <strong>Current selection</strong><br>
-              Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }}
+              Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }} <br>
+              Selected Index: {{ (selectedItemByView['ligand_receptor_global_scores'] | json) ||
+              (selectedItemByView['ligand_receptor_NMF_factors'] | json) || 'None'}}
+            </div>
+
+            <div *ngIf="selectedView === 'ligand_receptor_relationships'" class="hx-toolbar"
+              style="display: flex; justify-content: center; margin: 12px 0;">
+              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+                [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
+            showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
+          ">
+                Show
+                {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+              </button>
             </div>
 
             <div *ngIf="
@@ -604,7 +610,8 @@
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor global scores loaded'" [datasetId]="selectedDataset?.id"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="updateHexColors()"
+                (geneSelected)="onItemSelected($event, 'ligand_receptor_global_scores')"></app-table>
             </ng-template>
 
             <ng-template #nmf_scores>
@@ -612,7 +619,8 @@
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor NMF factors loaded'" [datasetId]="selectedDataset?.id"
-                (featuresUpdated)="updateHexColors()"></app-table>
+                (featuresUpdated)="updateHexColors()"
+                (geneSelected)="onItemSelected($event, 'ligand_receptor_NMF_factors')"></app-table>
             </ng-template>
           </div>
         </mat-tab>
@@ -780,7 +788,8 @@
           <div *ngIf="selectedView === 'cell_comp_tf_activity_similarity'">
             <div class="selected-gene-info">
               <strong>Current selection</strong><br>
-              Score: Cell composition TF activity similarity
+              Score: Cell composition TF activity similarity <br>
+              Selected index: {{ selectedItemByView['cell_comp_tf_activity_global_scores'] || 'None' }}
             </div>
 
             <h4>Cell Composition TF Activity Global Scores</h4>
@@ -788,8 +797,8 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
-              [emptyMessage]="'No cell composition TF activity scores loaded'"
-              (featuresUpdated)="updateHexColors()"></app-table>
+              [emptyMessage]="'No cell composition TF activity scores loaded'" (featuresUpdated)="updateHexColors()"
+              (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores')"></app-table>
           </div>
         </mat-tab>
 
@@ -797,14 +806,15 @@
           <div *ngIf="selectedView === 'tf_activity'">
             <div class="selected-gene-info">
               <strong>Current selection</strong><br>
-              Score: TF activity (ULM)
+              Score: TF activity (ULM) <br>
+              Selected index: {{ selectedItemByView['tf_activity'] || 'None' }}
             </div>
 
             <h4>TF Activity</h4>
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
               [updateColumn]="'tf_activity'" [emptyMessage]="'No TF activity scores loaded'"
-              (featuresUpdated)="updateHexColors()"></app-table>
+              (featuresUpdated)="updateHexColors()" (geneSelected)="onItemSelected($event, 'tf_activity')"></app-table>
           </div>
         </mat-tab>
 
@@ -812,7 +822,8 @@
           <div *ngIf="selectedView === 'pathway_activity'">
             <div class="selected-gene-info">
               <strong>Current selection</strong><br>
-              Score: Pathway activity (MLM)
+              Score: Pathway activity (MLM) <br>
+              Selected index: {{ selectedItemByView['pathway_activity'] || 'None' }}
             </div>
 
             <h4>Pathway Activity</h4>
@@ -820,7 +831,8 @@
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="features" [updateColumn]="'pathway_activity'"
-              [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"></app-table>
+              [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"
+              (geneSelected)="onItemSelected($event, 'pathway_activity')"></app-table>
           </div>
         </mat-tab>
         <mat-tab label="DGEA" [disabled]="!hasDgeaData()">
@@ -1446,7 +1458,21 @@
             <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
-                Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }}
+                Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }} <br>
+                Selected index: {{ (selectedItemByViewCompare['ligand_receptor_global_scores'] | json) ||
+              (selectedItemByViewCompare['ligand_receptor_NMF_factors'] | json) || 'None' }}
+              </div>
+
+              <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'" class="hx-toolbar"
+                style="display: flex; justify-content: center; margin: 12px 0;">
+                <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+                  style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+                  [attr.aria-pressed]="showGlobalLigandReceptorScores" (click)="
+              showGlobalLigandReceptorScores = !showGlobalLigandReceptorScores
+            ">
+                  Show
+                  {{ showGlobalLigandReceptorScores ? "NMF factors" : "global scores" }}
+                </button>
               </div>
 
               <div *ngIf="
@@ -1457,13 +1483,13 @@
 
               <ng-template #global_scores>
                 <h4>Ligand–Receptor Global Scores</h4>
-                <app-table [data]="this.metaCompare" [actionColumns]="[
+                <app-table [data]="this.metaCompare['ligand_receptor_global_scores']" [actionColumns]="[
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
           ]" [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                  (featuresUpdated)="repaintBothViews()"></app-table>
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onItemSelected($event, 'ligand_receptor_global_scores', true)"></app-table>
               </ng-template>
 
               <ng-template #nmf_scores>
@@ -1471,7 +1497,8 @@
                 <app-table [data]="this.metaCompare['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                   [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
                   [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
-                  (featuresUpdated)="repaintBothViews()"></app-table>
+                  (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onItemSelected($event, 'ligand_receptor_NMF_factors', true)"></app-table>
               </ng-template>
             </div>
           </mat-tab>
@@ -1481,7 +1508,8 @@
             <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
-                Score: Cell composition TF activity similarity
+                Score: Cell composition TF activity similarity <br>
+                Selected index: {{ selectedItemByViewCompare['cell_comp_tf_activity_global_scores'] || 'None' }}
               </div>
 
               <h4>Cell Composition TF Activity Global Scores</h4>
@@ -1490,7 +1518,8 @@
           'cell_comp_tf_activity_category',
         ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
                 [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
-                (featuresUpdated)="repaintBothViews()"></app-table>
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores', true)"></app-table>
             </div>
           </mat-tab>
 
@@ -1499,14 +1528,16 @@
             <div *ngIf="selectedCompareView === 'tf_activity'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
-                Score: TF activity (ULM)
+                Score: TF activity (ULM) <br>
+                Selected index: {{ selectedItemByViewCompare['tf_activity'] || 'None' }}
               </div>
 
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.metaCompare['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
                 [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
-                (featuresUpdated)="repaintBothViews()"></app-table>
+                (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onItemSelected($event, 'tf_activity', true)"></app-table>
             </div>
           </mat-tab>
 
@@ -1514,7 +1545,8 @@
             <div *ngIf="selectedCompareView === 'pathway_activity'">
               <div class="selected-gene-info">
                 <strong>Comparison selection</strong><br>
-                Score: Pathway activity (MLM)
+                Score: Pathway activity (MLM) <br>
+                Selected index: {{ selectedItemByViewCompare['pathway_activity'] || 'None' }}
               </div>
 
               <h4>Pathway Activity Comparison</h4>
@@ -1522,8 +1554,8 @@
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (featuresUpdated)="repaintBothViews()"></app-table>
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                (geneSelected)="onItemSelected($event, 'pathway_activity', true)"></app-table>
             </div>
           </mat-tab>
         </mat-tab-group>
