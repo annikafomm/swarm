@@ -677,9 +677,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let newView: string | null = null;
     const tabLabel = event.tab.textLabel;
 
-    // Handle info tabs that need async rendering (main view only)
+
     if (!compare && (tabLabel === 'Cluster Information' || tabLabel === 'Cell Information')) {
       setTimeout(() => this.renderNhoodHeatmap(), 300);
+      return;
+    }
+    if (compare && (tabLabel === 'Compare - Cluster Information' || tabLabel === 'Compare - Cell Information')) {
+      setTimeout(() => this.renderNhoodHeatmap(true), 300);
       return;
     }
 
@@ -1364,13 +1368,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
           const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
           if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-            this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+            if (compare) {
+              this.clusterCountCompare = Object.keys(leidenClusterAnnotations).length;
+            } else {
+              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+            }
           }
 
           const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
           if (Array.isArray(interval) && interval.length > 0) {
-            this.maxInterval = interval.length - 1;
+            if (compare) {
+              this.maxIntervalCompare = interval.length - 1;
+            } else {
+              this.maxInterval = interval.length - 1;
+            }
           }
+
           this.selectedRegulatoryScore =
             compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
           if (compare) {
@@ -2963,11 +2976,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           .attr('stroke', 'black');
       }
 
-      // Neighborhood enrichment will render when the tab is viewed
-      // via onTabChange handler
       setTimeout(() => this.updateSubgraphGenie3(), 0);
     }
     else {
+      this.resetClusterExtension(true);
       this.selectedCellCompare = cell;
       if (this.selectedCompareView === 'regulatory_scores') {
         this.getRegulatoryScoresforSpots(
@@ -2975,9 +2987,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
         )
       }
-      d3.select(event.target as SVGElement)
-        .transition()
-        .attr('stroke', 'black');
+      if (this.selectedCompareView === 'leiden') {
+        this.selectedClusterCompare = cell.properties.leiden;
+        this.compareClusterCells = this.compareFeatures.filter(
+          (c) => c.properties.leiden === cell.properties.leiden,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        this.extendCluster(cell.properties.leiden, true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
     }
   }
 
@@ -3003,15 +3023,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public selectCluster(clusterId: number, compare: boolean = false): void {
     if (compare) {
-      this.selectedCluster = clusterId;
-      this.clusterCells = this.compareFeatures.filter(
+      this.selectedClusterCompare = clusterId;
+      this.clusterCellsCompare = this.compareFeatures.filter(
         (cell) => cell.properties.leiden === clusterId,
       );
-      this.calculateClusterStats(); // If this uses clusterCells, it's fine
-      this.updateCoOccurrenceTable(); // If this uses clusterCells, it's fine
+      this.calculateClusterStats(true);
+      this.updateCoOccurrenceTable(true);
+      this.extendCluster(clusterId, true);
 
-      if (this.clusterCells.length > 0) {
-        this.selectedCellCompare = this.clusterCells[0];
+      if (this.clusterCellsCompare.length > 0) {
+        this.selectedCellCompare = this.clusterCellsCompare[0];
         setTimeout(() => this.updateSubgraphGenie3(true), 100);
         setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
       }
@@ -3022,6 +3043,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       );
       this.calculateClusterStats();
       this.updateCoOccurrenceTable();
+      this.extendCluster(clusterId);
 
       if (this.clusterCells.length > 0) {
         this.selectedCell = this.clusterCells[0];
@@ -3159,20 +3181,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public clearClusterData(compare: boolean = false): void {
-    this.selectedCluster = null;
-    this.clusterCells = [];
-    this.clusterCellTypes = [];
-    this.coOccurrenceData = []; // Clear co-occurrence data
-
     if (compare) {
+      this.selectedClusterCompare = null;
+      this.compareClusterCells = [];
+      this.clusterCellTypesCompare = [];
+      this.compareCoOccurrenceData = [];
       this.selectedCellCompare = null;
-      // If you have compare-specific cluster state, clear it here as well
     } else {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.coOccurrenceData = [];
       this.selectedCell = null;
     }
 
-    this.resetClusterExtension();
-    this.updateHexColors();
+    this.resetClusterExtension(compare);
+    this.updateHexColors(compare ? '#hexbin-compare' : '#hexbin');
   }
 
   private calculateClusterStats(compare: boolean = false): void {
@@ -3194,13 +3218,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }))
       .sort((a, b) => b.count - a.count);
 
+
+
     if (compare) {
       this.compareClusterCellTypes = clusterCellTypes;
     } else {
       this.clusterCellTypes = clusterCellTypes;
     }
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster!);
+    const clusterAnnotation = this.getLeidenClusterAnnotation(
+      compare ? this.selectedClusterCompare! : this.selectedCluster!,
+      compare
+    );
 
     if (clusterCells.length > 0) {
       const centralityAvg = {
@@ -3218,8 +3247,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private extendCluster(selectedCluster: number, compare: boolean = false): void {
     const features = compare ? this.compareFeatures : this.features;
+    const currentGroup = compare ? this.g_compare : this.g;
 
-    this.g
+    currentGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
@@ -3378,7 +3408,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     };
 
-    const container = document.getElementById('cluster-nhood-heatmap');
+    const container = document.getElementById(containerId); 
     if (!container) {
       console.error(`Container ${containerId} not found for rendering heatmap`);
       return;

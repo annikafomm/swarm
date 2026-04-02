@@ -1052,13 +1052,13 @@
               <div class="cluster-content">
                 <div class="cluster-stats">
                   <h4>Cluster Statistics</h4>
-                  <p><strong>Cells in cluster:</strong> {{ clusterCellsCompare.length }}</p>
+                  <p><strong>Cells in cluster:</strong> {{ compareClusterCells.length }}</p>
                   <p><strong>Cluster ID:</strong> {{ selectedClusterCompare }}</p>
                 </div>
 
                 <div class="cell-types">
                   <h4>Cell Type Distribution</h4>
-                  <div class="cell-type-item" *ngFor="let cellType of clusterCellTypesCompare">
+                  <div class="cell-type-item" *ngFor="let cellType of compareClusterCellTypes">
                     <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
                     <span>{{ cellType.type }}: {{ cellType.count }} ({{
                       cellType.percentage
@@ -1071,15 +1071,15 @@
                   <ul class="centrality-list">
                     <li>
                       <strong>Degree Centrality:</strong>
-                      {{ clusterCentralityAvgCompare.degree_centrality | number: "1.2-2" }}
+                      {{ compareClusterCentralityAvg.degree_centrality | number: "1.2-2" }}
                     </li>
                     <li>
                       <strong>Average Clustering:</strong>
-                      {{ clusterCentralityAvgCompare.average_clustering | number: "1.2-2" }}
+                      {{ compareClusterCentralityAvg.average_clustering | number: "1.2-2" }}
                     </li>
                     <li>
                       <strong>Closeness Centrality:</strong>
-                      {{ clusterCentralityAvgCompare.closeness_centrality | number: "1.2-2" }}
+                      {{ compareClusterCentralityAvg.closeness_centrality | number: "1.2-2" }}
                     </li>
                   </ul>
                 </div>
@@ -1092,50 +1092,6 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Cluster Information" *ngIf="selectedClusterCompare !== null">
-            <div class="cluster-info-container"
-              *ngIf="selectedCompareView === 'leiden' && selectedClusterCompare !== null">
-              <div class="cluster-header">
-                <h3>Cluster {{ selectedClusterCompare }}</h3>
-              </div>
-
-              <div class="cluster-content">
-                <div class="cluster-stats">
-                  <h4>Cluster Statistics</h4>
-                  <p><strong>Cells in cluster:</strong> {{ clusterCellsCompare.length }}</p>
-                  <p><strong>Cluster ID:</strong> {{ selectedClusterCompare }}</p>
-                </div>
-
-                <div class="cell-types">
-                  <h4>Cell Type Distribution</h4>
-                  <div class="cell-type-item" *ngFor="let cellType of clusterCellTypesCompare">
-                    <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
-                    <span>{{ cellType.type }}: {{ cellType.count }} ({{
-                      cellType.percentage
-                      }}%)</span>
-                  </div>
-                </div>
-
-                <div class="cluster-centrality">
-                  <h4>Leiden Centrality Averages</h4>
-                  <ul class="centrality-list">
-                    <li>
-                      <strong>Degree Centrality:</strong>
-                      {{ clusterCentralityAvgCompare.degree_centrality | number: "1.2-2" }}
-                    </li>
-                    <li>
-                      <strong>Average Clustering:</strong>
-                      {{ clusterCentralityAvgCompare.average_clustering | number: "1.2-2" }}
-                    </li>
-                    <li>
-                      <strong>Closeness Centrality:</strong>
-                      {{ clusterCentralityAvgCompare.closeness_centrality | number: "1.2-2" }}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </mat-tab>
 
           <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', 'compare')">
             <div *ngIf="selectedCompareView === 'regulatory_scores'">
@@ -1373,8 +1329,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Co-occurence"
-            [disabled]="!propertyAvailable('co_occurrence', 'compare')">
+          <mat-tab label="Compare - Co-occurence" [disabled]="!propertyAvailable('co_occurrence', 'compare')">
             <div class="co-occurrence-section" *ngIf="selectedClusterCompare !== null">
               <div class="co-occurrence-controls">
                 <h3>Cluster {{ selectedClusterCompare }} Co-occurrence Matrix</h3>
@@ -1414,10 +1369,10 @@
                   <tbody>
                     <tr>
                       <td class="cluster-header">Cluster {{ selectedClusterCompare }}</td>
-                      <td *ngFor="let value of compareCoOccurrenceData; let j = index" (click)="selectCluster(j)"
+                      <td *ngFor="let value of compareCoOccurrenceData; let j = index" (click)="selectCluster(j, true)"
                         [class.high-cooccurrence]="value > compareCoOccurrenceThreshold"
                         [class.diagonal]="selectedClusterCompare === j"
-                        [style.background-color]="getCoOccurrenceColor(value)" [title]="
+                        [style.background-color]="getCoOccurrenceColor(value, true)" [title]="
                   'Cluster ' +
                   selectedClusterCompare +
                   ' → Cluster ' +
@@ -1460,7 +1415,7 @@
                 <strong>Comparison selection</strong><br>
                 Score view: {{ showGlobalLigandReceptorScores ? 'Global scores' : 'NMF factors' }} <br>
                 Selected index: {{ (selectedItemByViewCompare['ligand_receptor_global_scores'] | json) ||
-              (selectedItemByViewCompare['ligand_receptor_NMF_factors'] | json) || 'None' }}
+                (selectedItemByViewCompare['ligand_receptor_NMF_factors'] | json) || 'None' }}
               </div>
 
               <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'" class="hx-toolbar"
