@@ -94,17 +94,51 @@
         Please upload a single-cell file (required when Tangram is enabled).
       </div>
 
+      <div class="section" style="margin-top:10px;" formGroupName="geneSelectionModes">
+        <label>Gene selection modes:</label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="ctg">
+          ctg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="hvg">
+          hvg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="spapros">
+          spapros
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="svg">
+          svg
+        </label>
+
+        <small>
+          Optional. Multiple selections are allowed. If nothing is selected, all overlapping genes will be used.
+        </small>
+      </div>
+
       <div class="section" style="margin-top:10px;">
-        <label>Gene selection mode:</label>
-        <div class="select">
-          <select formControlName="geneSelectionMode">
-            <option value="None">None</option>
-            <option value="ctg">ctg</option>
-            <option value="hvg">hvg</option>
-            <option value="spapros">spapros</option>
-            <option value="svg">svg</option>
-          </select>
+        <label>Upload custom gene list (.txt / .csv / .tsv):</label>
+        <div class="file">
+          <input id="geneList" type="file" (change)="onFileSelected($event, 'geneList')" accept=".txt,.csv,.tsv">
+          <label for="geneList" class="file-control">
+            <span class="btn">Choose file</span>
+            <span class="file-name" [title]="geneListFile?.name || 'No file selected'">
+              {{ geneListFile?.name || 'No file selected' }}
+            </span>
+          </label>
         </div>
+      </div>
+
+      <div class="section" style="margin-top:10px;" *ngIf="showGeneListColumnField()">
+        <label>Gene list column (for CSV/TSV):</label>
+        <input type="text" formControlName="geneListColumn" placeholder="e.g. gene_symbol">
+        <small>Optional. If left empty, the first column will be used.</small>
       </div>
     </div>
   </div>

@@ -12,6 +12,7 @@ import { DatasetService } from '../datasets.service';
 import { Dataset } from '../datasets.service';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { svg } from 'd3';
 
 @Component({
   selector: 'app-form-page',
@@ -28,6 +29,7 @@ export class FormPageComponent {
   // files
   spatialFile?: File;
   singleCellFile?: File;
+  geneListFile?: File;
   multiomeFile?: File;
   // Needed for Footprinting
   fragmentsFile?: File;
@@ -73,7 +75,13 @@ export class FormPageComponent {
       tangram: this.fb.group({
         filterSingleCell: [false],
         normalizeSingleCell: [false],
-        geneSelectionMode: ['None'],
+        geneSelectionModes: this.fb.group({
+          ctg: [false],
+          hvg: [false],
+          spapros: [false],
+          svg: [false],
+        }),
+        geneListColumn: [''],
       }),
 
       useTangramMultiome: [false],
@@ -178,10 +186,17 @@ export class FormPageComponent {
     this.form.get('useTangram')!.valueChanges.subscribe(on => {
       if (!on) {
         this.singleCellFile = undefined;
+        this.geneListFile = undefined;
         this.form.get('tangram')!.reset({
           filterSingleCell: false,
           normalizeSingleCell: false,
-          geneSelectionMode: 'None',
+          geneSelectionModes: {
+            ctg: false,
+            hvg: false,
+            spapros: false,
+            svg: false,
+          },
+          geneListColumn: '',
         });
       }
     });
@@ -251,9 +266,15 @@ export class FormPageComponent {
     return !!(a || g || s);
   }
 
+  showGeneListColumnField(): boolean {
+      if (!this.geneListFile) return false;
+      const name = this.geneListFile.name.toLowerCase();
+      return name.endsWith('.csv') || name.endsWith('.tsv');
+  }
+
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
-      'spatial' | 'singleCell' | 'multiome' | 'fragments' | 'fragmentsTabix' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
+      'spatial' | 'singleCell' | 'geneList' | 'multiome' | 'fragments' | 'fragmentsTabix' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
     const input = evt.target as HTMLInputElement
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
@@ -261,6 +282,7 @@ export class FormPageComponent {
     switch (type) {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
+      case 'geneList': this.geneListFile = file; break;
       case 'multiome': this.multiomeFile = file; break;
       case 'fragments': this.fragmentsFile = file; break;
       case 'fragmentsTabix': this.fragmentsTabixFile = file; break;
@@ -379,8 +401,20 @@ export class FormPageComponent {
       fd.append('single_cell_h5ad', this.singleCellFile);
       fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
       fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
-      const mode = this.form.value.tangram?.geneSelectionMode ?? 'None';
-      fd.append('gene_selection_mode', String(mode));
+      const tangram = this.form.value.tangram;
+      const selectedModes = Object.entries(tangram.geneSelectionModes ?? {})
+        .filter(([_, checked]) => checked)
+        .map(([mode]) => mode);
+
+      selectedModes.forEach((mode: string) => {fd.append('gene_selection_mode', mode)});
+      if (this.geneListFile) {
+        fd.append('gene_list_file', this.geneListFile);
+      }
+
+      const geneListColumn = this.form.value.tangram?.geneListColumn?.trim();
+      if (geneListColumn) {
+        fd.append('gene_list_column', geneListColumn);
+      }
     }
 
      // --- multiome
@@ -548,7 +582,17 @@ export class FormPageComponent {
       dataset: 'Visium',
       spatialOptions: { normalization: false, filtering: false },
       useTangram: false,
-      tangram: { filterSingleCell: false, normalizeSingleCell: false, geneSelectionMode: 'None' },
+      tangram: {
+        filterSingleCell: false,
+        normalizeSingleCell: false,
+        geneSelectionModes: {
+          ctg: false,
+          hvg: false,
+          spapros: false,
+          svg: false,
+        },
+        geneListColumn: '',
+      },
       scores: { networkScores: false, squidpy: false, lianaPlus: false },
       network: {
         algorithms: { viper: false, aucell: false, gsva: false, ssgsea: false },
@@ -595,6 +639,7 @@ export class FormPageComponent {
     // clear files
     this.spatialFile = undefined;
     this.singleCellFile = undefined;
+    this.geneListFile = undefined;
     this.genie3NetFile = undefined;
     this.spongeNAFile = undefined;
     this.spongeNIFile = undefined;

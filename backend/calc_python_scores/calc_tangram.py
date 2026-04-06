@@ -17,46 +17,160 @@ import math
 import anndata as ad
 ad.settings.allow_write_nullable_strings = True
 
-def select_genes(ad_sc, ad_sp, selection_mode: str, cell_label: str):
+def parse_selection_modes(selection_mode):
     """
-    Select genes according to the requested strategy. Falls back to overlapping genes
-    when no selection is provided.
+    Accepts:
+      - None
+      - "ctg"
+      - "ctg,hvg,svg"
+      - ["ctg", "hvg"]
+      - ["ctg,hvg", "svg"]
+    Returns a unique list while preserving order.
     """
-    if selection_mode is not None:
-        selection_mode = selection_mode.lower()
+    if selection_mode is None:
+        return []
 
-    # rank_genes_groups (used by ctg/spapros) requires the groupby column to be
-    # categorical; cast it here so the caller doesn't have to worry about dtype.
+    if isinstance(selection_mode, str):
+        raw = [selection_mode]
+    else:
+        raw = list(selection_mode)
+
+    modes = []
+    for item in raw:
+        if item is None:
+            continue
+        for part in str(item).split(","):
+            part = part.strip().lower()
+            if part and part != "none":
+                modes.append(part)
+
+    return list(dict.fromkeys(modes))
+
+
+def load_user_genes(path: str, gene_column: str = ""):
+    """
+    Load user-provided genes from:
+      - txt: one gene per line
+      - csv: first column or named column
+      - tsv: first column or named column
+    """
+    if not path:
+        return []
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Gene list file not found: {path}")
+
+    lower = path.lower()
+
+    if lower.endswith(".csv"):
+        df = pd.read_csv(path)
+        if gene_column:
+            if gene_column not in df.columns:
+                raise ValueError(
+                    f"Column '{gene_column}' not found in {path}. "
+                    f"Available columns: {list(df.columns)}"
+                )
+            genes = df[gene_column].tolist()
+        else:
+            genes = df.iloc[:, 0].tolist()
+
+    elif lower.endswith(".tsv"):
+        df = pd.read_csv(path, sep="\t")
+        if gene_column:
+            if gene_column not in df.columns:
+                raise ValueError(
+                    f"Column '{gene_column}' not found in {path}. "
+                    f"Available columns: {list(df.columns)}"
+                )
+            genes = df[gene_column].tolist()
+        else:
+            genes = df.iloc[:, 0].tolist()
+
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            genes = [
+                line.strip()
+                for line in f
+                if line.strip() and not line.strip().startswith("#")
+            ]
+
+    genes = [str(g).strip() for g in genes if pd.notna(g) and str(g).strip()]
+    genes = list(dict.fromkeys(genes))
+
+    print(f"[gene_selection] Loaded n={len(genes)} user genes from {path}")
+    return genes
+
+def select_genes(ad_sc, ad_sp, selection_mode, cell_label: str, user_genes=None):
+    """
+    Build the union of genes from:
+      - one or more selection methods
+      - optional user-provided gene list
+
+    If nothing is provided, returns None so Tangram uses all overlapping genes.
+    """
+    modes = parse_selection_modes(selection_mode)
+    user_genes = user_genes or []
+
     if cell_label and cell_label in ad_sc.obs.columns:
         ad_sc.obs[cell_label] = ad_sc.obs[cell_label].astype("category")
 
-    if selection_mode == "ctg":
-        genes = gene_selection.ctg(ad_sc, cell_label)
-        print("[gene_selection] ctg")
-    elif selection_mode == "hvg":
-        genes = gene_selection.hvg(ad_sc)
-        print("[gene_selection] hvg")
-    elif selection_mode == "spapros":
-        sc.pp.highly_variable_genes(ad_sc, flavor="seurat", n_top_genes=2000)
-        genes = gene_selection.spapros(ad_sc, cell_label)
-        print("[gene_selection] spapros")
-    elif selection_mode == "svg":
-        ad_sp.raw = ad_sp.copy()
-        genes = gene_selection.svg(ad_sp)
-        print("[gene_selection] svg")
-    else:
-        genes = None
-        print("[gene_selection] Using all overlapping genes (no selection mode)")
+    selected_sources = {}
 
-    if genes is None:
+    for mode in modes:
+        if mode == "ctg":
+            genes = gene_selection.ctg(ad_sc, cell_label)
+            print("[gene_selection] ctg")
+        elif mode == "hvg":
+            genes = gene_selection.hvg(ad_sc)
+            print("[gene_selection] hvg")
+        elif mode == "spapros":
+            sc.pp.highly_variable_genes(ad_sc, flavor="seurat", n_top_genes=2000)
+            genes = gene_selection.spapros(ad_sc, cell_label)
+            print("[gene_selection] spapros")
+        elif mode == "svg":
+            ad_sp_tmp = ad_sp.copy()
+            ad_sp_tmp.raw = ad_sp_tmp.copy()
+            genes = gene_selection.svg(ad_sp_tmp)
+            print("[gene_selection] svg")
+        else:
+            raise ValueError(
+                f"Unknown gene selection mode '{mode}'. "
+                "Valid modes: ctg, hvg, spapros, svg"
+            )
+
+        genes = list(genes) if genes is not None else []
+        selected_sources[mode] = genes
+        print(f"[gene_selection] {mode}: n={len(genes)}")
+
+    if user_genes:
+        selected_sources["user_list"] = list(dict.fromkeys(user_genes))
+        print(f"[gene_selection] user_list: n={len(selected_sources['user_list'])}")
+
+    if not selected_sources:
+        print("[gene_selection] Using all overlapping genes (no selection mode / no user gene list)")
         return None
 
-    genes = list(genes)
-    print(f"[gene_selection] Selected n={len(genes)} genes")
-    return genes
+    union_genes = []
+    for _, genes in selected_sources.items():
+        union_genes.extend(genes)
+    union_genes = list(dict.fromkeys(union_genes))
+
+    overlap = set(ad_sc.var_names).intersection(set(ad_sp.var_names))
+    union_overlap = [g for g in union_genes if g in overlap]
+
+    print(f"[gene_selection] Union before overlap filter: n={len(union_genes)}")
+    print(f"[gene_selection] Union after overlap filter:  n={len(union_overlap)}")
+
+    if len(union_overlap) == 0:
+        raise ValueError(
+            "No selected genes overlap between single-cell and spatial data. "
+            "Check whether your gene identifiers match ad_sc.var_names / ad_sp.var_names."
+        )
+
+    return union_overlap
 
 
-def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu', multiome: bool = False):
+def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode= None, cell_label: str = 'cell_type', ensembl_col: str = "", feature_col: str = "", device_choice: str = 'cpu', multiome: bool = False, user_genes=None):
     # Tangram preprocessing mutates ad_sc/ad_sp in-place.
     # We keep copies only to restore spatial metadata + map var annotations later.
     adata_sp_copy = ad_sp.copy()
@@ -72,7 +186,7 @@ def run_tangram(ad_sc: object, ad_sp: object, gene_selection_mode: str = None, c
 
 
     # Gene selection
-    genes = select_genes(ad_sc_use, ad_sp, gene_selection_mode, cell_label)
+    genes = select_genes(ad_sc_use, ad_sp, gene_selection_mode, cell_label, user_genes=user_genes)
 
     # Preprocessing
     # split into train and tet to evaluate the mapping performance on the test set
@@ -176,12 +290,16 @@ if __name__ == "__main__":
     parser.add_argument("--sp_path", required=True, help="Pfad zur Spatial h5ad")
     parser.add_argument("--multiome", action='store_true', help='Whether the single-cell data is from a multiome experiment (default: False)')
     parser.add_argument("--outdir", required=True, help="Pfad für Ausgabe-Verzeichnis (Tangram)")
-    parser.add_argument("--gene_selection_mode", default=None, help="ctg/hvg/spapros/svg/None")
+    parser.add_argument("--gene_selection_mode", nargs="*", default=None, help="One or more gene selection modes: ctg hvg spapros svg. "
+         "Also accepts comma-separated values, e.g. 'ctg,hvg'.")
     parser.add_argument("--cell_label", default="cell_type")
     parser.add_argument("--ensembl_col", default="")
     parser.add_argument("--feature_col", default="")
     parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"])
-
+    parser.add_argument("--gene_list_path", default="", help="Optional path to a user-provided gene list (txt/csv/tsv).")
+    parser.add_argument("--gene_list_column", default="", help="Optional column name for csv/tsv gene lists. "
+         "If empty, the first column is used."
+    )
     args = parser.parse_args()
 
     # Daten laden
@@ -190,6 +308,10 @@ if __name__ == "__main__":
 
     print("[tangram_cli] Lade Spatial AnnData:", args.sp_path)
     ad_sp = sc.read_h5ad(args.sp_path)
+
+    user_genes = []
+    if args.gene_list_path:
+        user_genes = load_user_genes(args.gene_list_path, args.gene_list_column)
 
     # Tangram ausführen
     ad_ge, adata_map = run_tangram(
@@ -201,6 +323,7 @@ if __name__ == "__main__":
         ensembl_col=args.ensembl_col,
         feature_col=args.feature_col,
         device_choice=args.device,
+        user_genes=user_genes,
     )
 
     # Ergebnis speichern

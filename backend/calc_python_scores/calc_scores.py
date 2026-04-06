@@ -196,7 +196,26 @@ def main():
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
-    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg', 'None'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
+    parser.add_argument(
+        '-gene_selection',
+        nargs='*',
+        default=None,
+        help="One or more gene selection methods: ctg hvg spapros svg. "
+            "Also accepts comma-separated values, e.g. 'ctg,hvg'."
+    )
+    parser.add_argument(
+        '-gene_list_path',
+        type=str,
+        default=None,
+        help="Optional path to a user-provided gene list (txt/csv/tsv)."
+    )
+    parser.add_argument(
+        '-gene_list_column',
+        type=str,
+        default='',
+        help="Optional column name for csv/tsv gene list files. "
+            "If empty, the first column is used."
+    )
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
@@ -246,8 +265,17 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
 
-    if args.gene_selection == "None":
-        args.gene_selection = None
+    if args.gene_selection is not None:
+        cleaned_gene_selection = []
+        for item in args.gene_selection:
+            if item is None:
+                continue
+            item = str(item).strip()
+            if not item or item.lower() == "none":
+                continue
+            cleaned_gene_selection.append(item)
+
+        args.gene_selection = cleaned_gene_selection or None
 
 
     # Prepare log file
@@ -393,7 +421,13 @@ def main():
                     ]
 
                     if args.gene_selection is not None:
-                        cmd += ["--gene_selection_mode", args.gene_selection]
+                        cmd += ["--gene_selection_mode", *args.gene_selection]
+
+                    if args.gene_list_path:
+                        cmd += ["--gene_list_path", args.gene_list_path]
+
+                    if args.gene_list_column:
+                        cmd += ["--gene_list_column", args.gene_list_column]
                     if args.cell_label:
                         cmd += ["--cell_label", args.cell_label]
                     if args.ensembl_col:
