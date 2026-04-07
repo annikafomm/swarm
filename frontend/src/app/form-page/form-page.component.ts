@@ -184,22 +184,18 @@ export class FormPageComponent {
 
     // clear single-cell if Tangram toggled off
     this.form.get('useTangram')!.valueChanges.subscribe(on => {
-      if (!on) {
-        this.singleCellFile = undefined;
-        this.geneListFile = undefined;
-        this.form.get('tangram')!.reset({
-          filterSingleCell: false,
-          normalizeSingleCell: false,
-          geneSelectionModes: {
-            ctg: false,
-            hvg: false,
-            spapros: false,
-            svg: false,
-          },
-          geneListColumn: '',
-        });
-      }
-    });
+    if (on) {
+      this.form.get('useTangramMultiome')!.setValue(false, { emitEvent: false });
+      this.multiomeFile = undefined;
+      return;
+    }
+
+    this.singleCellFile = undefined;
+
+    if (!this.form.get('useTangramMultiome')!.value) {
+      this.resetTangramSharedState();
+    }
+  });
 
     // if network scores toggled off, reset inner state
     this.form.get('scores.networkScores')!.valueChanges.subscribe(on => {
@@ -220,6 +216,20 @@ export class FormPageComponent {
         this.fragmentsTabixFile = undefined;
       }
     });
+
+    this.form.get('useTangramMultiome')!.valueChanges.subscribe(on => {
+    if (on) {
+      this.form.get('useTangram')!.setValue(false, { emitEvent: false });
+      this.singleCellFile = undefined;
+      return;
+    }
+
+    this.multiomeFile = undefined;
+
+    if (!this.form.get('useTangram')!.value) {
+      this.resetTangramSharedState();
+    }
+  });
 
     // Setup dataset observables
     this.builtinDatasets$ = this.dataSetService.availableDatasets$.pipe(
@@ -270,6 +280,21 @@ export class FormPageComponent {
       if (!this.geneListFile) return false;
       const name = this.geneListFile.name.toLowerCase();
       return name.endsWith('.csv') || name.endsWith('.tsv');
+  }
+
+  private resetTangramSharedState(): void {
+    this.geneListFile = undefined;
+    this.form.get('tangram')!.reset({
+      filterSingleCell: false,
+      normalizeSingleCell: false,
+      geneSelectionModes: {
+        ctg: false,
+        hvg: false,
+        spapros: false,
+        svg: false,
+      },
+      geneListColumn: '',
+    });
   }
 
   // ---------- file handling ----------
@@ -397,16 +422,24 @@ export class FormPageComponent {
 
     // --- tangram
     fd.append('use_tangram', String(this.form.value.useTangram));
+
+    const tangramActive = this.form.value.useTangram || this.form.value.useTangramMultiome;
+
     if (this.form.value.useTangram && this.singleCellFile) {
       fd.append('single_cell_h5ad', this.singleCellFile);
+    }
+
+    if (tangramActive) {
       fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
       fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+
       const tangram = this.form.value.tangram;
       const selectedModes = Object.entries(tangram.geneSelectionModes ?? {})
-        .filter(([_, checked]) => checked)
+        .filter(([_, checked]) => !!checked)
         .map(([mode]) => mode);
 
-      selectedModes.forEach((mode: string) => {fd.append('gene_selection_mode', mode)});
+      selectedModes.forEach((mode: string) => fd.append('gene_selection_mode', mode));
+
       if (this.geneListFile) {
         fd.append('gene_list_file', this.geneListFile);
       }
@@ -582,6 +615,7 @@ export class FormPageComponent {
       dataset: 'Visium',
       spatialOptions: { normalization: false, filtering: false },
       useTangram: false,
+      useTangramMultiome: false,
       tangram: {
         filterSingleCell: false,
         normalizeSingleCell: false,

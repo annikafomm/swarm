@@ -686,12 +686,14 @@ def build_upload_request(
         filtering=spatial_filtering,
     )
 
+    tangram_like_use = use_tangram or use_multiome
+
     tangram_input = TangramInput(
-        use=use_tangram,
-        filtering=singlecell_filtering if use_tangram else None,
-        normalization=singlecell_normalization if use_tangram else None,
-        gene_selection_mode=gene_selection_mode if (use_tangram and gene_selection_mode) else None,
-        gene_list_column=gene_list_column if (use_tangram and gene_list_column) else None,
+        use=tangram_like_use,
+        filtering=singlecell_filtering if tangram_like_use else None,
+        normalization=singlecell_normalization if tangram_like_use else None,
+        gene_selection_mode=gene_selection_mode if (tangram_like_use and gene_selection_mode) else None,
+        gene_list_column=gene_list_column if (tangram_like_use and gene_list_column) else None,
     )
 
     multiome_input = MultiomeInput(use=use_multiome)
