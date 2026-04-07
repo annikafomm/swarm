@@ -78,7 +78,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   selectedDataset: Dataset | null = null;
   selectedDatasetCompare: Dataset | null = null;
 
-  compareMode: boolean = false;;
+  compareMode: boolean = false;
 
   // Track component destruction to avoid setting state on an unmounted component
   private destroy$ = new Subject<void>();
@@ -113,6 +113,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // GeoJson
   public dataPath = DEFAULT_PATHS.hexagonPath;
+  public compareDataPath = DEFAULT_PATHS.hexagonPath;
   public dataSetTitle =
     this.dataPath.split('/').pop()?.replace('.geojson', '') || 'Hexagon Plot';
 
@@ -137,35 +138,54 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private currentPathGenerator!: d3.GeoPath<any, CellFeature>;
 
   private detailSize = 80;
-
   private detailVisible = false;
   private detailScreenPos: { x: number; y: number } | null = null;
   private keydownHandler?: (event: KeyboardEvent) => void;
-  // =======================================
 
 
   public selectedCell: CellFeature | null = null;
   public selectedCellCompare: CellFeature | null = null;
   public selectedCluster: number | null = null;
-  public colorByProperty = 'regulatory_scores';
+  public selectedClusterCompare: number | null = null;
+
+  public selectedView = 'regulatory_scores';
+  public selectedCompareView: string = 'regulatory_scores';
+
+  public selectedItemByView: { [view: string]: string | null } = {};
+  public selectedItemByViewCompare: { [view: string]: string | null } = {};
+
+  public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
+  public regulatoryScoreDisplayModeCompare: 'raw' | 'moranI' | 'gearyC' = 'raw';
+
   public selectedGeneSetGenie3: string | null = null;
+  public selectedGeneSetGenie3Compare: string | null = null;
+  public selectedGeneSetSpongeCompare: string | null = null;
   public selectedGeneSetSponge: string | null = null;
   public selectedRegulatoryScore: string | null = null;
+  public selectedRegulatoryScoreCompare: string | null = null;
   public selectedGeneExpressionMain: string | null = null;
   public selectedGeneExpressionCompare: string | null = null;
+  private regulatoryObsmKeysMain: string[] = [];
+  private regulatoryObsmKeysCompare: string[] = [];
 
   // Data sources for the two tables
   public genie3RawData: TableData = {};
   public spongeRawData: TableData = {};
+  public genie3RawDataCompare: TableData = {};
+  public spongeRawDataCompare: TableData = {};
 
   // Column lists for the two tables
   public genie3Elements: string[] = [];
   public spongeElements: string[] = [];
-
+  public genie3ElementsCompare: string[] = [];
+  public spongeElementsCompare: string[] = [];
 
   private previousGeneSetGenie3: string | null = null;
   private previousGeneSetSponge: string | null = null;
+  private previousGeneSetGenie3Compare: string | null = null;
+  private previousGeneSetSpongeCompare: string | null = null;
   private requestTokens: { [key: string]: number } = {};
+
   private geneDomainToken: number = 0;
   private geneDomainCache = new Map<string, { min: number; max: number; expiresAt: number }>();
   private geneDomainCacheTtlMs: number = 10 * 60 * 1000;
@@ -174,8 +194,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public dgeaReady: boolean = false;
 
   public selectedInterval: number = 0;
-  public features: CellFeature[] = []; // public so that filterable table can update it
+  public selectedIntervalCompare: number = 0;
+
+  public features: CellFeature[] = [];
+  public compareFeatures: CellFeature[] = [];
+
   public meta: { [key: string]: any } = {};
+  public metaCompare: { [key: string]: any } = {};
 
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   public selectedDgeaObsCol: string = 'cell_type';
@@ -186,7 +211,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   public clusterCells: CellFeature[] = [];
+  public clusterCellsCompare: CellFeature[] = [];
   public clusterCellTypes: {
+    type: string;
+    count: number;
+    percentage: string;
+  }[] = [];
+  public clusterCellTypesCompare: {
     type: string;
     count: number;
     percentage: string;
@@ -200,13 +231,45 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       average_clustering: 0,
       closeness_centrality: 0,
     };
+  public clusterCentralityAvgCompare: {
+    degree_centrality: number;
+    average_clustering: number;
+    closeness_centrality: number;
+  } = {
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
+
+
+  public compareClusterCells: CellFeature[] = [];
+  public compareClusterCellTypes: {
+    type: string;
+    count: number;
+    percentage: string;
+  }[] = [];
+  public compareClusterCentralityAvg: {
+    degree_centrality: number;
+    average_clustering: number;
+    closeness_centrality: number;
+  } = {
+      degree_centrality: 0,
+      average_clustering: 0,
+      closeness_centrality: 0,
+    };
+
 
   // GRN network and genesets
 
   public genie3Network: genie3RegGraphConnection[] = [];
   public spongeNetwork: spongeRegGraphConnection[] = [];
+
+  public genie3NetworkCompare: genie3RegGraphConnection[] = [];
+  public spongeNetworkCompare: spongeRegGraphConnection[] = [];
+
   public geneSetsGenie3: { [regulator: string]: string[] } = {};
   public geneSetsSponge: { [regulator: string]: string[] } = {};
+
   public genie3Width: number = 600;
   public spongeWidth: number = 600;
 
@@ -218,12 +281,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public genie3SliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
   public spongeSliderData: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
 
+  public genie3WeightCutoffCompare: number = 0.5;
+  public spongePValueCutoffCompare: number = 0.05;
+  public genie3MinEdgesCompare: number = 25;
+  public spongeMinEdgesCompare: number = 25;
+  public spongeSliderDataCompare: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
+  public genie3SliderDataCompare: { step: number; min_border: number; max_border: number; default_value: number } | null = null;
+
+
   // Loading screen trackers
   public isLoadingHexagons: boolean = true;
   public isLoadingCompare: boolean = false;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
+  public isLoadingGenie3Compare: boolean = false;
+  public isLoadingSpongeCompare: boolean = false;
+
   public isLoadingRegulatoryScores: boolean = false; // Track regulatory scores fetches during init
+  public isLoadingRegulatoryScoresCompare: boolean = false; // Track regulatory scores fetches during init for compare view
   public isAppInitializing: boolean = true; // Only for initial app load
 
   // Returns true if any initial data loading is in progress (ONLY for first time)
@@ -233,10 +308,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
+  public coOccurrenceDataCompare: number[] = [];
   public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
+  public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
+
+  // Compare Co-occurrence table
+  public compareCoOccurrenceData: number[] = [];
+  public compareCoOccurrenceColumns: string[] = [];
+  public compareCoOccurrenceThreshold: number = 0.5;
+  public maxIntervalCompare: number = 49;
+  public clusterCountCompare: number = 10;
 
   public colorableProperties: string[] = [
     'cell_type',
@@ -246,9 +330,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     'closeness_centrality',
   ];
 
+  public colorablePropertiesCompare: string[] = [
+    'cell_type',
+    'leiden',
+    'degree_centrality',
+    'average_clustering',
+    'closeness_centrality',
+  ];
+
+  public geneSetsGenie3Compare: { [regulator: string]: string[] } = {};
+  public geneSetsSpongeCompare: { [regulator: string]: string[] } = {};
+
   // keep track of which properties actually have any data available; used to
   // disable/grey‑out menu items and tabs instead of hiding them abruptly.
   public propertyAvailability: { [prop: string]: boolean } = {};
+  public propertyAvailabilityCompare: { [prop: string]: boolean } = {};
 
   public leidenCentralityProps = [
     'degree_centrality',
@@ -257,6 +353,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   ];
 
   public groupedProperties: { key: string; value: string[] }[] | null = null;
+  public groupedPropertiesCompare: { key: string; value: string[] }[] | null = null;
+
   public ligandReceptorScores: {
     [col: string]: { [index: string]: string | number };
   } | null = null;
@@ -275,7 +373,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       '#ff8a65',
       '#4caf50',
     ]);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
     '#ff9800',
@@ -288,19 +386,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     '#4caf50',
   ]);
   // Yellow continuous color palette
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd);
+  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
   // Comparison
-  public selectedCompareView: string = 'regulatory_scores';
+
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
-  private dataCompare: GeoJsonData | null = null;
 
-  public get compareFeatures(): CellFeature[] {
-    return this.dataCompare?.features || [];
-  }
 
   public repaintBothViews(): void {
     this.updateHexColors();
@@ -328,21 +422,44 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
+    // --- MAIN DATASET LISTENER ---
     this.datasetService.selectedDataset$
       .pipe(takeUntil(this.destroy$))
       .subscribe(dataset => {
         this.selectedDataset = dataset;
         if (dataset) {
-          this.updatePathsFromDataset(dataset);
+          this.dataPath = dataset.geojson_path || '';
+          this.features = [];
+          this.meta = {};
+          this.updatePathsFromDataset(dataset, false);
+          // Note: updatePathsFromDataset triggers the pathsService listener,
+          // which handles the actual D3 loading for the main view.
+        } else {
+          this.pathsService.updatePaths({ adataPath: undefined }, false);
+          this.dataPath = '';
         }
       });
 
+    // --- COMPARE DATASET LISTENER ---
     this.datasetService.selectedDatasetCompare$
       .pipe(takeUntil(this.destroy$))
       .subscribe(dataset => {
         this.selectedDatasetCompare = dataset;
         if (dataset && this.compareMode) {
+          // Prepare the state
+          this.compareDataPath = dataset.geojson_path || '';
+          this.compareFeatures = [];
+          this.metaCompare = {};
+          this.regulatoryObsmKeysCompare = [];
+
+          this.updatePathsFromDataset(dataset, true);
+          // Trigger the reload
           this.reloadComparisonView();
+
+        } else if (!dataset && this.compareMode) {
+          this.pathsService.updatePaths({ adataPath: undefined }, true);
+          this.compareDataPath = '';
+          d3.select('#hexbin-compare').selectAll('svg').remove();
         }
       });
 
@@ -356,14 +473,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
         if (hexagonPath) {
-          // Update the component's dataPath
+          this.isLoadingHexagons = true; // 1. Turn on spinner
           this.dataPath = hexagonPath;
-          console.log('✓ Loading hexagon data from', this.dataPath);
 
-          // Clear hexagon-plot container
           d3.select('#hexbin').selectAll('svg').remove();
-          d3.select('#hexbin-compare').selectAll('svg').remove();
-
           this.footprintPlotUrls = [];
           this.onDemandFootprintUrls = [];
           this.availableMotifs = [];
@@ -372,11 +485,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.motifSearchQuery = '';
           this.footprintComputeError = '';
 
-          // Load and render new data
-          this.createHexagonPlot();
-          this.loadAndRenderData(this.dataPath);
-
-          this.renderFootprintPlots(this.selectedDataset);
+          // 2. Yield to browser to paint spinner, then do the heavy lifting
+          setTimeout(() => {
+            this.createHexagonPlot();
+            this.loadAndRenderData(this.dataPath);
+            this.renderFootprintPlots(this.selectedDataset);
+          }, 50);
         } else {
           console.warn('✗ No hexagon path available');
         }
@@ -405,14 +519,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     window.addEventListener('resize', this._resizeHandler);
   }
 
-  onDatasetSelected(dataset: Dataset | null): void {
-    if (!dataset) return;
-
-    this.selectedDataset = dataset;
-    this.datasetService.selectDataset(dataset);  // Networks load automatically
-    this.updatePathsFromDataset(dataset);
-    this.reloadHexagons();
-    this.refreshSharedGeneExpressionDomain();
+  onDatasetSelected(dataset: Dataset | null, isCompare: boolean = false): void {
+    if (isCompare) {
+      // Just emit to the service. The listener in ngOnInit will catch it.
+      this.datasetService.selectDatasetCompare(dataset);
+    } else {
+      // Just emit to the service.
+      this.datasetService.selectDataset(dataset);
+    }
   }
 
   private updateGraphWidths(): void {
@@ -427,8 +541,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  public onRegulatoryGraphsPanelOpened(): void {
+    // Wait for lazy expansion-panel content to be attached to the DOM.
+    setTimeout(() => {
+      this.updateGraphWidths();
+
+      if (this.selectedGeneSetGenie3) {
+        this.updateSubgraphGenie3();
+      }
+
+      if (this.selectedGeneSetSponge) {
+        this.updateSubgraphSponge();
+      }
+    }, 0);
+  }
+
   // Handle tangram dataset selection - use tangram_adata_path if available
-  onDatasetTangramSelected(dataset: Dataset | null): void {
+  onDatasetTangramSelected(dataset: Dataset | null, isCompare: boolean = false): void {
     if (!dataset || !dataset.tangram_adata_path) return;
 
     // Create a modified dataset with tangram path
@@ -437,19 +566,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       adata_path: dataset.tangram_adata_path
     };
 
-    this.selectedDataset = tangramDataset;
-    this.datasetService.selectDataset(tangramDataset);
-    this.updatePathsFromDataset(tangramDataset);
-    this.reloadHexagons();
-    this.refreshSharedGeneExpressionDomain();
-  }
-
-  onDatasetCompareSelected(dataset: Dataset | null): void {
-    this.selectedDatasetCompare = dataset;
-    this.datasetService.selectDatasetCompare(dataset);  // Networks load automatically
-    if (dataset) {
+    if (isCompare) {
+      this.selectedDatasetCompare = tangramDataset;
+      this.datasetService.selectDatasetCompare(tangramDataset);
+      this.updatePathsFromDataset(tangramDataset, true);
       this.reloadComparisonView();
+    } else {
+      this.selectedDataset = tangramDataset;
+      this.datasetService.selectDataset(tangramDataset);
+      this.updatePathsFromDataset(tangramDataset, false);
+      this.reloadHexagons();
     }
+
     this.refreshSharedGeneExpressionDomain();
   }
 
@@ -469,19 +597,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.isLoadingCompare = true;
       // Clear existing compare hexagons
       d3.select('#hexbin-compare').selectAll('svg').remove();
-      // Load and render new compare data
-      this.initCompareHexagonPlot();
+
+      // Yield to the browser's paint cycle so the spinner appears
+      setTimeout(() => {
+        this.loadAndRenderData(this.compareDataPath, true);
+      }, 50);
     }
   }
 
-  private updatePathsFromDataset(dataset: Dataset): void {
+  private updatePathsFromDataset(dataset: Dataset, isCompare: boolean = false): void {
     this.pathsService.updatePaths({
-      adataMainPath: dataset.adata_path,
-      adataComparePath: dataset.adata_path,
+      adataPath: dataset.adata_path,
       genieFiltPath: dataset.genie_network_path,
       spongeFiltPath: dataset.sponge_network_path,
       hexagonPath: dataset.geojson_path,
-    });
+    }, isCompare);
   }
 
   // allow nested tables like for differential motif activity view
@@ -527,143 +657,125 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  public onTabColorChange(newView: string): void {
-    if (this.colorByProperty !== newView) {
-      this.colorByProperty = newView;
-      this.onColorbyPropertyChange();
+  public onTabColorChange(newView: string, compare: boolean = false): void {
+    if (compare) {
+      if (this.selectedCompareView !== newView) {
+        this.selectedCompareView = newView;
+        this.onColorbyPropertyChange(true);
+      } else {
+        this.updateHexColors('#hexbin-compare');
+      }
     } else {
-      // If the colorByProperty is already set, simply force an update.
-      this.updateHexColors();
+      if (this.selectedView !== newView) {
+        this.selectedView = newView;
+        this.onColorbyPropertyChange(false);
+      } else {
+        this.updateHexColors();
+      }
     }
   }
 
-  public onTabChange(event: MatTabChangeEvent): void {
+  public onTabChange(event: MatTabChangeEvent, compare: boolean = false): void {
     let newView: string | null = null;
     const tabLabel = event.tab.textLabel;
 
-    // Handle info tabs that need async rendering
-    if (tabLabel === 'Cluster Information') {
-      // Render neighborhood enrichment when cluster info tab is opened
-      // Use longer timeout to ensure Angular has rendered the template
+
+    if (!compare && (tabLabel === 'Cluster Information' || tabLabel === 'Cell Information')) {
       setTimeout(() => this.renderNhoodHeatmap(), 300);
       return;
     }
-
-    if (tabLabel === 'Cell Information') {
-      // Render neighborhood enrichment when cell info tab is opened
-      // Use longer timeout to ensure Angular has rendered the template
-      setTimeout(() => this.renderNhoodHeatmap(), 300);
+    if (compare && (tabLabel === 'Compare - Cluster Information' || tabLabel === 'Compare - Cell Information')) {
+      setTimeout(() => this.renderNhoodHeatmap(true), 300);
       return;
     }
 
-    if (tabLabel === 'DGEA') {
+    if (!compare && tabLabel === 'DGEA') {
       this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
-
       if (this.dgeaReady) {
         this.initDgeaSelection();
         setTimeout(() => this.renderDgeaHeatmap(), 100);
       }
-
       return;
     }
 
-    // Handle visualization tabs that change the color property
-    switch (tabLabel) {
-      case 'Regulatory Scores':
-        // Check if regulatory scores data is available
-        if (!this.hasRegulatoryScoresData()) {
-          console.warn('[Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
-          return;
-        }
-        newView = 'regulatory_scores';
-        break;
-      case 'Co-occurence':
-        newView = 'leiden';
-        break;
-      case 'Gene Expression':
-        newView = 'gene_expression';
-        break;
-      case 'TF Activity':
-        newView = 'tf_activity';
-        break;
-      case 'Pathway Activity':
-        newView = 'pathway_activity';
-        break;
-      case 'Cell Composition TF Activity':
-        newView = 'cell_comp_tf_activity_similarity';
-        break;
-      case 'Ligand-Receptor Relationships':
-        newView = 'ligand_receptor_relationships';
-        break;
-      case "ChromVar spatial correlation : Moran's I / Geary's C":
-        newView = 'chromvar_total_sum';
-        break;
-      case 'Differential Motif Activity':
-        // view should be cell type
-        newView = 'cell_type';
-        break;
-      case 'Footprints':
-        newView = 'cell_type';
-        break;
-    }
-
-    console.log('[Tab Change] newView=', newView);
-
-    if (newView && this.colorByProperty !== newView) {
-      this.colorByProperty = newView;
-      this.onColorbyPropertyChange();
-    }
-  }
-
-  public onCompareTabChange(event: MatTabChangeEvent): void {
-    let newView: string | null = null;
-
-    const label = event.tab.textLabel;
-
-    if (label.startsWith('Compare - ')) {
-      const viewName = label.replace('Compare - ', '').toLowerCase().replace(/\s+/g, '_');
-
-      switch (viewName) {
-        case 'regulatory_scores':
-          // Check if regulatory scores data is available
-          if (!this.hasRegulatoryScoresData()) {
-            console.warn('[Compare Tab Change] Regulatory Scores tab selected but no data available. Skipping view change.');
-            return;
-          }
-          newView = 'regulatory_scores';
-          break;
-        case 'gene_expression':
-          newView = 'gene_expression';
-          break;
-        case 'tf_activity':
-          newView = 'tf_activity';
-          break;
-        case 'pathway_activity':
-          newView = 'pathway_activity';
-          break;
+    // Map tab labels to view keys
+    const tabMap: { [label: string]: string } = compare
+      ? {
+        'Compare - Regulatory Scores': 'regulatory_scores',
+        'Compare - Co-occurence': 'leiden',
+        'Compare - Gene Expression': 'gene_expression',
+        'Compare - Ligand-Receptor Relationships': 'ligand_receptor_relationships',
+        'Compare - Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
+        'Compare - TF Activity': 'tf_activity',
+        'Compare - Pathway Activity': 'pathway_activity',
       }
-    }
+      : {
+        'Regulatory Scores': 'regulatory_scores',
+        'Co-occurence': 'leiden',
+        'Gene Expression': 'gene_expression',
+        'TF Activity': 'tf_activity',
+        'Pathway Activity': 'pathway_activity',
+        'Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
+        'Ligand-Receptor Relationships': 'ligand_receptor_relationships',
+        "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
+        'Differential Motif Activity': 'cell_type',
+        'Footprints': 'cell_type',
+      };
 
-    console.log('[Compare Tab Change] newView=', newView);
+    newView = tabMap[tabLabel] || null;
 
-    if (newView && this.selectedCompareView !== newView) {
-      this.selectedCompareView = newView;
-      this.onColorbyPropertyChange();
+    console.log('[Tab Change]', compare ? '[Compare]' : '[Main]', 'newView=', newView);
+
+    if (newView) {
+      this.onTabColorChange(newView, compare);
     }
   }
 
   /**
    * Check if regulatory scores data is available
    */
-  private hasRegulatoryScoresData(): boolean {
-    if (!this.meta) return false;
+  private hasRegulatoryScoresData(scope: 'main' | 'compare' = 'main'): boolean {
+    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+    if (!meta || Object.keys(meta).length === 0) return false;
 
-    const hasGenie3 = this.meta['global_regulatory_scores_genie3'] &&
-      Object.keys(this.meta['global_regulatory_scores_genie3']).length > 0;
-    const hasSponge = this.meta['global_regulatory_scores_sponge'] &&
-      Object.keys(this.meta['global_regulatory_scores_sponge']).length > 0;
+    const hasGenie3 = meta['global_regulatory_scores_genie3'] &&
+      Object.keys(meta['global_regulatory_scores_genie3']).length > 0;
+    const hasSponge = meta['global_regulatory_scores_sponge'] &&
+      Object.keys(meta['global_regulatory_scores_sponge']).length > 0;
 
-    return hasGenie3 || hasSponge;
+    const hasRegulatoryObsm = (
+      scope === 'compare' ? this.regulatoryObsmKeysCompare : this.regulatoryObsmKeysMain
+    ).length > 0;
+
+    return (hasGenie3 || hasSponge) && hasRegulatoryObsm;
+  }
+
+  private hasGeneExpressionData(scope: 'main' | 'compare' = 'main'): boolean {
+    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+    if (!meta || Object.keys(meta).length === 0) return false;
+
+    const hasMoranI = meta['moranI'] && Object.keys(meta['moranI']).length > 0;
+    const hasGearyC = meta['gearyC'] && Object.keys(meta['gearyC']).length > 0;
+
+    return (hasMoranI || hasGearyC);
+  }
+
+  private async fetchRegulatoryObsmKeys(datasetId?: string): Promise<string[]> {
+    const query = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
+    try {
+      const res = await firstValueFrom(
+        this.sessionService.callWithSession(() =>
+          this.http.get<{ regulatory_obsm_keys?: string[] }>(
+            `${this.sessionService.apiUrl}/api/obsm_tables${query}`,
+            { withCredentials: true },
+          )
+        )
+      );
+      return Array.isArray(res?.regulatory_obsm_keys) ? res.regulatory_obsm_keys : [];
+    } catch (e) {
+      console.warn('[Regulatory availability] Could not fetch obsm keys', e);
+      return [];
+    }
   }
 
   /**
@@ -671,25 +783,123 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * by the template to disable tabs and dropdown options when information
    * hasn't been computed or loaded yet.
    */
-  public propertyAvailable(prop: string): boolean {
-    if (prop === 'co_occurrence') {
-      const clusters = this.meta?.['leiden_cluster_annotations'];
-      if (!clusters) return false;
+  public propertyAvailable(prop: string, scope: 'main' | 'compare' = 'main'): boolean {
+    if (prop === 'gene_expression') return this.hasGeneExpressionData(scope)
+    if (prop === 'regulatory_scores') return this.hasRegulatoryScoresData(scope);
+    if (prop === 'co_occurrence') return this.hasCoOccurrenceData(scope);
 
-      return Object.values(clusters).some(
-        (c: any) => Array.isArray(c?.co_occurrence) && c.co_occurrence.length > 0
-      );
+
+    const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
+
+    if (map && prop in map) {
+      return map[prop];
     }
-    return !!this.propertyAvailability[prop];
+
+    return false;
   }
 
-  /**
-   * Compatibility wrapper for the existing regulatory scores tab.  Left in place
-   * simply so that the template change is minimal; it now defers to the generic
-   * availability check.
-   */
-  public canViewRegulatoryScores(): boolean {
-    return this.propertyAvailable('regulatory_scores');
+  private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
+    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+
+    if (!meta || Object.keys(meta).length === 0 || !meta['leiden_cluster_annotations']) return false;
+
+    const annotations = meta['leiden_cluster_annotations'];
+
+    // Check if at least one cluster has a valid 2D co_occurrence array
+    return Object.values(annotations).some((ann: any) =>
+      ann &&
+      Array.isArray(ann.co_occurrence) &&
+      ann.co_occurrence.length > 0 &&
+      Array.isArray(ann.co_occurrence[0]) // verify it's a 2D array
+    );
+  }
+
+  private updatePropertyAvailability(scope: 'main' | 'compare' = 'main') {
+    const features = scope === 'main' ? this.features : this.compareFeatures;
+    const map: { [prop: string]: boolean } = {};
+    const currentColorableProps = scope === 'main' ? this.colorableProperties : this.colorablePropertiesCompare;
+    if (features && features.length > 0) {
+      const keys = Object.keys(features[0].properties || {});
+      for (const prop of currentColorableProps) {
+        if (prop === 'regulatory_scores') {
+          map[prop] = this.hasRegulatoryScoresData(scope);
+        }
+        else if (prop === 'gene_expression') {
+          map[prop] = this.hasGeneExpressionData(scope);
+        }
+        else if (prop === 'co_occurrence') {
+          map[prop] = this.hasCoOccurrenceData(scope);
+
+        } else {
+          map[prop] = keys.includes(prop);
+        }
+      }
+      // Add all other keys as available
+      for (const key of keys) {
+        map[key] = true;
+      }
+    }
+    if (scope === 'main') {
+      this.propertyAvailability = map;
+    } else {
+      this.propertyAvailabilityCompare = map;
+    }
+  }
+
+  private buildGroupedPropertiesFromKeys(keys: string[]): { key: string; value: string[] }[] {
+    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
+    const lianaKeys = [
+      'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity',
+      'tf_activity',
+      'pathway_activity',
+    ];
+    const chromvarKeys = ['chromvar_total_sum'];
+
+    return [
+      { key: 'Scores', value: keys.filter((p) => scoreKeys.includes(p)) },
+      { key: 'LIANA+', value: keys.filter((p) => lianaKeys.includes(p)) },
+      { key: 'ChromVAR', value: keys.filter((p) => chromvarKeys.includes(p)) },
+      {
+        key: 'Other', value: keys.filter(
+          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
+        )
+      },
+    ];
+  }
+
+  private computePropertyAvailability(
+    features: CellFeature[],
+    candidates: Set<string>,
+    context: 'main' | 'compare'
+  ): { [prop: string]: boolean } {
+    const availability: { [prop: string]: boolean } = {};
+
+    candidates.forEach((prop) => {
+      if (prop === 'regulatory_scores') {
+        const hasFeatureData = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+        availability[prop] = context === 'main'
+          ? this.hasRegulatoryScoresData() || hasFeatureData
+          : hasFeatureData;
+      } else if (this.leidenCentralityProps.includes(prop)) {
+        availability[prop] = features.some((f) => {
+          const annotationVal = this.getLeidenClusterAnnotation(f.properties.leiden, context === 'compare' ? true : false)?.centrality?.[prop];
+          const featureVal = f?.properties ? f.properties[prop] : undefined;
+          const val = annotationVal ?? featureVal;
+          return val !== undefined && val !== null && val !== '';
+        });
+      } else {
+        availability[prop] = features.some((f) => {
+          const val = f?.properties ? f.properties[prop] : undefined;
+          return val !== undefined && val !== null && val !== '';
+        });
+      }
+    });
+
+    return availability;
   }
 
   private createHexagonPlot(containerName?: string): void {
@@ -760,107 +970,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     (svgSel as any).call(zoomBehavior);
   }
 
-  private initCompareHexagonPlot(): void {
-
-    // Do not recurse — if the compare container isn't in the DOM, abort and let the caller retry once.
-    const node = document.getElementById('hexbin-compare');
-    if (!node) {
-      console.warn('hexbin-compare not present in DOM, skipping compare init');
-      return;
-    }
-
-    // prepare svg/group
-
-    this.createHexagonPlot('#hexbin-compare');
-
-    this.dataCompare = this.geoDataService.getData();
-    const featuresToDraw = (this.dataCompare && Array.isArray(this.dataCompare.features)) ? this.dataCompare.features : [];
-
-    if (!this.selectedCompareView) {
-      console.log('No compare view selected; skipping compare render');
-      return;
-    }
-    const compareIsContinuous = this.isContinuousScale(this.selectedCompareView, featuresToDraw);
-    console.log('[compare init] selectedCompareView=', this.selectedCompareView, 'featuresToDraw=', featuresToDraw.length, 'isContinuous=', compareIsContinuous);
-    this.currentCompareLegendType = compareIsContinuous ? 'continuous' : 'categorical';
-
-    const width = 1200;
-    const height = 1000;
-    const projection = d3.geoIdentity().fitSize([width, height], {
-      type: 'FeatureCollection',
-      features: featuresToDraw,
-    });
-    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
-
-    if (!this.g_compare) {
-      console.warn('g_compare not initialized after createHexagonPlot');
-      return;
-    }
-
-    // draw using the intended feature set (featuresToDraw)
-    this.g_paths_compare = this.g_compare.selectAll('g.compare-layer').data([0]).join('g').attr('class', 'compare-layer') as any;
-
-    this.g_paths_compare
-      .selectAll('path')
-      .data(featuresToDraw)
-      .join('path')
-      .attr('d', (d) => pathGenerator(d) || '')
-      .attr('fill', (d) => {
-        const value = (this.leidenCentralityProps.includes(this.selectedCompareView))
-          ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedCompareView]
-          : d.properties[this.selectedCompareView];
-        if (this.currentCompareLegendType === 'categorical') {
-          return this.colorScaleCompare(String(value));
-        } else {
-          const num = this.toNumber(value);
-          return Number.isFinite(num) ? this.continuousColorScaleCompare(num) : '#ccc';
-        }
-      })
-      .style('opacity', 0.8)
-      .on('mouseover', (event, d) => this.mouseOver(event, d))
-      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-      .on('click', (event, d) => this.openSidenavCompare(event, d));
-
-    setTimeout(() => { this.isLoadingCompare = false; }, 100);
-
-    setTimeout(() => { this.updateHexColors('#hexbin-compare') }, 0);
-
-
-  }
-
   public onCompareMode(): void {
-
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
       this.isLoadingCompare = true;
-      // schedule a single init attempt so Angular has time to render the compare container
-      setTimeout(() => this.initCompareHexagonPlot(), 50);
+      this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
+
+      // Emit the main dataset to the compare stream.
+      // This will automatically trigger the listener in ngOnInit!
+      if (this.selectedDataset) {
+        this.datasetService.selectDatasetCompare(this.selectedDataset);
+      }
       this.refreshSharedGeneExpressionDomain();
 
-
     } else {
-      // remove compare svg and clear references
+      // Teardown logic stays exactly the same
       d3.select('#hexbin-compare').selectAll('*').remove();
       try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
       this.svg_compare = null as any;
       this.g_compare = null as any;
 
-      // Reset compare legend / scales so reopening starts fresh
       try {
         this.currentLegendDomainCompare = [];
         this.currentCompareLegendType = 'categorical';
-        // reset compare ordinal domain
         if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
           this.colorScaleCompare.domain([] as any);
         }
-        // reset compare continuous domain
         if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
           this.continuousColorScaleCompare.domain([0, 1]);
         }
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) { }
+
+      // Clear the service state
+      this.datasetService.selectDatasetCompare(null);
       this.refreshSharedGeneExpressionDomain();
     }
   }
@@ -911,9 +1054,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  private getLeidenClusterAnnotation(clusterId: number | null | undefined): any | null {
+  private getLeidenClusterAnnotation(clusterId: number | null | undefined, compare: boolean = false): any | null {
     if (clusterId === null || clusterId === undefined) return null;
-    return this.meta?.['leiden_cluster_annotations']?.[String(clusterId)] ?? null;
+    const meta = compare ? this.metaCompare : this.meta;
+    return meta?.['leiden_cluster_annotations']?.[String(clusterId)] ?? null;
   }
 
   // Create comparison ID matching the backend JSON format
@@ -932,7 +1076,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public showDgeaGeneOnMainPlot(gene: string): void {
     this.shownGeneOnPlot = gene;
-    this.colorByProperty = 'gene_expression';
+    this.selectedView = 'gene_expression';
     this.fetchAndUpdate('gene_expression', gene);
   }
 
@@ -1050,17 +1194,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const flippedHeatmap = cmp?.heatmap_context
       ? {
-          ...cmp.heatmap_context,
-          groups: Array.isArray(cmp.heatmap_context.groups)
-            ? [
-                this.selectedDgeaGroup1,
-                this.selectedDgeaGroup2,
-                ...cmp.heatmap_context.groups.filter(
-                  (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
-                )
-              ]
-            : cmp.heatmap_context.groups
-        }
+        ...cmp.heatmap_context,
+        groups: Array.isArray(cmp.heatmap_context.groups)
+          ? [
+            this.selectedDgeaGroup1,
+            this.selectedDgeaGroup2,
+            ...cmp.heatmap_context.groups.filter(
+              (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
+            )
+          ]
+          : cmp.heatmap_context.groups
+      }
       : null;
 
     return {
@@ -1096,11 +1240,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  private loadAndRenderData(dataPath: string): void {
+  private loadAndRenderData(dataPath: string, compare: boolean = false): void {
+
+    const tokenType = compare ? 'hexagons_compare' : 'hexagons_main';
+    const token = this.nextRequestToken(tokenType);
+
     // Load GeoJSON data - prepend base URL if it starts with /api/
     const fullUrl = dataPath.startsWith('/api/')
       ? `${this.sessionService.apiUrl}${dataPath}`
       : dataPath;
+
+    console.log('[DEBUG] Loading GeoJSON from:', fullUrl, 'compare=', compare);
 
     // Use fetch instead of d3.json to handle credentials properly
     fetch(fullUrl, { credentials: 'include' })
@@ -1110,94 +1260,173 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         return response.json();
       })
-      .then((data: GeoJsonData) => {
+      .then(async (data: GeoJsonData) => {
+        if (token !== this.requestTokens[tokenType]) {
+          console.warn(`[Race condition prevented] Ignoring stale GeoJSON fetch for ${dataPath}`);
+          return;
+        }
         console.log('Data loaded from:', fullUrl, data);
 
         if (!data) {
           throw new Error('Failed to load GeoJSON data');
         }
 
-        this.geoDataService.setData(data);
+        compare ? this.geoDataService.setCompareData(data) : this.geoDataService.setData(data);
+
+        const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+        if (compare) {
+          this.regulatoryObsmKeysCompare = await this.fetchRegulatoryObsmKeys(datasetId);
+        } else {
+          this.regulatoryObsmKeysMain = await this.fetchRegulatoryObsmKeys(datasetId);
+        }
+
+        console.log('[Regulatory availability] main obsm keys:', this.regulatoryObsmKeysMain);
 
         // Infer properties for coloring dropdown
-        this.features = data.features;
+        if (compare) {
+          this.createHexagonPlot('#hexbin-compare');
+          this.compareFeatures = data.features;
+          if (this.g_compare && this.currentPathGenerator) {
+            this.g_compare
+              .style('cursor', 'pointer')
+              .style('pointer-events', null)
+              .selectAll<SVGPathElement, CellFeature>('path')
+              .data(this.compareFeatures, (d: any) => d.properties.barcode)
+              .join('path')
+              .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
+              .attr('fill', (d: CellFeature) => {
+                const value = this.leidenCentralityProps.includes(this.selectedCompareView)
+                  ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedCompareView]
+                  : d.properties?.[this.selectedCompareView];
+                if (this.currentCompareLegendType === 'categorical') {
+                  return this.colorScaleCompare(String(value));
+                } else {
+                  const num = this.toNumber(value);
+                  return Number.isFinite(num)
+                    ? this.continuousColorScaleCompare(num)
+                    : '#ccc';
+                }
+              })
+              .style('opacity', 0.8)
+              .on('mouseover', (event, d) => this.mouseOver(event, d))
+              .on('mouseleave', (event, d) => this.mouseLeave(event, d))
+              .on('click', (event, d) => this.displayCellDetails(event, d, true));
+          }
+
+        } else {
+          this.features = data.features;
+        }
 
         if (data.meta) {
           // save all features for potential downsampling in Xenium datasets
-          this.fullFeatures = data.features;
+          if (!compare) {
+            this.fullFeatures = data.features;
 
-          this.isXenium =
-            (data.meta && data.meta["data_type"] === "xenium") ||
-            data.features.length > 50000;
-          if (this.svg) {
+            this.isXenium =
+              (data.meta && data.meta["data_type"] === "xenium") ||
+              data.features.length > 50000;
+            if (this.svg) {
+              if (this.isXenium) {
+                (this.svg as any).on('dblclick.zoom', null);
+              }
+            }
+            // set base
             if (this.isXenium) {
-              (this.svg as any).on('dblclick.zoom', null);
+              const target = 10000;
+              const step = Math.ceil(this.fullFeatures.length / target);
+              this.features = this.fullFeatures.filter((_, i) => i % step === 0);
+
+              // window only for xenium
+              if (this.isXenium) {
+                this.initDetailWindow();
+                this.hideDetailWindow();
+                this.bindDetailWindowInteractions();
+              }
+
+            } else {
+              this.features = this.fullFeatures;
             }
           }
-          // set base
-          if (this.isXenium) {
-            const target = 10000;
-            const step = Math.ceil(this.fullFeatures.length / target);
-            this.features = this.fullFeatures.filter((_, i) => i % step === 0);
 
-            // window only for xenium
-            if (this.isXenium) {
 
-              this.initDetailWindow();
-              this.hideDetailWindow();
-              this.bindDetailWindowInteractions();
+
+          if (compare) {
+            this.metaCompare = data.meta;
+            console.log('Compare meta loaded:', this.metaCompare, data.meta);
+            this.updatePropertyAvailability('compare');
+          } else {
+            this.meta = data.meta;
+            this.updatePropertyAvailability('main');
+          }
+
+          const availableObsCols = this.getDgeaObsCols();
+          if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
+            this.selectedDgeaObsCol = availableObsCols[0];
+          }
+          this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
+          if (this.dgeaReady) {
+            this.initDgeaSelection();
+          }
+
+          const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
+          if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+            if (compare) {
+              this.clusterCountCompare = Object.keys(leidenClusterAnnotations).length;
+            } else {
+              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
             }
-                    } else {
-                        this.features = this.fullFeatures;
-                    }
-                    this.meta = data.meta;
-                    const availableObsCols = this.getDgeaObsCols();
-                    if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
-                      this.selectedDgeaObsCol = availableObsCols[0];
-                    }
+          }
 
-                    this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
-                    if (this.dgeaReady) {
-                      this.initDgeaSelection();
-                    }
-                    const leidenClusterAnnotations = this.meta?.['leiden_cluster_annotations'];
-                    if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
-                      this.clusterCount = Object.keys(leidenClusterAnnotations).length;
-                    }
-
-          const interval = this.meta?.['interval'];
+          const interval = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
           if (Array.isArray(interval) && interval.length > 0) {
-            this.maxInterval = interval.length - 1;
+            if (compare) {
+              this.maxIntervalCompare = interval.length - 1;
+            } else {
+              this.maxInterval = interval.length - 1;
+            }
           }
+
           this.selectedRegulatoryScore =
-            this.meta['grn_score_names']?.[0] || null;
-          this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
-          this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+            compare ? this.metaCompare['grn_score_names']?.[0] : this.meta['grn_score_names']?.[0] || null;
+          if (compare) {
+            this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3Compare = this.metaCompare['genie_genesets'] || {};
+            this.geneSetsSpongeCompare = this.metaCompare['sponge_genesets'] || {};
+          } else {
+            this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
+            this.geneSetsGenie3 = this.meta['genie_genesets'] || {};
+            this.geneSetsSponge = this.meta['sponge_genesets'] || {};
+          }
           // Populate dropdown options from gene set keys
           this.genie3Elements = Object.keys(this.geneSetsGenie3);
           this.spongeElements = Object.keys(this.geneSetsSponge);
           this.selectedGeneSetGenie3 =
-            Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
           this.selectedGeneSetSponge =
-            Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
 
-          // Mark initial network loads as pending before any completion check can run.
-          // This prevents `isAppInitializing` from switching off in the short window
-          // before `onGeneSetChange()` sets loading flags and starts requests.
-          this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
-          this.isLoadingSponge = !!this.selectedGeneSetSponge;
-
-          // Set previous values to null so first onGeneSetChange() will trigger visualization
-          this.previousGeneSetGenie3 = null;
-          this.previousGeneSetSponge = null;
-
+          if (compare) {
+            this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
+            this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
+            this.previousGeneSetGenie3Compare = null;
+            this.previousGeneSetSpongeCompare = null;
+            this.selectedRegulatoryScoreCompare = this.metaCompare['grn_score_names']?.[0] || null;
+          } else {
+            this.isLoadingGenie3 = !!this.selectedGeneSetGenie3;
+            this.isLoadingSponge = !!this.selectedGeneSetSponge;
+            this.previousGeneSetGenie3 = null;
+            this.previousGeneSetSponge = null;
+            this.selectedRegulatoryScore = this.meta['grn_score_names']?.[0] || null;
+          }
           // Trigger initial graph visualization
           setTimeout(() => {
-            this.onGeneSetChange();
+            this.onGeneSetChange(compare);
           }, 100);
-        }
 
-        let firstProps = this.features[0]?.properties || {};
+        }
+        const featuresForProps = compare ? this.compareFeatures : this.features;
+        const firstProps = featuresForProps?.[0]?.properties || {};
+
 
         // start with whatever is available on the first feature, but also make
         // sure that the set contains the "known" columns we care about so that
@@ -1221,17 +1450,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         scoreKeys.forEach((k) => allKeys.add(k));
         lianaKeys.forEach((k) => allKeys.add(k));
 
+
+
         this.leidenCentralityProps.forEach((k) => allKeys.add(k));
-        this.colorableProperties = Array.from(allKeys);
+        compare ? this.colorablePropertiesCompare = Array.from(allKeys) : this.colorableProperties = Array.from(allKeys);
         console.log('Initial colourable properties (including potential ones):',
-          this.colorableProperties);
+          compare ? this.colorablePropertiesCompare : this.colorableProperties);
 
         // Alphabetical order
-        this.colorableProperties.sort((a, b) => a.localeCompare(b));
+        compare ? this.colorablePropertiesCompare.sort((a, b) => a.localeCompare(b)) : this.colorableProperties.sort((a, b) => a.localeCompare(b));
 
         // Group similar properties together
         const chromvarKeys = ['chromvar_total_sum'];
-        this.groupedProperties = [
+        const currentgroupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
           { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
@@ -1242,64 +1473,96 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           },
         ];
 
+        compare ? this.groupedPropertiesCompare = currentgroupedProperties : this.groupedProperties = currentgroupedProperties;
+
+
         // compute availability for everything we've decided to show
-        const candidates = new Set(this.colorableProperties);
-        // ensure some non-colorable but still important keys are included
-        candidates.add('regulatory_scores');
-        this.propertyAvailability = {};
+        const candidates = new Set(compare ? this.colorablePropertiesCompare : this.colorableProperties);
+
+        const targetAvailabilityMap: { [prop: string]: boolean } = {};
+
         candidates.forEach((prop) => {
           if (prop === 'regulatory_scores') {
-            this.propertyAvailability[prop] = this.hasRegulatoryScoresData();
+            targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
+          } else if (prop === 'gene_expression') {
+            targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
+          }
+          else if (prop === 'co_occurrence') {
+            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare ? 'compare' : 'main');
+
           } else if (this.leidenCentralityProps.includes(prop)) {
-            this.propertyAvailability[prop] = this.features.some((f) => {
-              const val = this.getLeidenClusterAnnotation(f.properties.leiden)?.centrality?.[prop];
+            targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
+              // FIX: Added 'compare' argument to getLeidenClusterAnnotation
+              const val = this.getLeidenClusterAnnotation(f.properties.leiden, compare)?.centrality?.[prop];
               return val !== undefined && val !== null && val !== '';
             });
           } else {
-            this.propertyAvailability[prop] = this.features.some((f) => {
+            targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
               const val = f.properties ? f.properties[prop] : undefined;
               return val !== undefined && val !== null && val !== '';
             });
           }
         });
-        console.log('Property availability map:', this.propertyAvailability);
 
-        // remove unavailable properties from the dropdown entirely so the user
-        // cannot select them and they don't appear as the default
-        this.colorableProperties = this.colorableProperties.filter((p) =>
-          this.propertyAvailability[p]
-        );
-        console.log('Filtered colourableProperties:', this.colorableProperties);
+        // Conditionally assign the calculated map to the correct view
+        if (compare) {
+          this.propertyAvailabilityCompare = targetAvailabilityMap;
+        } else {
+          this.propertyAvailability = targetAvailabilityMap;
+        }
+        console.log(`Property availability map (${compare ? 'compare' : 'main'}):`, targetAvailabilityMap);
 
-        // rebuild grouped properties after filtering to exclude unavailable items
+        // rebuild grouped properties with full property list; template handles disabled state
         this.groupedProperties = [
           { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
           { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
           {
             key: 'Other', value: this.colorableProperties.filter(
-              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p)
+              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
             ),
           },
         ];
 
-        if (this.propertyAvailable('regulatory_scores')) {
-          this.colorByProperty = 'regulatory_scores';
-        } else if (this.propertyAvailable('cell_type')) {
-          this.colorByProperty = 'cell_type';
+        const firstAvailableProperty = compare
+          ? this.colorablePropertiesCompare.find((p) => this.propertyAvailable(p, 'compare'))
+          : this.colorableProperties.find((p) => this.propertyAvailable(p, 'main'));
+
+        if (compare) {
+          if (this.propertyAvailable('regulatory_scores', 'compare')) {
+            this.selectedCompareView = 'regulatory_scores';
+          } else if (this.propertyAvailable('cell_type', 'compare')) {
+            this.selectedCompareView = 'cell_type';
+          } else if (firstAvailableProperty) {
+            this.selectedCompareView = firstAvailableProperty;
+          } else {
+            // Keep empty when nothing is available.
+            this.selectedCompareView = this.colorablePropertiesCompare[0] || '';
+          }
+          this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
         } else {
-          // just pick the first remaining option (already filtered to available
-          // ones).  any value here is acceptable as 'random' default.
-          this.colorByProperty = this.colorableProperties[0] || '';
+
+          if (this.propertyAvailable('regulatory_scores', 'main')) {
+            this.selectedView = 'regulatory_scores';
+          } else if (this.propertyAvailable('cell_type', 'main')) {
+            this.selectedView = 'cell_type';
+          } else if (firstAvailableProperty) {
+            this.selectedView = firstAvailableProperty;
+          } else {
+            // Keep empty when nothing is available.
+            this.selectedView = this.colorableProperties[0] || '';
+          }
+          this.currentLegendType = this.isContinuousScale(this.selectedView, this.features, false) ? 'continuous' : 'categorical';
         }
 
-        this.currentLegendType = this.isContinuousScale() ? 'continuous' : 'categorical';
+
 
         const width = 1200;
         const height = 1000;
 
         const projection = d3.geoIdentity().fitSize([width, height], {
           type: 'FeatureCollection',
-          features: (this.isXenium ? this.fullFeatures : this.features),
+          features: compare ? this.compareFeatures : (this.isXenium ? this.fullFeatures : this.features),
         });
 
         // Create a geoPath generator with the projection
@@ -1316,8 +1579,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           });
         }
 
-
-
         // Ziel-Layer auswählen (Xenium = baseLayer, Visium = g)
         if (this.isXenium) {
           this.baseLayer
@@ -1328,9 +1589,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             .join('path')
             .attr('d', (d: CellFeature) => pathGenerator(d) || '')
             .attr('fill', (d: CellFeature) => {
-              const value = this.leidenCentralityProps.includes(this.colorByProperty)
-                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
-                : d.properties?.[this.colorByProperty];
+              const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
+                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
+                : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
               if (this.currentLegendType === 'categorical') {
                 return this.colorScale(String(value));
               } else {
@@ -1342,42 +1603,51 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             })
             .style('opacity', 0.8);
         } else {
-          this.g
+          (compare ? this.g_compare : this.g)
             .style('cursor', 'pointer')
             .style('pointer-events', null)
             .selectAll<SVGPathElement, CellFeature>('path')
-            .data(this.features, (d: any) => d.properties.barcode)
+            .data(compare ? this.compareFeatures : this.features, (d: any) => d.properties.barcode)
             .join('path')
             .attr('d', (d: CellFeature) => pathGenerator(d) || '')
             .attr('fill', (d: CellFeature) => {
-              const value = this.leidenCentralityProps.includes(this.colorByProperty)
-                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
-                : d.properties?.[this.colorByProperty];
-              if (this.currentLegendType === 'categorical') {
+              const value = this.leidenCentralityProps.includes(compare ? this.selectedCompareView : this.selectedView)
+                ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[compare ? this.selectedCompareView : this.selectedView]
+                : d.properties?.[compare ? this.selectedCompareView : this.selectedView];
+              if (compare ? this.currentCompareLegendType === 'categorical' : this.currentLegendType === 'categorical') {
                 return this.colorScale(String(value));
               } else {
                 const num = this.toNumber(value);
                 return Number.isFinite(num)
-                  ? this.continuousColorScale(num)
+                  ? compare ? this.continuousColorScaleCompare(num)
+                    : this.continuousColorScale(num)
                   : '#ccc';
               }
             })
             .style('opacity', 0.8)
             .on('mouseover', (event, d) => this.mouseOver(event, d))
             .on('mouseleave', (event, d) => this.mouseLeave(event, d))
-            .on('click', (event, d) => this.openSidenav(event, d));
+            .on('click', (event, d) => this.displayCellDetails(event, d, compare));
         }
 
-        this.onColorbyPropertyChange();
+        this.onColorbyPropertyChange(compare);
         setTimeout(() => {
-          this.isLoadingHexagons = false;
-          this.checkInitializationComplete();
+          if (compare) {
+            this.isLoadingCompare = false;
+          } else {
+            this.isLoadingHexagons = false;
+          }
+          this.checkInitializationComplete(compare);
         }, 0);
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
-        this.isLoadingHexagons = false;
-        this.checkInitializationComplete();
+        if (compare) {
+          this.isLoadingCompare = false;
+        } else {
+          this.isLoadingHexagons = false;
+        }
+        this.checkInitializationComplete(compare);
       });
   }
 
@@ -1412,7 +1682,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       requests.push({ datasetId, gene: cleanGene, cacheKey });
     };
 
-    if (this.colorByProperty === 'gene_expression') {
+    if (this.selectedView === 'gene_expression') {
       add(this.selectedDataset?.id, this.selectedGeneExpressionMain);
     }
 
@@ -1433,49 +1703,106 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.sharedGeneExpressionDomain;
   }
 
-  private extractViewValue(feature: CellFeature, view: string): unknown {
+  private cloneGeoJsonData(data: GeoJsonData | null): GeoJsonData | null {
+    if (!data) return null;
+
+    try {
+      if (typeof structuredClone === 'function') {
+        return structuredClone(data);
+      }
+    } catch (e) {
+      console.warn('[compare:data] structuredClone failed, falling back to JSON clone', e);
+    }
+
+    return JSON.parse(JSON.stringify(data)) as GeoJsonData;
+  }
+
+  private async loadCompareGeoJsonData(): Promise<GeoJsonData | null> {
+    const comparePath = this.selectedDatasetCompare?.geojson_path
+      ?? this.selectedDataset?.geojson_path
+      ?? this.dataPath;
+
+    if (!comparePath) {
+      console.warn('[compare init] no compare geojson path available');
+      return null;
+    }
+
+    const fullUrl = comparePath.startsWith('/api/')
+      ? `${this.sessionService.apiUrl}${comparePath}`
+      : comparePath;
+
+    const response = await fetch(fullUrl, { credentials: 'include' });
+    if (!response.ok) {
+      throw new Error(`HTTP Error: ${response.status} ${response.statusText} (${fullUrl})`);
+    }
+
+    const data = await response.json() as GeoJsonData;
+    console.log('[compare init] loaded geojson from path', {
+      comparePath,
+      fullUrl,
+      featureCount: data?.features?.length ?? 0,
+      selectedCompareDatasetId: this.selectedDatasetCompare?.id ?? null,
+      selectedMainDatasetId: this.selectedDataset?.id ?? null,
+    });
+
+    return data;
+  }
+
+  private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
     if (this.leidenCentralityProps.includes(view)) {
-      return this.getLeidenClusterAnnotation(feature.properties.leiden)?.centrality?.[view];
+      return this.getLeidenClusterAnnotation(feature.properties.leiden, context == 'compare' ? true : false)?.centrality?.[view];
     }
     return feature.properties[view];
   }
 
-  private collectFiniteValuesForView(features: CellFeature[], view: string): number[] {
+  private collectFiniteValuesForView(
+    features: CellFeature[],
+    view: string,
+    context: 'main' | 'compare' = 'main'
+  ): number[] {
     return features
-      .map((f) => this.toNumber(this.extractViewValue(f, view)))
+      .map((f) => this.toNumber(this.extractViewValue(f, view, context)))
       .filter((n) => Number.isFinite(n));
   }
 
-  private getMinMaxForView(features: CellFeature[], view: string): { min: number; max: number } | null {
-    const values = this.collectFiniteValuesForView(features, view);
-    if (!values.length) return null;
-    return {
+  private getMinMaxForView(
+    features: CellFeature[],
+    view: string,
+    compare: boolean = false
+  ): { min: number; max: number } | null {
+    const values = this.collectFiniteValuesForView(features, view, compare ? 'compare' : 'main');
+    if (!values.length) {
+      console.log('[domain:getMinMaxForView] no finite values', {
+        view,
+        featureCount: features.length,
+      });
+      return null;
+    }
+    const result = {
       min: Math.min(...values),
       max: Math.max(...values),
     };
+    console.log('[domain:getMinMaxForView] computed', {
+      view,
+      featureCount: features.length,
+      finiteCount: values.length,
+      min: result.min,
+      max: result.max,
+    });
+    return result;
   }
 
-  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
-    if (!this.compareMode) return null;
-
-    const mainView = this.colorByProperty;
-    const compareView = this.selectedCompareView;
+  private getMergedMinMaxForView(view: string): { min: number; max: number } | null {
+    // Generalized: always merges min/max for both main and compare for a given view
     const mainFeatures = this.features || [];
-    const compareFeatures = this.dataCompare?.features || [];
-    if (!mainFeatures.length || !compareFeatures.length) return null;
-
-    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
-    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
-    if (!mainIsContinuous || !compareIsContinuous) return null;
-
-    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
-    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView);
-    if (!mainMinMax || !compareMinMax) return null;
-
-    return {
-      min: Math.min(mainMinMax.min, compareMinMax.min),
-      max: Math.max(mainMinMax.max, compareMinMax.max),
-    };
+    const compareFeatures = this.compareFeatures || [];
+    if (!mainFeatures.length && !compareFeatures.length) return null;
+    const mainMinMax = mainFeatures.length ? this.getMinMaxForView(mainFeatures, view, false) : null;
+    const compareMinMax = compareFeatures.length ? this.getMinMaxForView(compareFeatures, view, true) : null;
+    if (!mainMinMax && !compareMinMax) return null;
+    const min = [mainMinMax?.min, compareMinMax?.min].filter(x => x !== undefined).reduce((a, b) => Math.min(a as number, b as number));
+    const max = [mainMinMax?.max, compareMinMax?.max].filter(x => x !== undefined).reduce((a, b) => Math.max(a as number, b as number));
+    return { min, max };
   }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {
@@ -1506,16 +1833,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return !cached || cached.expiresAt <= now;
     });
 
+    // Fetch pending gene stats if needed
     if (pending.length > 0) {
       const results = await Promise.allSettled(
-        pending.map((r) => firstValueFrom(
-          this.sessionService.callWithSession(() =>
-            this.http.get<GeneStatsResponse>(
-              `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
-              { withCredentials: true },
+        pending.map((r) =>
+          firstValueFrom(
+            this.sessionService.callWithSession(() =>
+              this.http.get<GeneStatsResponse>(
+                `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+                { withCredentials: true },
+              )
             )
           )
-        ))
+        )
       );
 
       if (token !== this.geneDomainToken) {
@@ -1536,6 +1866,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
     }
 
+    // Gather all valid cached domains
     const valid = requests
       .map((r) => this.geneDomainCache.get(r.cacheKey))
       .filter((v): v is { min: number; max: number; expiresAt: number } => !!v && v.expiresAt > Date.now());
@@ -1564,44 +1895,51 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.refreshSharedGeneExpressionDomain();
   }
 
-  public onColorbyPropertyChange(): void {
-    console.log('[onColorbyPropertyChange] colorByProperty changed to:', this.colorByProperty);
+  public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
+    const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    selectedMap[view] = event.gene;
+    this.fetchAndUpdate(event.action, event.gene, compare, view);
+  }
 
-    if (this.colorByProperty === 'gene_expression' || (this.compareMode && this.selectedCompareView === 'gene_expression')) {
+  public onColorbyPropertyChange(compare: boolean = false): void {
+    const colorProp = compare ? this.selectedCompareView : this.selectedView;
+    const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const geneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+
+    console.log('[onColorbyPropertyChange] colorByProperty changed to:', colorProp);
+
+    const dualGeneExpressionCompare =
+      this.compareMode &&
+      this.selectedView === 'gene_expression' &&
+      this.selectedCompareView === 'gene_expression';
+
+    if (dualGeneExpressionCompare) {
       this.refreshSharedGeneExpressionDomain();
+    } else {
+      this.sharedGeneExpressionDomain = null;
+      this.sharedGeneExpressionContextKey = null;
     }
 
-    if (this.colorByProperty === 'regulatory_scores') {
-      if (
-        this.selectedRegulatoryScore?.endsWith('genie3') &&
-        this.selectedGeneSetGenie3
-      ) {
-        console.log(this.selectedRegulatoryScore, this.selectedGeneSetGenie3);
-        this.fetchAndUpdate(
-          this.selectedRegulatoryScore,
-          this.selectedGeneSetGenie3,
-        );
-        this.updateSubgraphGenie3();
-        this.updateSubgraphSponge();
-
-      } else if (
-        this.selectedRegulatoryScore?.endsWith('sponge') &&
-        this.selectedGeneSetSponge
-      ) {
-        this.fetchAndUpdate(
-          this.selectedRegulatoryScore,
-          this.selectedGeneSetSponge,
-        );
-        this.updateSubgraphGenie3();
-        this.updateSubgraphSponge();
+    if (colorProp === 'regulatory_scores') {
+      if (regulatoryScore?.endsWith('genie3') && geneSetGenie3) {
+        this.fetchAndUpdate(regulatoryScore, geneSetGenie3, compare);
+        this.updateSubgraphGenie3(compare);
+        this.updateSubgraphSponge(compare);
+      } else if (regulatoryScore?.endsWith('sponge') && geneSetSponge) {
+        this.fetchAndUpdate(regulatoryScore, geneSetSponge, compare);
+        this.updateSubgraphGenie3(compare);
+        this.updateSubgraphSponge(compare);
       }
     }
-    if (this.compareMode) {
+
+    if (compare) {
       console.log('[onColorbyPropertyChange] Updating compare hexagons');
       this.updateHexColors('#hexbin-compare');
+    } else {
+      console.log('[onColorbyPropertyChange] Updating main hexagons');
+      this.updateHexColors();
     }
-    console.log('[onColorbyPropertyChange] Updating main hexagons');
-    this.updateHexColors();
   }
 
   /**
@@ -1609,42 +1947,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * If `features` is provided, that dataset is used for the test (used for compare view). Otherwise
    * the main `this.features` is used.
    */
-  isContinuousScale(view?: string, features?: CellFeature[]) {
-    if (!view) {
-      view = this.colorByProperty;
-    }
-    const sourceFeatures = Array.isArray(features) ? features : this.features || [];
+  isContinuousScale(view?: string, features?: CellFeature[], compare: boolean = false): boolean {
+    const property = view ?? (compare ? this.selectedCompareView : this.selectedView);
+    const sourceFeatures = Array.isArray(features)
+      ? features
+      : (compare ? this.compareFeatures : this.features) || [];
 
     const valuesRaw = sourceFeatures.map((f) => {
-      if (this.leidenCentralityProps.includes(view)) {
+      if (this.leidenCentralityProps.includes(property)) {
         const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden);
-        return clusterAnnotation?.centrality?.[view];
+        return clusterAnnotation?.centrality?.[property];
       }
-      return f.properties[view];;
+      return f.properties[property];
     });
 
-    const numericValues = valuesRaw.map((v) => this.toNumber(v));
+    // FILTER OUT undefined/null values so they don't evaluate to NaN and break the check
+    const validRaw = valuesRaw.filter(v => v !== undefined && v !== null && v !== '');
+
+    // If completely empty (e.g., initial state), default to continuous
+    if (validRaw.length === 0) return true;
+
+    const numericValues = validRaw.map((v) => this.toNumber(v));
     const allNumbers = numericValues.every((n) => Number.isFinite(n));
-
-    // Check if all values are integers (for categorical treatment)
     const allIntegers = allNumbers && numericValues.every((n) => Number.isInteger(n));
-
-    // Check if we have a reasonable number of unique integer values for categorical treatment (here 20)
     const uniqueIntegerCount = allIntegers ? new Set(numericValues).size : 0;
     const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
 
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
   }
 
+
   private getViewVariablesToUpdate(containerName: string) {
     const isMainView = containerName === '#hexbin';
-    const viewToUpdate = isMainView ? this.colorByProperty : this.selectedCompareView;
-    const featuresToUpdate = isMainView ? this.features : (this.dataCompare?.features || []);
+    const viewToUpdate = isMainView ? this.selectedView : this.selectedCompareView;
+    const featuresToUpdate = isMainView ? this.features : (this.compareFeatures || []);
     const gToUpdate = isMainView ? this.g : this.g_compare;
     const gPathsToUpdate = isMainView ? this.g_paths : this.g_paths_compare;
     const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
     const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
-    const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate);
+    // Pass the compare flag to isContinuousScale for correct logic
+    const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate, !isMainView);
     const legendContainerName = isMainView ? 'svg-legend' : 'svg-legend-compare';
     const legendGradientName = isMainView ? 'svg-legend-gradient' : 'svg-legend-gradient-compare';
     return {
@@ -1664,34 +2006,74 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       getLegendType: () => isMainView ? this.currentLegendType : this.currentCompareLegendType,
       setLegendType: (t: 'continuous' | 'categorical') => { if (isMainView) this.currentLegendType = t; else this.currentCompareLegendType = t; }
     } as const;
+  }
 
+  // This function checks if the selected view/property is available in the features. If not, it falls back to a default property or the first available property.
+
+  private getAvailableView(selectedView: string, features: CellFeature[], fallback: string = 'cell_type'): string {
+
+    if (!features.length) return fallback;
+
+    // 1. Always trust dynamically fetched properties (even if sparse/empty on cell 0)
+    const dynamicProps = [
+      'gene_expression', 'regulatory_scores', 'ligand_receptor_relationships',
+      'cell_comp_tf_activity_similarity', 'tf_activity', 'pathway_activity', 'chromvar_total_sum'
+    ];
+    if (dynamicProps.includes(selectedView)) {
+      return selectedView;
+    }
+
+    // 2. For static properties, check if it exists on the first feature
+    const firstFeature = features[0];
+    const hasProperty = this.leidenCentralityProps.includes(selectedView)
+      ? true
+      : selectedView in (firstFeature.properties || {});
+
+    if (hasProperty) return selectedView;
+    if (fallback in (firstFeature.properties || {})) return fallback;
+
+    const keys = Object.keys(firstFeature.properties || {});
+    return keys.length ? keys[0] : fallback;
   }
 
   public updateHexColors(containerName?: string): void {
-
     if (!containerName) {
       containerName = '#hexbin';
     }
 
+    // Determine which features and selected view to use
+    const isMainView = containerName === '#hexbin';
+    const features = isMainView ? this.features : this.compareFeatures;
+    const selectedView = isMainView ? this.selectedView : this.selectedCompareView;
+    // Use getAvailableView to ensure the property exists
+    const viewToUse = this.getAvailableView(selectedView, features, 'cell_type');
+    if (viewToUse !== selectedView) {
+      console.warn(`[updateHexColors] Property "${selectedView}" not found, falling back to "${viewToUse}".`);
+      // Optionally, update the selectedView variable here if you want the UI to reflect the fallback
+      // if (isMainView) this.selectedView = viewToUse; else this.selectedCompareView = viewToUse;
+    }
+
+    // Get the rest of the view variables (scales, g, etc.)
     const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
-    let valuesRaw;
 
-    console.log('[updateHexColors] container=', containerName, 'view=', viewVariablesToUpdate.view, 'featuresForTest=', viewVariablesToUpdate.features.length || 0, 'isContinuous=', viewVariablesToUpdate.isContinuous);
-
-    // Debug: check if the view property exists in features
-    if (viewVariablesToUpdate.features.length > 0) {
-      const firstFeature = viewVariablesToUpdate.features[0];
-      const hasProperty = this.leidenCentralityProps.includes(viewVariablesToUpdate.view)
+    // Overwrite the view property for this rendering
+    // (since viewVariablesToUpdate.view is readonly, just use viewToUse in all logic below)
+    let valuesRaw: any[] = [];
+    if (features.length > 0) {
+      const firstFeature = features[0];
+      const hasProperty = this.leidenCentralityProps.includes(viewToUse)
         ? true
-        : viewVariablesToUpdate.view in (firstFeature.properties || {});
-      console.log('[updateHexColors] First feature properties keys:', Object.keys(firstFeature.properties || {}));
-      console.log('[updateHexColors] Looking for property:', viewVariablesToUpdate.view, '- Exists:', hasProperty);
+        : viewToUse in (firstFeature.properties || {});
+
       if (!hasProperty) {
         console.warn('[updateHexColors] Property not found in features! Available:', Object.keys(firstFeature.properties || {}));
+        // Optionally, show a user-facing message here
       }
     }
 
-    this.resetClusterExtension();
+    if (viewToUse !== (isMainView ? this.selectedView : this.selectedCompareView)) {
+      this.resetClusterExtension();
+    }
 
     if (this.selectedCell && this.selectedCluster) {
       this.selectedCluster = null;
@@ -1705,54 +2087,68 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     if (this.selectedCell) this.selectedCell = null;
 
-
     const layerToColor = (
       (containerName === '#hexbin' && this.isXenium)
         ? this.baseLayer
         : viewVariablesToUpdate.g
     ) as unknown as d3.Selection<SVGGElement, any, any, any>;
 
-    const sel = layerToColor
-      .selectAll('path')
-      .data(viewVariablesToUpdate.features);
-
-    if (containerName === '#hexbin-compare' && this.compareMode && sel.size() === 0) {
-      console.warn('[updateHexColors] Compare layer has no paths; re-initializing compare plot');
-      this.initCompareHexagonPlot();
+    // Safety check: if layerToColor is null/undefined, skip the color update
+    if (!layerToColor) {
+      console.warn(`[updateHexColors] Layer not found for ${containerName}`);
       return;
     }
 
-    valuesRaw = viewVariablesToUpdate.features.map((f) => this.extractViewValue(f, viewVariablesToUpdate.view));
+    const sel = layerToColor
+      .selectAll('path')
+      .data(features);
 
+    if (containerName === '#hexbin-compare' && this.compareMode && sel.size() === 0) {
+      console.warn('[updateHexColors] Compare layer has no paths; re-initializing compare plot');
+      this.loadAndRenderData(this.selectedDatasetCompare?.geojson_path || '', true);
+      return;
+    }
+
+    valuesRaw = features.map((f) => this.extractViewValue(f, viewToUse));
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
-    if (viewVariablesToUpdate.isContinuous) {
-      // continuous scale - only if not integers or too many unique integers
+    // Determine if the property is continuous
+    const isContinuous = this.isContinuousScale(viewToUse, features, !isMainView);
+
+    if (isContinuous) {
       const compareSharedDomain = this.getPairedContinuousDomainForCompare();
-      const sharedDomain = compareSharedDomain ?? (viewVariablesToUpdate.view === 'gene_expression'
+      console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
+      const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
         ? this.getSharedDomainForGeneExpressionView()
         : null);
 
+      const domainSource = sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain';
+
       let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
       let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
+
+      if (!Number.isFinite(min) || !Number.isFinite(max)) {
+        min = 0;
+        max = 1;
+      }
+
       if (min === max) {
         const eps = min === 0 ? 1 : Math.abs(min) * 0.01;
         min -= eps;
         max += eps;
       }
 
-      if (sharedDomain) {
-        this.continuousColorScale.domain([min, max]);
-        this.continuousColorScaleCompare.domain([min, max]);
-        this.currentLegendDomain = [min, max];
-        this.currentLegendDomainCompare = [min, max];
-        this.currentLegendType = 'continuous';
-        this.currentCompareLegendType = 'continuous';
-      } else {
-        viewVariablesToUpdate.continuous.domain([min, max]);
-      }
+      // Always normalize to [0, 1] for consistent color usage across all views
+      this.continuousColorScale.domain([0, 1]);
+      this.continuousColorScaleCompare.domain([0, 1]);
+      viewVariablesToUpdate.continuous.domain([0, 1]);
 
-      viewVariablesToUpdate.setLegendDomain([min, max]);
+      // Legend always shows [0, 1]
+      this.currentLegendDomain = [0, 1];
+      this.currentLegendDomainCompare = [0, 1];
+      this.currentLegendType = 'continuous';
+      this.currentCompareLegendType = 'continuous';
+      viewVariablesToUpdate.setLegendDomain([0, 1]);
       viewVariablesToUpdate.setLegendType('continuous');
 
       sel
@@ -1761,15 +2157,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.extractViewValue(d, viewVariablesToUpdate.view);
+          const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
           return Number.isFinite(n)
-            ? viewVariablesToUpdate.continuous(n)
+            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
             : '#ccc';
-
         });
     } else {
-      // categorical scale - for non-numeric, integers with few unique values, or mixed data
+      // categorical scale
       const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
 
       viewVariablesToUpdate.ordinal.domain(domain);
@@ -1782,10 +2177,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('stroke-width', 1)
         .attr('stroke', 'transparent')
         .attr('fill', (d) => {
-          const raw = this.extractViewValue(d, viewVariablesToUpdate.view);
+          const raw = this.extractViewValue(d, viewToUse);
           return viewVariablesToUpdate.ordinal(String(raw));
         });
     }
+
     if (
       containerName === '#hexbin' &&
       this.isXenium &&
@@ -1796,23 +2192,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.updateDetailAtScreenPos(this.detailScreenPos.x, this.detailScreenPos.y);
     }
     this.renderLegend(containerName);
+
   }
 
-  public updateSubgraphGenie3(): void {
+  public updateSubgraphGenie3(compare: boolean = false): void {
     const token = this.nextRequestToken('genie3');
     console.log('Updating AUCELL graph for Genie3...');
-    this.isLoadingGenie3 = true;
-    d3.select('#aucell_graph_genie3').selectAll('*').remove();
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+    const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    d3.select(graphContainerId).selectAll('*').remove();
 
-    if (!this.selectedGeneSetGenie3) {
-      this.isLoadingGenie3 = false;
+    if (!geneSet || !datasetId) {
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       return;
     }
 
     this.sessionService
       .callWithSession(() =>
         this.http.get(
-          `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(this.selectedGeneSetGenie3 ? this.selectedGeneSetGenie3 : '')}`,
+          `${this.sessionService.apiUrl}/geneset_connections_genie?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
           { withCredentials: true },
         ),
       )
@@ -1822,7 +2222,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           {
             const payload: any = res;
             const data = payload['connections'] as { regulatoryGene: string; targetGene: string; weight: number }[];
-            this.genie3Network = data.map((d) => ({
+            compare ? this.genie3NetworkCompare = data.map((d) => ({
+              source: d.regulatoryGene,
+              target: d.targetGene,
+              weight: d.weight,
+            })) : this.genie3Network = data.map((d) => ({
               source: d.regulatoryGene,
               target: d.targetGene,
               weight: d.weight,
@@ -1832,16 +2236,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const sliderData: any = payload['slider_data'];
 
             if (sliderData && typeof sliderData === 'object') {
-              this.genie3SliderData = {
-                step: sliderData.step || 1,
-                min_border: sliderData.min_border || 0,
-                max_border: sliderData.max_border || 100,
-                default_value: sliderData.default_value || 50,
-              };
-              this.genie3WeightCutoff = this.genie3SliderData.default_value;
+              if (compare) {
+                this.genie3SliderDataCompare = {
+                  step: sliderData.step || 1,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.genie3WeightCutoffCompare = this.genie3SliderDataCompare.default_value;
+              }
+              else {
+                this.genie3SliderData = {
+                  step: sliderData.step || 1,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.genie3WeightCutoff = this.genie3SliderData.default_value;
+              }
             }
 
-            this.visualizeGenie3Subgraph();
+            this.visualizeGenie3Subgraph(compare);
 
           }
         },
@@ -1856,18 +2271,81 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  public visualizeGenie3Subgraph(): void {
+  private getPairedContinuousDomainForCompare(): { min: number; max: number } | null {
+    if (!this.compareMode) {
+      console.log('[domain:getPaired] skipped: compare mode is off');
+      return null;
+    }
 
-    this.isLoadingGenie3 = true;
-    d3.select('#aucell_graph_genie3').html('');
+    const mainView = this.selectedView;
+    const compareView = this.selectedCompareView;
 
-    if (!this.selectedGeneSetGenie3 || this.genie3Network.length === 0) {
-      this.isLoadingGenie3 = false;
-      this.checkInitializationComplete();
+    if (mainView !== 'gene_expression' || compareView !== 'gene_expression') {
+      return null;
+    }
+
+    const mainFeatures = this.features || [];
+    const compareFeatures = this.compareFeatures || [];
+
+    if (!mainFeatures.length || !compareFeatures.length) {
+      return null;
+    }
+
+    const mainIsContinuous = this.isContinuousScale(mainView, mainFeatures);
+    const compareIsContinuous = this.isContinuousScale(compareView, compareFeatures);
+    if (!mainIsContinuous || !compareIsContinuous) {
+      console.log('[domain:getPaired] skipped: one side is not continuous', {
+        mainView,
+        compareView,
+        mainIsContinuous,
+        compareIsContinuous,
+      });
+      return null;
+    }
+
+    const mainMinMax = this.getMinMaxForView(mainFeatures, mainView);
+    const compareMinMax = this.getMinMaxForView(compareFeatures, compareView, true);
+    if (!mainMinMax || !compareMinMax) {
+      console.log('[domain:getPaired] skipped: missing min/max', {
+        mainView,
+        compareView,
+        mainMinMax,
+        compareMinMax,
+      });
+      return null;
+    }
+
+    const merged = {
+      min: Math.min(mainMinMax.min, compareMinMax.min),
+      max: Math.max(mainMinMax.max, compareMinMax.max),
+    };
+
+    console.log('[domain:getPaired] merged domain', {
+      mainView,
+      compareView,
+      mainMinMax,
+      compareMinMax,
+      merged,
+    });
+
+    return merged;
+  }
+
+  public visualizeGenie3Subgraph(compare: boolean = false): void {
+    const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+
+
+    compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+    d3.select(graphContainerId).html('');
+
+    if (!geneSet || compare ? !this.genie3NetworkCompare : !this.genie3Network || compare ? this.genie3NetworkCompare.length === 0 : this.genie3Network.length === 0) {
+      compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+      this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = this.selectedGeneSetGenie3;
+    let regulator = geneSet ?? '';
     let targets = this.geneSetsGenie3[regulator] || [];
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
@@ -1876,13 +2354,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let candidateEdges: { source: string; target: string; weight: number }[] = [];
     let slicedEdges: { source: string; target: string; weight: number }[] = [];
 
-
-    candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
-      source: String(e.source),
-      target: String(e.target),
-      weight: e.weight,
-    }));
-
+    if (compare) {
+      candidateEdges = this.genie3NetworkCompare.filter((edge) => edge.weight > this.genie3WeightCutoffCompare).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        weight: e.weight,
+      }));
+    }
+    else {
+      candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        weight: e.weight,
+      }));
+    }
     candidateEdges.sort((a, b) => b.weight - a.weight);
     slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
 
@@ -1891,7 +2376,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     slicedEdges.forEach((edge) => {
       if (!(nodeSet.has(edge.source) && nodeSet.has(edge.target))) {
-        console.log("Adding edge nodes:", edge.source, edge.target);
         nodeSet.add(edge.source);
         nodeSet.add(edge.target);
       }
@@ -1939,7 +2423,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const height = 300;
 
     const svg = d3
-      .select('#aucell_graph_genie3')
+      .select(graphContainerId)
       .append('svg')
       .attr('width', width)
       .attr('height', height)
@@ -2064,28 +2548,31 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     setTimeout(() => this.updateGraphWidths(), 50);
 
-    this.isLoadingGenie3 = false;
-    this.checkInitializationComplete();
+    compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+    this.checkInitializationComplete(compare);
 
 
   }
 
 
-  public updateSubgraphSponge(): void {
+  public updateSubgraphSponge(compare: boolean = false): void {
+    const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+
     const token = this.nextRequestToken('sponge');
     console.log('Updating AUCELL graph for Sponge...');
-    d3.select('#aucell_graph_sponge').selectAll('*').remove();
+    d3.select(graphContainerId).selectAll('*').remove();
 
-    if (!this.selectedGeneSetSponge) {
+    if (!geneSet || !datasetId) {
       return;
     }
 
-    this.isLoadingSponge = true;
-
+    compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
     this.sessionService
       .callWithSession(() =>
         this.http.get(
-          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(this.selectedGeneSetSponge ? this.selectedGeneSetSponge : '')}`,
+          `${this.sessionService.apiUrl}/geneset_connections_sponge?gene_set_name=${encodeURIComponent(geneSet || '')}&dataset_id=${encodeURIComponent(datasetId || '')}`,
           { withCredentials: true },
         ),
       )
@@ -2104,32 +2591,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             const sliderData: any = payload['slider_data'];
 
             if (sliderData && typeof sliderData === 'object') {
-              this.spongeSliderData = {
-                step: sliderData.step || 0.01,
-                min_border: sliderData.min_border || 0,
-                max_border: sliderData.max_border || 100,
-                default_value: sliderData.default_value || 50,
-              };
+              if (compare) {
+                this.spongeSliderDataCompare = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoffCompare = this.spongeSliderDataCompare.default_value;
+              } else {
+                this.spongeSliderData = {
+                  step: sliderData.step || 0.01,
+                  min_border: sliderData.min_border || 0,
+                  max_border: sliderData.max_border || 100,
+                  default_value: sliderData.default_value || 50,
+                };
+                this.spongePValueCutoff = this.spongeSliderData.default_value;
+              }
             }
-
-            this.isLoadingSponge = true;
 
             console.log('Sponge Network:', data);
 
-            this.spongeNetwork = data.map((d) => ({
+            compare ? this.spongeNetworkCompare = data.map((d) => ({
+              source: d.geneA,
+              target: d.geneB,
+              p_adjusted: d['p.adj'],
+              mscore: d['mscor'],
+            })) : this.spongeNetwork = data.map((d) => ({
               source: d.geneA,
               target: d.geneB,
               p_adjusted: d['p.adj'],
               mscore: d['mscor'],
             }));
 
-            this.visualizeSpongeSubgraph();
+            this.visualizeSpongeSubgraph(compare);
           }
         },
         error: (err) => {
           if (this.requestTokens['sponge'] !== this.requestTokens['sponge']) {
             console.error(
-              `[Backend] Failed to load Sponge Connections for["${this.selectedGeneSetSponge}]`,
+              `[Backend] Failed to load Sponge Connections for["${geneSet}"]`,
               err,
             );
           }
@@ -2137,19 +2638,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  public visualizeSpongeSubgraph(): void {
+  public visualizeSpongeSubgraph(compare: boolean = false): void {
+    const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
+    const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
-    this.isLoadingSponge = true;
-    d3.select('#aucell_graph_sponge').html('');
+    compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
+    d3.select(graphContainerId).html('');
 
-    if (!this.selectedGeneSetSponge || this.spongeNetwork.length === 0) {
-      this.isLoadingSponge = false;
-      this.checkInitializationComplete();
+    if (!geneSet || !datasetId || compare ? !this.spongeNetworkCompare || this.spongeNetworkCompare.length === 0 : !this.spongeNetwork || this.spongeNetwork.length === 0) {
+      compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+      this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = this.selectedGeneSetSponge;
-    let targets = this.geneSetsSponge[regulator] || [];
+    let regulator = geneSet ?? '';
+    let targets = this.geneSetsGenie3[regulator] || [];
+
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     let edges: { source: string; target: string; p_adjusted: number }[] = [];
@@ -2157,12 +2662,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
     let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
 
-
-    candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
-      source: String(e.source),
-      target: String(e.target),
-      p_adjusted: e.p_adjusted,
-    }));
+    if (compare) {
+      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        p_adjusted: e.p_adjusted,
+      }));
+    }
+    else {
+      candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+        source: String(e.source),
+        target: String(e.target),
+        p_adjusted: e.p_adjusted,
+      }));
+    }
 
     candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
     slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
@@ -2216,7 +2729,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const height = 300;
 
     const svg = d3
-      .select('#aucell_graph_sponge')
+      .select(graphContainerId)
       .append('svg')
       .attr('width', width)
       .attr('height', height)
@@ -2339,8 +2852,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
     });
 
-    this.isLoadingSponge = false;
-    this.checkInitializationComplete();
+    compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+    this.checkInitializationComplete(compare);
 
     setTimeout(() => this.updateGraphWidths(), 50);
 
@@ -2428,15 +2941,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     if (
       this.selectedCell &&
       (d.properties.barcode === this.selectedCell.properties.barcode ||
-        (this.colorByProperty === 'leiden' &&
+        (this.selectedView === 'leiden' &&
           d.properties.leiden === this.selectedCell.properties.leiden))
     )
       return;
     if (
       this.selectedCellCompare &&
-      (d.properties.barcode === this.selectedCellCompare.properties.barcode ||
-        (this.selectedCompareView === 'leiden' &&
-          d.properties.leiden === this.selectedCellCompare.properties.leiden))
+      d.properties.barcode === this.selectedCellCompare.properties.barcode
     )
       return;
     d3.selectAll('.Country')
@@ -2451,40 +2962,48 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .attr('stroke', 'transparent');
   }
 
-  public openSidenav(event: MouseEvent, cell: CellFeature): void {
-    this.resetClusterExtension();
-    this.selectedCell = cell;
-    if (this.colorByProperty === 'regulatory_scores') {
-      this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
-    }
-    if (this.colorByProperty === 'leiden') {
-      this.openClusterSidenav(cell.properties.leiden);
-      this.extendCluster(cell.properties.leiden);
-    } else {
-      d3.select(event.target as SVGElement)
-        .transition()
-        .attr('stroke', 'black');
-    }
+  public displayCellDetails(event: MouseEvent, cell: CellFeature, compare: boolean = false): void {
+    if (!compare) {
+      this.resetClusterExtension();
+      this.selectedCell = cell;
+      if (this.selectedView === 'regulatory_scores') {
+        this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
+      }
+      if (this.selectedView === 'leiden') {
+        this.displayClusterDetails(cell.properties.leiden);
+        this.extendCluster(cell.properties.leiden);
+      } else {
+        d3.select(event.target as SVGElement)
+          .transition()
+          .attr('stroke', 'black');
+      }
 
-    // Neighborhood enrichment will render when the tab is viewed
-    // via onTabChange handler
-    setTimeout(() => this.updateSubgraphGenie3(), 0);
+      setTimeout(() => this.updateSubgraphGenie3(), 0);
+    }
+    else {
+      this.resetClusterExtension(true);
+      this.selectedCellCompare = cell;
+      if (this.selectedCompareView === 'regulatory_scores') {
+        this.getRegulatoryScoresforSpots(
+          cell.properties.barcode,
+          this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
+        )
+      }
+      if (this.selectedCompareView === 'leiden') {
+        this.selectedClusterCompare = cell.properties.leiden;
+        this.compareClusterCells = this.compareFeatures.filter(
+          (c) => c.properties.leiden === cell.properties.leiden,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        this.extendCluster(cell.properties.leiden, true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
+    }
   }
 
-  public openSidenavCompare(event: MouseEvent, cell: CellFeature): void {
-    this.selectedCellCompare = cell;
-    if (this.selectedCompareView === 'regulatory_scores') {
-      this.getRegulatoryScoresforSpots(
-        cell.properties.barcode,
-        this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
-      )
-    }
-    d3.select(event.target as SVGElement)
-      .transition()
-      .attr('stroke', 'black');
-  }
-
-  public openClusterSidenav(clusterId: number): void {
+  public displayClusterDetails(clusterId: number): void {
     this.selectedCluster = clusterId;
     this.clusterCells = this.features.filter(
       (cell) => cell.properties.leiden === clusterId,
@@ -2504,98 +3023,133 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  public selectCluster(clusterId: number): void {
-    this.selectedCluster = clusterId;
-    this.clusterCells = this.features.filter(
-      (cell) => cell.properties.leiden === clusterId,
-    );
-    this.calculateClusterStats();
-    this.updateCoOccurrenceTable();
+  public selectCluster(clusterId: number, compare: boolean = false): void {
+    if (compare) {
+      this.selectedClusterCompare = clusterId;
+      this.clusterCellsCompare = this.compareFeatures.filter(
+        (cell) => cell.properties.leiden === clusterId,
+      );
+      this.calculateClusterStats(true);
+      this.updateCoOccurrenceTable(true);
+      this.extendCluster(clusterId, true);
 
-    if (this.clusterCells.length > 0) {
-      this.selectedCell = this.clusterCells[0];
-      // Neighborhood enrichment will render when the Cluster Information tab is viewed
-      // via onTabChange handler
-      setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-      // setTimeout(() => this.renderFootprintPlots(), 0);
+      if (this.clusterCellsCompare.length > 0) {
+        this.selectedCellCompare = this.clusterCellsCompare[0];
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
+    } else {
+      this.selectedCluster = clusterId;
+      this.clusterCells = this.features.filter(
+        (cell) => cell.properties.leiden === clusterId,
+      );
+      this.calculateClusterStats();
+      this.updateCoOccurrenceTable();
+      this.extendCluster(clusterId);
+
+      if (this.clusterCells.length > 0) {
+        this.selectedCell = this.clusterCells[0];
+        setTimeout(() => this.updateSubgraphGenie3(false), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      }
     }
   }
 
-  public onGeneSetChange(): void {
-    if (this.selectedGeneSetGenie3 !== this.previousGeneSetGenie3) {
-      this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+  public onGeneSetChange(compare: boolean = false): void {
+    const geneSetGenie3Changed = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const geneSetSpongeChanged = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const previousGeneSetGenie3Changed = compare ? this.previousGeneSetGenie3Compare : this.previousGeneSetGenie3;
+    const previousGeneSetSpongeChanged = compare ? this.previousGeneSetSpongeCompare : this.previousGeneSetSponge;
+    const regulatoryScoreChanged = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const graphIdGenie3 = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
+    const graphIdSponge = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
 
-      if (this.selectedGeneSetGenie3) {
-        d3.select('#aucell_graph_genie3').selectAll('*').remove();
-        this.isLoadingGenie3 = true;
+    if (geneSetGenie3Changed !== previousGeneSetGenie3Changed) {
+      compare ? this.previousGeneSetGenie3Compare = this.selectedGeneSetGenie3Compare : this.previousGeneSetGenie3 = this.selectedGeneSetGenie3;
+      if (geneSetGenie3Changed) {
+
+        d3.select(graphIdGenie3).selectAll('*').remove();
+        compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
         setTimeout(() => {
-          this.updateSubgraphGenie3();
+          this.updateSubgraphGenie3(compare);
           if (
-            this.selectedRegulatoryScore?.endsWith('genie3') &&
-            this.selectedGeneSetGenie3
+            regulatoryScoreChanged?.endsWith('genie3') &&
+            geneSetGenie3Changed
           ) {
             this.fetchAndUpdate(
-              this.selectedRegulatoryScore,
-              this.selectedGeneSetGenie3,
+              regulatoryScoreChanged,
+              geneSetGenie3Changed,
+              compare
             );
           }
         }, 100);
       } else {
         // Clear Genie3 graph if no gene set is selected
-        d3.select('#aucell_graph_genie3').selectAll('*').remove();
-        this.isLoadingGenie3 = false;
+        d3.select(graphIdGenie3).selectAll('*').remove();
+        compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       }
     }
 
-    if (this.selectedGeneSetSponge !== this.previousGeneSetSponge) {
-      this.previousGeneSetSponge = this.selectedGeneSetSponge;
-      if (this.selectedGeneSetSponge) {
-        d3.select('#aucell_graph_sponge').selectAll('*').remove();
-        console.log('Updating Sponge graph for:', this.selectedGeneSetSponge);
+    if (geneSetSpongeChanged !== previousGeneSetSpongeChanged) {
+      compare ? this.previousGeneSetSpongeCompare = this.selectedGeneSetSpongeCompare : this.previousGeneSetSponge = this.selectedGeneSetSponge;
+      if (geneSetSpongeChanged) {
+        d3.select(graphIdSponge).selectAll('*').remove();
+        console.log('Updating Sponge graph for:', geneSetSpongeChanged);
         console.log(
           'Sponge targets available:',
-          this.geneSetsSponge[this.selectedGeneSetSponge]?.length || 0,
+          this.geneSetsSponge[geneSetSpongeChanged]?.length || 0,
         );
-        this.isLoadingSponge = true;
+        compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
         setTimeout(() => {
-          this.updateSubgraphSponge();
+          this.updateSubgraphSponge(compare);
           if (
-            this.selectedRegulatoryScore?.endsWith('sponge') &&
-            this.selectedGeneSetSponge
+            regulatoryScoreChanged?.endsWith('sponge') &&
+            geneSetSpongeChanged
           ) {
             this.fetchAndUpdate(
-              this.selectedRegulatoryScore,
-              this.selectedGeneSetSponge,
+              regulatoryScoreChanged,
+              geneSetSpongeChanged,
+              compare
             );
           }
         }, 100);
       } else {
         // Clear Sponge graph if no gene set is selected
-        d3.select('#aucell_graph_sponge').selectAll('*').remove();
-        this.isLoadingSponge = false;
+        d3.select(graphIdSponge).selectAll('*').remove();
+        compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
       }
     }
   }
 
-  public selectGeneSetFromTable(gene: string, networkType: 'genie3' | 'sponge'): void {
+  public selectGeneSetFromTable(gene: string, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
     if (networkType === 'genie3') {
-      this.selectedGeneSetGenie3 = gene;
-      this.previousGeneSetGenie3 = null; // Force update
+      compare ? this.selectedGeneSetGenie3Compare = gene : this.selectedGeneSetGenie3 = gene;
+      compare ? this.previousGeneSetGenie3Compare = null : this.previousGeneSetGenie3 = null; // Force update
     } else if (networkType === 'sponge') {
-      this.selectedGeneSetSponge = gene;
-      this.previousGeneSetSponge = null; // Force update
+      compare ? this.selectedGeneSetSpongeCompare = gene : this.selectedGeneSetSponge = gene;
+      compare ? this.previousGeneSetSpongeCompare = null : this.previousGeneSetSponge = null; // Force update
     }
     // Trigger the graph update
-    this.onGeneSetChange();
+    this.onGeneSetChange(compare);
   }
 
-  public onGeneSelectedFromTable(event: { gene: string; action: string }, networkType: 'genie3' | 'sponge'): void {
-    // Only select if this action is for the corresponding network type
+  public onGeneSelectedFromTable(event: { gene: string; action: string }, networkType: 'genie3' | 'sponge', compare: boolean = false): void {
     if (networkType === 'genie3' && event.action.includes('genie3')) {
-      this.selectGeneSetFromTable(event.gene, 'genie3');
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+
+      this.selectGeneSetFromTable(event.gene, 'genie3', compare);
     } else if (networkType === 'sponge' && event.action.includes('sponge')) {
-      this.selectGeneSetFromTable(event.gene, 'sponge');
+
+      if (compare) {
+        this.selectedRegulatoryScoreCompare = event.action;
+      } else {
+        this.selectedRegulatoryScore = event.action;
+      }
+      this.selectGeneSetFromTable(event.gene, 'sponge', compare);
     }
   }
 
@@ -2603,75 +3157,109 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * Check if initial app loading is complete.
    * Sets isAppInitializing to false once all initial data fetches are done.
    */
-  private checkInitializationComplete(): void {
-    if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
-      this.isAppInitializing = false;
-      console.log('[Init] App initialization complete - hiding loader');
+  private checkInitializationComplete(compare: boolean = false): void {
+    if (compare) {
+      if (!this.isLoadingCompare && !this.isLoadingGenie3Compare && !this.isLoadingSpongeCompare && !this.isLoadingRegulatoryScoresCompare) {
+        this.isAppInitializing = false;
+        console.log('[Init] Compare view initialization complete - hiding loader');
+      }
+    }
+    else {
+      if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
+        this.isAppInitializing = false;
+        console.log('[Init] App initialization complete - hiding loader');
+      }
     }
   }
 
-  public selectCellFromCluster(cell: CellFeature): void {
-    this.selectedCell = cell;
-    // Neighborhood enrichment will render when the Cluster Information tab is viewed
-    // via onTabChange handler
-    setTimeout(() => this.updateSubgraphGenie3(), 0);
+  public selectCellFromCluster(cell: CellFeature, compare: boolean = false): void {
+    if (compare) {
+      this.selectedCellCompare = cell;
+      setTimeout(() => this.updateSubgraphGenie3(true), 0);
+    } else {
+      this.selectedCell = cell;
+      setTimeout(() => this.updateSubgraphGenie3(false), 0);
+    }
   }
 
-  public closeClusterSidenav(): void {
-    this.selectedCluster = null;
-    this.clusterCells = [];
-    this.clusterCellTypes = [];
-    this.coOccurrenceData = []; // Clear co-occurrence data
-    this.resetClusterExtension();
-    this.updateHexColors();
+  public clearClusterData(compare: boolean = false): void {
+    if (compare) {
+      this.selectedClusterCompare = null;
+      this.compareClusterCells = [];
+      this.clusterCellTypesCompare = [];
+      this.compareCoOccurrenceData = [];
+      this.selectedCellCompare = null;
+    } else {
+      this.selectedCluster = null;
+      this.clusterCells = [];
+      this.clusterCellTypes = [];
+      this.coOccurrenceData = [];
+      this.selectedCell = null;
+    }
+
+    this.resetClusterExtension(compare);
+    this.updateHexColors(compare ? '#hexbin-compare' : '#hexbin');
   }
 
-  private calculateClusterStats(): void {
-    if (this.clusterCells.length === 0) return;
+  private calculateClusterStats(compare: boolean = false): void {
+    const clusterCells = compare ? this.compareClusterCells : this.clusterCells;
+    if (!clusterCells || clusterCells.length === 0) return;
 
     // Calculate cell type distribution using existing cell_type property
     const cellTypeMap = new Map<string, number>();
-    this.clusterCells.forEach((cell) => {
+    clusterCells.forEach((cell) => {
       const cellType = cell.properties.cell_type;
       cellTypeMap.set(cellType, (cellTypeMap.get(cellType) || 0) + 1);
     });
 
-    this.clusterCellTypes = Array.from(cellTypeMap.entries())
+    const clusterCellTypes = Array.from(cellTypeMap.entries())
       .map(([type, count]) => ({
         type,
         count,
-        percentage: ((count / this.clusterCells.length) * 100).toFixed(1),
+        percentage: ((count / clusterCells.length) * 100).toFixed(1),
       }))
       .sort((a, b) => b.count - a.count);
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster!);
 
-    if (this.clusterCells.length > 0) {
-      this.clusterCentralityAvg = {
+
+    if (compare) {
+      this.compareClusterCellTypes = clusterCellTypes;
+    } else {
+      this.clusterCellTypes = clusterCellTypes;
+    }
+
+    const clusterAnnotation = this.getLeidenClusterAnnotation(
+      compare ? this.selectedClusterCompare! : this.selectedCluster!,
+      compare
+    );
+
+    if (clusterCells.length > 0) {
+      const centralityAvg = {
         degree_centrality: clusterAnnotation?.centrality?.['degree_centrality'] ?? 0,
         average_clustering: clusterAnnotation?.centrality?.['average_clustering'] ?? 0,
         closeness_centrality: clusterAnnotation?.centrality?.['closeness_centrality'] ?? 0,
       };
+      if (compare) {
+        this.compareClusterCentralityAvg = centralityAvg;
+      } else {
+        this.clusterCentralityAvg = centralityAvg;
+      }
     }
   }
 
-  private extendCluster(selectedCluster: number): void {
-    this.g
+  private extendCluster(selectedCluster: number, compare: boolean = false): void {
+    const features = compare ? this.compareFeatures : this.features;
+    const currentGroup = compare ? this.g_compare : this.g;
+
+    currentGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
       .attr('d', (d: CellFeature) => {
-        // Extending the hexagon size by 1.1 is barely noticeable,
-        // plus it's infinitely annoying resetting size when switching
-        // away from leiden clustering.
-        //if (d.properties.leiden === selectedCluster) {
-        //  // Scale the hexagon coordinates outward
-        //  return this.getScaledPath(d, 1.1); // 10% larger
-        //}
         // Return original path for non-selected hexagons
         const projection = d3.geoIdentity().fitSize([1200, 1000], {
           type: 'FeatureCollection',
-          features: this.features,
+          features: features,
         });
         const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
         return pathGenerator(d) || '';
@@ -2689,50 +3277,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       });
   }
 
-  private getScaledPath(feature: CellFeature, scaleFactor: number): string {
-    const coords = feature.geometry.coordinates[0];
-
-    // Calculate centroid of the hexagon
-    let centerX = 0,
-      centerY = 0;
-    coords.forEach((coord: number[]) => {
-      centerX += coord[0];
-      centerY += coord[1];
-    });
-    centerX /= coords.length;
-    centerY /= coords.length;
-
-    // Scale each coordinate outward from the center
-    const scaledCoords = coords.map((coord: number[]) => {
-      const dx = coord[0] - centerX;
-      const dy = coord[1] - centerY;
-      return [centerX + dx * scaleFactor, centerY + dy * scaleFactor];
-    });
-
-    // Create scaled geometry
-    const scaledGeometry: CellGeometry = {
-      type: 'Polygon',
-      coordinates: [scaledCoords],
-    };
-
-    // Use path generator to convert to SVG path
+  private resetClusterExtension(compare: boolean = false): void {
+    const features = compare ? this.compareFeatures : this.features;
+    const targetGroup = compare ? this.g_compare : this.g;
     const projection = d3.geoIdentity().fitSize([1200, 1000], {
       type: 'FeatureCollection',
-      features: this.features,
-    });
-    const pathGenerator = d3.geoPath().projection(projection);
-
-    return pathGenerator(scaledGeometry) || '';
-  }
-
-  private resetClusterExtension(): void {
-    const projection = d3.geoIdentity().fitSize([1200, 1000], {
-      type: 'FeatureCollection',
-      features: this.features,
+      features: features,
     });
     const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
 
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
       .duration(300)
@@ -2742,7 +3296,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .style('opacity', 0.8);
 
     // Reinitialize the mouseleave event
-    this.g
+    targetGroup
       .selectAll<SVGPathElement, CellFeature>('path')
       .on('mouseleave', (event, d) => this.mouseLeave(event, d));
   }
@@ -2812,10 +3366,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  private renderNhoodHeatmap(): void {
-    const leiden = this.selectedCell?.properties?.leiden;
-    const clusterAnnotation = this.getLeidenClusterAnnotation(leiden);
+  private renderNhoodHeatmap(compare: boolean = false): void {
+    const cell = compare ? this.selectedCellCompare : this.selectedCell;
+    const leiden = cell?.properties?.leiden;
+    const clusterAnnotation = this.getLeidenClusterAnnotation(leiden, compare);
     const enrichment = clusterAnnotation?.neighborhood_enrichment;
+    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
 
     if (!enrichment || !Array.isArray(enrichment)) return;
 
@@ -2854,9 +3410,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       },
     };
 
-    const container = document.getElementById('cluster-nhood-heatmap');
+    const container = document.getElementById(containerId);
     if (!container) {
-      console.error('Container cluster-nhood-heatmap not found for rendering heatmap');
+      console.error(`Container ${containerId} not found for rendering heatmap`);
       return;
     }
 
@@ -2864,85 +3420,105 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     Plotly.newPlot(container, data, layout, { displayModeBar: false });
   }
 
-  public closeSidenav(): void {
-    this.selectedCell = null;
+  public closeSidenav(compare: boolean = false): void {
+    if (compare) {
+      this.selectedCellCompare = null;
+    } else {
+      this.selectedCell = null;
+    }
     this.updateHexColors();
   }
 
-  public updateCoOccurrenceTable(): void {
-    if (this.selectedCluster === null) {
+  public updateCoOccurrenceTable(compare: boolean = false): void {
+    const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
+
+    // 1. Clear state immediately
+    if (compare) {
+      this.compareCoOccurrenceData = [];
+    } else {
       this.coOccurrenceData = [];
+    }
+
+    if (selectedCluster === null || selectedCluster === undefined) return;
+
+    const clusterAnnotation = this.getLeidenClusterAnnotation(selectedCluster, compare);
+
+    // 2. Validate the 2D array exists for this specific cluster
+    if (!clusterAnnotation || !Array.isArray(clusterAnnotation.co_occurrence)) {
+      console.warn(`[Co-occurrence] No data matrix found for Cluster ${selectedCluster}`);
       return;
     }
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(this.selectedCluster);
-    const coOccurrenceMatrix = clusterAnnotation?.co_occurrence;
+    // This is your [[2.54, 2.10...], [...]] array
+    const matrix = clusterAnnotation.co_occurrence;
+    const interval = compare ? this.selectedIntervalCompare : this.selectedInterval;
+    const data: number[] = [];
 
-
-    if (!Array.isArray(coOccurrenceMatrix)) {
-      console.warn('No co-occurrence data found for cluster', this.selectedCluster);
-      this.coOccurrenceData = [];
-      return;
-    }
-
-    this.coOccurrenceData = [];
-    console.log('Selected Cluster:', this.selectedCluster, 'Interval:', this.selectedInterval);
-    console.log('Matrix structure:', coOccurrenceMatrix);
+    // 3. Safely extract the data
     try {
-      for (let j = 0; j < this.clusterCount; j++) {
-        if (
-          Array.isArray(coOccurrenceMatrix[j]) &&
-          typeof coOccurrenceMatrix[j][this.selectedInterval] === 'number'
-        ) {
-          this.coOccurrenceData.push(
-            coOccurrenceMatrix[j][this.selectedInterval],
-          );
+      // We rely on the actual length of the matrix rather than a hardcoded cluster count
+      const numTargetClusters = matrix.length;
+
+      for (let j = 0; j < numTargetClusters; j++) {
+        const targetClusterIntervals = matrix[j];
+
+        if (Array.isArray(targetClusterIntervals) && targetClusterIntervals.length > interval) {
+          const val = targetClusterIntervals[interval];
+          // Guarantee a clean number goes into the array
+          data.push(typeof val === 'number' && !isNaN(val) ? val : 0);
         } else {
-          this.coOccurrenceData.push(0);
+          data.push(0); // Safe fallback
         }
       }
     } catch (error) {
-      console.error('Error extracting co-occurrence data:', error);
-      this.coOccurrenceData = Array(this.clusterCount).fill(0);
+      console.error('[Co-occurrence] Error parsing 2D matrix:', error);
+      data.length = 0; // Wipe on critical failure
     }
 
-    // Calculate threshold for highlighting
-    this.calculateCoOccurrenceThreshold();
+    // 4. Update the component state
+    if (compare) {
+      this.compareCoOccurrenceData = data;
+      // Sync the cluster count so the HTML table headers match the data length
+      this.clusterCountCompare = data.length;
+    } else {
+      this.coOccurrenceData = data;
+      this.clusterCount = data.length;
+    }
 
-    console.log(
-      'Co-occurrence data for cluster',
-      this.selectedCluster,
-      'at interval',
-      this.selectedInterval,
-      ':',
-      this.coOccurrenceData,
-    );
+    if (data.length > 0) {
+      this.calculateCoOccurrenceThreshold(compare);
+    }
   }
 
-  private calculateCoOccurrenceThreshold(): void {
-    const allValues = this.coOccurrenceData.flat().filter((val) => val > 0);
+  private calculateCoOccurrenceThreshold(compare: boolean = false): void {
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+
+    const allValues = data.flat().filter((val) => val > 0);
     if (allValues.length > 0) {
       allValues.sort((a, b) => a - b);
       const percentile75 = Math.floor(allValues.length * 0.75);
-      this.coOccurrenceThreshold = allValues[percentile75] || 0.5;
+      compare ? this.compareCoOccurrenceThreshold = allValues[percentile75] : this.coOccurrenceThreshold = allValues[percentile75];
     }
   }
 
-  public getCoOccurrenceColor(value: number): string {
+  public getCoOccurrenceColor(value: number, compare: boolean = false): string {
     if (value === 0) return '#f8f9fa';
 
-    // Use the same color scale as hexagons for consistency
-    // Exclude the same cluster (diagonal) from max calculation to better scale other values
-    const coOccurrenceWithoutSameCluster = this.coOccurrenceData.filter(
-      (_, index) => index !== this.selectedCluster,
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+    const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
+    const colorScale = compare ? this.continuousColorScaleCompare : this.continuousColorScale;
+
+    const coOccurrenceWithoutSameCluster = data.filter(
+      (_, index) => index !== selectedCluster,
     );
     const maxValue = Math.max(...coOccurrenceWithoutSameCluster);
     const intensity = Math.min(value / maxValue, 1);
-    return this.continuousColorScale(intensity);
+    return colorScale(intensity);
   }
 
-  public getIntervalStats(): { min: number; max: number; avg: number } {
-    const allValues = this.coOccurrenceData.flat().filter((val) => val > 0);
+  public getIntervalStats(compare: boolean = false): { min: number; max: number; avg: number } {
+    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
+    const allValues = data.flat().filter((val) => val > 0);
     if (allValues.length === 0) return { min: 0, max: 0, avg: 0 };
 
     const min = Math.min(...allValues);
@@ -2952,7 +3528,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return { min, max, avg: Math.round(avg * 100) / 100 };
   }
 
-  async getRegulatoryScoresforSpots(barcode: string, datasetId?: string) {
+  async getRegulatoryScoresforSpots(barcode: string, datasetId?: string, compare: boolean = false) {
     const datasetQuery = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : '';
     this.sessionService.callWithSession(() =>
       this.http.get(
@@ -2968,7 +3544,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const genie3ElementsSet = new Set<string>();
         const spongeElementsSet = new Set<string>();
 
-        // Separate the raw score groups by suffix (_genie3 or _sponge) for separate tables
         for (const [scoreType, scores] of Object.entries(rawData)) {
           if (scoreType.endsWith('_genie3')) {
             genie3Data[scoreType] = scores;
@@ -2978,19 +3553,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             Object.keys(scores).forEach(element => spongeElementsSet.add(element));
           }
         }
-        this.genie3RawData = genie3Data;
-        this.spongeRawData = spongeData;
-
-        // Features/Columns assigned as the list of elements (TFs or Genes)
-        this.genie3Elements = Array.from(genie3ElementsSet);
-        this.spongeElements = Array.from(spongeElementsSet);
-
+        if (compare) {
+          this.genie3RawDataCompare = genie3Data;
+          this.spongeRawDataCompare = spongeData;
+          this.genie3ElementsCompare = Array.from(genie3ElementsSet);
+          this.spongeElementsCompare = Array.from(spongeElementsSet);
+        } else {
+          this.genie3RawData = genie3Data;
+          this.spongeRawData = spongeData;
+          this.genie3Elements = Array.from(genie3ElementsSet);
+          this.spongeElements = Array.from(spongeElementsSet);
+        }
       },
       error: (err) => {
-        this.genie3RawData = {};
-        this.spongeRawData = {};
-        this.genie3Elements = [];
-        this.spongeElements = [];
+        if (compare) {
+          this.genie3RawDataCompare = {};
+          this.spongeRawDataCompare = {};
+          this.genie3ElementsCompare = [];
+          this.spongeElementsCompare = [];
+        } else {
+          this.genie3RawData = {};
+          this.spongeRawData = {};
+          this.genie3Elements = [];
+          this.spongeElements = [];
+        }
         console.error(
           `[Backend] Failed to load regulatory scores for ${barcode}`,
           err,
@@ -2999,17 +3585,29 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  async fetchAndUpdate(columnName: string, index: string, updateCompare: boolean = false) {
+  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string) {
+    const tokenType = compare ? 'obsm_compare' : 'obsm_main';
+    const token = this.nextRequestToken(tokenType);
     const safeIndex = encodeURIComponent(index);
     const isGeneExpression = columnName === 'gene_expression';
+
+    // Determine the property name to update based on the view
+    // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
+    const propertyToUpdate = view || 'regulatory_scores';
 
     const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
       : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
 
-    const datasetQuery = this.selectedDataset?.id
-      ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
-      : '';
+    // Change query dataset based on whether we're updating the main view or compare view
+
+    const datasetQuery = compare
+      ? this.selectedDatasetCompare?.id
+        ? `?dataset_id=${encodeURIComponent(this.selectedDatasetCompare.id)}`
+        : ''
+      : this.selectedDataset?.id
+        ? `?dataset_id=${encodeURIComponent(this.selectedDataset.id)}`
+        : '';
 
     const request = `${baseRequest}${datasetQuery}`;
 
@@ -3022,33 +3620,37 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       )
       .subscribe({
         next: (res) => {
+          if (token !== this.requestTokens[tokenType]) return;
           const data = res as { [barcode: string]: any };
 
-          if (this.features) {
+          // 1. Update ONLY the main view if compare is false
+          if (!compare && this.features) {
             for (const feature of this.features) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                feature.properties[this.colorByProperty] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
+            console.log(`[Backend] Updated main view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
-          console.log('Features:', this.features);
-          if (updateCompare && this.compareMode && this.dataCompare?.features) {
-            for (const feature of this.dataCompare.features) {
+
+          // 2. Update ONLY the compare view if compare is true
+          if (compare && this.compareMode && this.compareFeatures) {
+            for (const feature of this.compareFeatures) {
               const barcode = feature.properties?.barcode;
               if (barcode && data[barcode] !== undefined) {
-                feature.properties[this.selectedCompareView] = data[barcode];
+                feature.properties[propertyToUpdate] = data[barcode];
               }
             }
-            console.log(`[Backend] Also updated compare view property '${this.selectedCompareView}' from obsm["${columnName}"][${index}]`);
+            console.log(`[Backend] Updated compare view property '${propertyToUpdate}' from obsm["${columnName}"][${index}]`);
           }
-          console.log(`[Backend] Loaded adata.obsm["${columnName}][${index}]`);
+
           this.repaintBothViews();
 
           // Mark regulatory scores fetch as complete if during initialization
           if (this.isInitializing) {
             this.isLoadingRegulatoryScores = false;
-            this.checkInitializationComplete();
+            this.checkInitializationComplete(compare);
           }
         },
         error: (err) => {
@@ -3059,34 +3661,93 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           // Mark as complete even on error
           if (this.isInitializing) {
             this.isLoadingRegulatoryScores = false;
-            this.checkInitializationComplete();
+            this.checkInitializationComplete(compare);
           }
         },
       });
   }
 
-  public onRegulatoryScoreChange(): void {
-    if (
-      this.selectedRegulatoryScore?.endsWith('genie3') &&
-      this.selectedGeneSetGenie3 &&
-      this.selectedGeneSetSponge
-    ) {
-      this.fetchAndUpdate(
-        this.selectedRegulatoryScore,
-        this.selectedGeneSetGenie3,
-      );
-    } else if (
-      this.selectedRegulatoryScore?.endsWith('sponge') &&
-      this.selectedGeneSetSponge
-    ) {
-      this.fetchAndUpdate(
-        this.selectedRegulatoryScore,
-        this.selectedGeneSetSponge,
-      );
+  public onRegulatoryScoreChange(compare: boolean = false): void {
+    const selectedRegulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
+    const selectedGeneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const selectedGeneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+
+    if (selectedRegulatoryScore?.endsWith('genie3') && selectedGeneSetGenie3) {
+      this.fetchAndUpdate(selectedRegulatoryScore, selectedGeneSetGenie3, compare);
+    } else if (selectedRegulatoryScore?.endsWith('sponge') && selectedGeneSetSponge) {
+      this.fetchAndUpdate(selectedRegulatoryScore, selectedGeneSetSponge, compare);
     }
   }
 
 
+  public onRegulatoryDisplayModeChange(compare: boolean = false): void {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    const meta = compare ? this.metaCompare : this.meta;
+
+    // Validate that data exists for the selected display mode
+    const genie3Key = displayMode === 'raw'
+      ? 'global_regulatory_scores_genie3'
+      : displayMode === 'moranI'
+        ? 'global_regulatory_moranI_genie3'
+        : 'global_regulatory_gearyC_genie3';
+
+    const spongeKey = displayMode === 'raw'
+      ? 'global_regulatory_scores_sponge'
+      : displayMode === 'moranI'
+        ? 'global_regulatory_moranI_sponge'
+        : 'global_regulatory_gearyC_sponge';
+
+    const hasGenie3Data = meta?.[genie3Key] && Object.keys(meta[genie3Key]).length > 0;
+    const hasSpongeData = meta?.[spongeKey] && Object.keys(meta[spongeKey]).length > 0;
+
+    if (!hasGenie3Data && !hasSpongeData) {
+      console.warn(
+        `[RegulatoryScores] No ${displayMode} data available for ${compare ? 'compare' : 'main'} view. Available keys:`,
+        Object.keys(meta || {}).filter(k => k.includes('regulatory'))
+      );
+    }
+
+    console.log(
+      `[RegulatoryScores] Display mode changed to '${displayMode}' for ${compare ? 'compare' : 'main'} view`
+    );
+  }
+
+  public getRegulatoryActionColumns(networkType: 'genie3' | 'sponge', compare: boolean): string[] {
+    const meta = compare ? this.metaCompare : this.meta;
+    const scoreNames = meta?.['grn_score_names'];
+    if (!Array.isArray(scoreNames)) {
+      return [];
+    }
+    return scoreNames.filter((name: string) => name.endsWith(`_${networkType}`));
+  }
+
+  public getRegulatoryTableData(networkType: 'genie3' | 'sponge', compare: boolean): TableData {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    const meta = compare ? this.metaCompare : this.meta;
+    const key =
+      displayMode === 'raw'
+        ? `global_regulatory_scores_${networkType}`
+        : displayMode === 'moranI'
+          ? `global_regulatory_moranI_${networkType}`
+          : `global_regulatory_gearyC_${networkType}`;
+
+    const table = meta?.[key];
+    if (!table || typeof table !== 'object') {
+      return {};
+    }
+    return table as TableData;
+  }
+
+  public getRegulatoryEmptyMessage(networkType: 'genie3' | 'sponge', compare: boolean): string {
+    const displayMode = compare ? this.regulatoryScoreDisplayModeCompare : this.regulatoryScoreDisplayMode;
+    if (displayMode === 'moranI') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Moran's I regulatory scores loaded`;
+    }
+    if (displayMode === 'gearyC') {
+      return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} Geary's C regulatory scores loaded`;
+    }
+    return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} global regulatory scores loaded`;
+  }
   keyCompareByLabel = (a: KeyValue<string, unknown>, b: KeyValue<string, unknown>) => {
     return this.label(a.key).localeCompare(this.label(b.key), 'de', { sensitivity: 'base' });
   };
@@ -3222,6 +3883,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   private renderLegend(containerName: string): void {
     const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
+
 
     viewVariablesToUpdate.svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
 
@@ -3500,9 +4162,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .join('path')
       .attr('d', (d: CellFeature) => this.currentPathGenerator!(d) || '')
       .attr('fill', (d: CellFeature) => {
-        const value = this.leidenCentralityProps.includes(this.colorByProperty)
-          ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.colorByProperty]
-          : d.properties?.[this.colorByProperty];
+        const value = this.leidenCentralityProps.includes(this.selectedView)
+          ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedView]
+          : d.properties?.[this.selectedView];
         if (this.currentLegendType === 'categorical') {
           return this.colorScale(String(value));
         } else {
@@ -3515,7 +4177,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.4)
       .style('opacity', 1)
-      .on('click', (event, d) => this.openSidenav(event, d));
+      .on('click', (event, d) => this.displayCellDetails(event, d));
   }
 
 
@@ -3643,7 +4305,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.detailLayer.style('display', 'none');
   }
 }
-
 
 
 

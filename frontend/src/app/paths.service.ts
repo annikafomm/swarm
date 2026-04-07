@@ -2,11 +2,11 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 
 export interface Paths {
-  adataMainPath?: string;
-  adataComparePath?: string;
+  adataPath?: string;
   genieFiltPath?: string;
   spongeFiltPath?: string;
   hexagonPath?: string;
+
 }
 
 @Injectable({
@@ -15,17 +15,27 @@ export interface Paths {
 export class PathsService {
   private paths = new BehaviorSubject<Paths>({});
   public paths$ = this.paths.asObservable();
+  private comparePaths = new BehaviorSubject<Paths>({});
+  public comparePaths$ = this.comparePaths.asObservable();
 
   constructor() {}
 
-  updatePaths(newPaths: Partial<Paths>): void {
-    this.paths.next({
-      ...this.paths.value,
-      ...newPaths
-    });
+  updatePaths(newPaths: Partial<Paths>, isCompare: boolean = false): void {
+    if (isCompare) {
+      this.comparePaths.next({
+        ...this.comparePaths.value,
+        ...newPaths
+      });
+    } else {
+      this.paths.next({
+        ...this.paths.value,
+        ...newPaths
+      });
+    }
   }
 
-  getPaths(): Paths {
-    return this.paths.value;
+
+  getPaths(isCompare: boolean = false): Paths {
+    return isCompare ? this.comparePaths.value : this.paths.value;
   }
 }

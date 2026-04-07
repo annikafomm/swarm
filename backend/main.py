@@ -348,6 +348,38 @@ def _resolve_adata_path(session_data: SessionData, dataset_id: Optional[str] = N
     return session_data.adata_path
 
 
+def _resolve_dataset_dict(session_data: SessionData, dataset_id: str) -> Dict[str, Any]:
+    """Resolve and authorize a dataset record by id for current user."""
+    all_datasets = dataset_registry.get_all_datasets(as_dict=True)
+
+    builtin = all_datasets.get("builtin", {}).get(dataset_id)
+    if builtin:
+        return builtin
+
+    uploaded = all_datasets.get("uploaded", {}).get(dataset_id)
+    if not uploaded:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found")
+
+    owner = uploaded.get("user")
+    if owner not in {session_data.username, "__shared__"}:
+        raise HTTPException(status_code=403, detail=f"Dataset '{dataset_id}' is not visible")
+
+    return uploaded
+
+
+def _resolve_network_path(
+    session_data: SessionData,
+    dataset_id: Optional[str],
+    network_key: str,
+    fallback_session_path: Optional[str],
+) -> Optional[str]:
+    """Resolve dataset-specific network path, falling back to session path."""
+    if dataset_id:
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        return dataset_dict.get(network_key)
+    return fallback_session_path
+
+
 def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, float]]:
     """
     Return min/max for one gene from an AnnData object.
@@ -1030,14 +1062,18 @@ async def upload(
         out_dir = Path(out_dir)
         # Check for xenium cells file first
         xenium_cells_file = out_dir / "xenium_cells_with_grid_scores.h5ad"
-        st_scores_file = out_dir / "st_scores.h5ad"
+        st_scores_file = out_dir / "adata_st_scores.h5ad"
+        tg_scores_file = out_dir / "adata_tg_scores.h5ad"
 
         if xenium_cells_file.exists() and xenium_cells_file.is_file():
             adata_path = str(xenium_cells_file)
             selected_reason = "xenium_cells_with_grid_scores"
         elif st_scores_file.exists() and st_scores_file.is_file():
             adata_path = str(st_scores_file)
-            selected_reason = "st_scores"
+            selected_reason = "adata_st_scores"
+        elif tg_scores_file.exists() and tg_scores_file.is_file():
+            adata_path = str(tg_scores_file)
+            selected_reason = "adata_tg_scores"
         else:
             adata_path = str(saved_files_dict.get("spatial_h5ad"))
             selected_reason = "original_spatial"
@@ -1053,12 +1089,13 @@ async def upload(
 
             subprocess.run(
                 [
-                    "python",
+                    "python3",
                     "../backend/visium_to_geojson.py",
                     "--adata", adata_path,
                     "--outpath", geojson_path,
                     "--data_type", dataset.lower(),
-                ]
+                ],
+                check=True,
             )
             print(f"✓ Generated GeoJSON at {geojson_path}")
         geojson_path = str(out_dir / "hexagons.geojson") if (out_dir / "hexagons.geojson").exists() else None
@@ -1153,6 +1190,117 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
         import traceback
         traceback.print_exc()
         raise
+
+
+@app.get("/api/unregistered_datasets", dependencies=[Depends(cookie)])
+async def get_unregistered_datasets(session_data: SessionData = Depends(verifier)):
+    """
+    Get list of unregistered datasets from uploads folder.
+    Used by popup dialog to show what datasets can be recovered/registered.
+    """
+    try:
+        unregistered = dataset_registry.get_unregistered_datasets(BASE_UPLOAD_DIR)
+        print(f"Found {len(unregistered)} unregistered datasets")
+        return {"datasets": unregistered}
+    except Exception as e:
+        print(f"✗ Error in get_unregistered_datasets: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/register_dataset", dependencies=[Depends(cookie)])
+async def register_dataset(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier)
+):
+    """
+    Register an unregistered dataset from its config file.
+    The dataset_id corresponds to the job directory name.
+    """
+    try:
+        job_dir = BASE_UPLOAD_DIR / dataset_id
+
+        # Look for config file matching pattern job_*_config.json
+        config_files = list(job_dir.glob("job_*_config.json"))
+
+        if not config_files:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Config file not found for dataset {dataset_id}"
+            )
+
+        config_file = config_files[0]  # Use first match
+
+        # Register the dataset using the current user
+        dataset = dataset_registry.register_dataset_from_config(
+            config_file=config_file,
+            user=session_data.username
+        )
+
+        print(f"✓ Registered dataset {dataset_id} for user {session_data.username}")
+        return {
+            "success": True,
+            "message": f"Dataset {dataset_id} registered successfully",
+            "dataset": dataset.to_dict()
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"✗ Error registering dataset: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/delete_unregistered_dataset", dependencies=[Depends(cookie)])
+async def delete_unregistered_dataset(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier)
+):
+    """
+    Delete an unregistered dataset's directory.
+    Only unregistered datasets can be deleted via this endpoint.
+    """
+    try:
+        # Verify it's actually unregistered
+        if dataset_id in dataset_registry.datasets.get("uploaded", {}):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Dataset {dataset_id} is already registered. Use dataset deletion instead."
+            )
+
+        job_dir = BASE_UPLOAD_DIR / dataset_id
+        if not job_dir.exists():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dataset directory not found: {dataset_id}"
+            )
+
+        success = dataset_registry.delete_unregistered_dataset(
+            dataset_id=dataset_id,
+            uploads_dir=BASE_UPLOAD_DIR,
+            delete_files=True
+        )
+
+        if success:
+            print(f"✓ Deleted unregistered dataset {dataset_id}")
+            return {
+                "success": True,
+                "message": f"Dataset {dataset_id} deleted successfully"
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to delete dataset {dataset_id}"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ Error deleting dataset: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/geojson/{dataset_id}", dependencies=[Depends(cookie)])
@@ -1404,19 +1552,27 @@ async def read_network_sponge(sponge_network_path: SpongeNetworksPath, session_i
 
 
 @app.get("/geneset_connections_genie", dependencies=[Depends(cookie)])
-async def get_geneset_connections(
-    gene_set_name: str, session_data: SessionData = Depends(verifier)
+async def get_geneset_connections_genie(
+    gene_set_name: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    genie_network_path = _resolve_network_path(
+        session_data,
+        dataset_id,
+        "genie_network_path",
+        session_data.genie_network_path,
+    )
 
-    if not session_data.genie_network_path:
+    if not genie_network_path:
         return {"connections": [], "slider_data": {}}
 
-
     # Get the geneset from the name
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
 
     # Check if genie_genesets exists in adata.uns
     if "genie_genesets" not in adata.uns:
@@ -1429,7 +1585,7 @@ async def get_geneset_connections(
 
     # Get connections from genie_network
     connections, slider_data = get_subnetwork_data(
-        session_data.genie_network_path, gene_set, "genie"
+        genie_network_path, gene_set, "genie"
     )
 
     # Write to dict
@@ -1439,17 +1595,27 @@ async def get_geneset_connections(
 
 
 @app.get("/geneset_connections_sponge", dependencies=[Depends(cookie)])
-async def get_geneset_connections(
-    gene_set_name: str, session_data: SessionData = Depends(verifier)
+async def get_geneset_connections_sponge(
+    gene_set_name: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    sponge_network_path = _resolve_network_path(
+        session_data,
+        dataset_id,
+        "sponge_network_path",
+        session_data.sponge_network_path,
+    )
+
     # Get the geneset from the name
-    if not session_data.sponge_network_path:
+    if not sponge_network_path:
         return {"connections": [], "slider_data": {}}
 
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     gene_set = adata.uns["sponge_genesets"].get(
         gene_set_name, None
     )
@@ -1457,11 +1623,33 @@ async def get_geneset_connections(
 
     # Get connections from sponge_network
     connections, slider_data = get_subnetwork_data(
-        session_data.sponge_network_path, gene_set, "sponge"
+        sponge_network_path, gene_set, "sponge"
     )
     connections = connections.to_dict(orient="records")
 
     return {"connections": connections, "slider_data": slider_data}
+
+
+@app.get("/api/obsm_tables", dependencies=[Depends(cookie)])
+async def get_obsm_tables(
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    """Return available obsm table names for the selected dataset."""
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+        adata = _load_adata_cached(adata_path)
+        obsm_keys = sorted(list(adata.obsm.keys()))
+        regulatory_obsm_keys = [k for k in obsm_keys if k.endswith("_genie3") or k.endswith("_sponge")]
+        return {
+            "dataset_id": dataset_id,
+            "obsm_keys": obsm_keys,
+            "regulatory_obsm_keys": regulatory_obsm_keys,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read obsm keys: {e}")
 
 
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
@@ -1564,9 +1752,19 @@ async def get_obsm_column(
             raise HTTPException(status_code=500, detail=f"ChromVAR processing failed: {str(e)}")
 
     # --- default behavior unchanged ---
+    if table not in adata.obsm:
+        print(f"[ERROR] Table '{table}' not found in adata.obsm")
+        print(f"[DEBUG] Available obsm keys: {list(adata.obsm.keys())}")
+        raise HTTPException(status_code=404, detail=f"Table '{table}' not found in adata.obsm. Available tables: {', '.join(adata.obsm.keys())}")
+
     obsm_data = adata.obsm[table]
     if not isinstance(obsm_data, pd.DataFrame):
         obsm_data = pd.DataFrame(obsm_data, index=adata.obs_names)
+
+    if column not in obsm_data.columns:
+        print(f"[ERROR] Column '{column}' not found in table '{table}'")
+        print(f"[DEBUG] Available columns: {list(obsm_data.columns)}")
+        raise HTTPException(status_code=404, detail=f"Column '{column}' not found in table '{table}'. Available columns: {', '.join(obsm_data.columns)}")
 
     return obsm_data[column].to_dict()
 
