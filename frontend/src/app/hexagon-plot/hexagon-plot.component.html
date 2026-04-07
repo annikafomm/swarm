@@ -524,11 +524,11 @@
                 </div>
 
                 <div class="stats-display" *ngIf="coOccurrenceData.length > 0">
-                  <span class="stat-item">Min: {{ getIntervalStats().min }}</span>
-                  <span class="stat-item">Max: {{ getIntervalStats().max }}</span>
-                  <span class="stat-item">Avg: {{ getIntervalStats().avg }}</span>
+                  <span class="stat-item">Min: {{ getIntervalStats().min | number:'1.4-4' }}</span>
+                  <span class="stat-item">Max: {{ getIntervalStats().max | number:'1.4-4' }}</span>
+                  <span class="stat-item">Avg: {{ getIntervalStats().avg}}</span>
                   <span class="interval-info">(0-{{ maxInterval }})</span>
-                  <span  *ngIf="intervalBoundaries.length">
+                  <span  *ngIf="getIntervalBoundaries().length">
                     <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
                     <span class="interval-info">{{ formatActualIntervalRange(selectedInterval) }}</span>
                   </span>
@@ -1357,7 +1357,7 @@
                 <h3>Cluster {{ selectedClusterCompare }} Co-occurrence Matrix</h3>
                 <div class="controls-row">
                   <div class="interval-selector">
-                    <label for="interval-select">Interval:</label> <!---warum hier +1?-->
+                    <label for="interval-select">Interval:</label>
                     <select id="interval-select" [(ngModel)]="this.selectedIntervalCompare"
                       (change)="updateCoOccurrenceTable(true)">
                       <option *ngFor="
@@ -1371,9 +1371,14 @@
                   </div>
 
                   <div class="stats-display" *ngIf="compareCoOccurrenceData.length > 0">
-                    <span class="stat-item">Min: {{ getIntervalStats(true).min }}</span>
-                    <span class="stat-item">Max: {{ getIntervalStats(true).max }}</span>
+                    <span class="stat-item">Min: {{ getIntervalStats(true).min | number:'1.4-4' }}</span>
+                    <span class="stat-item">Max: {{ getIntervalStats(true).max | number:'1.4-4' }}</span>
                     <span class="stat-item">Avg: {{ getIntervalStats(true).avg }}</span>
+                    <span class="interval-info">(0-{{ maxIntervalCompare }})</span>
+                    <span *ngIf="getIntervalBoundaries(true).length">
+                      <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                      <span class="interval-info">{{ formatActualIntervalRange(selectedIntervalCompare, true) }}</span>
+                    </span>
                   </div>
                 </div>
               </div>
