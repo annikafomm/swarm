@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, Dict, List, Union
+from typing import Optional, Dict, List, Union, Any
 
 from dataset_structure import Dataset, DatasetFactory, VisiumDataset, Params
 
@@ -96,6 +96,34 @@ class DatasetRegistry:
         except Exception as e:
             print(f"✗ Error saving registry: {e}")
             raise
+
+    def _refresh_uploaded_datasets(self):
+        """
+        Reload uploaded datasets from the registry file.
+        This keeps the in-memory registry in sync with disk, so newly registered
+        datasets are visible after a page refresh without restarting.
+        """
+        if not self.registry_file.exists():
+            return
+
+        try:
+            with open(self.registry_file, 'r') as f:
+                data = json.load(f)
+
+            # Reload uploaded datasets
+            uploaded = {}
+            for dataset_id, dataset_dict in data.get("uploaded", {}).items():
+                try:
+                    dataset_dict["category"] = "uploaded"
+                    dataset = DatasetFactory.from_registry_dict(dataset_dict)
+                    uploaded[dataset_id] = dataset
+                except Exception as e:
+                    print(f"⚠ Failed to reload uploaded dataset {dataset_id}: {e}")
+
+            self.datasets["uploaded"] = uploaded
+            print(f"[DEBUG] Reloaded {len(uploaded)} uploaded datasets from disk")
+        except Exception as e:
+            print(f"✗ Error reloading uploaded datasets: {e}")
 
     def register_uploaded_dataset(
         self,
@@ -303,6 +331,204 @@ class DatasetRegistry:
             self._save_registry()
             return True
         return False
+
+    def find_config_files(self, uploads_dir: Path) -> List[Path]:
+        """
+        Scan uploads directory for unregistered configuration files.
+        Returns list of config files for datasets not yet in registry.
+
+        Args:
+            uploads_dir: Path to uploads directory
+
+        Returns:
+            List of Paths to unregistered config files
+        """
+        if not uploads_dir.exists():
+            print(f"⚠ Uploads directory does not exist: {uploads_dir}")
+            return []
+
+        unregistered = []
+        uploads_dir = Path(uploads_dir)
+
+        print(f"[DEBUG] Scanning for config files in: {uploads_dir}")
+        print(f"[DEBUG] Currently registered uploaded datasets: {list(self.datasets.get('uploaded', {}).keys())}")
+
+        # Find all config files matching pattern job_*_config.json
+        all_config_files = list(uploads_dir.rglob("job_*_config.json"))
+        print(f"[DEBUG] Found {len(all_config_files)} config files total")
+
+        for config_file in all_config_files:
+            try:
+                # Extract dataset_id from filename and directory
+                # File: job_TIMESTAMP_UUID/job_TIMESTAMP_config.json
+                parent_dir = config_file.parent
+                dataset_id = parent_dir.name
+
+                print(f"[DEBUG] Checking config: {dataset_id} - Registered: {dataset_id in self.datasets.get('uploaded', {})}")
+
+                # Allow re-registration even if already registered
+                # This enables recovery and re-registration on new sessions
+                unregistered.append(config_file)
+                print(f"[DEBUG] Added dataset for registration: {dataset_id}")
+            except Exception as e:
+                print(f"⚠ Error processing config file {config_file}: {e}")
+
+        print(f"[DEBUG] Total unregistered config files found: {len(unregistered)}")
+        return unregistered
+
+    def get_unregistered_datasets(self, uploads_dir: Path) -> List[Dict[str, Any]]:
+        """
+        Get summary info about unregistered datasets from config files.
+        Suitable for displaying in UI popup.
+
+        Args:
+            uploads_dir: Path to uploads directory
+
+        Returns:
+            List of dicts with dataset info for UI display
+        """
+        # Reload uploaded datasets from disk to sync with latest registry
+        # This ensures newly registered datasets show up after refresh
+        self._refresh_uploaded_datasets()
+
+        config_files = self.find_config_files(uploads_dir)
+        unregistered = []
+
+        for config_file in config_files:
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+
+                parent_dir = config_file.parent
+                dataset_id = parent_dir.name
+
+                # Extract key info
+                dataset_type = config.get("dataset", "Unknown")
+                adata_path = config.get("output_files", {}).get("adata_path")
+                created_at = datetime.fromtimestamp(
+                    int(dataset_id.split("_")[1]) / 1000, # timestamp in milliseconds
+                ) if "_" in dataset_id else datetime.now()
+
+                # Check if adata file exists
+                adata_exists = Path(adata_path).exists() if adata_path else False
+
+                unregistered.append({
+                    "dataset_id": dataset_id,
+                    "alias": f"{dataset_type} Dataset - {dataset_id}",
+                    "dataset_type": dataset_type,
+                    "created_at": created_at.isoformat(),
+                    "config_path": str(config_file),
+                    "adata_path": adata_path,
+                    "adata_exists": adata_exists,
+                    "status": "ready" if adata_exists else "missing_files",
+                })
+            except Exception as e:
+                print(f"⚠ Error reading unregistered dataset from {config_file}: {e}")
+
+        # Sort by creation date, newest first
+        unregistered.sort(key=lambda x: x["created_at"], reverse=True)
+        return unregistered
+
+    def register_dataset_from_config(
+        self,
+        config_file: Path,
+        user: str = "anonymous",
+    ) -> Dataset:
+        """
+        Register a dataset by loading its configuration file.
+        Creates a Dataset object and adds it to the registry.
+
+        Args:
+            config_file: Path to config JSON file (e.g., job_123_config.json)
+            user: Username to assign as owner
+
+        Returns:
+            Registered Dataset object
+
+        Raises:
+            ValueError: If config file is invalid or adata file missing
+        """
+        config_file = Path(config_file)
+        if not config_file.exists():
+            raise ValueError(f"Config file not found: {config_file}")
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        parent_dir = config_file.parent
+        dataset_id = parent_dir.name
+
+        # Allow re-registration of already registered datasets
+        # This supports recovery flows and re-registration on new sessions
+        if dataset_id in self.datasets.get("uploaded", {}):
+            print(f"[DEBUG] Dataset {dataset_id} already registered, re-registering...")
+
+        # Extract paths and metadata from config
+        adata_path = config.get("output_files", {}).get("adata_path")
+        geojson_path = config.get("output_files", {}).get("geojson_path")
+        genie_network_path = config.get("output_files", {}).get("genie_network_path")
+        sponge_network_path = config.get("output_files", {}).get("sponge_network_path")
+
+        # Validate adata file exists
+        if not adata_path or not Path(adata_path).exists():
+            raise ValueError(f"AnnData file not found: {adata_path}")
+
+        # Extract processing options
+        dataset_type = config.get("dataset", "Visium")
+        use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+        use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
+
+        # Create Dataset object
+        dataset = VisiumDataset(
+            dataset_id=dataset_id,
+            alias=f"{dataset_type} Dataset",
+            adata_path=adata_path,
+            user=user,
+            tangram_adata_path=None,  # Can be updated if available
+            geojson_path=geojson_path,
+            genie_network_path=genie_network_path,
+            sponge_network_path=sponge_network_path,
+            created_at=datetime.now(),
+            dataset_type=dataset_type,
+            use_tangram=use_tangram,
+            use_multiome=use_multiome,
+        )
+
+        # Register it
+        self.register_uploaded_dataset(dataset=dataset)
+        print(f"✓ Registered dataset from config: {dataset_id}")
+        return dataset
+
+    def delete_unregistered_dataset(self, dataset_id: str, uploads_dir: Path, delete_files: bool = True) -> bool:
+        """
+        Delete an unregistered dataset's directory and optionally its files.
+
+        Args:
+            dataset_id: Dataset identifier (directory name)
+            uploads_dir: Path to uploads directory
+            delete_files: If True, delete the entire job directory. If False, just remove references.
+
+        Returns:
+            True if deletion successful, False otherwise
+        """
+        try:
+            job_dir = Path(uploads_dir) / dataset_id
+
+            if not job_dir.exists():
+                print(f"⚠ Dataset directory not found: {job_dir}")
+                return False
+
+            if delete_files:
+                import shutil
+                shutil.rmtree(job_dir)
+                print(f"✓ Deleted dataset directory: {job_dir}")
+            else:
+                print(f"⚠ Dataset directory preserved: {job_dir}")
+
+            return True
+        except Exception as e:
+            print(f"✗ Error deleting dataset {dataset_id}: {e}")
+            return False
 
     def rescan_uploads_folder(self, uploads_dir: Path) -> Dict[str, str]:
         """

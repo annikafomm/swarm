@@ -6,6 +6,9 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 import { PathsService } from './paths.service';
+import { DatasetService } from './datasets.service';
+import { MatDialog } from '@angular/material/dialog';
+import { UnregisteredDatasetsDialogComponent } from './unregistered-datasets-dialog/unregistered-datasets-dialog.component';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
@@ -31,10 +34,30 @@ export class AppComponent implements OnInit, OnDestroy {
     private http: HttpClient,
     public sessionService: SessionService,
     private pathsService: PathsService,
+    private datasetService: DatasetService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
     this.sessionService.initSession();
+
+    // Show unregistered datasets dialog after session is initialized
+    // Track by session ID - show dialog on each NEW session (page refresh creates new session)
+    setTimeout(() => {
+      const currentSessionId = this.sessionService.sessionId;
+      const lastDialogSessionId = sessionStorage.getItem('lastUnregisteredDialogSessionId');
+
+      console.log(`[APP] Current session: ${currentSessionId}, Last dialog session: ${lastDialogSessionId}`);
+
+      // Show dialog if this is a new session (different from last time we showed it)
+      if (currentSessionId && currentSessionId !== lastDialogSessionId) {
+        console.log('[APP] New session detected, showing unregistered datasets dialog');
+        this.showUnregisteredDatasetsDialog();
+        sessionStorage.setItem('lastUnregisteredDialogSessionId', currentSessionId);
+      } else {
+        console.log('[APP] Same session, skipping unregistered datasets dialog');
+      }
+    }, 1000);  // Increased timeout to ensure session is ready
 
     this.pathsService.paths$
       .pipe(takeUntil(this.destroy$))
@@ -64,7 +87,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
         // Load paths sequentially to avoid race conditions
         const promises: Promise<any>[] = [];
-        if (paths.adataMainPath) promises.push(loadPath('read_adata', paths.adataMainPath, 'adata'));
+        if (paths.adataPath) promises.push(loadPath('read_adata', paths.adataPath, 'adata'));
         if (paths.genieFiltPath) promises.push(loadPath('read_network_genie', paths.genieFiltPath, 'network_genie'));
         if (paths.spongeFiltPath) promises.push(loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge'));
 
@@ -77,6 +100,40 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  private showUnregisteredDatasetsDialog(): void {
+    this.sessionService.callWithSession(() =>
+      this.datasetService.loadUnregisteredDatasets()
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          const datasets = response.datasets || [];
+          console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
+          const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
+            width: '1000px',
+            maxHeight: '80vh',
+            disableClose: false,
+            autoFocus: 'first-button',
+          });
+
+          // Reload datasets when dialog closes
+          dialogRef.afterClosed()
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((result) => {
+              if (result?.datasetsChanged) {
+                // Reload available datasets to reflect any registrations/deletions
+                this.datasetService.loadAvailableDatasets();
+              }
+            });
+        },
+        error: (error) => {
+          console.error('[DEBUG] Error loading unregistered datasets:', error);
+          console.warn('Could not check for unregistered datasets:', error);
+          // Silently fail - not critical to functionality
+        }
+      });
   }
 
   title = 'frontend';

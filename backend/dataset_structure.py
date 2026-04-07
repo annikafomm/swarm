@@ -188,7 +188,7 @@ class Dataset(ABC):
             "geojson_path": self.geojson_path,
             "genie_network_path": self.genie_network_path,
             "sponge_network_path": self.sponge_network_path,
-            "created_at": self.created_at.isoformat(),
+            "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             "metadata": self.metadata,
         }
 
@@ -225,6 +225,14 @@ class Dataset(ABC):
         # Handle 'id' vs 'dataset_id' field name
         if "id" in data_copy and "dataset_id" not in data_copy:
             data_copy["dataset_id"] = data_copy.pop("id")
+
+        # Convert created_at string back to datetime if needed
+        if "created_at" in data_copy and isinstance(data_copy["created_at"], str):
+            try:
+                data_copy["created_at"] = datetime.fromisoformat(data_copy["created_at"])
+            except (ValueError, TypeError):
+                print(f"⚠ Could not parse created_at: {data_copy['created_at']}")
+                data_copy["created_at"] = datetime.now()
 
         return dataset_class(**data_copy)
 

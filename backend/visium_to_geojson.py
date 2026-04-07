@@ -31,6 +31,28 @@ genewise_scores = ["moranI", "gearyC"]
 motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
 cluster_wise_scores = ["diff_motif_activity_top_motifs"]
 
+
+def _extract_autocorr_stat(autocorr_obj, preferred_col: str) -> dict[str, float]:
+    if autocorr_obj is None:
+        return {}
+
+    if not isinstance(autocorr_obj, pd.DataFrame):
+        autocorr_obj = pd.DataFrame(autocorr_obj)
+
+    if autocorr_obj.empty:
+        return {}
+
+    if preferred_col in autocorr_obj.columns:
+        col = preferred_col
+    else:
+        numeric_cols = [c for c in autocorr_obj.columns if pd.api.types.is_numeric_dtype(autocorr_obj[c])]
+        if len(numeric_cols) == 0:
+            return {}
+        col = numeric_cols[0]
+
+    series = autocorr_obj[col]
+    return {str(k): float(v) for k, v in series.items() if pd.notna(v)}
+
 class Hexagons:
     """
     Class to convert Visium or Transformed Xenium spatial data to GeoJSON format with hexagonal geometry.
@@ -473,6 +495,32 @@ if __name__ == "__main__":
 
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
+
+    meta_dict['global_regulatory_moranI_genie3'] = {}
+    meta_dict['global_regulatory_moranI_sponge'] = {}
+    meta_dict['global_regulatory_gearyC_genie3'] = {}
+    meta_dict['global_regulatory_gearyC_sponge'] = {}
+
+    for score in genie3_score_names + sponge_score_names:
+        if score not in spatial_data.obsm:
+            continue
+
+        moran_key = f"{score}_moranI"
+        geary_key = f"{score}_gearyC"
+
+        moran_stats = _extract_autocorr_stat(spatial_data.uns.get(moran_key), "I")
+        geary_stats = _extract_autocorr_stat(spatial_data.uns.get(geary_key), "C")
+
+        if score.endswith('_genie3'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_genie3'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_genie3'][score] = geary_stats
+        elif score.endswith('_sponge'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_sponge'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
 
 
     # The names in the tuple are options; all should have the same column names
