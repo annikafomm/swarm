@@ -3593,7 +3593,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Determine the property name to update based on the view
     // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
-    const propertyToUpdate = view || 'regulatory_scores';
+    const propertyToUpdate =
+      view || (isGeneExpression ? 'gene_expression' : 'regulatory_scores');
 
     const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
