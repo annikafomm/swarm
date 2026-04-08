@@ -33,7 +33,7 @@ header {
   border-radius: 12px;
   padding: 8px;
   background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .overview-img {
@@ -48,15 +48,32 @@ header {
   background: #fff;
   border: 1px solid #e6e9f2;
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0,0,0,.08), 0 2px 8px rgba(0,0,0,.06);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .08), 0 2px 8px rgba(0, 0, 0, .06);
   padding: 16px 18px;
 }
 
 /* Typografie & Listen */
-h2, h3, h4 { margin: 10px 0 8px; line-height: 1.25; }
-p { margin: .5rem 0; line-height: 1.45; }
-ul { padding-left: 1.25rem; margin: 0 0 .75rem; }
-li { margin: .4rem 0; line-height: 1.45; }
+h2,
+h3,
+h4 {
+  margin: 10px 0 8px;
+  line-height: 1.25;
+}
+
+p {
+  margin: .5rem 0;
+  line-height: 1.45;
+}
+
+ul {
+  padding-left: 1.25rem;
+  margin: 0 0 .75rem;
+}
+
+li {
+  margin: .4rem 0;
+  line-height: 1.45;
+}
 
 /* Inline-Code: „Pill“ + weicher Umbruch (verhindert Überlappungen) */
 code {
@@ -95,7 +112,8 @@ code {
 }
 
 /* Back-Button im App-Stil */
-.back-btn, .back-link {
+.back-btn,
+.back-link {
   margin-top: 1rem;
   padding: 0.5rem 1rem;
   cursor: pointer;
@@ -109,4 +127,170 @@ code {
   padding: 0.5rem 1rem;
   font-size: 1rem;
   transition: color 0.2s;
+}
+
+/* Dataset Info Panel */
+.dataset-info {
+  background: linear-gradient(135deg, #f8f9ff 0%, #f3f5ff 100%);
+  border-left: 4px solid #5b7cff;
+  margin-bottom: 2rem;
+
+  h2 {
+    color: #2c3e50;
+    margin-top: 0;
+  }
+
+  h3 {
+    color: #4a5f8f;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.1rem;
+  }
+}
+
+.dataset-details {
+  background: white;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid #e6e9f2;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f2f8;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  strong {
+    color: #4a5f8f;
+    min-width: 100px;
+  }
+
+  span {
+    color: #2c3e50;
+    word-break: break-word;
+    flex: 1;
+    text-align: right;
+  }
+}
+
+.monospace {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  background: #f3f5ff;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Multiome Features */
+.multiome-features {
+  background: white;
+  border: 1px solid #e6e9f2;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+
+  h3 {
+    margin-top: 0;
+  }
+}
+
+.feature-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+
+  .feature-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    margin: 0;
+    color: #2c3e50;
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      background: #d4edda;
+      color: #155724;
+      border-radius: 50%;
+      font-weight: bold;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+  }
+}
+
+/* Data Files */
+.data-files,
+.diff-motif-files,
+.footprint-files {
+  background: white;
+  border: 1px solid #e6e9f2;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+
+  h3 {
+    margin-top: 0;
+  }
+}
+
+.file-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  margin: 0;
+  border-bottom: 1px solid #f0f2f8;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  a {
+    color: #5b7cff;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+
+    &:hover {
+      color: #3d55cc;
+      text-decoration: underline;
+    }
+  }
+}
+
+.file-label {
+  color: #8b95b0;
+  font-size: 0.85rem;
+  margin-left: 12px;
+  flex-shrink: 0;
+}
+
+/* Info Hint */
+.info-hint {
+  background: #f0f7ff;
+  border-left: 4px solid #5b7cff;
+  color: #4a5f8f;
+  padding: 12px 16px;
+  margin-bottom: 2rem;
+
+  p {
+    margin: 0;
+  }
 }

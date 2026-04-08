@@ -100,6 +100,7 @@ class SessionData(BaseModel):
     adata_path: str = None
     genie_network_path: str | None = None
     sponge_network_path: str | None = None
+    current_dataset_id: str | None = None
     created_at: datetime = None
 
     def __init__(self, **data: Any):
@@ -330,22 +331,90 @@ def _get_visible_dataset_paths(session_data: SessionData) -> Dict[str, str]:
 
 def _resolve_adata_path(session_data: SessionData, dataset_id: Optional[str] = None) -> str:
     """
-    Resolve adata path with optional dataset override.
+    Resolve adata path with type-aware selection for main/compare view isolation.
 
     Resolution order:
-    1) dataset_id (if provided and visible to user)
-    2) session_data.adata_path
-    3) builtin fallback handled in _load_adata_cached when None
+    1) If explicit dataset_id param provided: use that dataset (main/compare separated)
+    2) If session has current_dataset_id: use that (implicit fallback)
+    3) Return session_data.adata_path (legacy fallback)
+    4) Builtin fallback handled in _load_adata_cached when None
+
+    Type-aware path selection ensures correct file for analysis type:
+    - XeniumDataset: prefer tangram results, then grid adata, then adata_path
+    - MultiomeDataset: prefer adata_st_scores_path (ST with scores), then adata_tg_scores_path
+    - VisiumDataset: prefer tangram results if available, else adata_path
+
+    This ensures main and compare views with different datasets don't cross-contaminate.
     """
+    # Determine which dataset_id to use (explicit param always wins)
+    source = None
+    effective_dataset_id = None
+
     if dataset_id:
-        visible = _get_visible_dataset_paths(session_data)
-        adata_path = visible.get(dataset_id)
-        if not adata_path:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Dataset '{dataset_id}' not found or not visible",
-            )
-        return adata_path
+        # Explicit parameter - this is the authoritative source
+        effective_dataset_id = dataset_id
+        source = "explicit_param"
+    elif session_data.current_dataset_id:
+        # Implicit fallback from session state
+        effective_dataset_id = session_data.current_dataset_id
+        source = "session_state"
+
+    if effective_dataset_id:
+        try:
+            # Resolve and authorize dataset for current user
+            dataset_dict = _resolve_dataset_dict(session_data, effective_dataset_id)
+
+            # Determine dataset type and return appropriate path
+            dataset_type = dataset_dict.get("type", "Visium")
+
+            if dataset_type == "Xenium":
+                # For Xenium: prefer tangram results, then grid adata, then fallback
+                if dataset_dict.get("tangram_adata_path"):
+                    selected_path = dataset_dict["tangram_adata_path"]
+                    path_type = "tangram_adata_path"
+                elif dataset_dict.get("xenium_grid_adata_path"):
+                    selected_path = dataset_dict["xenium_grid_adata_path"]
+                    path_type = "xenium_grid_adata_path"
+                else:
+                    selected_path = dataset_dict.get("adata_path")
+                    path_type = "adata_path"
+                return selected_path
+
+            elif dataset_type == "multiome":
+                # For multiome: prefer ST scores (best for viewing), then tangram projected
+                if dataset_dict.get("adata_st_scores_path"):
+                    selected_path = dataset_dict["adata_st_scores_path"]
+                    path_type = "adata_st_scores_path"
+                elif dataset_dict.get("adata_tg_scores_path"):
+                    selected_path = dataset_dict["adata_tg_scores_path"]
+                    path_type = "adata_tg_scores_path"
+                elif dataset_dict.get("tangram_adata_path"):
+                    selected_path = dataset_dict["tangram_adata_path"]
+                    path_type = "tangram_adata_path"
+                else:
+                    selected_path = dataset_dict.get("adata_path")
+                    path_type = "adata_path"
+                return selected_path
+
+            else:
+                # VisiumDataset and default: prefer tangram results if available
+                if dataset_dict.get("tangram_adata_path"):
+                    selected_path = dataset_dict["tangram_adata_path"]
+                    path_type = "tangram_adata_path"
+                else:
+                    selected_path = dataset_dict.get("adata_path")
+                    path_type = "adata_path"
+                return selected_path
+
+        except HTTPException:
+            # Re-raise HTTP exceptions (auth errors, not found, etc.)
+            raise
+        except Exception as e:
+            print(f"[RESOLVE ERROR] Failed to resolve dataset {effective_dataset_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to resolve dataset: {str(e)}")
+
+    # Fallback to session state adata_path
+    print(f"[RESOLVE] fallback → session.adata_path")
     return session_data.adata_path
 
 
@@ -575,6 +644,7 @@ async def reset_session(session_id: UUID = Depends(cookie)):
     session_data.adata_path = None
     session_data.genie_network_path = None
     session_data.sponge_network_path = None
+    session_data.current_dataset_id = None
     session_data.created_at = datetime.now()  # Reset timestamp
     await backend.update(session_id, session_data)
     return {"status": "session reset"}
@@ -961,6 +1031,8 @@ async def upload(
                 text=True,
                 check=False,
             )
+        use_tangram = True
+        single_cell_h5ad = h5ad_path
         saved_files_dict["single_cell_h5ad"] = h5ad_path
 
     # 3) Build structured UploadRequest using helper function
@@ -1099,6 +1171,62 @@ async def upload(
         if Path(out_dir / "sponge_network_filtered_st.csv").exists():
             out_files["sponge_network_path"] = str(out_dir / "sponge_network_filtered_st.csv")
 
+        # Xenium-specific paths
+        if Path(out_dir / "xenium_cells_with_grid_scores.h5ad").exists():
+            out_files["xenium_grid_adata_path"] = str(out_dir / "xenium_cells_with_grid_scores.h5ad")
+
+        # Multiome-specific paths (always-present outputs)
+        multiome_always_present = [
+            ("adata_st_scores.h5ad", "adata_st_scores_path"),
+            ("adata_tg_scores.h5ad", "adata_tg_scores_path"),
+            ("adata_map.h5ad", "adata_map_path"),
+            ("adata_map.X.csv", "adata_map_X_csv_path"),
+            ("adata_map.var.csv", "adata_map_var_csv_path"),
+            ("calc_scores.log", "calc_scores_log_path"),
+            ("global_motif_analysis.rds", "global_motif_analysis_path"),
+        ]
+        for filename, key in multiome_always_present:
+            path = out_dir / filename
+            if path.exists():
+                out_files[key] = str(path)
+
+        # Multiome-specific paths (conditional outputs)
+        multiome_conditional = [
+            ("motif_to_tf.csv", "motif_to_tf_csv_path"),
+            ("spot_obj_chromvar.rds", "spot_obj_chromvar_path"),
+            ("spot_obj_footprints.rds", "spot_obj_footprints_path"),
+            ("dissociated_obj_footprints.rds", "dissociated_obj_footprints_path"),
+            ("chromvar_scores.csv", "chromvar_scores_csv_path"),
+        ]
+
+        for filename, key in multiome_conditional:
+            path = out_dir / filename
+            if path.exists():
+                out_files[key] = str(path)
+
+        # Multiome dict-based paths (diff_motif_activity_csv_paths, footprint_pdf_paths)
+        # These are typically in subdirectories, scan for them if multiome was enabled
+        multiome_dir = out_dir / "multiome"
+        if multiome_dir.exists():
+            diff_motif_csvs = {}
+            footprint_pdfs = {}
+
+            for item in multiome_dir.iterdir():
+                if item.is_file():
+                    if "diff_motif_activity" in item.name and item.suffix == ".csv":
+                        # Extract comparison name from filename (if pattern is known)
+                        comparison = item.stem.replace("diff_motif_activity_", "").replace("_comparison", "")
+                        diff_motif_csvs[comparison] = str(item)
+                    elif item.suffix == ".pdf" and "footprint" in item.name:
+                        # Extract motif ID from filename (if pattern is known)
+                        motif_id = item.stem.replace("footprint_", "").replace("_pdf", "")
+                        footprint_pdfs[motif_id] = str(item)
+
+            if diff_motif_csvs:
+                out_files["diff_motif_activity_csv_paths"] = diff_motif_csvs
+            if footprint_pdfs:
+                out_files["footprint_pdf_paths"] = footprint_pdfs
+
     if adata_path is None:
         adata_path = saved_files_dict.get("spatial_h5ad")
         selected_reason = "fallback_to_input"
@@ -1121,6 +1249,24 @@ async def upload(
                 geojson_path=out_files.get("geojson_path"),
                 genie_network_path=out_files.get("genie_network_path"),
                 sponge_network_path=out_files.get("sponge_network_path"),
+                # Xenium-specific
+                xenium_grid_adata_path=out_files.get("xenium_grid_adata_path"),
+                # Multiome: always-present
+                adata_st_scores_path=out_files.get("adata_st_scores_path"),
+                adata_tg_scores_path=out_files.get("adata_tg_scores_path"),
+                adata_map_path=out_files.get("adata_map_path"),
+                adata_map_X_csv_path=out_files.get("adata_map_X_csv_path"),
+                adata_map_var_csv_path=out_files.get("adata_map_var_csv_path"),
+                calc_scores_log_path=out_files.get("calc_scores_log_path"),
+                global_motif_analysis_path=out_files.get("global_motif_analysis_path"),
+                # Multiome: conditional
+                motif_to_tf_csv_path=out_files.get("motif_to_tf_csv_path"),
+                spot_obj_chromvar_path=out_files.get("spot_obj_chromvar_path"),
+                spot_obj_footprints_path=out_files.get("spot_obj_footprints_path"),
+                dissociated_obj_footprints_path=out_files.get("dissociated_obj_footprints_path"),
+                chromvar_scores_csv_path=out_files.get("chromvar_scores_csv_path"),
+                diff_motif_activity_csv_paths=out_files.get("diff_motif_activity_csv_paths"),
+                footprint_pdf_paths=out_files.get("footprint_pdf_paths"),
             )
             dataset_registry.register_uploaded_dataset(dataset=dataset_obj)
             print(f"✓ Registered Dataset: {dataset_obj.id}")
@@ -1183,6 +1329,67 @@ async def get_datasets(session_data: SessionData = Depends(verifier)):
         import traceback
         traceback.print_exc()
         raise
+
+
+@app.get("/api/dataset/{dataset_id}/capabilities", dependencies=[Depends(cookie)])
+async def get_dataset_capabilities(dataset_id: str, session_data: SessionData = Depends(verifier)):
+    """
+    Return capability flags for a dataset without loading it into session.
+    Allows frontend to determine what features/tabs should be available.
+
+    Returns:
+        {
+            "has_gene_expression": bool,
+            "has_regulatory_scores": bool,
+            "has_networks": bool,
+            "has_tangram": bool,
+            "has_multiome": bool,
+            "has_chromvar": bool,
+            "has_footprinting": bool,
+            "has_differential_motif_activity": bool,
+            "has_liana": bool,
+            "has_squidpy": bool,
+        }
+    """
+    try:
+        dataset = dataset_registry.get_dataset_by_id(dataset_id, as_dict=False)
+        if not dataset:
+            raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
+
+        # Determine capabilities based on dataset fields and paths
+        capabilities = {
+            "has_gene_expression": bool(dataset.adata_path and Path(dataset.adata_path).exists()),
+            "has_regulatory_scores": bool(dataset.genie_network_path or dataset.sponge_network_path),
+            "has_networks": bool(dataset.genie_network_path or dataset.sponge_network_path),
+            "has_tangram": dataset.use_tangram if hasattr(dataset, 'use_tangram') else False,
+            "has_multiome": dataset.use_multiome if hasattr(dataset, 'use_multiome') else False,
+            "has_chromvar": dataset.use_chromvar if hasattr(dataset, 'use_chromvar') else False,
+            "has_chromvar_moranI": dataset.use_moranI if hasattr(dataset, 'use_moranI') else False,
+            "has_chromvar_gearyC": dataset.use_gearyC if hasattr(dataset, 'use_gearyC') else False,
+            "has_footprinting": dataset.use_footprinting if hasattr(dataset, 'use_footprinting') else False,
+            "has_differential_motif_activity": dataset.use_differential_motif_activity if hasattr(dataset, 'use_differential_motif_activity') else False,
+            "has_liana": False,  # Would need to check metadata
+            "has_squidpy": False,  # Would need to check metadata
+            "dataset_type": getattr(dataset, 'type', 'unknown'),
+        }
+
+        return capabilities
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ Error in get_dataset_capabilities: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+        return capabilities
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ Error in get_dataset_capabilities: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/unregistered_datasets", dependencies=[Depends(cookie)])
@@ -1313,8 +1520,6 @@ async def get_geojson(dataset_id: str):
             geojson_path = BASE_UPLOAD_DIR / dataset_id / "hexagons.geojson"
             print(f"[DEBUG] Looking for uploaded geojson at: {geojson_path}")
 
-        print(f"[DEBUG] File exists: {geojson_path.exists()}")
-
         if not geojson_path.exists():
             print(f"[ERROR] GeoJSON file not found at {geojson_path}")
             raise HTTPException(status_code=404, detail=f"GeoJSON file not found: {geojson_path}")
@@ -1332,6 +1537,7 @@ async def get_geojson(dataset_id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 async def get_hexagon(user: str, subdir: str, filename: str):
     """
     file_path = Path("./uploads") / filename
@@ -1342,83 +1548,6 @@ async def get_hexagon(user: str, subdir: str, filename: str):
     if file_path.exists() and file_path.is_file():
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
-
-
-# ============================================================================
-# DEBUG / TESTING ENDPOINTS (Backend-only, not exposed to frontend)
-# ============================================================================
-
-@app.post("/debug/rescan_uploads")
-async def debug_rescan_uploads():
-    """
-    TESTING ONLY: Re-scan the uploads folder and re-register existing datasets.
-    Useful when you've run the pipeline and want to reload without restarting the server.
-
-    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads`
-
-    Note: This endpoint is intentionally backend-only and not exposed in the frontend.
-    """
-    try:
-        # Rescan the uploads folder
-        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
-
-        # Reload datasets into memory
-        # Re-load to get the latest from disk
-        dataset_registry.datasets = dataset_registry._load_registry()
-
-        return {
-            "status": "success",
-            "message": "Rescanned uploads folder and reregistered datasets",
-            "results": results,
-            "total_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
-        }
-    except Exception as e:
-        print(f"Error in debug rescan: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/debug/rescan_uploads_shared")
-async def debug_rescan_uploads_shared():
-    """
-    TESTING ONLY: Rescan uploads folder and register ALL datasets as shared.
-    Datasets marked as shared will appear in the dropdown for all users.
-
-    This is useful for testing when you want datasets to be accessible without
-    worrying about session/user filtering.
-
-    Example: `curl -X POST http://127.0.0.1:3000/debug/rescan_uploads_shared`
-    """
-    try:
-        # Rescan the uploads folder
-        results = dataset_registry.rescan_uploads_folder(BASE_UPLOAD_DIR)
-
-        # Now convert all newly registered datasets to "shared"
-        all_datasets = dataset_registry.get_all_datasets()
-        if "uploaded" in all_datasets:
-            for dataset_id, info in all_datasets["uploaded"].items():
-                # Change user to __shared__ so it appears for everyone
-                info["user"] = "__shared__"
-
-        # Save the updated registry
-        dataset_registry._save_registry()
-
-        # Reload datasets into memory without clearing shared datasets
-        dataset_registry.datasets = dataset_registry._load_registry(clear_uploads=False)
-
-        return {
-            "status": "success",
-            "message": "Rescanned uploads and marked all datasets as SHARED (visible to all users)",
-            "results": results,
-            "total_shared_datasets": len(dataset_registry.get_all_datasets().get("uploaded", {}))
-        }
-    except Exception as e:
-        print(f"Error in debug rescan shared: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/create_session/{name}")
 async def create_session(name: str, response: Response):
@@ -1472,6 +1601,18 @@ async def read_adata(
     session_data = await backend.read(session_id)
 
     session_data.adata_path = adata_path.path
+
+    # Try to infer dataset_id from the path by looking it up in registry
+    try:
+        all_datasets = dataset_registry.get_all_datasets(as_dict=True)
+        for dtype in ["builtin", "uploaded"]:
+            for dataset_id, dataset_dict in all_datasets.get(dtype, {}).items():
+                if dataset_dict.get("adata_path") == adata_path.path:
+                    session_data.current_dataset_id = dataset_id
+                    print(f"Inferred current_dataset_id from adata_path: {dataset_id}")
+                    break
+    except Exception as e:
+        print(f"Could not infer dataset_id: {e}")
 
     print(f"Setting adata path to: {adata_path.path}")
 
@@ -1647,24 +1788,44 @@ async def get_obsm_tables(
 
 @app.get("/obs/{column}", dependencies=[Depends(cookie)])
 async def get_obs_column(
-    column: str, session_data: SessionData = Depends(verifier)
+    column: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/obs/cell_type?dataset_id=job_123`
+
+    Returns metadata column from obs.
+
+    Args:
+        column: Column name (e.g., 'cell_type', 'leiden')
+        dataset_id: Optional dataset ID. If provided, uses that dataset's adata.
+                   If not provided, falls back to session state.
     """
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     return adata.obs[column].to_dict()
 
 
 
 @app.get("/var/{column}", dependencies=[Depends(cookie)])
 async def get_var_column(
-    column: str, session_data: SessionData = Depends(verifier)
+    column: str,
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier)
 ):
     """
-    Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells`
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/var/n_cells?dataset_id=job_123`
+
+    Returns metadata column from var (gene-level metadata).
+
+    Args:
+        column: Column name (e.g., 'n_cells', 'mean_counts')
+        dataset_id: Optional dataset ID. If provided, uses that dataset's adata.
+                   If not provided, falls back to session state.
     """
-    adata = _load_adata_cached(session_data.adata_path)
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+    adata = _load_adata_cached(adata_path)
     return adata.var[column].to_dict()
 
 
@@ -1696,11 +1857,10 @@ async def get_obsm_column(
     dataset_id: Optional[str] = None,
     session_data: SessionData = Depends(verifier),
 ):
-    print(f"[DEBUG] Endpoint called: table={table}, column={column}")
-    print(f"[DEBUG] Session username: {session_data.username}")
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
 
+    print(f"[DEBUG] get_obsm_column called with table='{table}', column='{column}', dataset_id='{dataset_id}', adata_path='{adata_path}'")
     # --- ChromVAR special case: column is motif name OR comma-separated motif names ---
     if table == "chromvar_spot_scores":
         try:
@@ -1951,20 +2111,16 @@ async def get_available_motifs(
     Return the list of chromVAR motif IDs for the current dataset.
 
     Resolution order:
-    1. Active session (session_data.adata_path set via /read_adata) — normal flow.
-    2. Fallback: dataset_id query param → look up adata_path from the registry.
-       This handles the rescanned-dataset case where /read_adata was never called.
+    1. If dataset_id provided: resolve dataset and return type-appropriate adata path
+    2. Active session (session_data.adata_path set via /read_adata) — normal flow.
+    3. Builtin fallback handled in _load_adata_cached when None
     """
     print("[DEBUG] get available motifs")
-    adata_path = session_data.adata_path
-
-    if not adata_path and dataset_id:
-        ds = dataset_registry.get_dataset_by_id(dataset_id)
-        if not ds:
-            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
-        adata_path = ds.get("adata_path")
-
-    if not adata_path:
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=400,
             detail="No dataset loaded in session and no dataset_id provided. "
@@ -1986,24 +2142,25 @@ async def get_available_cell_types(
     dataset_id: Optional[str] = None,
 ):
     """
-    Return the unique cell types from spot_obj_footprints.rds for the current dataset.
-    Uses a small inline Rscript so no extra dependency is needed.
+    Return the unique cell types from the current dataset.
+
+    Resolution order:
+    1. If dataset_id provided: resolve dataset and return type-appropriate adata path
+    2. Active session (session_data.adata_path set via /read_adata) — normal flow.
+    3. Builtin fallback handled in _load_adata_cached when None
     """
     print("[DEBUG] get available cell types")
-    adata_path = session_data.adata_path
-
-    if not adata_path and dataset_id:
-        ds = dataset_registry.get_dataset_by_id(dataset_id)
-        if not ds:
-            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
-        adata_path = ds.get("adata_path")
-
-    if not adata_path:
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=400,
             detail="No dataset loaded in session and no dataset_id provided. "
                    "Either call /read_adata or pass ?dataset_id=<id>."
         )
+
     print(f"[DEBUG] adata_path = {adata_path}")
     try:
         adata = _load_adata_cached(adata_path)
@@ -2027,18 +2184,15 @@ async def compute_footprint(
     Runs compute_additional_footprints.R and returns the new footprint URL.
 
     Resolution order for adata_path:
-    1. Active session (session_data.adata_path set via /read_adata).
-    2. Fallback: dataset_id form field → registry lookup (rescanned-dataset case).
+    1. If dataset_id provided: resolve dataset and return type-appropriate adata path
+    2. Active session (session_data.adata_path set via /read_adata).
+    3. Builtin fallback handled in _load_adata_cached when None
     """
-    adata_path = session_data.adata_path
-
-    if not adata_path and dataset_id:
-        ds = dataset_registry.get_dataset_by_id(dataset_id)
-        if not ds:
-            raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found in registry")
-        adata_path = ds.get("adata_path")
-
-    if not adata_path:
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
             status_code=400,
             detail="No dataset loaded in session and no dataset_id provided. "
