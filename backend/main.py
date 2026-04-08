@@ -24,7 +24,6 @@ from models import (
     OutputFiles,
     FilesInput,
     DatasetType,
-    GeneSelectionMode,
 )
 
 # merit
@@ -625,7 +624,8 @@ def build_upload_request(
     use_tangram: bool,
     singlecell_filtering: bool,
     singlecell_normalization: bool,
-    gene_selection_mode: Optional[str],
+    gene_selection_mode: Optional[List[str]],
+    gene_list_column: Optional[str],
     # Multiome
     use_multiome: bool,
     # Scores
@@ -718,11 +718,14 @@ def build_upload_request(
         filtering=spatial_filtering,
     )
 
+    tangram_like_use = use_tangram or use_multiome
+
     tangram_input = TangramInput(
-        use=use_tangram,
-        filtering=singlecell_filtering if use_tangram else None,
-        normalization=singlecell_normalization if use_tangram else None,
-        gene_selection_mode=GeneSelectionMode(gene_selection_mode) if (use_tangram and gene_selection_mode) else None,
+        use=tangram_like_use,
+        filtering=singlecell_filtering if tangram_like_use else None,
+        normalization=singlecell_normalization if tangram_like_use else None,
+        gene_selection_mode=gene_selection_mode if (tangram_like_use and gene_selection_mode) else None,
+        gene_list_column=gene_list_column if (tangram_like_use and gene_list_column) else None,
     )
 
     multiome_input = MultiomeInput(use=use_multiome)
@@ -838,6 +841,7 @@ async def upload(
     # --- files ---
     spatial_h5ad: UploadFile = File(...),
     single_cell_h5ad: Optional[UploadFile] = File(None),
+    gene_list_file: Optional[UploadFile] = File(None),
     multiome_rds: Optional[UploadFile] = File(None),
     fragments_tsv_gz: Optional[UploadFile] = File(None),
     fragments_tsv_gz_tbi: Optional[UploadFile] = File(None),
@@ -853,7 +857,8 @@ async def upload(
     use_tangram: bool = Form(False),
     singlecell_filtering: bool = Form(False),
     singlecell_normalization: bool = Form(False),
-    gene_selection_mode: Optional[str] = Form(None),
+    gene_list_column: Optional[str] = Form(None),
+    gene_selection_mode: Optional[List[str]] = Form(None),
     # --- multiome options ---
     use_multiome: bool = Form(False),
     # --- scoring ---
@@ -930,6 +935,7 @@ async def upload(
     saved_files_dict = {
         "spatial_h5ad": save_file(spatial_h5ad, job_dir),
         "single_cell_h5ad": save_file(single_cell_h5ad, job_dir),
+        "gene_list_file": save_file(gene_list_file, job_dir),
         "multiome_rds": save_file(multiome_rds, job_dir),
         "fragments_tsv_gz": save_file(fragments_tsv_gz, job_dir),
         "fragments_tsv_gz_tbi": save_file(fragments_tsv_gz_tbi, job_dir),
@@ -974,6 +980,7 @@ async def upload(
         singlecell_filtering=singlecell_filtering,
         singlecell_normalization=singlecell_normalization,
         gene_selection_mode=gene_selection_mode,
+        gene_list_column=gene_list_column,
         use_multiome=use_multiome,
         score_network=score_network,
         score_squidpy=score_squidpy,

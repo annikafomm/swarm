@@ -33,6 +33,9 @@ def dict2params(param_dict):
                             case "single_cell_h5ad":
                                 python_params.append("-sc_path")
                                 python_params.append(param_dict.get(key).get(fkey))
+                            case "gene_list_file":
+                                python_params.append("-gene_list_path")
+                                python_params.append(param_dict.get(key).get(fkey))
                             case "multiome_rds":
                                 multiome_params.append("--multiome_rds")
                                 multiome_params.append(param_dict.get(key).get(fkey))
@@ -70,9 +73,26 @@ def dict2params(param_dict):
                                 case "normalization":
                                     python_params.append("-normalize_sc")
                                 case "gene_selection_mode":
-                                    if param_dict.get(key).get(tkey) is not None and param_dict.get(key).get(tkey) != "None":
-                                        python_params.append("-gene_selection")
-                                        python_params.append(param_dict.get(key).get(tkey))
+                                    value = param_dict.get(key).get(tkey)
+
+                                    if value is None:
+                                        pass
+                                    elif isinstance(value, list):
+                                        cleaned = [
+                                            str(v).strip() for v in value
+                                            if v is not None and str(v).strip() and str(v).strip().lower() != "none"
+                                        ]
+                                        if cleaned:
+                                            python_params.append("-gene_selection")
+                                            python_params.extend(cleaned)
+                                    elif isinstance(value, str):
+                                        value = value.strip()
+                                        if value and value.lower() != "none":
+                                            python_params.append("-gene_selection")
+                                            python_params.append(value)
+                                case "gene_list_column":
+                                    python_params.append("-gene_list_column")
+                                    python_params.append(param_dict.get(key).get(tkey))
 
             case "multiome":
                 for tkey in param_dict.get(key).keys():

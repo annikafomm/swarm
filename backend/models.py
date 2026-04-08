@@ -60,6 +60,7 @@ class FilesInput(BaseConfig):
     """Consolidated file upload paths (after saving to disk)."""
     spatial_h5ad: str
     single_cell_h5ad: Optional[str] = None
+    gene_list_file: Optional[str] = None
     multiome_rds: Optional[str] = None
     fragments_tsv_gz: Optional[str] = None
     fragments_tsv_gz_tbi: Optional[str] = None
@@ -81,16 +82,36 @@ class SpatialInput(BaseConfig):
 
 
 class TangramInput(BaseConfig):
-    """Single-cell to spatial mapping (Tangram) configuration."""
     use: bool = False
     filtering: Optional[bool] = None
     normalization: Optional[bool] = None
-    gene_selection_mode: Optional[GeneSelectionMode] = None
+    gene_selection_mode: Optional[List[str]] = None
+    gene_list_column: Optional[str] = None
 
-    @field_validator("filtering", "normalization", mode="before")
+    @field_validator("gene_selection_mode", mode="before")
+    @classmethod
+    def normalize_gene_selection_mode(cls, v):
+        if v is None:
+            return None
+
+        if not isinstance(v, list):
+            v = [v]
+
+        normalized = []
+        for item in v:
+            if hasattr(item, "value"):
+                item = item.value
+            else:
+                item = str(item)
+                if "." in item:
+                    item = item.split(".")[-1]
+            normalized.append(item.strip().lower())
+
+        return normalized
+
+    @field_validator("filtering", "normalization", "gene_list_column", mode="before")
     @classmethod
     def only_if_used(cls, v, info):
-        """Parameters only valid if use=True."""
         if not info.data.get("use") and v is not None:
             return None
         return v
