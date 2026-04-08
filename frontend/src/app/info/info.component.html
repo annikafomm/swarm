@@ -1,8 +1,13 @@
 <div class="info-page">
   <header>
     <img src="assets/info/logo.png" alt="MOPITAS Logo" />
-
   </header>
+  <div class="back-button-container">
+    <button mat-raised-button (click)="goBack()" class="back-btn">
+      <mat-icon>arrow_back</mat-icon>
+      Back
+    </button>
+  </div>
 
   <!-- Dataset Information Panel -->
   <section *ngIf="selectedDataset" class="card dataset-info">
@@ -57,9 +62,9 @@
       <h3>📁 Available Data Files</h3>
       <ul class="file-list">
         <li *ngFor="let file of getMultiomeFiles()" class="file-item">
-          <a [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">
+          <button class="link-btn" (click)="downloadFile(file.path)">
             📥 {{ file.name }}
-          </a>
+          </button>
           <span class="file-label">{{ file.label }}</span>
         </li>
       </ul>
@@ -426,5 +431,5 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
   </section>
 
 
-  <button (click)="goBack()" class="back-btn">← Back</button>
+
 </div>

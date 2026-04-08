@@ -1,15 +1,19 @@
 import { Component, OnDestroy } from '@angular/core';
 import { Location } from '@angular/common';
 import { CommonModule } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { DatasetService } from '../datasets.service';
 import { Dataset } from '../datasets.service';
+import { SessionService } from '../session.service';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'app-info',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule],
   templateUrl: './info.component.html',
   styleUrl: './info.component.scss'
 })
@@ -19,7 +23,9 @@ export class InfoComponent implements OnDestroy {
 
   constructor(
     private location: Location,
-    private datasetService: DatasetService
+    private datasetService: DatasetService,
+    private http: HttpClient,
+    private sessionService: SessionService
   ) {
     // Subscribe to dataset selection changes
     this.datasetService.selectedDataset$
@@ -31,6 +37,44 @@ export class InfoComponent implements OnDestroy {
 
   goBack() {
     this.location.back();
+  }
+
+  /**
+   * Download a file by path (works for binary formats like h5ad)
+   * Uses the blob approach instead of opening in new tab
+   */
+  downloadFile(filePath: string): void {
+    const encodedPath = encodeURIComponent(filePath);
+    const downloadUrl = `${this.sessionService.apiUrl}/api/download/${encodedPath}`;
+
+    // Fetch the file as a blob
+    this.http.get(downloadUrl, {
+      responseType: 'blob',
+      withCredentials: true
+    }).subscribe({
+      next: (blob) => {
+        // Create a temporary link element
+        const link = document.createElement('a');
+        const url = window.URL.createObjectURL(blob);
+        link.href = url;
+
+        // Extract filename from path
+        const fileName = filePath.split('/').pop() || 'download';
+        link.download = fileName;
+
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+
+        // Cleanup
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      },
+      error: (err) => {
+        console.error(`Failed to download file: ${filePath}`, err);
+        alert('Failed to download file');
+      }
+    });
   }
 
   /**
