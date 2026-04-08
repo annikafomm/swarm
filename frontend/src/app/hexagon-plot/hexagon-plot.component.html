@@ -1540,6 +1540,88 @@
                 (geneSelected)="onItemSelected($event, 'pathway_activity', true)"></app-table>
             </div>
           </mat-tab>
+
+          <mat-tab label="Compare - DGEA" [disabled]="!hasDgeaData(true)">
+            <ng-template #noDgeaCompareTpl>
+              <div class="no-data">No DGEA data available.</div>
+            </ng-template>
+
+            <ng-template #noComparisonCompareTpl>
+              <div class="no-data">
+                No comparison found for this selection.
+              </div>
+            </ng-template>
+
+            <ng-container *ngIf="dgeaReadyCompare; else noDgeaCompareTpl">
+              <h4>DGEA Comparison</h4>
+
+              <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
+
+                <mat-form-field appearance="fill">
+                  <mat-label>Grouping</mat-label>
+                  <mat-select [(ngModel)]="selectedDgeaObsColCompare" (selectionChange)="onDgeaObsColChange(true)">
+                    <mat-option *ngFor="let col of getDgeaObsCols(true)" [value]="col">
+                      {{ getDgeaObsColLabel(col) }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                  <mat-form-field appearance="fill">
+                    <mat-label>{{ selectedDgeaObsColCompare === 'cell_type' ? 'Cell type 1' : 'Group 1' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup1Compare" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels(true)" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="fill" *ngIf="!dgeaVsAllCompare">
+                    <mat-label>{{ selectedDgeaObsColCompare === 'cell_type' ? 'Cell type 2' : 'Group 2' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup2Compare" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels(true)" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-checkbox [(ngModel)]="dgeaVsAllCompare" (change)="onDgeaVsAllChange(true)">
+                    Compare Group 1 vs all others
+                  </mat-checkbox>
+                </div>
+              </div>
+
+              <div *ngIf="getSelectedDgeaComparison(true) as cmp; else noComparisonCompareTpl">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                  <div>
+                    <strong>Grouping:</strong>
+                    {{ getDgeaObsColLabel(selectedDgeaObsColCompare) }}
+                    <br>
+                    <strong>Comparison:</strong>
+                    {{ cmp['group1'] }} vs {{ cmp['group2'] }}
+                    (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+                  </div>
+                </div>
+
+                <div *ngIf="cmp['skipped']" class="no-data">
+                  This comparison was skipped: {{ cmp['skip_reason'] }}
+                </div>
+
+                <app-table
+                  *ngIf="!cmp['skipped']"
+                  [data]="cmp['table']"
+                  [actionColumns]="['show_on_plot']"
+                  [features]="compareFeatures"
+                  [updateColumn]="'dgea'"
+                  [isCompare]="true"
+                  (geneSelected)="onDgeaGeneSelected($event, true)">
+                </app-table>
+              </div>
+
+              <div #dgeaHeatmapCompare id="dgea-heatmap-compare" style="width: 100%; min-height: 500px; margin-top: 16px;">
+              </div>
+            </ng-container>
+          </mat-tab>
         </mat-tab-group>
       </div>
     </div>
