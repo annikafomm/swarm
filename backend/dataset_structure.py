@@ -271,6 +271,8 @@ class VisiumDataset(Dataset):
         dataset_type: Optional[str] = None,  # e.g., "Visium", "Xenium"
         use_tangram: bool = False,
         use_multiome: bool = False,
+        adata_st_scores_path: Optional[str] = None,  # Original ST data with scores
+        adata_tg_scores_path: Optional[str] = None,  # Tangram-projected data with scores
         **metadata
     ):
         """
@@ -280,6 +282,8 @@ class VisiumDataset(Dataset):
             dataset_type: Original dataset type from params (e.g., "Visium", "XeniumRIF1")
             use_tangram: Whether tangram deconvolution was applied
             use_multiome: Whether multiome data was processed
+            adata_st_scores_path: Path to original ST data with computed scores (optional, when scores available)
+            adata_tg_scores_path: Path to tangram-projected data with scores (optional, when tangram+scores)
             **metadata: Additional Visium-specific metadata
         """
         super().__init__(
@@ -298,6 +302,8 @@ class VisiumDataset(Dataset):
         self.dataset_type = dataset_type  # e.g., "Visium"
         self.use_tangram = use_tangram
         self.use_multiome = use_multiome
+        self.adata_st_scores_path = adata_st_scores_path  # For datasets with computed scores
+        self.adata_tg_scores_path = adata_tg_scores_path  # For tangram+scores datasets
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize VisiumDataset to dictionary."""
@@ -306,6 +312,8 @@ class VisiumDataset(Dataset):
             "dataset_type": self.dataset_type,
             "use_tangram": self.use_tangram,
             "use_multiome": self.use_multiome,
+            "adata_st_scores_path": self.adata_st_scores_path,
+            "adata_tg_scores_path": self.adata_tg_scores_path,
         })
         return data
 

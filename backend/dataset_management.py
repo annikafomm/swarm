@@ -479,8 +479,23 @@ class DatasetRegistry:
             print(f"Multiome dataset detected [DEBUG], checking for adata_st_scores_path and adata_tg_scores_path")
             return output_files.get("adata_tg_scores_path")
 
+        # Handle Visium datasets - prefer adata_st_scores_path (original ST with scores) if available
+        if "visium" in dataset_type.lower():
+            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
 
-        # Default for Visium and others
+            if use_tangram:
+                # Tangram was applied, prefer adata_tg_scores (tangram-projected with scores)
+                if output_files.get("adata_tg_scores_path"):
+                    return output_files.get("adata_tg_scores_path")
+            else:
+                # No tangram, prefer adata_st_scores (original ST with scores)
+                if output_files.get("adata_st_scores_path"):
+                    return output_files.get("adata_st_scores_path")
+
+            # Fallback to original adata if scores not available
+            return output_files.get("adata_path")
+
+        # Default for other types
         return output_files.get("adata_path")
 
     def register_dataset_from_config(
@@ -595,12 +610,13 @@ class DatasetRegistry:
             )
         else:
             # Default to VisiumDataset
+            # For Visium datasets, also extract score paths so users can switch between them
             dataset = VisiumDataset(
                 dataset_id=dataset_id,
                 alias=f"{dataset_type} Dataset",
                 adata_path=adata_path,
                 user=user,
-                tangram_adata_path=None,
+                tangram_adata_path=output_files.get("adata_tg_scores_path") if use_tangram else None,
                 geojson_path=geojson_path,
                 genie_network_path=genie_network_path,
                 sponge_network_path=sponge_network_path,
@@ -608,6 +624,8 @@ class DatasetRegistry:
                 dataset_type=dataset_type,
                 use_tangram=use_tangram,
                 use_multiome=use_multiome,
+                adata_st_scores_path=output_files.get("adata_st_scores_path"),
+                adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
             )
 
         # Register it
