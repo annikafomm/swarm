@@ -424,21 +424,29 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   async onShowAction(action: string, row: any): Promise<void> {
     const geneName = String(row.index);
 
-    // Emit event to parent component for gene selection
-    this.geneSelected.emit({ gene: geneName, action: action });
-
-    if (action === 'chromvar_spot_scores') {
-      this.chromvarBaseMotif = this.getMotifId(row);
-      this.updateChromvarCombinedIfReady(true);
+    // DGEA-only UI action:
+    // do NOT call backend here, let the parent convert it to gene_expression
+    if (action === 'show_on_plot') {
       if (this.isCompare) {
-        this.geneSelectedCompare.emit({ gene: geneName, action: action });
+        this.geneSelectedCompare.emit({ gene: geneName, action });
       } else {
-        this.geneSelected.emit({ gene: geneName, action: action });
+        this.geneSelected.emit({ gene: geneName, action });
       }
       return;
     }
 
-    // Emit the gene selection event for all score column actions
+    if (action === 'chromvar_spot_scores') {
+      this.chromvarBaseMotif = this.getMotifId(row);
+      this.updateChromvarCombinedIfReady(true);
+
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
+      return;
+    }
+
     if (this.isCompare) {
       this.geneSelectedCompare.emit({ gene: geneName, action });
     } else {
