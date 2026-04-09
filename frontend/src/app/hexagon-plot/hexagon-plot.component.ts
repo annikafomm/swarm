@@ -222,16 +222,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public dgeaVsAllCompare: boolean = false;
 
 
-  @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
-
-  public dgeaReadyCompare: boolean = false;
-  public selectedDgeaObsColCompare: string = 'cell_type';
-  public selectedDgeaGroup1Compare: string | null = null;
-  public selectedDgeaGroup2Compare: string | null = null;
-  public dgeaVsAllCompare: boolean = false;
-  public shownGeneOnPlotCompare: string | null = null;
-
-
   public clusterCells: CellFeature[] = [];
   public clusterCellsCompare: CellFeature[] = [];
   public clusterCellTypes: {
@@ -757,6 +747,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         'Compare: ChromVar spatial correlation : Moran\'s I / Geary\'s C': 'chromvar_total_sum',
         'Compare - Differential Motif Activity': 'cell_type',
         'Compare - Footprints': 'cell_type',
+        'Compare - DGEA': 'gene_expression'
       }
       : {
         'Regulatory Scores': 'regulatory_scores',
@@ -768,7 +759,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         'Ligand-Receptor Relationships': 'ligand_receptor_relationships',
         "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
         'Differential Motif Activity': 'cell_type',
-        'Footprints': 'cell_type'
+        'Footprints': 'cell_type',
+        'DGEA': 'gene_expression'
       };
 
     newView = tabMap[tabLabel] || null;
@@ -1305,7 +1297,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedDgeaGroup2 = firstDifferent ?? null;
       }
     }
-  }
 
 
   private loadAndRenderData(dataPath: string, compare: boolean = false): void {
