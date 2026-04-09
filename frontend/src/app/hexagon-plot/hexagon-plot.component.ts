@@ -222,6 +222,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public dgeaVsAllCompare: boolean = false;
 
 
+  @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
+
+  public dgeaReadyCompare: boolean = false;
+  public selectedDgeaObsColCompare: string = 'cell_type';
+  public selectedDgeaGroup1Compare: string | null = null;
+  public selectedDgeaGroup2Compare: string | null = null;
+  public dgeaVsAllCompare: boolean = false;
+  public shownGeneOnPlotCompare: string | null = null;
+
 
   public clusterCells: CellFeature[] = [];
   public clusterCellsCompare: CellFeature[] = [];
@@ -726,6 +735,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
+    if (compare && tabLabel === 'Compare - DGEA') {
+      this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
+      if (this.dgeaReadyCompare) {
+        this.initDgeaSelection(true);
+        setTimeout(() => this.renderDgeaHeatmap(true), 100);
+      }
+      return;
+    }
+
     // Map tab labels to view keys
     const tabMap: { [label: string]: string } = compare
       ? {
@@ -750,7 +768,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         'Ligand-Receptor Relationships': 'ligand_receptor_relationships',
         "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
         'Differential Motif Activity': 'cell_type',
-        'Footprints': 'cell_type',
+        'Footprints': 'cell_type'
       };
 
     newView = tabMap[tabLabel] || null;
@@ -1277,9 +1295,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    if (!this.selectedDgeaGroup2) {
-      const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
-      this.selectedDgeaGroup2 = firstDifferent ?? null;
+      if (this.dgeaVsAll) {
+        this.selectedDgeaGroup2 = null;
+        return;
+      }
+
+      if (!this.selectedDgeaGroup2) {
+        const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
+        this.selectedDgeaGroup2 = firstDifferent ?? null;
+      }
     }
   }
 
