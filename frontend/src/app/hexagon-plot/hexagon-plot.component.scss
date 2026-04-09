@@ -136,12 +136,15 @@
   font-weight: 700;
   cursor: pointer;
   height: 36px;
+
+  &[disabled] {
+    background-color: #f0f0f0;
+    color: #999;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
 }
 
-label {
-  font-weight: 600;
-  margin-right: 0.5rem;
-}
 
 select {
   font-size: 1rem;

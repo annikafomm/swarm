@@ -61,7 +61,8 @@
         </mat-form-field>
       </div>
 
-      <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view">
+      <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view"
+        [disabled]="!currentDataSetSupportsCompare || isInitializing">
         <mat-icon style="color: black;">compare_arrows</mat-icon>
       </button>
 
@@ -102,10 +103,6 @@
           </mat-select>
         </mat-form-field>
       </div>
-
-
-
-
 
     </div>
 
@@ -530,7 +527,7 @@
                   <span class="stat-item">Max: {{ getIntervalStats().max | number:'1.4-4' }}</span>
                   <span class="stat-item">Avg: {{ getIntervalStats().avg}}</span>
                   <span class="interval-info">(0-{{ maxInterval }})</span>
-                  <span  *ngIf="getIntervalBoundaries().length">
+                  <span *ngIf="getIntervalBoundaries().length">
                     <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
                     <span class="interval-info">{{ formatActualIntervalRange(selectedInterval) }}</span>
                   </span>
@@ -683,11 +680,14 @@
               <strong>Current selection</strong><br>
               Score: {{ showChromvarMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
             </div>
-
-            <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
-              (click)="showChromvarMoranI = !showChromvarMoranI">
-              Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
-            </button>
+            <div class="moran-geary-toggle"
+              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
+                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+                (click)="showChromvarMoranI = !showChromvarMoranI">
+                Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
+              </button>
+            </div>
           </div>
           <div *ngIf="showChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
           <ng-template #chromvarMoranI>
@@ -924,7 +924,7 @@
 
               <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
                 [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
-                (geneSelected)="onDgeaGeneSelected($event)">
+                (geneSelected)="onDgeaGeneSelected($event, false)">
               </app-table>
             </div>
 
@@ -1341,8 +1341,8 @@
                 <h4>Geary's C</h4>
                 <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                  (featuresUpdated)="repaintBothViews()" (geneSelected)="onGeneExpressionSelected($event, 'compare')"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
 
@@ -1506,8 +1506,7 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (featuresUpdated)="repaintBothViews()"
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores', true)"></app-table>
             </div>
           </mat-tab>
@@ -1546,6 +1545,215 @@
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onItemSelected($event, 'pathway_activity', true)"></app-table>
             </div>
+          </mat-tab>
+
+          <mat-tab label="Compare: ChromVar spatial correlation : Moran's I / Geary's C"
+            [disabled]="!propertyAvailable('chromvar_total_sum','compare')">
+            <div>
+              <div class="selected-gene-info">
+                <strong>Current selection</strong><br>
+                Score: {{ compareShowChromvarMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
+              </div>
+              <div class="moran-geary-toggle"
+                style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+                <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+                  [attr.aria-pressed]="compareShowChromvarMoranI"
+                  style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+                  (click)="compareShowChromvarMoranI = !compareShowChromvarMoranI">
+                  Show {{ compareShowChromvarMoranI ? "Geary's C" : "Moran's I" }}
+                </button>
+              </div>
+            </div>
+            <div *ngIf="compareShowChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
+            <ng-template #chromvarMoranI>
+              <h4>ChromVAR Moran's I</h4>
+              <app-table [data]="this.metaCompare['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDatasetCompare?.id"
+                (featuresUpdated)="updateHexColors('#hexbin-compare')">
+              </app-table>
+            </ng-template>
+
+            <ng-template #chromvarGearyC>
+              <h4>ChromVAR Geary's C</h4>
+              <app-table [data]="this.metaCompare['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDatasetCompare?.id"
+                (featuresUpdated)="updateHexColors('#hexbin-compare')">
+              </app-table>
+            </ng-template>
+          </mat-tab>
+
+
+          <mat-tab label="Differential Motif Activity" [disabled]="!this.metaCompare['diff_motif_activity_top_motifs']">
+            <div *ngFor="let comparison of this.metaCompare['diff_motif_activity_top_motifs'] | keyvalue">
+              <h4>{{ comparison.key }}</h4>
+
+              <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
+
+              <br />
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
+
+            <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
+            <div class="cluster-plots">
+              <h4>Pre-computed Footprint Plots</h4>
+
+              <div *ngIf="footprintPlotUrls.length === 0" class="no-data">
+                No pre-computed footprint plots for this dataset.
+              </div>
+
+              <div *ngFor="let url of footprintPlotUrls" style="margin-bottom: 16px;">
+                <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
+              </div>
+            </div>
+
+            <!-- ── Section 2: Compute on demand ───────────────────────────── -->
+            <div class="cluster-plots">
+              <h4>Compute New Footprint</h4>
+              <div class="footprint-form">
+                <!-- Cluster-by selector -->
+                <mat-form-field appearance="fill" style="width: 100%;">
+                  <mat-label>Color / Group by</mat-label>
+                  <mat-select [(ngModel)]="footPrintClusterByCompare">
+                    <mat-option value="cell_type">Cell Type</mat-option>
+                    <mat-option value="leiden">Leiden</mat-option>
+                    <mat-optgroup *ngIf="availableCellTypes.length > 0" label="Specific Cell Type (is_…)">
+                      <mat-option *ngFor="let ct of availableCellTypes" [value]="'is_' + ct">
+                        {{ ct }}
+                      </mat-option>
+                    </mat-optgroup>
+                  </mat-select>
+                </mat-form-field>
+
+                <!-- Motif multi-select with search -->
+                <mat-form-field appearance="fill" style="width: 100%;">
+                  <mat-label>Motif ID(s)</mat-label>
+                  <mat-select multiple [(ngModel)]="footprintMotifsCompare" [disabled]="availableMotifs.length === 0">
+                    <mat-select-trigger>
+                      {{ footprintMotifsCompare.length === 0 ? '' : footprintMotifsCompare.length + ' motif(s) selected'
+                      }}
+                    </mat-select-trigger>
+                    <div
+                      style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
+                      <input placeholder="Search motifs…" [value]="motifSearchQuery"
+                        (input)="motifSearchQuery = $any($event.target).value" (click)="$event.stopPropagation()"
+                        (keydown)="$event.stopPropagation()"
+                        style="width: 100%; border: 1px solid #ccc; padding: 5px 8px; border-radius: 4px; font-size: 13px; outline: none;" />
+                    </div>
+                    <mat-option *ngFor="let m of filteredMotifs" [value]="m">{{ m }}</mat-option>
+                    <mat-option *ngIf="filteredMotifs.length === 0" disabled>No motifs match</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <!-- submit button -->
+                <button class="hx-btn hx-btn-upload"
+                  [disabled]="footprintMotifsCompare.length === 0 || isComputingFootprintCompare"
+                  (click)="computeFootprint(true)">
+                  <span *ngIf="!isComputingFootprintCompare">Compute Footprints</span>
+                  <span *ngIf="isComputingFootprintCompare">
+                    Computing&hellip;
+                    <mat-progress-spinner mode="indeterminate" [diameter]="16"
+                      style="display:inline-block; vertical-align:middle; margin-left:6px;">
+                    </mat-progress-spinner>
+                  </span>
+                </button>
+
+                <div *ngIf="footprintComputeErrorCompare" class="error-msg" style="color: red; margin-top: 8px;">
+                  {{ footprintComputeErrorCompare }}
+                </div>
+              </div>
+
+            </div>
+
+            <!-- ── On-demand results ───────────────────────────── -->
+            <div class="cluster-plots" *ngIf="onDemandFootprintUrlsCompare.length > 0">
+              <h4>On-Demand Footprint Plots</h4>
+              <div *ngFor="let url of onDemandFootprintUrlsCompare" style="margin-bottom: 16px;">
+                <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
+              </div>
+            </div>
+
+          </mat-tab>
+
+          <mat-tab label="DGEA" [disabled]="!hasDgeaData(true)">
+            <ng-template #noDgeaTpl>
+              <div class="no-data">No DGEA data available.</div>
+            </ng-template>
+
+            <ng-template #noComparisonTpl>
+              <div class="no-data">
+                No comparison found for this selection.
+              </div>
+            </ng-template>
+
+            <ng-container *ngIf="dgeaReadyCompare; else noDgeaTpl">
+              <h4>DGEA Comparison</h4>
+
+              <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
+
+                <!-- GROUPING -->
+                <mat-form-field appearance="fill">
+                  <mat-label>Grouping</mat-label>
+                  <mat-select [(ngModel)]="selectedDgeaObsCol" (selectionChange)="onDgeaObsColChange(true)">
+                    <mat-option *ngFor="let col of getDgeaObsCols()" [value]="col">
+                      {{ getDgeaObsColLabel(col) }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <!-- GROUPS -->
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+
+                  <mat-form-field appearance="fill">
+                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 1' : 'Group 1' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="fill" *ngIf="!dgeaVsAll">
+                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 2' : 'Group 2' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-checkbox [(ngModel)]="dgeaVsAll" (change)="onDgeaVsAllChange(true)">
+                    Compare Group 1 vs all others
+                  </mat-checkbox>
+                </div>
+
+              </div>
+
+              <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparisonTpl">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                  <div>
+                    <strong>Grouping:</strong>
+                    {{ getDgeaObsColLabel(selectedDgeaObsCol) }}
+                    <br>
+                    <strong>Comparison:</strong>
+                    {{ cmp['group1'] }} vs {{ cmp['group2'] }}
+                    (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+                  </div>
+                </div>
+
+                <div *ngIf="cmp['skipped']" class="no-data">
+                  This comparison was skipped: {{ cmp['skip_reason'] }}
+                </div>
+
+                <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
+                  [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
+                  (geneSelected)="onDgeaGeneSelected($event, true)">
+                </app-table>
+              </div>
+
+              <div #dgeaHeatmapCompare id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
+              </div>
+            </ng-container>
           </mat-tab>
         </mat-tab-group>
       </div>
