@@ -717,21 +717,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (!compare && tabLabel === 'DGEA') {
+      this.selectedView = 'gene_expression';
       this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
       if (this.dgeaReady) {
         this.initDgeaSelection(compare);
         setTimeout(() => this.renderDgeaHeatmap(), 100);
       }
-      return;
+
     }
 
     if (compare && tabLabel === 'Compare - DGEA') {
+      this.selectedCompareView = 'gene_expression';
       this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
       if (this.dgeaReadyCompare) {
         this.initDgeaSelection(true);
         setTimeout(() => this.renderDgeaHeatmap(true), 100);
       }
-      return;
+
     }
 
     // Map tab labels to view keys
@@ -1127,10 +1129,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
-    compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
-    compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
-    this.fetchAndUpdate('gene_expression', gene, compare);
-  }
+  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+  this.onColorbyPropertyChange(compare);
+  this.fetchAndUpdate('gene_expression', gene, compare);
+}
 
 
   // Render the context heatmap
@@ -1287,16 +1290,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-      if (this.dgeaVsAll) {
-        this.selectedDgeaGroup2 = null;
-        return;
-      }
-
-      if (!this.selectedDgeaGroup2) {
-        const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
-        this.selectedDgeaGroup2 = firstDifferent ?? null;
-      }
+    if (this.dgeaVsAll) {
+      this.selectedDgeaGroup2 = null;
+      return;
     }
+
+    if (!this.selectedDgeaGroup2) {
+      const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
+      this.selectedDgeaGroup2 = firstDifferent ?? null;
+    }
+  }
 
 
   private loadAndRenderData(dataPath: string, compare: boolean = false): void {
