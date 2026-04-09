@@ -61,8 +61,9 @@
         </mat-form-field>
       </div>
 
-      <button class="basic-button" id="compare-button" (click)="onCompareMode()" matTooltip="Toggle comparison view"
-        [disabled]="!currentDataSetSupportsCompare || isInitializing">
+      <button class="basic-button" id="compare-button" (click)="onCompareMode()"
+        [matTooltip]="isXeniumDatasetSelected ? 'Comparison view not supported for Xenium datasets' : 'Toggle comparison view'"
+        [disabled]="!currentDataSetSupportsCompare || isInitializing || isXeniumDatasetSelected">
         <mat-icon style="color: black;">compare_arrows</mat-icon>
       </button>
 
@@ -1568,16 +1569,16 @@
             <ng-template #chromvarMoranI>
               <h4>ChromVAR Moran's I</h4>
               <app-table [data]="this.metaCompare['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
-                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDatasetCompare?.id"
-                (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'"
+                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')">
               </app-table>
             </ng-template>
 
             <ng-template #chromvarGearyC>
               <h4>ChromVAR Geary's C</h4>
               <app-table [data]="this.metaCompare['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
-                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDatasetCompare?.id"
-                (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'"
+                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')">
               </app-table>
             </ng-template>
           </mat-tab>

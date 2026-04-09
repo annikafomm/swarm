@@ -336,6 +336,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public clusterCountCompare: number = 10;
 
   public currentDataSetSupportsCompare: boolean = true;
+  public isXeniumDatasetSelected: boolean = false;
 
   public colorableProperties: string[] = [
     'cell_type',
@@ -448,6 +449,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         if (dataset) {
           const dsType = dataset?.dataset_type?.toLowerCase();
           this.currentDataSetSupportsCompare = !(dsType === 'multiome' || dsType === 'xenium');
+
+          // Detect if Xenium dataset is selected
+          this.isXeniumDatasetSelected = dsType === 'xenium';
+
+          // Auto-disable compare mode if Xenium is selected
+          if (this.isXeniumDatasetSelected && this.compareMode) {
+            console.log('Xenium dataset selected - disabling comparison view');
+            this.compareMode = false;
+            // Clear compare view data
+            d3.select('#hexbin-compare').selectAll('*').remove();
+            try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
+            this.svg_compare = null as any;
+            this.g_compare = null as any;
+            this.datasetService.selectDatasetCompare(null);
+          }
+
           this.dataPath = dataset.geojson_path || '';
           this.features = [];
           this.meta = {};
@@ -457,6 +474,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.pathsService.updatePaths({ adataPath: undefined }, false);
           this.dataPath = '';
+          this.isXeniumDatasetSelected = false;
         }
       });
 
@@ -984,6 +1002,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onCompareMode(): void {
+    // Prevent compare mode toggle if Xenium dataset is selected
+    if (this.isXeniumDatasetSelected) {
+      console.warn('Compare mode not supported for Xenium datasets');
+      return;
+    }
+
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
