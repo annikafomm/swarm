@@ -114,6 +114,15 @@
     }
 }
 
+.missing-files-note {
+    font-size: 0.75rem;
+    color: #c62828;
+    margin-top: 4px;
+    font-style: italic;
+    word-break: break-word;
+    max-width: 200px;
+}
+
 .action-buttons {
     display: flex;
     gap: 8px;

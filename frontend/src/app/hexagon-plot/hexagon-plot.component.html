@@ -315,24 +315,26 @@
             <mat-expansion-panel expanded="true">
               <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
 
-                <mat-form-field appearance="fill" class="dataset-dropdown">
-                  <mat-label>Show Regulatory Statistic</mat-label>
-                  <mat-select [(ngModel)]="regulatoryScoreDisplayMode"
-                    (selectionChange)="onRegulatoryDisplayModeChange(false)">
-                    <mat-option [value]="'raw'">Raw scores</mat-option>
-                    <mat-option [value]="'moranI'">Moran's I</mat-option>
-                    <mat-option [value]="'gearyC'">Geary's C</mat-option>
-                  </mat-select>
-                </mat-form-field>
+              <mat-form-field appearance="fill" class="dataset-dropdown">
+                <mat-label>Show Regulatory Statistic</mat-label>
+                <mat-select [(ngModel)]="regulatoryScoreDisplayMode"
+                  (selectionChange)="onRegulatoryDisplayModeChange(false)">
+                  <mat-option [value]="'raw'">Raw scores</mat-option>
+                  <mat-option [value]="'moranI'">Moran's I</mat-option>
+                  <mat-option [value]="'gearyC'">Geary's C</mat-option>
+                </mat-select>
+              </mat-form-field>
 
-                <app-table [data]="getRegulatoryTableData('genie3', false)" [features]="features"
-                  [actionColumns]="getRegulatoryActionColumns('genie3', false)" [updateColumn]="'regulatory_scores'"
-                  [emptyMessage]="getRegulatoryEmptyMessage('genie3', false)" (featuresUpdated)="updateHexColors()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
-                <app-table [data]="getRegulatoryTableData('sponge', false)" [features]="features"
-                  [updateColumn]="'regulatory_scores'" [actionColumns]="getRegulatoryActionColumns('sponge', false)"
-                  [emptyMessage]="getRegulatoryEmptyMessage('sponge', false)" (featuresUpdated)="updateHexColors()"
-                  (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
+              <app-table [data]="getRegulatoryTableData('genie3', false)" [features]="features"
+                [datasetId]="selectedDataset?.id" [actionColumns]="getRegulatoryActionColumns('genie3', false)"
+                [updateColumn]="'regulatory_scores'" [emptyMessage]="getRegulatoryEmptyMessage('genie3', false)"
+                (featuresUpdated)="updateHexColors()"
+                (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
+              <app-table [data]="getRegulatoryTableData('sponge', false)" [features]="features"
+                [datasetId]="selectedDataset?.id" [updateColumn]="'regulatory_scores'"
+                [actionColumns]="getRegulatoryActionColumns('sponge', false)"
+                [emptyMessage]="getRegulatoryEmptyMessage('sponge', false)" (featuresUpdated)="updateHexColors()"
+                (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
 
             </mat-expansion-panel>
 
@@ -691,14 +693,16 @@
           <ng-template #chromvarMoranI>
             <h4>ChromVAR Moran's I</h4>
             <app-table [data]="this.meta['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
-              [features]="features" [updateColumn]="'chromvar_total_sum'" (featuresUpdated)="updateHexColors()">
+              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (featuresUpdated)="updateHexColors()">
             </app-table>
           </ng-template>
 
           <ng-template #chromvarGearyC>
             <h4>ChromVAR Geary's C</h4>
             <app-table [data]="this.meta['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
-              [features]="features" [updateColumn]="'chromvar_total_sum'" (featuresUpdated)="updateHexColors()">
+              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (featuresUpdated)="updateHexColors()">
             </app-table>
           </ng-template>
         </mat-tab>
@@ -807,9 +811,9 @@
             <h4>Cell Composition TF Activity Global Scores</h4>
             <app-table [data]="this.meta['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
-          'cell_comp_tf_activity_category',
-        ]" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
-              [emptyMessage]="'No cell composition TF activity scores loaded'" (featuresUpdated)="updateHexColors()"
+          'cell_comp_tf_activity_category']" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
+              [datasetId]="selectedDataset?.id" [emptyMessage]="'No cell composition TF activity scores loaded'"
+              (featuresUpdated)="updateHexColors()"
               (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores')"></app-table>
           </div>
         </mat-tab>
@@ -826,7 +830,8 @@
             <app-table [data]="this.meta['tf_names']"
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
               [updateColumn]="'tf_activity'" [emptyMessage]="'No TF activity scores loaded'"
-              (featuresUpdated)="updateHexColors()" (geneSelected)="onItemSelected($event, 'tf_activity')"></app-table>
+              [datasetId]="selectedDataset?.id" (featuresUpdated)="updateHexColors()"
+              (geneSelected)="onItemSelected($event, 'tf_activity')"></app-table>
           </div>
         </mat-tab>
 
@@ -843,7 +848,8 @@
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
         ]" [features]="features" [updateColumn]="'pathway_activity'"
-              [emptyMessage]="'No pathway activity scores loaded'" (featuresUpdated)="updateHexColors()"
+              [emptyMessage]="'No pathway activity scores loaded'" [datasetId]="selectedDataset?.id"
+              (featuresUpdated)="updateHexColors()"
               (geneSelected)="onItemSelected($event, 'pathway_activity')"></app-table>
           </div>
         </mat-tab>
@@ -917,7 +923,8 @@
               </div>
 
               <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
-                [features]="features" [updateColumn]="'dgea'" (geneSelected)="onDgeaGeneSelected($event)">
+                [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
+                (geneSelected)="onDgeaGeneSelected($event)">
               </app-table>
             </div>
 
@@ -1298,7 +1305,7 @@
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
                 <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
-                  [updateColumn]="'regulatory_scores'"
+                  [updateColumn]="'regulatory_scores'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                   (featuresUpdated)="updateHexColors()">
                 </app-table>
@@ -1334,7 +1341,7 @@
                 <h4>Geary's C</h4>
                 <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                   (featuresUpdated)="repaintBothViews()" (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
@@ -1499,7 +1506,7 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
         ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
-                [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
+                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores', true)"></app-table>
             </div>
@@ -1517,7 +1524,7 @@
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.metaCompare['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
-                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
+                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onItemSelected($event, 'tf_activity', true)"></app-table>
             </div>

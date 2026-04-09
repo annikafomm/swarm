@@ -88,6 +88,7 @@ yarn-error.log
 !.vscode/launch.json
 !.vscode/extensions.json
 .history/*
+.claude
 
 # Miscellaneous
 .angular/cache

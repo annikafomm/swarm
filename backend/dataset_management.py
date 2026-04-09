@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, List, Union, Any
 
-from dataset_structure import Dataset, DatasetFactory, VisiumDataset, Params
+from dataset_structure import Dataset, DatasetFactory, VisiumDataset, XeniumDataset, MultiomeDataset, Params
 
 
 class DatasetRegistry:
@@ -161,25 +161,7 @@ class DatasetRegistry:
             self.datasets["uploaded"][dataset.id] = dataset
             print(f"Registering Dataset object: {dataset.id}")
         else:
-            # Legacy: create VisiumDataset from parameters
-            if not all([dataset_id, alias, adata_path]):
-                raise ValueError("Must provide either dataset object or (dataset_id, alias, adata_path)")
-
-            dataset_obj = VisiumDataset(
-                dataset_id=dataset_id,
-                alias=alias,
-                adata_path=adata_path,
-                user=user,
-                tangram_adata_path=tangram_adata_path,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                created_at=datetime.now(),
-                footprint_list=footprint_list,
-                **metadata
-            )
-            self.datasets["uploaded"][dataset_id] = dataset_obj
-            print(f"Registered legacy dataset: {dataset_id}")
+            print()
 
         print(f"Saving registry to {self.registry_file}")
         self._save_registry()
@@ -380,6 +362,8 @@ class DatasetRegistry:
         """
         Get summary info about unregistered datasets from config files.
         Suitable for displaying in UI popup.
+        Intelligently checks for the correct adata file based on dataset type and processing flags.
+        Validates multiome and xenium-specific required files.
 
         Args:
             uploads_dir: Path to uploads directory
@@ -404,13 +388,48 @@ class DatasetRegistry:
 
                 # Extract key info
                 dataset_type = config.get("dataset", "Unknown")
-                adata_path = config.get("output_files", {}).get("adata_path")
+                if dataset_type == "Visium" and config.get("multiome").get("use") == True:
+                    dataset_type = "Multiome"
+                output_files = config.get("output_files", {})
+
+
+                # Determine which adata file to check based on dataset type and processing
+                adata_path = self._determine_adata_path(dataset_type, output_files, config)
+
                 created_at = datetime.fromtimestamp(
                     int(dataset_id.split("_")[1]) / 1000, # timestamp in milliseconds
                 ) if "_" in dataset_id else datetime.now()
 
                 # Check if adata file exists
                 adata_exists = Path(adata_path).exists() if adata_path else False
+                print(f"[DEBUG] Dataset {dataset_id} - Type: {dataset_type} - Checking adata at: {adata_path} - Exists: {adata_exists}")
+
+                # Validate type-specific required files
+                missing_files = []
+                is_complete = adata_exists
+                dataset_type_lower = dataset_type.lower()
+
+                if "multiome" in dataset_type_lower:
+                    # Check multiome-specific paths
+                    st_scores_path = output_files.get("adata_st_scores_path")
+                    tg_scores_path = output_files.get("adata_tg_scores_path")
+                    if not st_scores_path and not tg_scores_path:
+                        missing_files.append("adata_st_scores.h5ad or adata_tg_scores.h5ad")
+                        is_complete = False
+                elif "xenium" in dataset_type_lower:
+                    # Check xenium-specific paths
+                    xenium_grid_path = output_files.get("xenium_grid_adata_path")
+                    xenium_grid_exists = Path(xenium_grid_path).exists() if xenium_grid_path else False
+                    if not xenium_grid_exists and not adata_exists:
+                        missing_files.append("xenium_cells_with_grid_scores.h5ad or adata_path")
+                        is_complete = False
+                # For visium, just check main adata
+                elif "visium" in dataset_type_lower:
+                    missing_files.append("adata.h5ad")
+                print(f"[DEBUG] Dataset {dataset_id} - Missing files: {missing_files} - Is complete: {is_complete}")
+
+                status = "ready" if is_complete else "missing_files"
+                missing_files_str = ", ".join(missing_files) if missing_files else None
 
                 unregistered.append({
                     "dataset_id": dataset_id,
@@ -420,7 +439,9 @@ class DatasetRegistry:
                     "config_path": str(config_file),
                     "adata_path": adata_path,
                     "adata_exists": adata_exists,
-                    "status": "ready" if adata_exists else "missing_files",
+                    "status": status,
+                    "missing_files": missing_files_str,
+                    "is_complete": is_complete,
                 })
             except Exception as e:
                 print(f"⚠ Error reading unregistered dataset from {config_file}: {e}")
@@ -429,6 +450,54 @@ class DatasetRegistry:
         unregistered.sort(key=lambda x: x["created_at"], reverse=True)
         return unregistered
 
+    def _determine_adata_path(self, dataset_type: str, output_files: Dict[str, Any], config: Dict[str, Any]) -> Optional[str]:
+        """
+        Determine which adata file to check based on dataset type and processing flags.
+        (For registering datasets from config)
+        Args:
+            dataset_type: Type of dataset (e.g., "Visium", "Xenium", "Multiome")
+            output_files: Dict of output file paths from config
+            config: Full config dict (for processing flags like use_tangram)
+
+        Returns:
+            Path to the primary adata file to validate
+        """
+        # Handle Xenium datasets - they use different adata files based on tangram
+        if "xenium" in dataset_type.lower():
+            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+
+            if use_tangram:
+                # Tangram was applied, check for adata_tg_scores.h5ad
+                return output_files.get("adata_tg_scores_path")
+            else:
+                # No tangram, check for xenium_cells_with_grid_scores.h5ad
+                # This might be stored as adata_path or xenium_grid_adata_path in config
+                return output_files.get("xenium_grid_adata_path") or output_files.get("adata_path")
+
+        # Handle Multiome datasets - use adata_st_scores_path if available
+        if "multiome" in dataset_type.lower():
+            print(f"Multiome dataset detected [DEBUG], checking for adata_st_scores_path and adata_tg_scores_path")
+            return output_files.get("adata_tg_scores_path")
+
+        # Handle Visium datasets - prefer adata_st_scores_path (original ST with scores) if available
+        if "visium" in dataset_type.lower():
+            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+
+            if use_tangram:
+                # Tangram was applied, prefer adata_tg_scores (tangram-projected with scores)
+                if output_files.get("adata_tg_scores_path"):
+                    return output_files.get("adata_tg_scores_path")
+            else:
+                # No tangram, prefer adata_st_scores (original ST with scores)
+                if output_files.get("adata_st_scores_path"):
+                    return output_files.get("adata_st_scores_path")
+
+            # Fallback to original adata if scores not available
+            return output_files.get("adata_path")
+
+        # Default for other types
+        return output_files.get("adata_path")
+
     def register_dataset_from_config(
         self,
         config_file: Path,
@@ -436,14 +505,14 @@ class DatasetRegistry:
     ) -> Dataset:
         """
         Register a dataset by loading its configuration file.
-        Creates a Dataset object and adds it to the registry.
+        Creates a Dataset object of the appropriate type and adds it to the registry.
 
         Args:
             config_file: Path to config JSON file (e.g., job_123_config.json)
             user: Username to assign as owner
 
         Returns:
-            Registered Dataset object
+            Registered Dataset object (concrete type varies: VisiumDataset, XeniumDataset, etc.)
 
         Raises:
             ValueError: If config file is invalid or adata file missing
@@ -464,39 +533,104 @@ class DatasetRegistry:
             print(f"[DEBUG] Dataset {dataset_id} already registered, re-registering...")
 
         # Extract paths and metadata from config
-        adata_path = config.get("output_files", {}).get("adata_path")
-        geojson_path = config.get("output_files", {}).get("geojson_path")
-        genie_network_path = config.get("output_files", {}).get("genie_network_path")
-        sponge_network_path = config.get("output_files", {}).get("sponge_network_path")
+        output_files = config.get("output_files", {})
+        dataset_type = config.get("dataset", "Visium")
+
+        if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
+            dataset_type = "Multiome"
+
+        # Determine which adata file to use based on dataset type
+        adata_path = self._determine_adata_path(dataset_type, output_files, config)
+
+        # For xenium datasets, also extract grid path for XeniumDataset
+        xenium_grid_adata_path = output_files.get("xenium_grid_adata_path") or output_files.get("adata_path")
+
+        geojson_path = output_files.get("geojson_path")
+        genie_network_path = output_files.get("genie_network_path")
+        sponge_network_path = output_files.get("sponge_network_path")
 
         # Validate adata file exists
         if not adata_path or not Path(adata_path).exists():
             raise ValueError(f"AnnData file not found: {adata_path}")
 
         # Extract processing options
-        dataset_type = config.get("dataset", "Visium")
         use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
         use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
 
-        # Create Dataset object
-        dataset = VisiumDataset(
-            dataset_id=dataset_id,
-            alias=f"{dataset_type} Dataset",
-            adata_path=adata_path,
-            user=user,
-            tangram_adata_path=None,  # Can be updated if available
-            geojson_path=geojson_path,
-            genie_network_path=genie_network_path,
-            sponge_network_path=sponge_network_path,
-            created_at=datetime.now(),
-            dataset_type=dataset_type,
-            use_tangram=use_tangram,
-            use_multiome=use_multiome,
-        )
+        # Use DatasetFactory to create the appropriate dataset type
+        # First, create a minimal Params object for the factory
+        # (The factory expects Params but we'll pass what we can from config)
+
+        # Route based on dataset type
+        dataset_type_lower = dataset_type.lower()
+
+        if "xenium" in dataset_type_lower:
+            # Create XeniumDataset with both adata paths
+            dataset = XeniumDataset(
+                dataset_id=dataset_id,
+                alias=f"{dataset_type} Dataset",
+                adata_path=adata_path,
+                user=user,
+                tangram_adata_path=output_files.get("adata_tg_scores_path") if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                xenium_grid_adata_path=xenium_grid_adata_path,
+            )
+        elif "multiome" in dataset_type_lower:
+            # Create MultiomeDataset with all multiome paths
+            dataset = MultiomeDataset(
+                dataset_id=dataset_id,
+                alias=f"{dataset_type} Dataset",
+                adata_path=adata_path,
+                user=user,
+                tangram_adata_path=output_files.get("adata_tg_scores_path"),
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                adata_st_scores_path=output_files.get("adata_st_scores_path"),
+                adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
+                adata_map_path=output_files.get("adata_map_path"),
+                adata_map_X_csv_path=output_files.get("adata_map_X_csv_path"),
+                adata_map_var_csv_path=output_files.get("adata_map_var_csv_path"),
+                calc_scores_log_path=output_files.get("calc_scores_log_path"),
+                global_motif_analysis_path=output_files.get("global_motif_analysis_path"),
+                motif_to_tf_csv_path=output_files.get("motif_to_tf_csv_path"),
+                spot_obj_chromvar_path=output_files.get("spot_obj_chromvar_path"),
+                spot_obj_footprints_path=output_files.get("spot_obj_footprints_path"),
+                dissociated_obj_footprints_path=output_files.get("dissociated_obj_footprints_path"),
+                chromvar_scores_csv_path=output_files.get("chromvar_scores_csv_path"),
+                diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
+                footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
+            )
+        else:
+            # Default to VisiumDataset
+            # For Visium datasets, also extract score paths so users can switch between them
+            dataset = VisiumDataset(
+                dataset_id=dataset_id,
+                alias=f"{dataset_type} Dataset",
+                adata_path=adata_path,
+                user=user,
+                tangram_adata_path=output_files.get("adata_tg_scores_path") if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                adata_st_scores_path=output_files.get("adata_st_scores_path"),
+                adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
+            )
 
         # Register it
         self.register_uploaded_dataset(dataset=dataset)
-        print(f"✓ Registered dataset from config: {dataset_id}")
+        print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
         return dataset
 
     def delete_unregistered_dataset(self, dataset_id: str, uploads_dir: Path, delete_files: bool = True) -> bool:

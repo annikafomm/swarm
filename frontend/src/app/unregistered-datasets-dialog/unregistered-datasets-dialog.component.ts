@@ -21,6 +21,8 @@ interface UnregisteredDataset {
   adata_path: string;
   adata_exists: boolean;
   status: 'ready' | 'missing_files';
+  missing_files?: string | null;
+  is_complete?: boolean;
 }
 
 @Component({
@@ -83,6 +85,10 @@ export class UnregisteredDatasetsDialogComponent implements OnInit, OnDestroy {
   }
 
   toggleDatasetSelection(datasetId: string): void {
+    const dataset = this.datasets.find(d => d.dataset_id === datasetId);
+    if (dataset && !dataset.is_complete) {
+      return; // Don't allow selection of incomplete datasets
+    }
     if (this.selectedDatasets.has(datasetId)) {
       this.selectedDatasets.delete(datasetId);
     } else {
@@ -95,20 +101,23 @@ export class UnregisteredDatasetsDialogComponent implements OnInit, OnDestroy {
   }
 
   toggleAllSelection(): void {
-    if (this.selectedDatasets.size === this.datasets.length) {
+    // Only allow selecting complete datasets
+    const selectableDatasets = this.datasets.filter(d => d.is_complete);
+    if (this.selectedDatasets.size === selectableDatasets.length) {
       this.selectedDatasets.clear();
     } else {
-      this.datasets.forEach(d => this.selectedDatasets.add(d.dataset_id));
+      selectableDatasets.forEach(d => this.selectedDatasets.add(d.dataset_id));
     }
   }
 
   isAllSelected(): boolean {
-    return this.datasets.length > 0 && this.selectedDatasets.size === this.datasets.length;
+    const selectableDatasets = this.datasets.filter(d => d.is_complete);
+    return selectableDatasets.length > 0 && this.selectedDatasets.size === selectableDatasets.length;
   }
 
   registerDataset(dataset: UnregisteredDataset): void {
-    if (!dataset.adata_exists) {
-      alert('Cannot register: AnnData file is missing or inaccessible');
+    if (!dataset.is_complete) {
+      alert(`Cannot register: Dataset is incomplete.\n\nMissing files:\n${dataset.missing_files || 'Unknown'}\n\nPlease ensure all required output files are present.`);
       return;
     }
 
@@ -208,5 +217,16 @@ export class UnregisteredDatasetsDialogComponent implements OnInit, OnDestroy {
 
   getStatusBadgeClass(status: string): string {
     return status === 'ready' ? 'status-badge status-ready' : 'status-badge status-missing';
+  }
+
+  getStatusTooltip(dataset: UnregisteredDataset): string {
+    if (dataset.is_complete) {
+      return 'All required files present. Ready to register.';
+    }
+    return `Incomplete: Missing ${dataset.missing_files || 'required files'}`;
+  }
+
+  isDatasetIncomplete(dataset: UnregisteredDataset): boolean {
+    return !dataset.is_complete;
   }
 }

@@ -642,20 +642,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public openInfoPage(fragmentId?: string): void {
-    const frag = fragmentId ? `#${fragmentId}` : '';
-    const targetUrl = `/info${frag}`;
-
-    // Navigate via the router (keeps SPA behavior) then force a full-page load
-    // to ensure the browser jumps to the fragment reliably.
-    this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {}).then(() => {
-      // Use replaceState to avoid adding a duplicate history entry, then reload.
-      try {
-        history.replaceState(null, '', targetUrl);
-      } catch { }
-      // Force reload so the browser will honor the fragment scroll.
-      window.location.href = targetUrl;
-    });
-  }
+  // Simply navigate via router - no full page reload
+  // This preserves the component state for when user returns
+  this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {});
+}
 
   public onTabColorChange(newView: string, compare: boolean = false): void {
     if (compare) {
