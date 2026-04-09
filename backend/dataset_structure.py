@@ -464,6 +464,9 @@ class XeniumDataset(VisiumDataset):
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
         xenium_grid_adata_path: Optional[str] = None,
+        # Multiome-specific (accepted but ignored)
+        adata_st_scores_path: Optional[str] = None,
+        adata_tg_scores_path: Optional[str] = None,
     ) -> "XeniumDataset":
         """
         Create XeniumDataset from Params and output paths.

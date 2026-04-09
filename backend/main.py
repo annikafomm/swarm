@@ -2171,7 +2171,11 @@ async def get_available_cell_types(
     print(f"[DEBUG] adata_path = {adata_path}")
     try:
         adata = _load_adata_cached(adata_path)
-        cell_types = list(adata.obs["cell_type"].unique())
+        # Handle datasets that may not have "cell_type" column (e.g., Xenium without annotation)
+        if "cell_type" in adata.obs.columns:
+            cell_types = list(adata.obs["cell_type"].unique())
+        else:
+            cell_types = []
         print(f"[get_available_cell_types] Found cell types: {cell_types}, dataset_id={dataset_id}")
 
         return {"cell_types": cell_types}

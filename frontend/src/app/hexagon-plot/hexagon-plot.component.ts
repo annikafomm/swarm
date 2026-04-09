@@ -55,17 +55,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement?: ElementRef<HTMLElement>;
   @ViewChild(MatTabGroup, { static: false }) tabGroup?: MatTabGroup;
   @ViewChild('dgeaHeatmap', { static: false }) dgeaHeatmapElement!: ElementRef<HTMLElement>;
+  @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
   private _resizeHandler: any = null;
   // Removed manual subscription tracker - all subscriptions use takeUntil now
   footprintPlotUrls: SafeResourceUrl[] = [];
+  footprintPlotUrlsCompare: SafeResourceUrl[] = [];
   onDemandFootprintUrls: SafeResourceUrl[] = [];
+  onDemandFootprintUrlsCompare: SafeResourceUrl[] = [];
   availableMotifs: string[] = [];
   availableCellTypes: string[] = [];
   footprintMotifs: string[] = [];
+  footprintMotifsCompare: string[] = [];
   motifSearchQuery: string = '';
   footprintClusterBy: string = 'cell_type';
+  footPrintClusterByCompare: string = 'cell_type';
   isComputingFootprint: boolean = false;
+  isComputingFootprintCompare: boolean = false;
   footprintComputeError: string = '';
+  footprintComputeErrorCompare: string = '';
 
   get filteredMotifs(): string[] {
     const q = this.motifSearchQuery.trim().toLowerCase();
@@ -192,6 +199,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private sharedGeneExpressionDomain: { min: number; max: number } | null = null;
   private sharedGeneExpressionContextKey: string | null = null;
   public dgeaReady: boolean = false;
+  public dgeaReadyCompare: boolean = false;
 
   public selectedInterval: number = 0;
   public selectedIntervalCompare: number = 0;
@@ -204,19 +212,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Selected groups for the DGEA comparison (bound to the dropdowns)
   public selectedDgeaObsCol: string = 'cell_type';
+  public selectedDgeaObsColCompare: string = 'cell_type';
   public selectedDgeaGroup1: string | null = null;
+  public selectedDgeaGroup1Compare: string | null = null;
   public selectedDgeaGroup2: string | null = null;
+  public selectedDgeaGroup2Compare: string | null = null;
   private hiddenPropKeys = new Set<string>([]);
   public dgeaVsAll: boolean = false;
-
-  @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
-
-  public dgeaReadyCompare: boolean = false;
-  public selectedDgeaObsColCompare: string = 'cell_type';
-  public selectedDgeaGroup1Compare: string | null = null;
-  public selectedDgeaGroup2Compare: string | null = null;
   public dgeaVsAllCompare: boolean = false;
-  public shownGeneOnPlotCompare: string | null = null;
 
 
   public clusterCells: CellFeature[] = [];
@@ -331,6 +334,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public maxIntervalCompare: number = 49;
   public clusterCountCompare: number = 10;
 
+  public currentDataSetSupportsCompare: boolean = true;
+  public isXeniumDatasetSelected: boolean = false;
+
   public colorableProperties: string[] = [
     'cell_type',
     'leiden',
@@ -368,8 +374,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     [col: string]: { [index: string]: string | number };
   } | null = null;
   public showGlobalLigandReceptorScores: boolean = true;
+  public compareShowGlobalLigandReceptorScores: boolean = true;
   public showMoranI: boolean = true;
+  public compareShowMoranI: boolean = true;
   public showChromvarMoranI: boolean = true;
+  public compareShowChromvarMoranI: boolean = true;
   public colorScale = d3
     .scaleOrdinal<string>()
     .range([
@@ -437,6 +446,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .subscribe(dataset => {
         this.selectedDataset = dataset;
         if (dataset) {
+          const dsType = dataset?.dataset_type?.toLowerCase();
+          this.currentDataSetSupportsCompare = !(dsType === 'multiome' || dsType === 'xenium');
+
+          // Detect if Xenium dataset is selected
+          this.isXeniumDatasetSelected = dsType === 'xenium';
+
+          // Auto-disable compare mode if Xenium is selected
+          if (this.isXeniumDatasetSelected && this.compareMode) {
+            console.log('Xenium dataset selected - disabling comparison view');
+            this.compareMode = false;
+            // Clear compare view data
+            d3.select('#hexbin-compare').selectAll('*').remove();
+            try { d3.select('#hexbin-compare').selectAll('svg').remove(); } catch { }
+            this.svg_compare = null as any;
+            this.g_compare = null as any;
+            this.datasetService.selectDatasetCompare(null);
+          }
+
           this.dataPath = dataset.geojson_path || '';
           this.features = [];
           this.meta = {};
@@ -446,6 +473,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.pathsService.updatePaths({ adataPath: undefined }, false);
           this.dataPath = '';
+          this.isXeniumDatasetSelected = false;
         }
       });
 
@@ -651,10 +679,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public openInfoPage(fragmentId?: string): void {
-  // Simply navigate via router - no full page reload
-  // This preserves the component state for when user returns
-  this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {});
-}
+    // Simply navigate via router - no full page reload
+    // This preserves the component state for when user returns
+    this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {});
+  }
 
   public onTabColorChange(newView: string, compare: boolean = false): void {
     if (compare) {
@@ -689,21 +717,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     if (!compare && tabLabel === 'DGEA') {
+      this.selectedView = 'gene_expression';
       this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
       if (this.dgeaReady) {
-        this.initDgeaSelection();
+        this.initDgeaSelection(compare);
         setTimeout(() => this.renderDgeaHeatmap(), 100);
       }
-      return;
+
     }
 
     if (compare && tabLabel === 'Compare - DGEA') {
+      this.selectedCompareView = 'gene_expression';
       this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
       if (this.dgeaReadyCompare) {
         this.initDgeaSelection(true);
         setTimeout(() => this.renderDgeaHeatmap(true), 100);
       }
-      return;
+
     }
 
     // Map tab labels to view keys
@@ -716,6 +746,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         'Compare - Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
         'Compare - TF Activity': 'tf_activity',
         'Compare - Pathway Activity': 'pathway_activity',
+        'Compare: ChromVar spatial correlation : Moran\'s I / Geary\'s C': 'chromvar_total_sum',
+        'Compare - Differential Motif Activity': 'cell_type',
+        'Compare - Footprints': 'cell_type',
+        'Compare - DGEA': 'gene_expression'
       }
       : {
         'Regulatory Scores': 'regulatory_scores',
@@ -728,6 +762,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
         'Differential Motif Activity': 'cell_type',
         'Footprints': 'cell_type',
+        'DGEA': 'gene_expression'
       };
 
     newView = tabMap[tabLabel] || null;
@@ -979,6 +1014,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onCompareMode(): void {
+    // Prevent compare mode toggle if Xenium dataset is selected
+    if (this.isXeniumDatasetSelected) {
+      console.warn('Compare mode not supported for Xenium datasets');
+      return;
+    }
+
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
@@ -1026,15 +1067,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Returns all available cell type levels for the dropdown selectors
   getDgeaLevels(compare: boolean = false): string[] {
     const meta = compare ? this.metaCompare : this.meta;
-    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
-    return meta?.['dgea']?.[obsCol]?.['levels'] ?? [];
+    return meta?.['dgea']?.[this.selectedDgeaObsCol]?.['levels'] ?? [];
   }
 
   // Returns the map of all DGEA comparisons
   getDgeaComparisonMap(compare: boolean = false): { [key: string]: any } {
     const meta = compare ? this.metaCompare : this.meta;
-    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
-    return meta?.['dgea']?.[obsCol]?.['comparisons'] ?? {};
+    return meta?.['dgea']?.[this.selectedDgeaObsCol]?.['comparisons'] ?? {};
   }
 
   // Re-render the DGEA heatmap when the user changes the group selections
@@ -1048,21 +1087,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onDgeaObsColChange(compare: boolean = false): void {
-    if (compare) {
-      this.selectedDgeaGroup1Compare = null;
-      this.selectedDgeaGroup2Compare = null;
-      this.dgeaVsAllCompare = false;
-      this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
-      this.initDgeaSelection(true);
-      setTimeout(() => this.renderDgeaHeatmap(true), 0);
-    } else {
-      this.selectedDgeaGroup1 = null;
-      this.selectedDgeaGroup2 = null;
-      this.dgeaVsAll = false;
-      this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
-      this.initDgeaSelection(false);
-      setTimeout(() => this.renderDgeaHeatmap(false), 0);
-    }
+    compare ? this.selectedDgeaGroup1Compare = null : this.selectedDgeaGroup1 = null;
+    compare ? this.selectedDgeaGroup2Compare = null : this.selectedDgeaGroup2 = null;
+    compare ? this.dgeaVsAllCompare = false : this.dgeaVsAll = false;
+    compare ? this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsCol] : this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
+    this.initDgeaSelection(compare);
+    setTimeout(() => this.renderDgeaHeatmap(), 0);
   }
 
   getDgeaObsColLabel(col: string): string {
@@ -1090,38 +1120,25 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public shownGeneOnPlot: string | null = null;
+  public shownGeneOnPlotCompare: string | null = null;
 
-  public onDgeaGeneSelected(event: { gene: string; action: string }, compare: boolean = false): void {
+  public onDgeaGeneSelected(event: { gene: string; action: string; }, compare: boolean): void {
     if (event.action === 'show_on_plot') {
-      if (compare) {
-        this.showDgeaGeneOnComparePlot(event.gene);
-      } else {
-        this.showDgeaGeneOnMainPlot(event.gene);
-      }
+      this.showDgeaGeneOnMainPlot(event.gene, compare);
     }
   }
 
-  public showDgeaGeneOnComparePlot(gene: string): void {
-    this.shownGeneOnPlotCompare = gene;
-    this.selectedCompareView = 'gene_expression';
-    this.selectedGeneExpressionCompare = gene;
-    this.fetchAndUpdate('gene_expression', gene, true, 'gene_expression');
-  }
-
-  public showDgeaGeneOnMainPlot(gene: string): void {
-    this.shownGeneOnPlot = gene;
-    this.selectedView = 'gene_expression';
-    this.selectedGeneExpressionMain = gene;
-    this.fetchAndUpdate('gene_expression', gene, false, 'gene_expression');
-  }
+  public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
+  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+  this.onColorbyPropertyChange(compare);
+  this.fetchAndUpdate('gene_expression', gene, compare);
+}
 
 
   // Render the context heatmap
   private renderDgeaHeatmap(compare: boolean = false): void {
-    const container = compare
-      ? this.dgeaHeatmapCompareElement?.nativeElement
-      : this.dgeaHeatmapElement?.nativeElement;
-
+    const container = compare ? this.dgeaHeatmapCompareElement?.nativeElement : this.dgeaHeatmapElement?.nativeElement;
     if (!container) return;
 
     const hm = this.getSelectedDgeaHeatmap(compare);
@@ -1153,8 +1170,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     ];
 
-    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
-    const xAxisTitle = this.getDgeaObsColLabel(obsCol);
+    const xAxisTitle = this.getDgeaObsColLabel(compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol);
 
     const layout: Partial<Plotly.Layout> = {
       margin: { t: 30, l: 140, r: 20, b: 100 },
@@ -1187,18 +1203,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Returns all available cell type levels for the dropdown selectors
   getSelectedDgeaComparison(compare: boolean = false): any | null {
     const selectedGroup1 = compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1;
-    const selectedGroup2 = compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2;
-    const vsAll = compare ? this.dgeaVsAllCompare : this.dgeaVsAll;
-
     if (!selectedGroup1) return null;
 
     const comps = this.getDgeaComparisonMap(compare);
 
-    if (vsAll) {
+    if (compare ? this.dgeaVsAllCompare : this.dgeaVsAll) {
       const vsAllId = this.makeComparisonId(selectedGroup1, 'all');
       return comps[vsAllId] ?? null;
     }
 
+    const selectedGroup2 = compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2;
     if (!selectedGroup2) return null;
     if (selectedGroup1 === selectedGroup2) return null;
 
@@ -1215,9 +1229,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private flipDgeaComparison(cmp: any, compare: boolean = false): any {
-    const selectedGroup1 = compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1;
-    const selectedGroup2 = compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2;
-
     const flippedTable: any = {};
 
     if (cmp?.table) {
@@ -1240,64 +1251,53 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const flippedHeatmap = cmp?.heatmap_context
       ? {
-          ...cmp.heatmap_context,
-          groups: Array.isArray(cmp.heatmap_context.groups)
-            ? [
-                selectedGroup1,
-                selectedGroup2,
-                ...cmp.heatmap_context.groups.filter(
-                  (g: string) => g !== selectedGroup1 && g !== selectedGroup2
-                )
-              ]
-            : cmp.heatmap_context.groups
-        }
+        ...cmp.heatmap_context,
+        groups: Array.isArray(cmp.heatmap_context.groups)
+          ? [
+            compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1,
+            this.selectedDgeaGroup2,
+            ...cmp.heatmap_context.groups.filter(
+              (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
+            )
+          ]
+          : cmp.heatmap_context.groups
+      }
       : null;
 
     return {
       ...cmp,
-      group1: selectedGroup1,
-      group2: selectedGroup2,
+      group1: compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1,
+      group2: compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2,
       n1: cmp.n2,
       n2: cmp.n1,
-      name: `${selectedGroup1} vs ${selectedGroup2}`,
+      name: `${compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1} vs ${compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2}`,
       table: flippedTable,
       heatmap_context: flippedHeatmap
     };
   }
 
   // Initialize default selections for the DGEA comparison dropdowns
-  initDgeaSelection(compare: boolean = false): void {
+  initDgeaSelection(compare: boolean): void {
     const levels = this.getDgeaLevels(compare);
     if (!levels.length) return;
 
-    if (compare) {
-      if (!this.selectedDgeaGroup1Compare) {
-        this.selectedDgeaGroup1Compare = levels[0];
-      }
+    if (!this.selectedDgeaGroup1) {
+      compare ? this.selectedDgeaGroup1Compare = levels[0] : this.selectedDgeaGroup1 = levels[0];
+    }
 
-      if (this.dgeaVsAllCompare) {
-        this.selectedDgeaGroup2Compare = null;
-        return;
-      }
+    if (compare ? this.dgeaVsAllCompare : this.dgeaVsAll) {
+      compare ? this.selectedDgeaGroup2Compare = null : this.selectedDgeaGroup2 = null;
+      return;
+    }
 
-      if (!this.selectedDgeaGroup2Compare) {
-        const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1Compare);
-        this.selectedDgeaGroup2Compare = firstDifferent ?? null;
-      }
-    } else {
-      if (!this.selectedDgeaGroup1) {
-        this.selectedDgeaGroup1 = levels[0];
-      }
+    if (this.dgeaVsAll) {
+      this.selectedDgeaGroup2 = null;
+      return;
+    }
 
-      if (this.dgeaVsAll) {
-        this.selectedDgeaGroup2 = null;
-        return;
-      }
-
-      if (!this.selectedDgeaGroup2) {
-        const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
-        this.selectedDgeaGroup2 = firstDifferent ?? null;
-      }
+    if (!this.selectedDgeaGroup2) {
+      const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
+      this.selectedDgeaGroup2 = firstDifferent ?? null;
     }
   }
 
@@ -1416,35 +1416,30 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.metaCompare = data.meta;
             console.log('Compare meta loaded:', this.metaCompare, data.meta);
             this.updatePropertyAvailability('compare');
-          } else {
-            this.meta = data.meta;
-            this.updatePropertyAvailability('main');
-          }
-
-          if (compare) {
             const availableObsColsCompare = this.getDgeaObsCols(true);
-            if (
-              availableObsColsCompare.length &&
-              !availableObsColsCompare.includes(this.selectedDgeaObsColCompare)
-            ) {
+            if (availableObsColsCompare.length && !availableObsColsCompare.includes(this.selectedDgeaObsColCompare)) {
               this.selectedDgeaObsColCompare = availableObsColsCompare[0];
             }
-
             this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
             if (this.dgeaReadyCompare) {
               this.initDgeaSelection(true);
             }
+
           } else {
-            const availableObsCols = this.getDgeaObsCols(false);
+            this.meta = data.meta;
+            this.updatePropertyAvailability('main');
+            const availableObsCols = this.getDgeaObsCols();
             if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
               this.selectedDgeaObsCol = availableObsCols[0];
             }
-
-            this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
+            this.dgeaReady = !!this.meta?.['dgea']?.['cell_type'];
             if (this.dgeaReady) {
               this.initDgeaSelection(false);
             }
           }
+
+
+
 
           const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
           if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
@@ -2199,8 +2194,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       const sharedDomain = compareSharedDomain ?? (viewToUse === 'gene_expression'
         ? this.getSharedDomainForGeneExpressionView()
         : null);
-
-      const domainSource = sharedDomain ? 'shared-gene-expression-domain' : 'local-current-view-domain';
 
       let min = sharedDomain ? sharedDomain.min : Math.min(...numericValues);
       let max = sharedDomain ? sharedDomain.max : Math.max(...numericValues);
@@ -3411,37 +3404,71 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log('availableCellTypes:', this.availableCellTypes);
   }
 
-  public computeFootprint(): void {
-    if (this.footprintMotifs.length === 0) return;
-    this.isComputingFootprint = true;
-    this.footprintComputeError = '';
-    const body = new FormData();
-    this.footprintMotifs.forEach(m => body.append('motif', m));
-    body.append('cluster_by', this.footprintClusterBy);
-    // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
-    if (this.selectedDataset?.id) {
-      body.append('dataset_id', this.selectedDataset.id);
-    }
-    this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
-      `${this.sessionService.apiUrl}/api/compute_footprint`,
-      body,
-      { withCredentials: true }
-    ).subscribe({
-      next: resp => {
-        this.isComputingFootprint = false;
-        const newUrls = (resp.results ?? []).map(r =>
-          this.sanitizer.bypassSecurityTrustResourceUrl(
-            `${this.sessionService.apiUrl}${r.footprint_url}`
-          )
-        );
-        this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, ...newUrls];
-      },
-      error: err => {
-        this.isComputingFootprint = false;
-        this.footprintComputeError =
-          err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+  public computeFootprint(compare: boolean = false): void {
+    if (compare) {
+      if (this.footprintMotifsCompare.length === 0) return;
+      this.isComputingFootprintCompare = true;
+      this.footprintComputeErrorCompare = '';
+      const bodyCompare = new FormData();
+      this.footprintMotifsCompare.forEach(m => bodyCompare.append('motif', m));
+      bodyCompare.append('cluster_by', this.footPrintClusterByCompare);
+      if (this.selectedDatasetCompare?.id) {
+        bodyCompare.append('dataset_id', this.selectedDatasetCompare.id);
       }
-    });
+      this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
+        `${this.sessionService.apiUrl}/api/compute_footprint`,
+        bodyCompare,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => {
+          this.isComputingFootprintCompare = false;
+          const newUrls = (resp.results ?? []).map(r =>
+            this.sanitizer.bypassSecurityTrustResourceUrl(
+              `${this.sessionService.apiUrl}${r.footprint_url}`
+            )
+          );
+          this.onDemandFootprintUrlsCompare = [...this.onDemandFootprintUrlsCompare, ...newUrls];
+        },
+        error: err => {
+          this.isComputingFootprintCompare = false;
+          this.footprintComputeErrorCompare =
+            err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+        }
+      });
+      return;
+    }
+    else {
+      if (this.footprintMotifs.length === 0) return;
+      this.isComputingFootprint = true;
+      this.footprintComputeError = '';
+      const body = new FormData();
+      this.footprintMotifs.forEach(m => body.append('motif', m));
+      body.append('cluster_by', this.footprintClusterBy);
+      // Pass dataset_id for rescanned-dataset fallback (session may not have adata_path set)
+      if (this.selectedDataset?.id) {
+        body.append('dataset_id', this.selectedDataset.id);
+      }
+      this.http.post<{ results: { footprint_url: string; relative_path: string }[] }>(
+        `${this.sessionService.apiUrl}/api/compute_footprint`,
+        body,
+        { withCredentials: true }
+      ).subscribe({
+        next: resp => {
+          this.isComputingFootprint = false;
+          const newUrls = (resp.results ?? []).map(r =>
+            this.sanitizer.bypassSecurityTrustResourceUrl(
+              `${this.sessionService.apiUrl}${r.footprint_url}`
+            )
+          );
+          this.onDemandFootprintUrls = [...this.onDemandFootprintUrls, ...newUrls];
+        },
+        error: err => {
+          this.isComputingFootprint = false;
+          this.footprintComputeError =
+            err?.error?.detail ?? 'Footprint computation failed. Check the server logs.';
+        }
+      });
+    }
   }
 
   private renderNhoodHeatmap(compare: boolean = false): void {
