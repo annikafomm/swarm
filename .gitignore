@@ -7,6 +7,10 @@ notebooks/
 # Ignore local proxy config
 # Note: proxy.conf.json, package.json, package-lock.json are managed via --skip-worktree
 
+# */package.json
+# */package-lock.json
+*/package-lock_merit.json
+
 # Ignore all h5ad files
 *.h5ad
 *.parquet
@@ -83,6 +87,7 @@ yarn-error.log
 
 # Visual Studio Code
 .vscode/*
+.vscode/settings.json
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
