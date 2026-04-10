@@ -3373,14 +3373,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   private renderFootprintPlots(dataset: Dataset | null): void {
-    this.footprintPlotUrls = (dataset?.footprint_list ?? []).map(relativePath =>
+    const raw = dataset?.footprint_pdf_paths;
+
+    const precomputedPaths =
+      Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === 'object'
+          ? Object.values(raw)
+          : (dataset?.footprint_list ?? []);
+
+    this.footprintPlotUrls = precomputedPaths.map(path =>
       this.sanitizer.bypassSecurityTrustResourceUrl(
-        `${this.sessionService.apiUrl}/api/download/${relativePath}`
+        `${this.sessionService.apiUrl}/api/download/${path}`
       )
     );
-    // Load available motifs for the on-demand compute form.
-    // Pass dataset_id so the backend can resolve the adata path even when
-    // /read_adata has not been called yet (e.g. rescanned datasets).
+
     if (dataset) {
       const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
       this.http.get<{ motifs: string[] }>(
@@ -3390,6 +3397,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         next: resp => { this.availableMotifs = resp.motifs ?? []; },
         error: () => { this.availableMotifs = []; }
       });
+
       this.http.get<{ cell_types: string[] }>(
         `${this.sessionService.apiUrl}/api/cell_types${params}`,
         { withCredentials: true }
@@ -3401,7 +3409,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.availableMotifs = [];
       this.availableCellTypes = [];
     }
-    console.log('availableCellTypes:', this.availableCellTypes);
   }
 
   public computeFootprint(compare: boolean = false): void {

@@ -13,6 +13,7 @@ import tangram as tg
 import gene_selection
 import torch
 import math
+import re
 # Allow writing nullable strings in anndata
 import anndata as ad
 ad.settings.allow_write_nullable_strings = True
@@ -284,6 +285,83 @@ def mapping_entropy_and_mass(ad_map, eps=1e-12):
 
     return entropy_per_row, spot_mass
 
+
+
+def add_dissociated_annotations_to_obs(
+    ad_ge,
+    pred_key: str = "tangram_ct_pred",
+    label_out: str = "cell_type_dissociated",
+    prob_prefix: str = "prob_",
+    prob_suffix: str = "_dissociated",
+    sanitize_names: bool = True,
+    add_masked_prob_columns: bool = True,
+    mask_obs_key: str = "cell_type",
+    masked_sep: str = "__",
+):
+    if pred_key not in ad_ge.obsm:
+        raise KeyError(f"{pred_key!r} not found in ad_ge.obsm")
+
+    ct_pred = ad_ge.obsm[pred_key]
+
+    # Ensure DataFrame with proper index/column names
+    if not isinstance(ct_pred, pd.DataFrame):
+        ct_pred = pd.DataFrame(ct_pred, index=ad_ge.obs_names)
+
+    ct_pred = ct_pred.copy()
+    ct_pred.index = ad_ge.obs_names
+    ct_pred.columns = ct_pred.columns.astype(str)
+
+    def _safe_name(x):
+        x = str(x)
+        if sanitize_names:
+            x = re.sub(r"[^0-9a-zA-Z_]+", "_", x).strip("_")
+        return x
+
+    # highest-score cell type per spot
+    ad_ge.obs[label_out] = ct_pred.idxmax(axis=1).astype("category")
+
+    # probability/score columns per dissociated cell type
+    colmap = {}
+    for ct in ct_pred.columns:
+        ct_name = str(ct)
+        ct_safe = _safe_name(ct_name)
+        out_col = f"{prob_prefix}{ct_safe}{prob_suffix}"
+        ad_ge.obs[out_col] = ct_pred[ct_name].to_numpy()
+        colmap[ct_name] = out_col
+
+    ad_ge.uns["dissociated_prob_column_map"] = colmap
+
+    # Optional: create masked columns for plotting by existing spatial annotation
+    if add_masked_prob_columns:
+        if mask_obs_key not in ad_ge.obs.columns:
+            raise KeyError(f"{mask_obs_key!r} not found in ad_ge.obs")
+
+        mask_series = ad_ge.obs[mask_obs_key].astype(str)
+        mask_categories = sorted(mask_series.unique())
+
+        masked_colmap = {}
+        for mask_ct in mask_categories:
+            mask_ct_safe = _safe_name(mask_ct)
+            mask = mask_series == mask_ct
+
+            masked_colmap[mask_ct] = {}
+            for original_ct_name, prob_col in colmap.items():
+                new_col = (
+                    f"{prob_col}"
+                    f"{masked_sep}{_safe_name(mask_obs_key)}"
+                    f"{masked_sep}{mask_ct_safe}"
+                )
+
+                vals = ad_ge.obs[prob_col].to_numpy(dtype=float).copy()
+                vals[~mask.to_numpy()] = np.nan
+                ad_ge.obs[new_col] = vals
+
+                masked_colmap[mask_ct][original_ct_name] = new_col
+
+        ad_ge.uns["dissociated_masked_prob_column_map"] = masked_colmap
+
+    return ad_ge
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sc_path", required=True, help="Pfad zur Single-Cell h5ad")
@@ -331,6 +409,16 @@ if __name__ == "__main__":
     print(ad_ge)
     print(ad_ge.obsm["tangram_ct_pred"])
     ad_ge.obsm["tangram_ct_pred"] = ad_ge.obsm["tangram_ct_pred"].rename(columns=str)
+    ad_ge = add_dissociated_annotations_to_obs(
+        ad_ge=ad_ge,
+        pred_key="tangram_ct_pred",
+        label_out="cell_type_dissociated",
+        prob_prefix="prob_",
+        prob_suffix="_dissociated",
+        sanitize_names=True,
+        add_masked_prob_columns=True,
+        mask_obs_key="cell_type",
+    )
     ad_ge.write_h5ad(os.path.join(args.outdir, "tangram_output.h5ad"))
     adata_map.write(os.path.join(args.outdir, "adata_map.h5ad"))
     # wtite also X as csv and var/obs as csv
