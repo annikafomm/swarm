@@ -14,7 +14,8 @@ linking_peaks <- function(object,
                         genome=BSgenome.Hsapiens.UCSC.hg38, 
                         cluster=NULL,
                         peak_assay="peaks",
-                        expression_assay="RNA"
+                        expression_assay="RNA",
+                        use_gene_id=FALSE
                         ){
     
     DefaultAssay(object) <- peak_assay
@@ -31,19 +32,21 @@ linking_peaks <- function(object,
     
     # link peaks to genes
     print("Linking peaks to genes...")
+    print(unique(c(priorGRN$gene, seeds$gene)))
     object.tmp <- LinkPeaks(
       object = object.links,
       peak.assay = peak_assay,
       expression.assay = expression_assay,
-      genes.use =  unique(c(priorGRN$gene, seeds$gene))
+      genes.use =  unique(c(priorGRN$gene, seeds$gene)),
+      gene.id = use_gene_id
     )
 
     print("Computing peak-gene distances...")
-    Links(object.tmp)<- distances_Links(object.tmp)
+    Links(object.tmp)<- distances_Links(object.tmp, use_gene_id = use_gene_id)
     print("Filtering links for promoters...")
-    Links(object.tmp)<- filter_links_for_promoters(object.tmp, -150000, 150000)
+    Links(object.tmp)<- filter_links_for_promoters(object.tmp, -150000, 150000, use_gene_id = use_gene_id)
     print("Annotating proximal/distal links...")
-    Links(object.tmp)<- annotate_proximal_distal(object.tmp, 100, 2000)
+    Links(object.tmp)<- annotate_proximal_distal(object.tmp, 100, 2000, use_gene_id = use_gene_id)
 
     if (length(object[['peaks']]@links)>0){
         Links(object)<-c(Links(object), Links(object.tmp))
@@ -180,7 +183,8 @@ do_peak_stats <- function(object, seeds,
     # object@misc$peak_stats.filtered<-df.stats.filtered
     
     print("Filtering peak stats...")
-    object@misc$peak_stats.filtered <- filter_gene_peak_links(object,
+    
+    peak_res<- filter_gene_peak_links(object,
                                         promoter.needed = promoter.needed,
                                         min.cells = min.cells,
                                         cluster_p_cutoff = cluster_p_cutoff,
@@ -193,7 +197,8 @@ do_peak_stats <- function(object, seeds,
                                         global_expr_given_acc_min = global_expr_given_acc_min,
                                         global_fc_min = global_fc_min
                                         )
-
+    object@misc$peak_stats.filtered <- peak_res$peak_stats_filtered
+    object@misc$peak_stats <- peak_res$peak_stats
 
     return(object)
 }
@@ -206,6 +211,9 @@ do_local_motif_stats<-function(object,
                                fragpath=NULL,
                                peaks_assay='peaks',
                                background_size=100,
+                               parallel=TRUE,
+                               verbose=TRUE,
+                               use_filtered_peak_links=TRUE,
                                min_count=1, min_log2FC=1, max_t_stat=0, min_p_adjust=0.05){
 
     # Args: - object: seurat object 
@@ -227,13 +235,26 @@ do_local_motif_stats<-function(object,
     message('Calculating motif enrichment')
     # calculate motif enrichment for seeds
     # regard the peaks that are left after filtering
-    gene_peak_links<-merge(object@misc$peak_stats.filtered, seeds[,c('gene', 'cluster')], by=c('gene', 'cluster'))
+    if (use_filtered_peak_links){
+        gene_peak_links<-merge(object@misc$peak_stats.filtered, seeds[,c('gene', 'cluster')], by=c('gene', 'cluster'))
+    } else {
+        gene_peak_links<-merge(object@misc$peak_stats, seeds[,c('gene', 'cluster')], by=c('gene', 'cluster'))
+    }
     if (nrow(gene_peak_links)==0){
         message('No peaks linked to given seeds')
         return(object)
     }
-    object<-calculate_enrichments(object, gene_peak_links=gene_peak_links)
+    # object<-calculate_enrichments(object, gene_peak_links=gene_peak_links)
+    object <- calculate_enrichments(
+            object = object,
+            gene_peak_links = gene_peak_links,
+            bg_size = background_size,
+            assay = "peaks",
+            workers = 20,
+            verbose = verbose
+            )
     df.stats.motif<-object@misc$motif_enrichment
+    
     df.stats.motif<-merge(df.stats.motif, seeds[,c('gene', 'cluster')], by=c('gene', 'cluster'))
    
 
@@ -266,7 +287,8 @@ do_local_motif_stats<-function(object,
     } 
     
     # add footprinting
-    df.stats.motif<-add_motif_stats(object, filtered.enrichment, background_size=background_size)
+    
+    df.stats.motif<-add_motif_stats(object, filtered.enrichment, background_size=background_size, parallel=parallel)
     object@misc$motif_stats<-rbind(object@misc$motif_stats, df.stats.motif)
     return(object)
     

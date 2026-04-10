@@ -112,8 +112,8 @@ include_motifs_for_seed<-function(object, gene, cluster, TFs=c(),
 
         if (nrow(distal.not.enriched)>0){
             #distal.not.enriched <- distal.not.enriched[distal.not.enriched$distal.motif_count>0,]
-            message('adding distal and not enriched motif_stats for:')
-            print(paste(gene, cluster))
+            # message('adding distal and not enriched motif_stats for:')
+            # print(paste(gene, cluster))
             
             distal.not.enriched <- add_motif_stats(object, distal.not.enriched, background_size=background_size,
                                                   parallel=parallel)
@@ -160,7 +160,7 @@ calculate_TF.actifiy_stats<-function(object, th.footprint_score=0, background_si
 
 create_subNetwork_for_seed<-function(object, gene, cluster, priorGRN, 
                                      cluster.specific=TRUE,
-                                     sd=5, score=0, a=0.05,
+                                     sd=5, score=0, a=0.05, min_per_flank=3,
                                      th.footprint_score=0,background_size=10,
                                     return_object=FALSE){
     # Args: - object: seurat object
@@ -183,9 +183,10 @@ create_subNetwork_for_seed<-function(object, gene, cluster, priorGRN,
     
     # if TF is not in database: not in combined_results
     combined_results<-do.call(rbind, tf_results)
+    print(colnames(combined_results))
    
     if (is.null(combined_results) || nrow(combined_results)==0){
-        message('No TFs found for seed')
+        # message('No TFs found for seed')
         combined_results<-data.frame('gene'=rep(gene, length(tf_results)),
                                      'cluster'=rep(cluster, length(tf_results)),
                                      'proximal.motif_count'=rep(NA, length(tf_results)),
@@ -212,7 +213,11 @@ create_subNetwork_for_seed<-function(object, gene, cluster, priorGRN,
                                      'promoter.or.enriched'=rep(NA, length(tf_results)),
                                      'TF'=names(tf_results),
                                      'result'=rep('gray', length(tf_results)),
-                                     'priorTF'=rep(TRUE, length(tf_results)))
+                                     'priorTF'=rep(TRUE, length(tf_results))
+                                     # TO DO: add columns for counts in flanks
+                                     )
+                                     
+
        
         if (return_object){
             object@misc$seedNetwork[[paste(gene, cluster)]]<-combined_results
@@ -243,6 +248,8 @@ create_subNetwork_for_seed<-function(object, gene, cluster, priorGRN,
         proximal.green.priorTFs<-proximal.present.priorTFs[proximal.present.priorTFs$'footprint_score'<score &
                                                           proximal.present.priorTFs$'sd.flanks'<sd &
                                                            proximal.present.priorTFs$'footprint_score'< proximal.present.priorTFs$'bg_footprint_mean' &
+                                                           proximal.present.priorTFs$'left_flank_nonzero_positions'> min_per_flank &
+                                                           proximal.present.priorTFs$'right_flank_nonzero_positions'> min_per_flank &
                                                           (proximal.present.priorTFs$'footprint.p_value_adj'<a |
                                                           is.na(proximal.present.priorTFs$'footprint.p_value_adj')),]
         
@@ -486,7 +493,7 @@ prepare_subNetwork<-function(subnetwork, gene){
 
 
 draw_subNetwork<-function(object, gene_list, cluster, priorGRN, 
-                          sd=5, score=0, a=0.05, th.footprint_score=0,background_size=10,
+                          sd=5, score=0, a=0.05, min_per_flank=3, th.footprint_score=0,background_size=10,
                          path=NULL, resolution=200,width = 1024, height = 1024,pointsize=10,
                          return_object=TRUE, context_name='gene_set', TFclasses=NULL,promoter_reg_only=FALSE){
 
@@ -504,7 +511,7 @@ draw_subNetwork<-function(object, gene_list, cluster, priorGRN,
     for (gene in gene_list){
         
         object<-create_subNetwork_for_seed(object, gene=gene, cluster=cluster,
-                                           sd=sd, score=score, a=a, th.footprint_score=th.footprint_score,
+                                           sd=sd, score=score, a=a, min_per_flank=min_per_flank, th.footprint_score=th.footprint_score,
                                            priorGRN=priorGRN, background_size=background_size,
                                             return_object=return_object)
 
@@ -788,10 +795,10 @@ plot_graph<-function(graph, path=NULL,
 
 
 draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN, 
-                          sd=2, score=0, a=0.05, a_red=0.5, th.footprint_score=0,background_size=10,
+                          sd=2, score=0, a=0.05, a_red=0.5, min_per_flank=3, th.footprint_score=0,background_size=10,
                          path=NULL, resolution=200,width = 1024, height = 1024,pointsize=10,
                          return_object=TRUE, context_name='gene_set', TFclasses=NULL,promoter_reg_only=FALSE,
-                                     parallel=TRUE, de_novo.threshold = "fixed"){
+                                     parallel=TRUE, de_novo.threshold = "fixed", show_colors=c("green", "yellow", "red", "blue", "gray", "black")){
 
     # plots the GRN that is the output
     
@@ -807,7 +814,7 @@ draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN,
     #gene_set_found<-unique(object@misc$motif_stats$gene)
     combined_results.list<-create_subNetwork_for_context(object, gene_list=gene_list, cluster=cluster, priorGRN, 
                                          cluster.specific=TRUE,
-                                         sd=sd, score=score, a=a,
+                                         sd=sd, score=score, a=a, min_per_flank=min_per_flank,
                                          th.footprint_score=th.footprint_score,background_size=background_size,
                                             context.name=context_name,
                                         return_object=FALSE, parallel=parallel, de_novo.threshold = de_novo.threshold, a_red=a_red) 
@@ -832,6 +839,8 @@ draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN,
     final_graph.df$color<- as.character(final_graph.df$color)
     object@misc$context_subNetwork[[context_name]]<-final_graph.df
     
+    final_graph.df<-final_graph.df[final_graph.df$color %in% show_colors,]
+    
 
     if(!is.null(TFclasses)){
         final_graph.df$from<-lapply(final_graph.df$from, function(TF) TFclasses$DBD[TFclasses$HGNC.symbol==TF])
@@ -854,16 +863,59 @@ draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN,
 
 }      
 
+visualize_subNetwork_for_context<-function(object, context_name, path=NULL, resolution=200,width = 1024, height = 1024,pointsize=10,
+                                       distinct_plots=TRUE, regard.yellow=FALSE,format='pdf', TFclasses=NULL,promoter_reg_only=FALSE){
+    # visualizes the subnetwork that is already created and stored in the object
+    if (is.null(object@misc$context_subNetwork[[context_name]])){
+        message('No subnetwork found for this context. Please run draw_subNetwork_for_context first.')
+        return(NULL)
+    }
+    final_graph.df<-object@misc$context_subNetwork[[context_name]]
+    
+    if(!is.null(TFclasses)){
+        final_graph.df$from<-lapply(final_graph.df$from, function(TF) TFclasses$DBD[TFclasses$HGNC.symbol==TF])
+    }
+    if (promoter_reg_only){
+        final_graph.df<-final_graph.df[final_graph.df$reg_type==1,]
+    }
+    
+    final_graph<-igraph::graph_from_data_frame(final_graph.df, directed = TRUE)
+    
+    plot_graph(final_graph, path=path, resolution=resolution,
+               width = width, height = height,pointsize=pointsize, context=context_name)
+    
+    return(final_graph.df)
+}
+
 create_subNetwork_for_context <- function(
     object, gene_list, cluster, priorGRN,
     cluster.specific = TRUE,
-    sd = 5, score = 0, a = 0.05, a_red = 0.5,
+    sd = 5, score = 0, a = 0.05, min_per_flank=3, a_red = 0.5,
     th.footprint_score = 0, background_size = 10,
     context.name = "context",
     return_object = FALSE, parallel = TRUE,
-    de_novo.threshold = c("auto", "fixed")
+    de_novo.threshold = c("auto", "fixed"),
+    min_count_distal = 1,
+    min_log2FC_distal = 1,
+    min_p_adjust_enr_distal = 0.05
 ){
     de_novo.threshold <- match.arg(de_novo.threshold)
+
+     green_enrichment_filter <- function(df) {
+        if (!has_rows(df)) return(df)
+
+        distal_ok <- !is.na(df$distal.motif_count) &
+            !is.na(df$log2FC.distal) &
+            !is.na(df$p_adjust.distal) &
+            df$distal.motif_count >= min_count_distal &
+            df$log2FC.distal >= min_log2FC_distal &
+            df$p_adjust.distal < min_p_adjust_enr_distal
+
+        proximal_ok <- !is.na(df$proximal.motif_count) &
+            df$proximal.motif_count > 0
+
+        df[distal_ok | proximal_ok, , drop = FALSE]
+    }
 
     has_rows <- function(x) {
         is.data.frame(x) && !is.null(x) && nrow(x) > 0
@@ -891,6 +943,7 @@ create_subNetwork_for_context <- function(
         )
 
         tf_results <- tf_stats[[paste(gene, cluster)]]
+        print(colnames(tf_results))
         combined_results[[gene]] <- do.call(rbind, tf_results)
 
         if (is.null(combined_results[[gene]]) || nrow(combined_results[[gene]]) == 0){
@@ -898,7 +951,7 @@ create_subNetwork_for_context <- function(
             print(length(tf_results))
             print(names(tf_results))
 
-            if (nrow(object@misc$df.stats.filtered[object@misc$df.stats.filtered$gene == gene, ]) == 0){
+            if (is.null(object@misc$df.stats.filtered[object@misc$df.stats.filtered$gene == gene, ])){
                 message("No TFs found for seed, as no peak is linked to seed")
                 motif <- "--"
             } else {
@@ -931,12 +984,17 @@ create_subNetwork_for_context <- function(
                 footprint.p_value_adj = rep(NA, length(tf_results)),
                 sd.flanks = rep(NA, length(tf_results)),
                 bg_sd_mean = rep(NA, length(tf_results)),
+                left_flank_nonzero_positions = rep(NA, length(tf_results)),
+                right_flank_nonzero_positions = rep(NA, length(tf_results)),
                 promoter.or.enriched = rep(NA, length(tf_results)),
                 TF = names(tf_results)
+                # TO DO: add columns for flank counts
             )
 
         } else {
             combined_results[[gene]]$TF <- sub("\\..*", "", rownames(combined_results[[gene]]))
+            # print("combined_results[[gene]]")
+            # print(combined_results[[gene]])
         }
     }
 
@@ -949,6 +1007,8 @@ create_subNetwork_for_context <- function(
     combined_results$result <- "yellow"
 
     combined_results$tmp <- rownames(combined_results)
+    print(colnames(combined_results))
+    print(colnames(priorGRN[, c("gene", "TF")]))
     combined_results.prior <- merge(
         combined_results,
         priorGRN[, c("gene", "TF")],
@@ -981,6 +1041,8 @@ create_subNetwork_for_context <- function(
             proximal.present.priorTFs$footprint_score < score &
             proximal.present.priorTFs$sd.flanks < sd &
             proximal.present.priorTFs$footprint_score < proximal.present.priorTFs$bg_footprint_mean &
+            proximal.present.priorTFs$left_flank_nonzero_positions > min_per_flank &
+            proximal.present.priorTFs$right_flank_nonzero_positions > min_per_flank &
             (proximal.present.priorTFs$footprint.p_value_adj < a |
              is.na(proximal.present.priorTFs$footprint.p_value_adj)), ,
             drop = FALSE
@@ -991,6 +1053,8 @@ create_subNetwork_for_context <- function(
             distal.present.priorTFs$footprint_score < score &
             distal.present.priorTFs$sd.flanks < sd &
             distal.present.priorTFs$footprint_score < distal.present.priorTFs$bg_footprint_mean &
+            distal.present.priorTFs$left_flank_nonzero_positions > min_per_flank &
+            distal.present.priorTFs$right_flank_nonzero_positions > min_per_flank &
             (distal.present.priorTFs$footprint.p_value_adj < a |
              is.na(distal.present.priorTFs$footprint.p_value_adj)), ,
             drop = FALSE
@@ -998,16 +1062,22 @@ create_subNetwork_for_context <- function(
     } else {
         proximal.green.priorTFs <- proximal.present.priorTFs[
             proximal.present.priorTFs$footprint_score < score &
-            proximal.present.priorTFs$sd.flanks < sd, ,
+            proximal.present.priorTFs$sd.flanks < sd &
+            proximal.present.priorTFs$left_flank_nonzero_positions > min_per_flank &
+            proximal.present.priorTFs$right_flank_nonzero_positions > min_per_flank , ,
             drop = FALSE
         ]
 
         distal.green.priorTFs <- distal.present.priorTFs[
             distal.present.priorTFs$footprint_score < score &
-            distal.present.priorTFs$sd.flanks < sd, ,
+            distal.present.priorTFs$sd.flanks < sd &
+            distal.present.priorTFs$left_flank_nonzero_positions > min_per_flank &
+            distal.present.priorTFs$right_flank_nonzero_positions > min_per_flank , ,
             drop = FALSE
         ]
     }
+    proximal.green.priorTFs <- green_enrichment_filter(proximal.green.priorTFs)
+    distal.green.priorTFs   <- green_enrichment_filter(distal.green.priorTFs)
 
     combined_results$result[
         rownames(combined_results) %in% rownames(proximal.present.priorTFs) |
@@ -1068,6 +1138,8 @@ create_subNetwork_for_context <- function(
                 new.proximal.TFs$footprint_score < score &
                 new.proximal.TFs$sd.flanks < sd &
                 new.proximal.TFs$footprint_score < new.proximal.TFs$bg_footprint_mean &
+                new.proximal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.proximal.TFs$right_flank_nonzero_positions > min_per_flank &
                 (new.proximal.TFs$footprint.p_value_adj < a |
                  is.na(new.proximal.TFs$footprint.p_value_adj)), ,
                 drop = FALSE
@@ -1076,6 +1148,8 @@ create_subNetwork_for_context <- function(
             new.proximal.green.TFs <- new.proximal.TFs[
                 new.proximal.TFs$footprint_score < avg.proximal.green.priorTFs[["footprint_score"]] &
                 new.proximal.TFs$sd.flanks < avg.proximal.green.priorTFs[["sd.flanks"]] &
+                new.proximal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.proximal.TFs$right_flank_nonzero_positions > min_per_flank &
                 (new.proximal.TFs$footprint.p_value_adj < a |
                  is.na(new.proximal.TFs$footprint.p_value_adj)), ,
                 drop = FALSE
@@ -1088,6 +1162,8 @@ create_subNetwork_for_context <- function(
                 new.distal.TFs$footprint_score < score &
                 new.distal.TFs$sd.flanks < sd &
                 new.distal.TFs$footprint_score < new.distal.TFs$bg_footprint_mean &
+                new.distal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.distal.TFs$right_flank_nonzero_positions > min_per_flank &
                 (new.distal.TFs$footprint.p_value_adj < a |
                  is.na(new.distal.TFs$footprint.p_value_adj)), ,
                 drop = FALSE
@@ -1096,6 +1172,8 @@ create_subNetwork_for_context <- function(
             new.distal.green.TFs <- new.distal.TFs[
                 new.distal.TFs$footprint_score < avg.distal.green.priorTFs[["footprint_score"]] &
                 new.distal.TFs$sd.flanks < avg.distal.green.priorTFs[["sd.flanks"]] &
+                new.distal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.distal.TFs$right_flank_nonzero_positions > min_per_flank &
                 (new.distal.TFs$footprint.p_value_adj < a |
                  is.na(new.distal.TFs$footprint.p_value_adj)), ,
                 drop = FALSE
@@ -1139,13 +1217,17 @@ create_subNetwork_for_context <- function(
         if (use.fixed.proximal) {
             new.proximal.green.TFs <- new.proximal.TFs[
                 new.proximal.TFs$footprint_score < score &
-                new.proximal.TFs$sd.flanks < sd*2, ,
+                new.proximal.TFs$sd.flanks < sd*2 &
+                new.proximal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.proximal.TFs$right_flank_nonzero_positions > min_per_flank, ,
                 drop = FALSE
             ]
         } else {
             new.proximal.green.TFs <- new.proximal.TFs[
                 new.proximal.TFs$footprint_score < avg.proximal.green.priorTFs[["footprint_score"]] &
-                new.proximal.TFs$sd.flanks < avg.proximal.green.priorTFs[["sd.flanks"]], ,
+                new.proximal.TFs$sd.flanks < avg.proximal.green.priorTFs[["sd.flanks"]] &
+                new.proximal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.proximal.TFs$right_flank_nonzero_positions > min_per_flank, ,
                 drop = FALSE
             ]
         }
@@ -1153,13 +1235,17 @@ create_subNetwork_for_context <- function(
         if (use.fixed.distal) {
             new.distal.green.TFs <- new.distal.TFs[
                 new.distal.TFs$footprint_score < score &
-                new.distal.TFs$sd.flanks < sd*2, ,
+                new.distal.TFs$sd.flanks < sd*2 &
+                new.distal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.distal.TFs$right_flank_nonzero_positions > min_per_flank, ,
                 drop = FALSE
             ]
         } else {
             new.distal.green.TFs <- new.distal.TFs[
                 new.distal.TFs$footprint_score < avg.distal.green.priorTFs[["footprint_score"]] &
-                new.distal.TFs$sd.flanks < avg.distal.green.priorTFs[["sd.flanks"]], ,
+                new.distal.TFs$sd.flanks < avg.distal.green.priorTFs[["sd.flanks"]] &
+                new.distal.TFs$left_flank_nonzero_positions > min_per_flank &
+                new.distal.TFs$right_flank_nonzero_positions > min_per_flank, ,
                 drop = FALSE
             ]
         }
@@ -1181,12 +1267,14 @@ create_subNetwork_for_context <- function(
         #     new.distal.TFs$sd.flanks > sd, ,
         #     drop = FALSE
         # ]
-        new.proximal.red.TFs <- new.proximal.TFs[
-            new.proximal.TFs$footprint_score > 0.5 |
-            new.proximal.TFs$sd.flanks > sd*2, ,
+        new.distal.red.TFs <- new.distal.TFs[
+            new.distal.TFs$footprint_score > 0.5 |
+            new.distal.TFs$sd.flanks > sd*2, ,
             drop = FALSE
         ]
     }
+    new.proximal.green.TFs <- green_enrichment_filter(new.proximal.green.TFs)
+    new.distal.green.TFs   <- green_enrichment_filter(new.distal.green.TFs)
 
     combined_results$result[
         rownames(combined_results) %in% rownames(absent.new.TFs)

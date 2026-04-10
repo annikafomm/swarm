@@ -440,25 +440,25 @@ global_motif_analysis <- function(object, args, logfile) {
           }
     write.csv(chromvar_scores, file = file.path(outdir_multiome, "chromvar_scores.csv"))
 
+    M_path <- file.path(args$outdir, "adata_map.X.csv")
+    meta_path <- file.path(args$outdir, "adata_map.var.csv")
+
+    if (!file.exists(M_path)) stop("Tangram map not found: ", M_path)
+    if (!file.exists(meta_path)) stop("Spot metadata not found: ", meta_path)
+
+    M <- read.csv(M_path, row.names = 1, check.names = FALSE)
+    spot_meta <- read.csv(meta_path, check.names = FALSE)
+
+    spot_obj <- project_chromvar_to_spots(
+      object_dissociated = object,
+      M = M,
+      spot_meta = spot_meta,
+      chromvar_assay = "chromvar",
+      clustering_var = "leiden"
+    )
+
     if (args$differential_motif_activity) {
       log_message("Differential motif activity on spatial spots (projected chromVAR)...", logfile, 2)
-
-      M_path <- file.path(args$outdir, "adata_map.X.csv")
-      meta_path <- file.path(args$outdir, "adata_map.var.csv")
-
-      if (!file.exists(M_path)) stop("Tangram map not found: ", M_path)
-      if (!file.exists(meta_path)) stop("Spot metadata not found: ", meta_path)
-
-      M <- read.csv(M_path, row.names = 1, check.names = FALSE)
-      spot_meta <- read.csv(meta_path, check.names = FALSE)
-
-      spot_obj <- project_chromvar_to_spots(
-        object_dissociated = object,
-        M = M,
-        spot_meta = spot_meta,
-        chromvar_assay = "chromvar",
-        clustering_var = "leiden"
-      )
 
       spot_obj <- run_diff_motif_activity_spatial(
         spot_obj = spot_obj,
@@ -470,7 +470,7 @@ global_motif_analysis <- function(object, args, logfile) {
         save_in_misc = TRUE
       )
 
-      saveRDS(spot_obj, file.path(outdir, "spot_obj_chromvar.rds"))
+      #saveRDS(spot_obj, file.path(outdir, "spot_obj_chromvar.rds"))
 
       top_tbls <- top_motifs_per_comparison(spot_obj)
       # save top motifs in misc for later use in footprinting
@@ -500,6 +500,7 @@ global_motif_analysis <- function(object, args, logfile) {
         write.csv(tbl, out_file, row.names = FALSE)
       }
     }
+    saveRDS(spot_obj, file.path(outdir, "spot_obj_chromvar.rds"))
 
   }
   # Enable footprinting for given motifs or da motifs

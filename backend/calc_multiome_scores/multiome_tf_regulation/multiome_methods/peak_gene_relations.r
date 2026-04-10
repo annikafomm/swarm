@@ -3,7 +3,45 @@
 # -------------------------------------------------------------------------- 
 # Distal peak selection
 
-Get_gene_location <- function(object, assay='peaks'){
+# Get_gene_location <- function(object, assay = "peaks") {
+#   ann <- object@assays[[assay]]@annotation
+#   genes <- Links(object)$gene
+
+#   genes_start <- numeric(length(genes))
+#   genes_end <- numeric(length(genes))
+
+#   for (i in seq_along(genes)) {
+#     gene <- genes[i]
+
+#     idx <- if (gene %in% ann$gene_id) {
+#       ann$gene_id == gene
+#     } else {
+#       ann$gene_name == gene
+#     }
+
+#     gr <- ann[idx]
+
+#     if (length(gr) == 0) {
+#       genes_start[i] <- NA_real_
+#       genes_end[i] <- NA_real_
+#       next
+#     }
+
+#     gene_strand <- unique(as.character(strand(gr)))
+
+#     if ("+" %in% gene_strand) {
+#       genes_start[i] <- min(start(gr))
+#       genes_end[i] <- max(end(gr))
+#     } else {
+#       genes_start[i] <- -max(start(gr))
+#       genes_end[i] <- -min(end(gr))
+#     }
+#   }
+
+#   list(genes_start, genes_end)
+# }
+
+Get_gene_location <- function(object, assay='peaks', use_gene_id=FALSE){
      # location of genes
      # regarding +/- strand
     # Args: Seurat object
@@ -12,15 +50,20 @@ Get_gene_location <- function(object, assay='peaks'){
     genes <- Links(object)@elementMetadata$gene
     genes_start = c()
     genes_end = c()
+    if (use_gene_id){
+        gene_col <- 'gene_id'
+    } else{
+        gene_col <- 'gene_name'
+    }
     for (gene in genes){
-        if ('+' %in% strand(object@assays[[assay]]@annotation[object@assays[[assay]]@annotation$gene_name==gene])@values){
+        if ('+' %in% strand(object@assays[[assay]]@annotation[mcols(object@assays[[assay]]@annotation)[[gene_col]]==gene])@values){
             # gene is located on forward strand, TF is located left from gene
-            gene_start <- min(summary(start(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==gene]@ranges)))
-            gene_end <- max(summary(end(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==gene]@ranges)))
+            gene_start <- min(summary(start(object[[assay]]@annotation[mcols(object@assays[[assay]]@annotation)[[gene_col]]==gene]@ranges)))
+            gene_end <- max(summary(end(object[[assay]]@annotation[mcols(object@assays[[assay]]@annotation)[[gene_col]]==gene]@ranges)))
         }else{
             # gene is located on backward strand, TF is located right from gene
-            gene_start <- max(summary(start(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==gene]@ranges)))*(-1)
-            gene_end <- min(summary(end(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==gene]@ranges)))*(-1)
+            gene_start <- max(summary(start(object[[assay]]@annotation[mcols(object@assays[[assay]]@annotation)[[gene_col]]==gene]@ranges)))*(-1)
+            gene_end <- min(summary(end(object[[assay]]@annotation[mcols(object@assays[[assay]]@annotation)[[gene_col]]==gene]@ranges)))*(-1)
         
         }
         genes_start <- append(genes_start, gene_start)
@@ -30,14 +73,21 @@ Get_gene_location <- function(object, assay='peaks'){
     return(genes_location)
 }     
 
-Get_peak_location <- function(object){
+Get_peak_location <- function(object, use_gene_id=FALSE){
      # location of peaks 
     linked_genes <- Links(object)@elementMetadata$gene
+    
     splitted_peaks_ranges <- strsplit(Links(object)@elementMetadata$peak, "-")     
     peaks_start = c()
     peaks_end = c()
+    
     for (i in 1:length(linked_genes)){
-        if ('+' %in% strand(object@assays$peaks@annotation[object@assays$peaks@annotation$gene_name==linked_genes[i]])@values){
+        if (use_gene_id){
+            vals <- strand(object@assays$peaks@annotation[mcols(object@assays$peaks@annotation)[["gene_id"]]==linked_genes[i]])@values
+        } else{
+            vals <- strand(object@assays$peaks@annotation[mcols(object@assays$peaks@annotation)[["gene_name"]]==linked_genes[i]])@values
+        }
+        if ('+' %in% vals){
             peak_start <- as.integer(splitted_peaks_ranges[[i]][2])
             peak_end <- as.integer(splitted_peaks_ranges[[i]][3])
         }else{
@@ -92,16 +142,16 @@ distances_Links_new<-function(object, gene.name){
 #'
 #' @seealso Signac::Links
 #' @export
-distances_Links <- function(object){
+distances_Links <- function(object, use_gene_id=FALSE){
     # how many bp upstream/ downstream from TSS is peak?
     # location of genes
-    genes_location <- Get_gene_location(object)
+    genes_location <- Get_gene_location(object, use_gene_id=use_gene_id)
     genes_start = as.numeric(unlist(genes_location[[1]]))
     genes_end = as.numeric(unlist(genes_location[[2]]))
     
     
     # location of peaks 
-    peaks_location <- Get_peak_location(object)
+    peaks_location <- Get_peak_location(object, use_gene_id=use_gene_id)
     peaks_start = as.numeric(unlist(peaks_location[1]))
     peaks_end = as.numeric(unlist(peaks_location[2]))
 
@@ -157,15 +207,15 @@ distances_Links <- function(object){
 #'
 #' @seealso Signac::Links
 #' @export
-filter_links_for_promoters <- function(object, upstream_min=100, upstream_max=2000){
+filter_links_for_promoters <- function(object, upstream_min=100, upstream_max=2000, use_gene_id=FALSE){
     # location of genes
-    genes_location <- Get_gene_location(object)
+    genes_location <- Get_gene_location(object, use_gene_id=use_gene_id)
     genes_start = as.numeric(unlist(genes_location[[1]]))
     genes_end = as.numeric(unlist(genes_location[[2]]))
     
     
     # location of peaks 
-    peaks_location <- Get_peak_location(object)
+    peaks_location <- Get_peak_location(object, use_gene_id=use_gene_id)
     peaks_start = as.numeric(unlist(peaks_location[1]))
     peaks_end = as.numeric(unlist(peaks_location[2]))
 
@@ -175,6 +225,7 @@ filter_links_for_promoters <- function(object, upstream_min=100, upstream_max=20
                                   
     links  <- object@assays$peaks@links                          
     condition <- (peaks_upstream_min < genes_start) & (peaks_upstream_max > genes_start )
+    print(condition)
     promoter_links <- links[condition]
     return(promoter_links)
     
@@ -199,15 +250,15 @@ filter_links_for_promoters <- function(object, upstream_min=100, upstream_max=20
 #'
 #' @seealso Signac::Links
 #' @export
-annotate_proximal_distal <- function(object,  upstream_min=100, upstream_max=2000){
+annotate_proximal_distal <- function(object,  upstream_min=100, upstream_max=2000, use_gene_id=FALSE){
     # location of genes
-    genes_location <- Get_gene_location(object)
+    genes_location <- Get_gene_location(object, use_gene_id=use_gene_id)
     genes_start = as.numeric(unlist(genes_location[[1]]))
     genes_end = as.numeric(unlist(genes_location[[2]]))
     
     
     # location of peaks 
-    peaks_location <- Get_peak_location(object)
+    peaks_location <- Get_peak_location(object, use_gene_id=use_gene_id)
     peaks_start = as.numeric(unlist(peaks_location[1]))
     peaks_end = as.numeric(unlist(peaks_location[2]))
 
@@ -731,7 +782,7 @@ filter_gene_peak_links <- function(
     print(paste0("Number of linked peaks after filtering: ", nrow(peak_stats_filtered)))
     print(table(peak_stats_filtered$pass_type, useNA = "ifany"))
 
-    return(peak_stats_filtered)
+    return(list(peak_stats = peak_stats, peak_stats_filtered = peak_stats_filtered))
 }               
                                  
 
@@ -2492,24 +2543,30 @@ GetMotifsInPeak <- function(peak, object, pwm){
 }
                                  
                                  
-get_motifs_in_promoter_region <- function(gene, motifs_positions, pbmc){
+get_motifs_in_promoter_region <- function(gene, motifs_positions, pbmc, use_gene_id=FALSE){
     #Args:
     #    gene: String
     #    motifs_positions: GRanges object
     #    pbmc: seurat object 
     #Returns:
     #   filtered GRanges object, obly containing the ranges that are in promoter region of gene
-    if ('-' %in% strand(pbmc@assays$peaks@annotation[pbmc@assays$peaks@annotation$gene_name==gene])@values){
+
+    if (use_gene_id){
+        gene_col <- 'gene_id'
+    } else {
+        gene_col <- 'gene_name'
+    }
+    if ('-' %in% strand(pbmc@assays$peaks@annotation[pbmc@assays$peaks@annotation[[gene_col]]==gene])@values){
         #backward_strand
         gene_strand = '-'
-        gene_start = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
-        gene_end = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
+        gene_start = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
+        gene_end = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
         relevant_motifs = subset(motifs_positions, (gene_start+1000) > motifs_positions$start  & (gene_start+100)<motifs_positions$end)
     }else{
         #forward_strand
         gene_strand = '+'
-        gene_start = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
-        gene_end = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
+        gene_start = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
+        gene_end = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
         relevant_motifs = subset(motifs_positions, (gene_start-1000) < motifs_positions$start  & (gene_start-100)>motifs_positions$end)
     }
     return(relevant_motifs)
@@ -2585,25 +2642,27 @@ get_GRanges_for_motifs <- function(object, motifs_of_interest, assay='peaks'){
 }
                                  
                                  
-GRange_motif_gene_pair <- function(pbmc, motif, gene){
+GRange_motif_gene_pair <- function(pbmc, motif, gene, use_gene_id=FALSE){
     # Only those ranges of the motif, that are located in promoter region of the gene are returned
     # Args: pbmc: seurat object
     #       motif: list of Strings, key of motif, must have been added by calling AddMotifs in advance
     #       gene: String, name of gene
-    #
+    #       use_gene_id: Boolean, whether to use gene_id instead of gene_name
     # Returns: GRanges object with ranges in promoter region of gene
     
     motifs_ranges <- get_GRanges_for_motifs(pbmc, motif)[[motif]]
     print(motifs_ranges)
+
+    gene_col <- ifelse(use_gene_id, 'gene_id', 'gene_name')
                    
     # get promoter region
-    chr <- as.character(runValue(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@seqnames))
-    if ('-' %in% strand(pbmc@assays$peaks@annotation[pbmc@assays$peaks@annotation$gene_name==gene])@values){
+    chr <- as.character(runValue(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@seqnames))
+    if ('-' %in% strand(pbmc@assays$peaks@annotation[pbmc@assays$peaks@annotation[[gene_col]]==gene])@values){
         
         #backward_strand   end_gene_start.....start_promoter_end..
         gene_strand = '-'
-        gene_start = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
-        gene_end = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
+        gene_start = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
+        gene_end = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
         
         # pr_start < pr < pr_end
         promoter_start = gene_start+200
@@ -2612,8 +2671,8 @@ GRange_motif_gene_pair <- function(pbmc, motif, gene){
     }else{
         #forward_strand  start_promoter_end......start_gene_end
         gene_strand = '+'
-        gene_start = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
-        gene_end = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation$gene_name==gene]@ranges)))
+        gene_start = min(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
+        gene_end = max(summary(start(pbmc[["ATAC"]]@annotation[pbmc[["ATAC"]]@annotation[[gene_col]]==gene]@ranges)))
         
         # pr_start < pr < pr_end
         promoter_start = gene_start-2000
@@ -2626,15 +2685,18 @@ GRange_motif_gene_pair <- function(pbmc, motif, gene){
     return(motifs_ranges[end(motifs_ranges@ranges)<= promoter_end])
 }  
 
-Get_gene_position<- function(object, target_gene, assay='peaks'){
-    if ('+' %in% strand(object@assays[[assay]]@annotation[object@assays[[assay]]@annotation$gene_name==target_gene])@values){
+Get_gene_position<- function(object, target_gene, assay='peaks', use_gene_id=FALSE){
+     # Args: object: seurat object with annotation in assay slot, target_gene: String, assay: String, use_gene_id: Boolean
+     # Returns: list with start and end of gene (ints)
+    gene_col <- ifelse(use_gene_id, 'gene_id', 'gene_name')
+    if ('+' %in% strand(object@assays[[assay]]@annotation[object@assays[[assay]]@annotation[[gene_col]]==target_gene])@values){
         # gene is located on forward strand, TF is located left from gene
-        gene_start <- min(summary(start(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==target_gene]@ranges)))
-        gene_end <- max(summary(end(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==target_gene]@ranges)))
+        gene_start <- min(summary(start(object[[assay]]@annotation[object[[assay]]@annotation[[gene_col]]==target_gene]@ranges)))
+        gene_end <- max(summary(end(object[[assay]]@annotation[object[[assay]]@annotation[[gene_col]]==target_gene]@ranges)))
     }else{
         # gene is located on backward strand, TF is located right from gene
-        gene_start <- max(summary(start(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==target_gene]@ranges)))*(-1)
-        gene_end <- min(summary(end(object[[assay]]@annotation[object[[assay]]@annotation$gene_name==target_gene]@ranges)))*(-1)
+        gene_start <- max(summary(start(object[[assay]]@annotation[object[[assay]]@annotation[[gene_col]]==target_gene]@ranges)))*(-1)
+        gene_end <- min(summary(end(object[[assay]]@annotation[object[[assay]]@annotation[[gene_col]]==target_gene]@ranges)))*(-1)
     }
     return(list(start = gene_start, end = gene_end))
 }
@@ -2922,13 +2984,14 @@ plot_links_per_gene <- function(object, assay="peaks"){
 }
 
 
-coverage_plot_for_gene <- function(object, gene_name) {
+coverage_plot_for_gene <- function(object, gene_name, use_gene_id=FALSE) {
     links <- Links(object[["peaks"]])
-    links_gene <- links[links$gene == gene_name]
+    gene_col <- ifelse(use_gene_id, 'gene_id', 'gene_name')
+    links_gene <- links[links[[gene_col]] == gene_name]
     print(links_gene)
 
     # the strand of the gene
-    strand <- as.character(unique(strand(Annotation(res_links$object)[Annotation(res_links$object)$gene_name == "FOXA1"])))
+    strand <- as.character(unique(strand(Annotation(res_links$object)[Annotation(res_links$object)[[gene_col]] == gene_name])))
 
     if ("+" %in% strand) {
         # if gene is on the + strand, upstream is left and downstream is right

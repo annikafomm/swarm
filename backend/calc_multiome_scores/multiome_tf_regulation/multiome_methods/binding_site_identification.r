@@ -60,7 +60,7 @@ getMotifStats<-function(object, gene, cluster, motif=NULL, gene_peak_links=NULL)
         if (nrow(motif_stats_for_seed)>0){
             return(motif_stats_for_seed)
         }else{
-            message('No motifs found for given seed.')
+            # message('No motifs found for given seed.')
             return(NULL)
             return(motif_enrichment_per_gene(object=object, gene=gene, cluster=cluster, gene_peak_links=gene_peak_links))
         }
@@ -159,7 +159,7 @@ compute_motifs_to_gene <-function(object, gene, cluster,
         geneChrom = paste("chr", as.character(seqnames(geneCoords)), sep="")
         
         if (length(geneStrand)>1){
-            message('Multiple ranges found. First range chosen.')
+            # message('Multiple ranges found. First range chosen.')
             geneCoords=geneCoords[1]
             geneStrand=geneStrand[1]
             geneChrom=geneChrom[1]
@@ -498,7 +498,6 @@ filter_motifs_by_enrichment <- function(object=NULL,
                                         motif_enrichment=NULL,
                                         min_count=1, 
                                         min_log2FC=1, 
-                                        max_t_stat=0, 
                                         min_p_adjust=0.05){
     # Args: - object: seurat object
     #       - motif_enrichment: data.frame
@@ -521,7 +520,6 @@ filter_motifs_by_enrichment <- function(object=NULL,
 
     enr<-enr[(enr[,'distal.motif_count']>=min_count & 
         enr[,'log2FC.distal']>=min_log2FC & 
-        enr[,'t_stat.distal']<max_t_stat & 
         enr[,'p_adjust.distal']<min_p_adjust)|enr[,'proximal.motif_count']>0,]
     filtered_enrichment<-enr
     return(filtered_enrichment)
@@ -542,7 +540,7 @@ get_tf_bindingsites_in_region = function(gene.name, motif.id, prom.length= 2000)
     geneChrom = paste("chr", as.character(seqnames(geneCoords)), sep="")
 
     if (length(geneStrand)>1){
-        message('Multiple ranges found. First range chosen.')
+        # message('Multiple ranges found. First range chosen.')
         geneCoords=geneCoords[1]
         geneStrand=geneStrand[1]
         geneChrom=geneChrom[1]
@@ -688,7 +686,9 @@ global_footprint_enrichment<-function(object, cls=NULL, motifs=NULL,
           background_score = result$background_score,
           difference = result$difference,
           sd.flanks = result$foreground_sd.flanks,
-          bg_sd_mean = result$background_sd.flanks
+          bg_sd_mean = result$background_sd.flanks,
+          left_flank_nonzero_positions = result$left_flank_nonzero_positions,
+          right_flank_nonzero_positions = result$right_flank_nonzero_positions
         )
       })
       result_df <- rbind(result_df, do.call(rbind, results))
@@ -825,6 +825,7 @@ Footprint_gene_motif <- function(object, gene, cluster, motif,
                                         position.enrichment.clusterspecific=TRUE,
                                         background_cluster=FALSE,
                                         expected.insertions=NULL,
+                                        flank_width=20,
                                         downstream.extension=50, 
                                         upstream.extension=50,
                                         plotting=TRUE,
@@ -952,7 +953,8 @@ Footprint_gene_motif <- function(object, gene, cluster, motif,
         observed.insertions_normalized <- observed.insertions
     }      
     
-    plot_df = data.frame(observed.insertions=observed.insertions_normalized,
+    plot_df = data.frame(observed.insertions.counts_sum=colSums(RegionPileupMatrix_gene_motif),
+                         observed.insertions=observed.insertions_normalized,
                          position=colnames(RegionPileupMatrix_gene_motif),
                          position_to_plot = seq(1,length(colnames(RegionPileupMatrix_gene_motif))),
                          expected.insertions=expected.insertions,
@@ -997,7 +999,7 @@ Footprint_gene_motif <- function(object, gene, cluster, motif,
 
     # PLOTTING
     if (plotting | !(return_data)){
-        footprint_plot<- plotFootprint(plot_df, motif=motif, gene=gene, cluster=cluster)
+        footprint_plot<- plotFootprint(plot_df, motif=motif, gene=gene, cluster=cluster, flank_width=flank_width)
         if(plotting){
             print(footprint_plot)
         }
@@ -1025,7 +1027,7 @@ score_footprint<-function(object, motif, footprint_data,
     # returns: 
     #       - score: numeric
     if(is.null(footprint_data)){
-        message('No footprint data')
+        # message('No footprint data')
         return(data.frame(score=NaN, sd.flanks=NaN))
     }
     
@@ -1035,14 +1037,24 @@ score_footprint<-function(object, motif, footprint_data,
     begin.footprint <- ((len.footprint-len.motif)/2-pad_fp)
     end.footprint <- ((len.footprint+len.motif)/2+pad_fp)
     pos.footprint <- c( begin.footprint:end.footprint )
-    pos.flanks <- c( ((begin.footprint-width.flanks-1):(begin.footprint-1)),# left flank
-                        ((end.footprint+1):(end.footprint+1+width.flanks)))# right flank
-    
+    # pos.flanks <- c( ((begin.footprint-width.flanks-1):(begin.footprint-1)),# left flank
+    #                     ((end.footprint+1):(end.footprint+1+width.flanks)))# right flank
+    pos.left.flank  <- max(1, begin.footprint - width.flanks):(begin.footprint - 1)
+    pos.right.flank <- (end.footprint + 1):min(len.footprint, end.footprint + width.flanks)
+    pos.flanks <- c(pos.left.flank, pos.right.flank)
     
     #print(pos.footprint)
     #print(pos.flanks)
     flanks <- footprint_data$difference[pos.flanks]
     footprint <- footprint_data$difference[pos.footprint]
+
+    left_flank_nonzero_positions <- sum(
+        footprint_data$observed.insertions.counts_sum[pos.left.flank] != 0
+    )
+    right_flank_nonzero_positions <- sum(
+        footprint_data$observed.insertions.counts_sum[pos.right.flank] != 0
+    )
+
     if (regardPosNegOnly){
         mean.flanks <- mean(flacks[flanks>0])
         mean.footprint <- mean(footprint[footprint<0])
@@ -1051,14 +1063,16 @@ score_footprint<-function(object, motif, footprint_data,
         mean.footprint <- mean(footprint)
     }
    
-    return(data.frame(score=(mean.footprint-mean.flanks), sd.flanks=sd(flanks)))
+    return(data.frame(score=(mean.footprint-mean.flanks), sd.flanks=sd(flanks),
+                      left_flank_nonzero_positions=left_flank_nonzero_positions,
+                      right_flank_nonzero_positions=right_flank_nonzero_positions))
 }     
 
 
 add_motif_stats<-function(object, filtered.enrichment,
                          gene_peak_links=NULL, background_size=100, 
                         delete_background=TRUE, plotting=FALSE, replace=TRUE,
-                         parallel=TRUE, max_cores=8){
+                         parallel=TRUE, max_cores=20){
     # tests against random background of single motifs how good a specific footprint score is
     # Args: - object: seurat object
     #       - filtered.enrichment: data.frame containing rownames=motifs, columns: gene, cluster,
@@ -1112,6 +1126,8 @@ add_motif_stats<-function(object, filtered.enrichment,
                  'footprint.p_value_adj'=NA,
                  'sd.flanks'= NaN,        
                   'bg_sd_mean'=NA,
+                     'left_flank_nonzero_positions'=NA,
+                     'right_flank_nonzero_positions'=NA,
                   row.names=NULL))
         })
     }
@@ -1121,8 +1137,8 @@ add_motif_stats<-function(object, filtered.enrichment,
     if (parallel){
         # Use conservative core count to avoid communication overhead
         num_cores <- min(round(detectCores()/4), max_cores)  # Cap at max_cores max
-        message(paste("Detected", detectCores(), "cores. Using", num_cores, "cores for parallel processing."))
-        message(paste('Attempting parallelized processing for', nrow(filtered.enrichment), 'Seed-motif pairs. Using', num_cores, 'cores.'))
+        # message(paste("Detected", detectCores(), "cores. Using", num_cores, "cores for parallel processing."))
+        # message(paste('Attempting parallelized processing for', nrow(filtered.enrichment), 'Seed-motif pairs. Using', num_cores, 'cores.'))
         
         tryCatch({
             footprint_stats_test.results <- mclapply(1:nrow(filtered.enrichment), function(i) {
@@ -1178,7 +1194,7 @@ add_motif_stats<-function(object, filtered.enrichment,
         message(paste("Result types:", paste(sapply(footprint_stats_test.results, class), collapse=", ")))
         stop("Failed to combine footprint stats results")
     })
-    filtered.enrichment<- cbind(filtered.enrichment, footprint_stats_test.results[,4:11])
+    filtered.enrichment<- cbind(filtered.enrichment, footprint_stats_test.results[,4:13])
 
 
     
@@ -1254,6 +1270,8 @@ footprint_stats_test <- function(object, gene, cluster, motif, gene_peak_links=N
                                                object@misc$footprint[[paste(gene, cluster)]][[motif]])
     forground_score<-forground_score_footprint$score
     forground_sd<-forground_score_footprint$sd.flanks
+    forground_left_flank_nonzero <- forground_score_footprint$left_flank_nonzero_positions
+    forground_right_flank_nonzero <- forground_score_footprint$right_flank_nonzero_positions
 
     if(is.na(forground_score)&!(return_object)){
         return(
@@ -1267,7 +1285,9 @@ footprint_stats_test <- function(object, gene, cluster, motif, gene_peak_links=N
                  'footprint.p_value'=NA,
                  'footprint.p_value_adj'=NA,
                  'sd.flanks'= NaN,        
-                  'bg_sd_mean'=NA  
+                  'bg_sd_mean'=NA ,
+                  'left_flank_nonzero_positions'=NA,
+                  'right_flank_nonzero_positions'=NA
                   )
         )
     }else if(is.na(forground_score)& return_object){
@@ -1338,7 +1358,9 @@ footprint_stats_test <- function(object, gene, cluster, motif, gene_peak_links=N
                                      'sd.flanks'= as.numeric(format(forground_sd, 
                                                              scientific = TRUE, digits = 4)),        
                                       'bg_sd_mean'=as.numeric(format(bg_sd_mean, 
-                                                                         scientific = TRUE, digits = 4))  
+                                                                         scientific = TRUE, digits = 4)),
+                                        'left_flank_nonzero_positions'=forground_left_flank_nonzero,
+                                        'right_flank_nonzero_positions'=forground_right_flank_nonzero
                                     )
         }else{
             if (replace){
@@ -1362,7 +1384,9 @@ footprint_stats_test <- function(object, gene, cluster, motif, gene_peak_links=N
                                      'sd.flanks'= as.numeric(format(forground_sd, 
                                                              scientific = TRUE, digits = 4)),        
                                       'bg_sd_mean'=as.numeric(format(bg_sd_mean, 
-                                                                         scientific = TRUE, digits = 4))  
+                                                                         scientific = TRUE, digits = 4)),
+                                        'left_flank_nonzero_positions'=forground_left_flank_nonzero,
+                                        'right_flank_nonzero_positions'=forground_right_flank_nonzero
                                     ))
         }
         return(object)
@@ -1378,7 +1402,9 @@ footprint_stats_test <- function(object, gene, cluster, motif, gene_peak_links=N
                  'footprint.p_value'=as.numeric(format(footprint.p_value, scientific = TRUE, digits = 4)),
                  'footprint.p_value_adj'=as.numeric(format(footprint.p_value, scientific = TRUE, digits = 4)),
                  'sd.flanks'= as.numeric(format(forground_sd, scientific = TRUE, digits = 4)),        
-                  'bg_sd_mean'=as.numeric(format(bg_sd_mean,scientific = TRUE, digits = 4))  
+                  'bg_sd_mean'=as.numeric(format(bg_sd_mean,scientific = TRUE, digits = 4)),
+                  'left_flank_nonzero_positions'=forground_left_flank_nonzero,
+                   'right_flank_nonzero_positions'=forground_right_flank_nonzero
                   )
         )
     }
