@@ -300,9 +300,11 @@ main <- function() {
   if (is.null(args$dir)) {
     stop("Error: --dir is required.")
   }
-  if (! all(c("expr.mtx", "var.csv", "cells.txt") %in% list.files(file.path(args$dir, "expr_info_st")))) {
+  # expr_info_st is only required if Tangram was NOT used
+  if (!args$tangram & ! all(c("expr.mtx", "var.csv", "cells.txt") %in% list.files(file.path(args$dir, "expr_info_st")))) {
     stop(paste0("Error: The directory ", args$dir, " does not contain the dir 'expr_info_st' with the files (expr.mtx, var.csv, cells.txt)"))
   }
+  # expr_info_tg is only required if Tangram WAS used
   if (args$tangram & ! all(c("expr.mtx", "var.csv", "cells.txt") %in% list.files(file.path(args$dir, "expr_info_tg")))) {
     stop(paste0("Error: The directory ", args$dir, " does not contain the dir 'expr_info_tg' with the files (expr.mtx, var.csv, cells.txt)"))
   }
@@ -317,7 +319,10 @@ main <- function() {
   if (args$tangram) {
     compute_network_scores("tg", args, logfile)
   }
-  compute_network_scores("st", args, logfile)
+  # Only compute st scores if expr_info_st exists
+  if (dir.exists(file.path(args$dir, "expr_info_st"))) {
+    compute_network_scores("st", args, logfile)
+  }
 
   log_message(paste0("R score pipeline finished at ", format(Sys.time(), "%Y-%m-%d %H:%M:%S"), "\n"), logfile)
 }

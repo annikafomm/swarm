@@ -23,9 +23,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
   @Input() updateColumn!: string;
+  @Input() datasetId?: string;
+  @Input() isLoading: boolean = false;
   @Input() emptyMessage: string = '';
+  @Input() isCompare: boolean = false;
   @Output() featuresUpdated = new EventEmitter<void>();
-
+  @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
+  @Output() geneSelectedCompare = new EventEmitter<{ gene: string; action: string }>();
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
@@ -38,6 +42,23 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   sortColumn: string | null = null;
   sortAsc: boolean = true;
   availableActionColumns: string[] = [];
+  private readonly virtualActionColumns = new Set<string>([
+    'gene_expression',
+    'chromvar_spot_scores',
+    'tf_activity_score_ulm',
+    'tf_activity_padj_ulm',
+    'pathway_activity_score_mlm',
+    'pathway_activity_padj_mlm',
+    'cell_comp_tf_activity_cosine_similarity',
+    'cell_comp_tf_activity_category',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category',
+    'ligand_receptor_NMF_factors',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category'
+  ]);
 
   // Pagination
   pageSize = 6; // number of rows per page
@@ -59,7 +80,12 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   prepareTable() {
-    if (Array.isArray(this.data)) {
+    if (!this.data) {
+      this.columns = [];
+      this.rows = [];
+      return;
+    }
+    else if (Array.isArray(this.data)) {
       this.columns = [];
       this.rows = this.data.map((val) => ({
         index: val,
@@ -90,14 +116,23 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       this.availableActionColumns = [];
       return;
     }
+
     if ('motif_id' in this.data) {
       this.availableActionColumns = this.actionColumns;
     } else if (!Array.isArray(this.data)) {
       const tableData = this.data as {
         [col: string]: { [index: string]: string | number };
       };
-      this.availableActionColumns = this.actionColumns.filter(
+      const matchingColumns = this.actionColumns.filter(
         (col) => col in tableData
+      );
+      const virtualColumns = this.actionColumns.filter(
+        (col) => this.virtualActionColumns.has(col)
+      );
+
+      // Show only actually available columns, plus known virtual actions.
+      this.availableActionColumns = Array.from(
+        new Set([...matchingColumns, ...virtualColumns])
       );
     } else {
       this.availableActionColumns = this.actionColumns;
@@ -116,15 +151,28 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     //   this.availableActionColumns = this.actionColumns;
     // }
 
-  }
 
-  hasData(): boolean {
-    if (!this.data) return false;
-    if (Array.isArray(this.data)) return this.data.length > 0;
+    if (Array.isArray(this.data)) {
+      this.availableActionColumns = this.actionColumns;
+      return;
+    }
+
     const tableData = this.data as {
       [col: string]: { [index: string]: string | number };
     };
-    return Object.keys(tableData).length > 0;
+
+    this.availableActionColumns = this.actionColumns.filter((col) => {
+      if (col === 'show_on_plot') return true;
+      if (col === 'gene_expression') return true;
+      if (col === 'chromvar_spot_scores') return true;
+      if (this.virtualActionColumns.has(col)) return true;  // ADD THIS LINE
+
+      return col in tableData;
+    });
+  }
+
+  hasData(): boolean {
+    return this.rows && this.rows.length > 0;
   }
 
   displayColumnName(col: string): string {
@@ -287,12 +335,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const isChromvar = columnName === 'chromvar_spot_scores';
 
     const safeIndex = encodeURIComponent(index);
+    const datasetQuery = this.datasetId ? `?dataset_id=${encodeURIComponent(this.datasetId)}` : '';
 
     const request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${safeIndex}`
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}${datasetQuery}`
       : isChromvar
-        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}`
-        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}`;
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}${datasetQuery}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}${datasetQuery}`;
 
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
@@ -320,6 +369,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
           this.featuresUpdated.emit();
         },
         error: (err) => {
+          if (this.features) {
+            for (const feature of this.features) {
+              feature.properties[this.updateColumn] = undefined;
+            }
+            this.featuresUpdated.emit();
+          }
+
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
           } else if (isChromvar) {
@@ -330,7 +386,6 @@ export class FilterableTableComponent implements OnInit, OnChanges {
         },
       });
   }
-
 
   /**
    * Retrieve the computed CSS variable value for --ftable-min-width
@@ -366,16 +421,39 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.updateChromvarCombinedIfReady();
   }
 
-  onShowAction(action: string, row: any): void {
-    if (action === 'chromvar_spot_scores') {
-      // base motif comes from motif_id column
-      this.chromvarBaseMotif = this.getMotifId(row);
-      this.updateChromvarCombinedIfReady(true);
+  async onShowAction(action: string, row: any): Promise<void> {
+    const geneName = String(row.index);
+
+    // DGEA-only UI action:
+    // do NOT call backend here, let the parent convert it to gene_expression
+    if (action === 'show_on_plot') {
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
       return;
     }
 
-    // default behavior (non-chromvar actions)
-    this.fetchAndUpdate(action, String(row.index));
+    if (action === 'chromvar_spot_scores') {
+      this.chromvarBaseMotif = this.getMotifId(row);
+      this.updateChromvarCombinedIfReady(true);
+
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
+      return;
+    }
+
+    if (this.isCompare) {
+      this.geneSelectedCompare.emit({ gene: geneName, action });
+    } else {
+      this.geneSelected.emit({ gene: geneName, action });
+    }
+
+    this.fetchAndUpdate(action, geneName);
   }
 
   private updateChromvarCombinedIfReady(force = false): void {
@@ -391,7 +469,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (!force && motifs.size === 0) return;
 
     const index = Array.from(motifs).join(','); // backend will split and sum
-    this.fetchAndUpdate('chromvar_spot_scores', index);
+    void this.fetchAndUpdate('chromvar_spot_scores', index);
   }
 
   get selectedSumCount(): number {
@@ -403,7 +481,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     if (!motifs.length) return;
 
     //  sum-only (ignores base motif)
-    this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
+    void this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
 
   }
 

@@ -31,6 +31,28 @@ genewise_scores = ["moranI", "gearyC"]
 motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
 cluster_wise_scores = ["diff_motif_activity_top_motifs"]
 
+
+def _extract_autocorr_stat(autocorr_obj, preferred_col: str) -> dict[str, float]:
+    if autocorr_obj is None:
+        return {}
+
+    if not isinstance(autocorr_obj, pd.DataFrame):
+        autocorr_obj = pd.DataFrame(autocorr_obj)
+
+    if autocorr_obj.empty:
+        return {}
+
+    if preferred_col in autocorr_obj.columns:
+        col = preferred_col
+    else:
+        numeric_cols = [c for c in autocorr_obj.columns if pd.api.types.is_numeric_dtype(autocorr_obj[c])]
+        if len(numeric_cols) == 0:
+            return {}
+        col = numeric_cols[0]
+
+    series = autocorr_obj[col]
+    return {str(k): float(v) for k, v in series.items() if pd.notna(v)}
+
 class Hexagons:
     """
     Class to convert Visium or Transformed Xenium spatial data to GeoJSON format with hexagonal geometry.
@@ -144,7 +166,10 @@ class Hexagons:
         if gene is None:
             gene = self.anndata.var.index[0]
 
-        X = self.anndata[barcode, gene].X
+        original_gene = self.var_upper_to_name.get(gene.upper(), gene)
+        X = self.anndata[barcode, original_gene].X
+
+        #X = self.anndata[barcode, gene].X
 
         # Handle both sparse and dense matrices
         if sparse.issparse(X):
@@ -177,34 +202,6 @@ class Hexagons:
             property_dict = {
                 "barcode": barcode,
             }
-
-            leiden_cluster = (
-                int(self.anndata.obs.get("leiden", {}).get(barcode, -1))
-                if "leiden" in self.anndata.obs.columns
-                else None
-            )
-
-            if leiden_cluster is not None:
-                property_dict["leiden"] = leiden_cluster
-
-                if "leiden_centrality_scores" in self.anndata.uns:
-                    property_dict["leiden_centrality"] = (
-                        self.anndata.uns["leiden_centrality_scores"]
-                        .iloc[leiden_cluster]
-                        .to_dict()
-                    )
-
-                if "leiden_co_occurrence" in self.anndata.uns:
-                    property_dict["leiden_co_occurrence"] = self.anndata.uns[
-                        "leiden_co_occurrence"
-                    ]["occ"][leiden_cluster].tolist()
-
-                if "leiden_nhood_enrichment" in self.anndata.uns:
-                    property_dict["leiden_nhood_enrichment"] = (
-                        self.anndata.uns["leiden_nhood_enrichment"]["zscore"][
-                            leiden_cluster
-                        ].tolist()
-                    )
 
             property_dict["centroid"] = (
                 self.centers[barcode] if barcode in self.centers else None
@@ -456,6 +453,41 @@ if __name__ == "__main__":
     # Add meta information like ligand receptor pair names for api fetching
     meta_dict = {}
 
+    meta_dict["leiden_cluster_annotations"] = {}
+
+    if "leiden" in spatial_data.obs.columns:
+        cluster_ids = sorted(
+            spatial_data.obs["leiden"].dropna().astype(int).unique().tolist()
+        )
+
+        for cluster_id in cluster_ids:
+            cluster_key = str(cluster_id)
+            meta_dict["leiden_cluster_annotations"][cluster_key] = {}
+
+            # Centrality scores for this cluster
+            if "leiden_centrality_scores" in spatial_data.uns:
+                meta_dict["leiden_cluster_annotations"][cluster_key]["centrality"] = (
+                    spatial_data.uns["leiden_centrality_scores"]
+                    .iloc[cluster_id]
+                    .to_dict()
+                )
+
+            # Co-occurrence scores for this cluster
+            if "leiden_co_occurrence" in spatial_data.uns:
+                occ = spatial_data.uns["leiden_co_occurrence"].get("occ")
+                if occ is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["co_occurrence"] = (
+                        occ[cluster_id].tolist()
+                    )
+
+            # Neighborhood enrichment scores for this cluster
+            if "leiden_nhood_enrichment" in spatial_data.uns:
+                zscore = spatial_data.uns["leiden_nhood_enrichment"].get("zscore")
+                if zscore is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["neighborhood_enrichment"] = (
+                        zscore[cluster_id].tolist()
+                    )
+
     if any(gs in spatial_data.uns for gs in global_scores_sort_keys):
         for global_score in global_scores_sort_keys:
             if global_score in spatial_data.uns:
@@ -463,6 +495,32 @@ if __name__ == "__main__":
 
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
+
+    meta_dict['global_regulatory_moranI_genie3'] = {}
+    meta_dict['global_regulatory_moranI_sponge'] = {}
+    meta_dict['global_regulatory_gearyC_genie3'] = {}
+    meta_dict['global_regulatory_gearyC_sponge'] = {}
+
+    for score in genie3_score_names + sponge_score_names:
+        if score not in spatial_data.obsm:
+            continue
+
+        moran_key = f"{score}_moranI"
+        geary_key = f"{score}_gearyC"
+
+        moran_stats = _extract_autocorr_stat(spatial_data.uns.get(moran_key), "I")
+        geary_stats = _extract_autocorr_stat(spatial_data.uns.get(geary_key), "C")
+
+        if score.endswith('_genie3'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_genie3'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_genie3'][score] = geary_stats
+        elif score.endswith('_sponge'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_sponge'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
 
 
     # The names in the tuple are options; all should have the same column names

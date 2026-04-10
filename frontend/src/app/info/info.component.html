@@ -1,8 +1,106 @@
 <div class="info-page">
   <header>
     <img src="assets/info/logo.png" alt="MOPITAS Logo" />
-
   </header>
+  <div class="back-button-container">
+    <button mat-raised-button (click)="goBack()" class="back-btn">
+      <mat-icon>arrow_back</mat-icon>
+      Back
+    </button>
+  </div>
+
+  <!-- Dataset Information Panel -->
+  <section *ngIf="selectedDataset" class="card dataset-info">
+    <h2>📊 Current Dataset</h2>
+    <div class="dataset-details">
+      <div class="detail-row">
+        <strong>Name:</strong>
+        <span>{{ selectedDataset.alias }}</span>
+      </div>
+      <div class="detail-row">
+        <strong>Type:</strong>
+        <span>{{ selectedDataset.dataset_type || 'Visium' }}</span>
+      </div>
+      <div class="detail-row">
+        <strong>Owner:</strong>
+        <span>{{ selectedDataset.user || 'Unknown' }}</span>
+      </div>
+      <div class="detail-row">
+        <strong>Created:</strong>
+        <span>{{ formatDate(selectedDataset.created_at) }}</span>
+      </div>
+      <div class="detail-row">
+        <strong>ID:</strong>
+        <span class="monospace">{{ selectedDataset.id }}</span>
+      </div>
+    </div>
+
+    <!-- Multiome Features -->
+    <div *ngIf="hasMultiomeFeatures()" class="multiome-features">
+      <h3>✨ Multiome Features Available</h3>
+      <ul class="feature-list">
+        <li *ngIf="selectedDataset.use_chromvar" class="feature-item">
+          <span class="badge">✓</span> ChromVAR Motif Activity Analysis
+        </li>
+        <li *ngIf="selectedDataset.use_differential_motif_activity" class="feature-item">
+          <span class="badge">✓</span> Differential Motif Activity
+        </li>
+        <li *ngIf="selectedDataset.use_footprinting" class="feature-item">
+          <span class="badge">✓</span> Footprint Analysis
+        </li>
+        <li *ngIf="selectedDataset.use_moranI" class="feature-item">
+          <span class="badge">✓</span> Moran's I Spatial Autocorrelation
+        </li>
+        <li *ngIf="selectedDataset.use_gearyC" class="feature-item">
+          <span class="badge">✓</span> Geary's C Spatial Autocorrelation
+        </li>
+      </ul>
+    </div>
+
+    <!-- Data Files -->
+    <div *ngIf="getMultiomeFiles().length > 0" class="data-files">
+      <h3>📁 Available Data Files</h3>
+      <ul class="file-list">
+        <li *ngFor="let file of getMultiomeFiles()" class="file-item">
+          <button class="link-btn" (click)="downloadFile(file.path)">
+            📥 {{ file.name }}
+          </button>
+          <span class="file-label">{{ file.label }}</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Differential Motif Activity Files -->
+    <div *ngIf="getDifferentialMotifActivityFiles().length > 0" class="diff-motif-files">
+      <h3>🔍 Differential Motif Activity Results</h3>
+      <ul class="file-list">
+        <li *ngFor="let file of getDifferentialMotifActivityFiles()" class="file-item">
+          <a [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">
+            📥 {{ file.comparison }}
+          </a>
+          <span class="file-label">Comparison results</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Footprint PDFs -->
+    <div *ngIf="getFootprintPDFs().length > 0" class="footprint-files">
+      <h3>📊 Footprint Profiles</h3>
+      <ul class="file-list">
+        <li *ngFor="let file of getFootprintPDFs()" class="file-item">
+          <a [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">
+            📄 {{ file.motifId }}
+          </a>
+          <span class="file-label">Footprint PDF</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Help Section -->
+  <section *ngIf="!selectedDataset" class="card info-hint">
+    <p>Select a dataset from the visualization view to see its details here.</p>
+  </section>
 
   <h2>Overview</h2>
   <div class="overview-container">
@@ -43,7 +141,7 @@
         upload).</li>
       <li> <b>Gene Symbols only</b></li>
     </ul>
-    
+
 
     <h3>Spatial autocorrelation scores</h3>
     <ul>
@@ -261,13 +359,13 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
       The views visualize different types of regulatory information as well as the observation columns of the anndata
     </p>
     <section id="gene-expression-view">
-    <h3>Gene Expression View</h3>
-    The user can visualize normalized gene expression for each spot in the map. A table
-    appears underneath the main visualization, where rows represent genes, and autocor-
-    relation scores such as Moran’s I or Geary’s C, along with p-values, are shown. Genes
-    can be sorted by any column or filtered by name. Pressing the ”Show” button triggers
-    a request to the backend that retrieves expression values for each spot and updates the
-    main visualization.
+      <h3>Gene Expression View</h3>
+      The user can visualize normalized gene expression for each spot in the map. A table
+      appears underneath the main visualization, where rows represent genes, and autocor-
+      relation scores such as Moran’s I or Geary’s C, along with p-values, are shown. Genes
+      can be sorted by any column or filtered by name. Pressing the ”Show” button triggers
+      a request to the backend that retrieves expression values for each spot and updates the
+      main visualization.
     </section>
     <h3>Leiden Clustering View</h3>
     The Leiden clustering view has specific properties that allow the user to analyze differ-
@@ -298,15 +396,22 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
     <h2> Unique features of the Views </h2>
     <h3>GeneSet Subgraphs</h3>
     In the <strong>Regulatory Scores View</strong> you are provided with a subgraph of the network that is based on
-    the currently selected gene set in the geneset-dropdown menu. This subgraph is built from the geneset and the prefiltered
-    GENIE3/Sponge network. After selecting all edges involving a gene set node, the edges are filtered for your weight/pvalue filter (slider above the graph).
-    The MinEdges slider controls the size of the network by selecting the best MinEdges edges from the remaining network after filtering for your p-value/weight threshold.
-    From these edges, the nodes and the real cutoff are inferred (if you have less nodes than MinEdges after filtering with weight/pvalue than cutoff will differ from what you selected in the slider).
-    The parameter is called MinEdges,because the original edges of the nodes inferred from the best edges are re-added to the graph. So MinEdges essentially regulates the Number
-    of Nodes by limiting the edges we take into account first and inferring the nodes from them. This ensures that the graph does not get too large but you can still assume that for a given all significant
+    the currently selected gene set in the geneset-dropdown menu. This subgraph is built from the geneset and the
+    prefiltered
+    GENIE3/Sponge network. After selecting all edges involving a gene set node, the edges are filtered for your
+    weight/pvalue filter (slider above the graph).
+    The MinEdges slider controls the size of the network by selecting the best MinEdges edges from the remaining network
+    after filtering for your p-value/weight threshold.
+    From these edges, the nodes and the real cutoff are inferred (if you have less nodes than MinEdges after filtering
+    with weight/pvalue than cutoff will differ from what you selected in the slider).
+    The parameter is called MinEdges,because the original edges of the nodes inferred from the best edges are re-added
+    to the graph. So MinEdges essentially regulates the Number
+    of Nodes by limiting the edges we take into account first and inferring the nodes from them. This ensures that the
+    graph does not get too large but you can still assume that for a given all significant
     edges are displayed.
     <h3>Co-Occurrence-Table</h3>
-    At the bottom of the <strong>Leiden-Cluster-View</strong>, the co-occurrence table will open, where the user can explore the
+    At the bottom of the <strong>Leiden-Cluster-View</strong>, the co-occurrence table will open, where the user can
+    explore the
     co-occurrence of clusters in different bin-like intervals (default is 50 intervals).
     Therefore, this view does not just allow visualization of the clustering but also helps
     discover more complex patterns like how clusters of spots interact and whether they form
@@ -326,5 +431,5 @@ ENSG00000158486,2383,0.198411022951078,4746.3198009264,4.10493693317117e-05</cod
   </section>
 
 
-  <button (click)="goBack()" class="back-btn">← Back</button>
+
 </div>

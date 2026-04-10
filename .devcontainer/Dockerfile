@@ -14,7 +14,7 @@ RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
 RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
     micromamba clean --all --yes
 
-Run micromamba run -n base R -q -e "\
+RUN micromamba run -n base R -q -e "\
   if (!requireNamespace('remotes', quietly = TRUE)) \
     install.packages('remotes', repos = 'https://cloud.r-project.org'); \
   if (!requireNamespace('scCustomize', quietly = TRUE)) \
@@ -83,6 +83,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
     && npm install -g @angular/cli \
     && apt-get clean
 
+# Install SSH to push with git (when cloning with ssh)
+RUN apt-get install -y --no-install-recommends openssh-client
 
 # Create non-root user
 RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/mopitas-mapra \

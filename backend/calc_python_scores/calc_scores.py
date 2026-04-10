@@ -29,7 +29,6 @@ from preprocessing.preprocessing_functions import *
 from calc_liana import run_liana
 from xenium.gridding_mapping import (
     map_cells_to_grid,
-    broadcast_grid_to_cells,
 )
 
 
@@ -149,8 +148,8 @@ def compute_spatial_scores(adata, description, args, logfile):
     # ---------------------------------------------------------------
 
     t0 = time.time()
-    filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
-    adata.write(os.path.join(args.outdir, filename))
+    #filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
+    #adata.write(os.path.join(args.outdir, filename))
     # Also save with fixed name for downstream multiome processing
     if description == "tg":
         adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
@@ -197,7 +196,26 @@ def main():
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
-    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg', 'None'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
+    parser.add_argument(
+        '-gene_selection',
+        nargs='*',
+        default=None,
+        help="One or more gene selection methods: ctg hvg spapros svg. "
+            "Also accepts comma-separated values, e.g. 'ctg,hvg'."
+    )
+    parser.add_argument(
+        '-gene_list_path',
+        type=str,
+        default=None,
+        help="Optional path to a user-provided gene list (txt/csv/tsv)."
+    )
+    parser.add_argument(
+        '-gene_list_column',
+        type=str,
+        default='',
+        help="Optional column name for csv/tsv gene list files. "
+            "If empty, the first column is used."
+    )
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
@@ -247,8 +265,17 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
 
-    if args.gene_selection == "None":
-        args.gene_selection = None
+    if args.gene_selection is not None:
+        cleaned_gene_selection = []
+        for item in args.gene_selection:
+            if item is None:
+                continue
+            item = str(item).strip()
+            if not item or item.lower() == "none":
+                continue
+            cleaned_gene_selection.append(item)
+
+        args.gene_selection = cleaned_gene_selection or None
 
 
     # Prepare log file
@@ -313,15 +340,7 @@ def main():
             t0 = time.time()
             from xenium.gridding_pipeline import choose_grid_n, gridding_xenium
 
-            # 1) Keep cell-level AnnData (visualization + final output later)
             adata_cells = adata.copy()
-            cell_file = os.path.basename(args.input).replace(
-                ".h5ad",
-                "_xenium_cells.h5ad"
-            )
-            cell_path = os.path.join(args.outdir, cell_file)
-            adata_cells.write(cell_path)
-            log_message(f"Cell-level Xenium AnnData written to {cell_path}", logfile, 2)
 
             # 2) Create grid-level for scoring
             n_ = choose_grid_n(adata, target_cells_per_spot=20)
@@ -338,12 +357,12 @@ def main():
                 adata_grid=adata_work,
             )
             adata_cells.write(
-                os.path.join(args.outdir, "xenium_cells.h5ad")
+                os.path.join(args.outdir, "xenium_map.h5ad")
             )
             log_message(f"Mapping cells to grid performed in {format_runtime(t0)}", logfile, 2)
 
             # 4) Proceed with all further analyses at the spot level
-            st_grid = os.path.join(args.outdir, "xenium_st_grid.h5ad")
+            st_grid = os.path.join(args.outdir, "xenium_grid.h5ad")
             adata_work.write(st_grid)
 
             st_preprocessed = st_grid
@@ -402,7 +421,13 @@ def main():
                     ]
 
                     if args.gene_selection is not None:
-                        cmd += ["--gene_selection_mode", args.gene_selection]
+                        cmd += ["--gene_selection_mode", *args.gene_selection]
+
+                    if args.gene_list_path:
+                        cmd += ["--gene_list_path", args.gene_list_path]
+
+                    if args.gene_list_column:
+                        cmd += ["--gene_list_column", args.gene_list_column]
                     if args.cell_label:
                         cmd += ["--cell_label", args.cell_label]
                     if args.ensembl_col:
