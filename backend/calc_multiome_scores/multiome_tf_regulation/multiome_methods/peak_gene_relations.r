@@ -761,8 +761,8 @@ filter_gene_peak_links <- function(
         peak_stats$signac.pvalues < global_signac_p_cutoff &
         !is.na(peak_stats$expr_and_acc_not_0.all) &
         peak_stats$expr_and_acc_not_0.all >= global_expr_given_acc_min &
-        !is.na(peak_stats$expr_not_0.given_acc.bg) &
-        peak_stats$expr_not_0.given_acc.bg > expr_given_acc_th &
+        !is.na(peak_stats$expr_not_0.given_acc.all) &
+        peak_stats$expr_not_0.given_acc.all > expr_given_acc_th &
         !is.na(peak_stats$FC.expr_given_acc.all) &
         peak_stats$FC.expr_given_acc.all > global_fc_min 
 
