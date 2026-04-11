@@ -101,7 +101,7 @@ do_peak_stats <- function(object, seeds,
                         cluster_t_min = 2,
                         cluster_expr_given_acc_min = 0.05,
                         cluster_fc_min = 1,
-                        cluster_delta_same_peak_bg_min = 0.3,
+                        cluster_delta_same_peak_bg_min = 0.1,
                         global_signac_z_min = 1.96,
                         global_signac_p_cutoff = 0.05,
                         global_expr_given_acc_min = 0.05,
@@ -251,8 +251,8 @@ do_local_motif_stats<-function(object,
             bg_size = background_size,
             assay = "peaks",
             workers = 20,
-            verbose = verbose
-            )
+            verbose = verbose)
+            
     df.stats.motif<-object@misc$motif_enrichment
     
     df.stats.motif<-merge(df.stats.motif, seeds[,c('gene', 'cluster')], by=c('gene', 'cluster'))
@@ -264,14 +264,13 @@ do_local_motif_stats<-function(object,
     filtered.enrichment<- filter_motifs_by_enrichment(motif_enrichment=df.stats.motif, 
                                                         min_count=min_count, 
                                                         min_log2FC=min_log2FC, 
-                                                        max_t_stat=max_t_stat, 
                                                         min_p_adjust=min_p_adjust)
 
   
     object@misc$filtered.motif_enrichment<-rbind(object@misc$filtered.motif_enrichment,
                                                  filtered.enrichment)
 
-
+    saveRDS(object, file = "/nfs/home/students/m.back/swarm/backend/calc_multiome_scores/multiome_tf_regulation/notebooks_pipeline/objects_AVN_fibroblast/filtered_motif_enrichment.rds")
     message('Adding footprint stats')
 
     # add bias

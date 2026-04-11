@@ -794,7 +794,7 @@ footprint_plots_by_TF<- function(object, gene, cluster, TF=NULL, motif_id=NULL, 
         }
     }
     
-    options(repr.plot.width = 10, repr.plot.height = 10)
+    #options(repr.plot.width = 10, repr.plot.height = 10)
     plots <- Filter(Negate(is.null), plots)
     if (length(plots)==0){
         return(paste("NO MOTIFS FOR",TF,"FOUND IN PEAKS LINKED TO",gene))

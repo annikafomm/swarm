@@ -492,7 +492,7 @@ prepare_subNetwork<-function(subnetwork, gene){
 }                          
 
 
-draw_subNetwork<-function(object, gene_list, cluster, priorGRN, 
+draw_subNetwork<-function(object, gene_list, cluster, priorGRN,  cluster.specific=TRUE,
                           sd=5, score=0, a=0.05, min_per_flank=3, th.footprint_score=0,background_size=10,
                          path=NULL, resolution=200,width = 1024, height = 1024,pointsize=10,
                          return_object=TRUE, context_name='gene_set', TFclasses=NULL,promoter_reg_only=FALSE){
@@ -511,6 +511,7 @@ draw_subNetwork<-function(object, gene_list, cluster, priorGRN,
     for (gene in gene_list){
         
         object<-create_subNetwork_for_seed(object, gene=gene, cluster=cluster,
+                                            cluster.specific=cluster.specific,
                                            sd=sd, score=score, a=a, min_per_flank=min_per_flank, th.footprint_score=th.footprint_score,
                                            priorGRN=priorGRN, background_size=background_size,
                                             return_object=return_object)
@@ -794,7 +795,7 @@ plot_graph<-function(graph, path=NULL,
 
 
 
-draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN, 
+draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN, cluster.specific=TRUE,
                           sd=2, score=0, a=0.05, a_red=0.5, min_per_flank=3, th.footprint_score=0,background_size=10,
                          path=NULL, resolution=200,width = 1024, height = 1024,pointsize=10,
                          return_object=TRUE, context_name='gene_set', TFclasses=NULL,promoter_reg_only=FALSE,
@@ -813,7 +814,7 @@ draw_subNetwork_for_context<-function(object, gene_list, cluster, priorGRN,
     priorGRN<-unique(priorGRN)
     #gene_set_found<-unique(object@misc$motif_stats$gene)
     combined_results.list<-create_subNetwork_for_context(object, gene_list=gene_list, cluster=cluster, priorGRN, 
-                                         cluster.specific=TRUE,
+                                         cluster.specific=cluster.specific,
                                          sd=sd, score=score, a=a, min_per_flank=min_per_flank,
                                          th.footprint_score=th.footprint_score,background_size=background_size,
                                             context.name=context_name,
@@ -901,8 +902,29 @@ create_subNetwork_for_context <- function(
 ){
     de_novo.threshold <- match.arg(de_novo.threshold)
 
-     green_enrichment_filter <- function(df) {
+    # green_enrichment_filter <- function(df) {
+    #     if (!has_rows(df)) return(df)
+
+    #     distal_ok <- !is.na(df$distal.motif_count) &
+    #         !is.na(df$log2FC.distal) &
+    #         !is.na(df$p_adjust.distal) &
+    #         df$distal.motif_count >= min_count_distal &
+    #         df$log2FC.distal >= min_log2FC_distal &
+    #         df$p_adjust.distal < min_p_adjust_enr_distal
+
+    #     proximal_ok <- !is.na(df$proximal.motif_count) &
+    #         df$proximal.motif_count > 0
+
+    #     df[distal_ok | proximal_ok, , drop = FALSE]
+    # }
+    green_enrichment_filter <- function(df) {
         if (!has_rows(df)) return(df)
+
+        prior_ok <- if ("priorTF" %in% colnames(df)) {
+            !is.na(df$priorTF) & df$priorTF
+        } else {
+            rep(FALSE, nrow(df))
+        }
 
         distal_ok <- !is.na(df$distal.motif_count) &
             !is.na(df$log2FC.distal) &
@@ -914,7 +936,7 @@ create_subNetwork_for_context <- function(
         proximal_ok <- !is.na(df$proximal.motif_count) &
             df$proximal.motif_count > 0
 
-        df[distal_ok | proximal_ok, , drop = FALSE]
+        df[prior_ok | distal_ok | proximal_ok, , drop = FALSE]
     }
 
     has_rows <- function(x) {
@@ -1019,6 +1041,15 @@ create_subNetwork_for_context <- function(
     combined_results$tmp <- NULL
     combined_results.prior$tmp <- NULL
 
+    # # add priorTF flags BEFORE green_enrichment_filter() is called
+    # combined_results$priorTF <- FALSE
+    # combined_results$priorTF[rownames(combined_results) %in% rownames(combined_results.prior)] <- TRUE
+    # combined_results.prior$priorTF <- TRUE
+    combined_results$priorTF <- FALSE
+    combined_results$priorTF[
+        rownames(combined_results) %in% rownames(combined_results.prior)
+    ] <- TRUE
+
     absent.priorTFs <- combined_results.prior[
         combined_results.prior$proximal.motif_count == 0 &
         combined_results.prior$distal.motif_count == 0, ,
@@ -1076,8 +1107,8 @@ create_subNetwork_for_context <- function(
             drop = FALSE
         ]
     }
-    proximal.green.priorTFs <- green_enrichment_filter(proximal.green.priorTFs)
-    distal.green.priorTFs   <- green_enrichment_filter(distal.green.priorTFs)
+    # proximal.green.priorTFs <- green_enrichment_filter(proximal.green.priorTFs)
+    # distal.green.priorTFs   <- green_enrichment_filter(distal.green.priorTFs)
 
     combined_results$result[
         rownames(combined_results) %in% rownames(proximal.present.priorTFs) |
@@ -1290,10 +1321,6 @@ create_subNetwork_for_context <- function(
                                           rownames(new.distal.red.TFs))
     ] <- "red"
 
-    combined_results$priorTF <- FALSE
-    combined_results$priorTF[
-        rownames(combined_results) %in% rownames(combined_results.prior)
-    ] <- TRUE
 
     combined_results$result[combined_results$motif == "-"] <- "gray"
     combined_results$result[combined_results$motif == "--"] <- "black"
