@@ -2,7 +2,6 @@
 
 # SWARM
 
-
 This is the Github-Repository of the MoPiTas Project in the Master Practical course of DaisyBioLab 2025.
 
 ## Dataset-Table
@@ -38,6 +37,7 @@ OR use
 bash launch.sh
 ```
 ## Format Requirements
+### Visium
 
 The web-tool is working with the anndata-format. This is a tutorial on how counts and scores should be saved.
 
@@ -118,4 +118,7 @@ Sponge:
 geneA,geneB,df,cor,pcor,mscor,p.val,p.adj
 ENSG00000182141,ENSG00000258630,1,0.121684631317227,0.0764637550413806,0.0452208762758468,0.029426,0.519790968019617
 ```
+
+### Xenium-specific
+### Multiom-specific
 
