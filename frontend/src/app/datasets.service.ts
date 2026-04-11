@@ -18,6 +18,7 @@ export interface Dataset {
   genie_network_path?: string;
   sponge_network_path?: string;
   geojson_path?: string;
+  tf_graph_path?: string;
 
   // Multiome: Always-present outputs
   adata_st_scores_path?: string;      // Spatial transcriptomics with scores (H5AD)

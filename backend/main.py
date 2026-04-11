@@ -1545,6 +1545,39 @@ async def get_geojson(dataset_id: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.get("/api/tf_graph/{dataset_id}", dependencies=[Depends(cookie)])
+async def get_tf_graph(dataset_id: str):
+    """Serve TF graph JSON files for datasets"""
+    try:
+        # Load the dataset from registry to get its tf_graph_path
+        dataset = dataset_registry.get_dataset_by_id(dataset_id, as_dict=False)
+        if not dataset or not dataset.tf_graph_path:
+            print(f"[ERROR] Dataset {dataset_id} not found or has no tf_graph_path")
+            raise HTTPException(status_code=404, detail=f"TF graph not available for dataset {dataset_id}")
+
+        # Normalize the path (handles frontend/../backend/ relative paths)
+        tf_graph_path = Path(dataset.tf_graph_path).resolve()
+
+        if not tf_graph_path.exists():
+            print(f"[ERROR] TF graph file not found at {tf_graph_path}")
+            raise HTTPException(status_code=404, detail=f"TF graph file not found: {tf_graph_path}")
+
+        print(f"[DEBUG] Serving tf_graph from: {tf_graph_path}")
+        return FileResponse(
+            tf_graph_path,
+            media_type="application/json",
+            filename=f"graph.json"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Exception in get_tf_graph: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 async def get_hexagon(user: str, subdir: str, filename: str):
     """
     file_path = Path("./uploads") / filename
@@ -1927,6 +1960,8 @@ async def get_obsm_column(
         raise HTTPException(status_code=404, detail=f"Column '{column}' not found in table '{table}'. Available columns: {', '.join(obsm_data.columns)}")
 
     return obsm_data[column].to_dict()
+
+@app.get("")
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(

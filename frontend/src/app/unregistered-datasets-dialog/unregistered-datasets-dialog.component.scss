@@ -87,12 +87,31 @@
 
 .dataset-type-badge {
     display: inline-block;
-    background-color: #e3f2fd;
-    color: #1976d2;
     padding: 4px 8px;
     border-radius: 12px;
     font-size: 0.85rem;
     font-weight: 500;
+
+    &.xenium {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+
+    &.visium {
+        background-color: #ffe0b2;
+        color: #e65100;
+    }
+
+    &.multiome {
+        background-color: #c8e6c9;
+        color: #1b5e20;
+    }
+
+    // Default/fallback style
+    &:not(.xenium):not(.visium):not(.multiome) {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
 }
 
 .status-badge {

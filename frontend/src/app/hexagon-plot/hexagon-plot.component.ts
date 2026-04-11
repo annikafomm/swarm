@@ -413,6 +413,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
 
+  public tfGraphLoading: boolean = false;
+  public tfGraphLoadingCompare: boolean = false
+
+  private tfGraph: tfGraphData | null = null;
+  private tfGraphCompare: tfGraphData | null = null;
+
 
   public repaintBothViews(): void {
     this.updateHexColors();
@@ -734,6 +740,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         setTimeout(() => this.renderDgeaHeatmap(true), 100);
       }
 
+    }
+
+    if (!compare && tabLabel === 'TF Gene-Nets') {
+      setTimeout(() => this.loadTfGraph(false), 100);
+      return;
+    }
+
+    if (compare && tabLabel.includes('TF Gene-Nets')) {
+      setTimeout(() => this.loadTfGraph(true), 100);
+      return;
     }
 
     // Map tab labels to view keys
@@ -1129,11 +1145,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
-  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
-  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
-  this.onColorbyPropertyChange(compare);
-  this.fetchAndUpdate('gene_expression', gene, compare);
-}
+    compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+    compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+    this.onColorbyPropertyChange(compare);
+    this.fetchAndUpdate('gene_expression', gene, compare);
+  }
 
 
   // Render the context heatmap
@@ -4441,6 +4457,255 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.svg.select('#detail-frame').style('display', 'none');
     this.detailLayer.style('display', 'none');
   }
+
+  /**
+   * Load TF graph data from the backend API
+   */
+  public loadTfGraph(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+
+    if (!dataset?.id) {
+      console.warn('No dataset selected');
+      return;
+    }
+
+    const loading = compare ? 'tfGraphLoadingCompare' : 'tfGraphLoading';
+    this[loading] = true;
+
+    // Build the API URL
+    const apiUrl = `/api/tf_graph/${dataset.id}`;
+    const fullUrl = `${this.sessionService.apiUrl}${apiUrl}`;
+
+    console.log('[TF Graph] Loading from:', fullUrl);
+
+    // Load the JSON file using fetch like GeoJSON does
+    fetch(fullUrl, { credentials: 'include' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data: { nodes: any[], links: any[] }) => {
+        console.log('✓ Loaded TF graph data:', data);
+        this.visualizeTfGraph(data, compare);
+        this[loading] = false;
+      })
+      .catch((err) => {
+        console.error('✗ Failed to load TF graph:', err);
+        this[loading] = false;
+      });
+  }
+
+  /**
+   * Visualize TF graph using D3
+   */
+  private visualizeTfGraph(graphData: { nodes: any[], links: any[] }, compare: boolean = false): void {
+    const containerId = compare ? '#tf_gene_net_container_compare' : '#tf_gene_net_container';
+
+    // Clear previous content
+    d3.select(containerId).html('');
+
+    if (!graphData.nodes || !graphData.links || graphData.nodes.length === 0) {
+      d3.select(containerId).append('p').text('No TF graph data available');
+      return;
+    }
+
+    // SVG dimensions
+    const width = 1000;
+    const height = 600;
+
+    // Create SVG
+    const svg = d3
+      .select(containerId)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', height)
+      .style('background-color', '#f8f9fa')
+      .style('border', '1px solid #ddd');
+
+    // Add zoom behavior
+    const g = svg.append('g');
+    const zoom = d3.zoom<SVGSVGElement, any>().on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
+
+    // Create map from node id to node object for efficient lookup
+    const nodeMap = new Map(graphData.nodes.map((node: any) => [node.id, node]));
+
+    // Transform links to use node objects instead of just ids
+    const links = graphData.links.map((link: any) => ({
+      source: nodeMap.get(link.source),
+      target: nodeMap.get(link.target),
+      edge_color: link.edge_color || '#999',
+      edge_width: link.edge_width || 1,
+      edge_dash: link.edge_dash || '0'
+    })).filter((link: any) => link.source && link.target);
+
+    // Force simulation
+    const simulation = d3
+      .forceSimulation(graphData.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(links)
+          .id((d: any) => d.id)
+          .distance(50)
+          .strength(0.4)
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30));
+
+    // Draw links
+    const link = g
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.3)
+      .selectAll('line')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('stroke', (d: any) => d.edge_color)
+      .attr('stroke-width', (d: any) => d.edge_width)
+      .style('stroke-dasharray', (d: any) => d.edge_dash);
+
+    // Draw nodes
+    const node = g
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .selectAll('circle')
+      .data(graphData.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => d.type === 'from' ? 8 : 6)
+      .attr('fill', (d: any) => d.node_fill || '#999')
+      .attr('opacity', 0.9)
+      .call(
+        d3
+          .drag<SVGCircleElement, any>()
+          .on('start', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on('drag', (event: any, d: any) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on('end', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          })
+      );
+
+    // Add node labels
+    const labels = g
+      .append('g')
+      .selectAll('text')
+      .data(graphData.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .attr('font-size', (d: any) => d.type === 'from' ? '11px' : '10px')
+      .attr('font-weight', (d: any) => d.priorTF ? 'bold' : 'normal')
+      .attr('fill', '#333')
+      .attr('pointer-events', 'none')
+      .text((d: any) => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name);
+
+    // Add tooltips on hover
+    node.append('title').text((d: any) => `${d.name}${d.priorTF ? ' (Prior TF)' : ''}`);
+
+    // Update positions on simulation tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node
+        .attr('cx', (d: any) => d.x)
+        .attr('cy', (d: any) => d.y);
+
+      labels
+        .attr('x', (d: any) => d.x)
+        .attr('y', (d: any) => d.y);
+    });
+
+    // Add legend
+    this.addTfGraphLegend(svg, width, height);
+  }
+
+  /**
+   * Add legend to TF graph visualization
+   */
+  private addTfGraphLegend(svg: any, width: number, height: number): void {
+    const legendX = 20;
+    const legendY = 20;
+
+    const legend = svg.append('g')
+      .attr('transform', `translate(${legendX}, ${legendY})`);
+
+    // Background
+    legend.append('rect')
+      .attr('width', 180)
+      .attr('height', 100)
+      .attr('fill', 'white')
+      .attr('stroke', '#ccc')
+      .attr('rx', 4);
+
+    // Title
+    legend.append('text')
+      .attr('x', 10)
+      .attr('y', 20)
+      .attr('font-weight', 'bold')
+      .attr('font-size', '12px')
+      .text('Legend');
+
+    // TF nodes
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 40)
+      .attr('r', 5)
+      .attr('fill', '#1f77b4');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 45)
+      .attr('font-size', '11px')
+      .text('Regulator');
+
+    // Prior TF indicator
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 60)
+      .attr('r', 5)
+      .attr('fill', '#ff7f0e');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 65)
+      .attr('font-size', '11px')
+      .text('Prior TF');
+
+    // Target nodes
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 80)
+      .attr('r', 4)
+      .attr('fill', '#cccccc');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 85)
+      .attr('font-size', '11px')
+      .text('Target');
+  }
 }
 
 
@@ -4497,3 +4762,9 @@ interface GeneStatsResponse {
   per_dataset: { [datasetId: string]: { min: number; max: number } };
   missing_in: string[];
 }
+
+interface tfGraphData {
+  nodes: { id: string; name: string }[];
+  links: { source: string; target: string; weight: number }[];
+}
+
