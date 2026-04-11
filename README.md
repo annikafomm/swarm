@@ -120,5 +120,143 @@ ENSG00000182141,ENSG00000258630,1,0.121684631317227,0.0764637550413806,0.0452208
 ```
 
 ### Xenium-specific
+
+## Overview
+
+For Xenium data, the pipeline does not run all analyses directly on the original cell-level object.  
+Instead, it first creates a **grid-level representation** and performs downstream spatial analyses on that representation.
+
+The overall workflow is:
+
+1. Load the original Xenium AnnData object.
+2. Optionally filter and normalize the data.
+3. Build a **grid-level AnnData** for downstream scoring.
+4. Keep a **cell-level copy** of the original Xenium data.
+5. Map each original Xenium cell to its nearest grid spot.
+6. Run downstream spatial analyses on the **grid / spot level**.
+7. Optionally run Tangram on the Xenium grid-level object.
+8. If Tangram is **not** used, propagate grid-level results back to the original Xenium cells.
+9. If Tangram **is** used, keep the results on the **spot / grid level** for visualization.
+
+## Xenium processing
+
+Because Xenium data is available at **single-cell resolution**, the pipeline converts it into a **grid-based spatial representation** before scoring. This makes downstream spatial analyses more practical while still preserving the original cell-level data for later use.
+
+For Xenium datasets, the pipeline:
+
+- creates a grid-level AnnData object
+- stores a mapping from original cells to grid spots
+- performs downstream analyses on the **spot / grid level**
+
+Important intermediate files are:
+
+- `xenium_map.h5ad`
+- `xenium_grid.h5ad`
+
+## Tangram behavior
+
+Tangram is optional.
+
+When Tangram is enabled, the pipeline uses the **grid-level Xenium object** as the spatial input. Tangram is therefore not run directly on the original Xenium cell-level object.
+
+Tangram supports multiple gene-selection modes:
+
+- `ctg`
+- `hvg`
+- `spapros`
+
+An optional user-defined gene list can also be provided.
+
+## Spatial score calculation
+
+Depending on the selected options, the Xenium workflow can compute:
+
+- spatial neighbors
+- LIANA+
+- centrality scores
+- co-occurrence
+- neighborhood enrichment
+- Moran’s I
+- Geary’s C
+
+The main score outputs are:
+
+- `adata_st_scores.h5ad`
+- `adata_tg_scores.h5ad`
+
+## Back-mapping behavior
+
+### Without Tangram
+
+If Xenium is processed **without Tangram**, the pipeline performs a back-mapping step after scoring.  
+In this step, grid-level results are propagated back to the original Xenium cells.
+
+The final output is:
+
+- `xenium_cells_with_grid_scores.h5ad`
+
+### With Tangram
+
+If Xenium is processed **with Tangram**, **no back-mapping to the original Xenium cells is performed**.
+
+Instead:
+
+- Tangram-derived results remain on the **spot / grid level**
+- the result is visualized on the **spot level**
+
+This avoids the additional cost of propagating Tangram-derived results back to every original Xenium cell.
+
+## Output behavior
+
+After the pipeline finishes, the backend selects output files in this order:
+
+1. `xenium_cells_with_grid_scores.h5ad`
+2. `adata_st_scores.h5ad`
+3. `adata_tg_scores.h5ad`
+4. otherwise the original spatial input
+
+This means:
+
+- **Xenium without Tangram** is usually visualized from `xenium_cells_with_grid_scores.h5ad`
+- **Xenium with Tangram** falls back to `adata_tg_scores.h5ad`
+- therefore, **Xenium + Tangram is displayed on spot / grid level**
+
+## Frontend visualization behavior
+
+The frontend contains Xenium-specific visualization logic.
+
+### Comparison mode
+
+Comparison mode is **disabled for Xenium datasets**.
+
+When a Xenium dataset is selected:
+
+- comparison mode cannot be toggled on
+- an existing comparison view is automatically disabled
+- the compare button is disabled in the UI
+
+### Performance handling
+
+For Xenium visualization, the frontend uses dedicated performance handling:
+
+- Xenium datasets are detected either by metadata (`data_type == "xenium"`) or by large feature counts
+- a reduced base layer is rendered for performance
+- a detail window is used for more focused interactive inspection
+- Xenium rendering is handled differently from standard Visium rendering
+
+This means the frontend is optimized for large Xenium datasets and does not treat Xenium exactly like a standard Visium hexagon view.
+
+## Summary
+
+In this pipeline, Xenium is handled through a **grid-first workflow**:
+
+- Xenium cells are converted into a grid representation
+- downstream analyses run on the **spot / grid level**
+- Tangram uses the **grid-level Xenium object**
+- **without Tangram**, results are mapped back to cells
+- **with Tangram**, results remain on the **spot / grid level** for visualization
+
+
+
 ### Multiom-specific
 
