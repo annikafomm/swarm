@@ -76,6 +76,97 @@ The web-tool is working with the anndata-format. This is a tutorial on how count
   - GSVA: stored in `anndata.obsm["spongeffects_GSVA_scores_{sponge|genie3}"]` as DataFrames with regulators as columns.
   - ssGSEA: stored in `anndata.obsm["spongeffects_ssGSEA_scores_{sponge|genie3}"]` as DataFrames with regulators as columns.
   - Viper: stored in `anndata.obsm["viper_scores_genie3"]` as DataFrame with regulators as columns.
+- **DGEA**
+  DGEA is currently implemented as a Seurat-based workflow.  
+The input AnnData object is first exported into a Seurat-compatible format, then differential expression is computed in R using `Seurat::FindMarkers`, and the resulting DGEA results are merged into the dataset metadata for frontend visualization.
+
+### Workflow
+
+1. Export the AnnData object to Seurat-compatible files:
+   - `matrix.mtx`
+   - `genes.tsv`
+   - `barcodes.tsv`
+   - `metadata.csv`
+
+2. Load the exported data in Seurat and create a Seurat object.
+
+3. Optionally filter the dataset to `in_tissue == 1` if the column is available.
+
+4. Normalize the Seurat object.
+
+5. Run differential expression analysis across selected metadata columns.
+
+6. Write the results to `dgea_results.json`.
+
+7. Merge the DGEA results into the GeoJSON metadata so they can be accessed by the frontend.
+
+### Groupings
+
+The current DGEA workflow is configured to run on the following metadata columns if they are available:
+
+- `cell_type`
+- `leiden`
+- `niche_cluster`
+
+For each grouping column, the workflow computes:
+
+- all pairwise group comparisons
+- one-vs-all comparisons
+- an aggregate marker view based on the best adjusted p-value observed across comparisons
+
+### Statistical settings
+
+DGEA is computed with `Seurat::FindMarkers` using the Wilcoxon test.
+
+Current default settings include:
+
+- `min_cells = 3`
+- `top_n = 200`
+- `min_pct = 0.10`
+- `logfc_threshold = 0.25`
+
+For the DGEA heatmap context, the workflow additionally uses:
+
+- `heatmap_n_top = 10`
+- `heatmap_padj_cutoff = 0.05`
+- `heatmap_logfc_cutoff = 0.5`
+- normalized expression values from the Seurat `"data"` slot
+
+### Output structure
+
+The DGEA results are stored as JSON under `meta["dgea"]`.
+
+For each grouping column, the output contains:
+
+- available levels
+- group sizes
+- aggregated marker results
+- individual comparisons
+
+Each comparison stores:
+
+- comparison ID
+- group names
+- group sizes
+- skipped status and skip reason if applicable
+- a marker table
+- a heatmap context containing scaled and raw expression values across groups
+
+Comparisons are skipped automatically if one of the groups does not satisfy the minimum cell requirement.
+
+### Frontend integration
+
+The frontend reads DGEA data from the dataset metadata and provides a dedicated **DGEA** tab.
+
+Users can:
+
+- select the grouping column
+- choose group 1 and group 2
+- switch to a one-vs-all comparison
+- inspect the marker table for the selected comparison
+- view a heatmap of the selected comparison
+- project selected genes back onto the main plot via **Show on plot**
+
 - **Tangram**
   - Cell type compositions: stored in `anndata.obsm["tangram_ct_pred"]` as DataFrame with cell types as columns.
 - **LIANA+ scores**
