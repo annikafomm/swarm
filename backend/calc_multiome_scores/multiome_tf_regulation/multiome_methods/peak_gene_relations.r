@@ -2979,43 +2979,137 @@ plot_links_per_gene <- function(object, assay="peaks"){
 
 }
 
+coverage_plot_for_gene <- function(object, gene_name, cluster=NULL, peak_assay = "peaks", expression_assay = "RNA") {
+  links <- Links(object[[peak_assay]])
 
-coverage_plot_for_gene <- function(object, gene_name, use_gene_id=FALSE) {
-    links <- Links(object[["peaks"]])
-    gene_col <- ifelse(use_gene_id, 'gene_id', 'gene_name')
-    links_gene <- links[links[[gene_col]] == gene_name]
-    print(links_gene)
+  if (is.null(links) || length(links) == 0) {
+    stop("No links found in assay '", peak_assay, "'.")
+  }
 
-    # the strand of the gene
-    strand <- as.character(unique(strand(Annotation(res_links$object)[Annotation(res_links$object)[[gene_col]] == gene_name])))
+  link_meta <- mcols(links)
 
-    if ("+" %in% strand) {
-        # if gene is on the + strand, upstream is left and downstream is right
-        left_extend = abs(min(min(links_gene$distancePeakStartTSS),0))
-        right_extend = abs(max(0,max(links_gene$distancePeakStartTSS)))
-    } else {
-        # if gene is on the - strand, upstream is right and downstream is left
-        left_extend = abs(max(0,max(links_gene$distancePeakStartTSS)))
-        right_extend = abs(min(0,min(links_gene$distancePeakStartTSS)))
-    }
-    
-    p <- CoveragePlot(
-        object = object,
-        region = gene_name,
-        features = gene_name,
-        expression.assay = "RNA",
-        #idents = idents.plot,
-        extend.upstream = left_extend, # left
-        extend.downstream = right_extend, # right
-        annotation = TRUE,
-        peaks = TRUE,
-        tile = TRUE,
-        links = TRUE
-        )
-    return(p)
+  if (!"gene" %in% colnames(link_meta)) {
+    stop("The Links GRanges does not contain a 'gene' metadata column.")
+  }
+
+  if (!"distancePeakStartTSS" %in% colnames(link_meta)) {
+    stop("The Links GRanges does not contain a 'distancePeakStartTSS' metadata column.")
+  }
+
+  links_gene <- links[link_meta$gene == gene_name]
+
+  if (length(links_gene) == 0) {
+    stop("No peak-gene links found for gene: ", gene_name)
+  }
+
+  ann <- Annotation(object[[peak_assay]])
+  ann_meta <- mcols(ann)
+
+  if (!"gene_name" %in% colnames(ann_meta)) {
+    stop("Annotation GRanges does not contain a 'gene_name' column.")
+  }
+
+  ann_gene <- ann[ann_meta$gene_name == gene_name]
+
+  if (length(ann_gene) == 0) {
+    stop("Gene not found in annotation: ", gene_name)
+  }
+
+  gene_strand <- unique(as.character(strand(ann_gene)))
+  gene_strand <- gene_strand[gene_strand != "*"][1]
+
+  if (is.na(gene_strand) || length(gene_strand) == 0) {
+    stop("Could not determine strand for gene: ", gene_name)
+  }
+
+  dists <- mcols(links_gene)$distancePeakStartTSS
+
+  if (gene_strand == "+") {
+    left_extend  <- abs(min(c(dists, 0), na.rm = TRUE))
+    right_extend <- abs(max(c(dists, 0), na.rm = TRUE))
+  } else {
+    left_extend  <- abs(max(c(dists, 0), na.rm = TRUE))
+    right_extend <- abs(min(c(dists, 0), na.rm = TRUE))
+  }
+
+  CoveragePlot(
+    object = object,
+    region = gene_name,
+    features = gene_name,
+    expression.assay = expression_assay,
+    extend.upstream = left_extend,
+    extend.downstream = right_extend,
+    annotation = TRUE,
+    peaks = TRUE,
+    #tile = TRUE,
+    links = TRUE,
+    idents = cluster
+  )
 }
 
 
 
+linking_peaks_for_module_cluster <- function(object, 
+                                            seed_genes, 
+                                            priorGRN, 
+                                            cluster,
+                                            gene_name_2_gene_id,
+                                            log2FC_threshold = 1,
+                                            p_adj_threshold = 0.05,
+                                            genome=BSgenome.Hsapiens.UCSC.hg38,
+                                            frag_path=NULL, add_markers=FALSE) {
+    priorGRN <- priorGRN %>%
+        rename(
+            gene = gene_name,
+            EID = Gene
+        )
 
-                                 
+    if (add_markers) {
+        marker_genes_cluster <- object@misc$markers.annotated[
+            !is.na(object@misc$markers.annotated[["cluster"]]) &
+            !is.na(object@misc$markers.annotated[["p_val_adj"]]) &
+            !is.na(object@misc$markers.annotated[["avg_log2FC"]]) &
+            object@misc$markers.annotated[["avg_log2FC"]] > log2FC_threshold &
+            object@misc$markers.annotated[["p_val_adj"]] < p_adj_threshold &
+            object@misc$markers.annotated[["cluster"]] == cluster,
+            ,
+            drop = FALSE
+        ]
+        print(typeof(marker_genes_cluster))
+        print(class(marker_genes_cluster))
+
+        priorGRN_ext <- gene_name_2_gene_id[gene_name_2_gene_id[["gene_name"]] %in% marker_genes_cluster, , drop = FALSE] %>%
+        rename(
+            gene = gene_name,
+            EID = gene_id
+        )
+        priorGRN <- bind_rows(priorGRN, priorGRN_ext)
+    
+    } 
+
+    print(typeof(priorGRN))
+    print(class(priorGRN))
+    print(head(priorGRN))
+
+    seeds <- gene_name_2_gene_id[gene_name_2_gene_id[["gene_name"]] %in% seed_genes, , drop = FALSE] %>%
+        rename(
+            gene = gene_name,
+            EID = gene_id
+        )
+    
+    object<-linking_peaks(object, priorGRN, seeds=seeds, genome=genome)
+    if (!is.null(frag_path)) {
+        frag_obj <- CreateFragmentObject(
+            path = frag_path,
+            cells = colnames(object)   # restrict to cells in this object
+        )
+        object[["peaks"]]@fragments <- list(frag_obj)
+    }
+    
+
+    # plot links
+    p <- plot_links_per_gene(object)
+    return(list(object = object, plot_links = p, priorGRN=priorGRN, seeds=seeds))
+
+}
+   
