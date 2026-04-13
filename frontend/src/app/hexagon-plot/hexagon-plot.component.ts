@@ -413,6 +413,70 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
 
+  public tfGraphLoading: boolean = false;
+  public tfGraphLoadingCompare: boolean = false;
+  public selectedGrnView: 'peak_stats' | 'motif_stats' | 'tf_graph' = 'tf_graph';
+  public selectedGrnViewCompare: 'peak_stats' | 'motif_stats' | 'tf_graph' = 'tf_graph';
+
+  private tfGraph: tfGraphData | null = null;
+  private tfGraphCompare: tfGraphData | null = null;
+
+  // On-demand GRN evaluation
+  public onDemandGrnParams = {
+    obsKey: 'cell_type',
+    cluster: '0',
+    name: 'GRN_Evaluation',
+    geneSet: '',
+    usePriorGrn: false,
+  };
+  public isComputingOnDemandGrn = false;
+  public onDemandGrnError = '';
+
+  public onDemandOutputPath: string | null = null;
+  public onDemandOutputPathCompare: string | null = null;
+
+  // Main View - GRN Evaluation Results
+  public onDemandGrnRuns: string[] = [];
+  public selectedOnDemandRun: string | null = null;
+  public grnGraphFilter: 'prior' | 'extended' | 'full' = 'full';
+  public grnGraphData: any = null;
+  public grnGraphDataPrior: any = null;
+  public grnGraphDataExtended: any = null;
+  public grnGraphDataFull: any = null;
+  public grnPlots: { [directory: string]: string[] } = {};
+  public grnPeakStats: any = null;
+  public grnMotifStats: any = null;
+
+  public isLoadingGrnGraph: boolean = false;
+  public isLoadingGrnGraphPrior: boolean = false;
+  public isLoadingGrnGraphExtended: boolean = false;
+  public isLoadingGrnGraphFull: boolean = false;
+  public isLoadingGrnRuns: boolean = false;
+  public isLoadingGrnPlots: boolean = false;
+  public isLoadingGrnStats: boolean = false;
+  public grnTabError: string | null = null;
+
+  // Compare View - GRN Evaluation Results (separate properties for independence)
+  public onDemandGrnRunsCompare: string[] = [];
+  public selectedOnDemandRunCompare: string | null = null;
+  public grnGraphFilterCompare: 'prior' | 'extended' | 'full' = 'full';
+  public grnGraphDataCompare: any = null;
+  public grnGraphDataPriorCompare: any = null;
+  public grnGraphDataExtendedCompare: any = null;
+  public grnGraphDataFullCompare: any = null;
+  public grnPlotsCompare: { [directory: string]: string[] } = {};
+  public grnPeakStatsCompare: any = null;
+  public grnMotifStatsCompare: any = null;
+
+  public isLoadingGrnRunsCompare: boolean = false;
+  public isLoadingGrnGraphCompare: boolean = false;
+  public isLoadingGrnGraphPriorCompare: boolean = false;
+  public isLoadingGrnGraphExtendedCompare: boolean = false;
+  public isLoadingGrnGraphFullCompare: boolean = false;
+  public isLoadingGrnPlotsCompare: boolean = false;
+  public isLoadingGrnStatsCompare: boolean = false;
+  public grnTabErrorCompare: string | null = null;
+
 
   public repaintBothViews(): void {
     this.updateHexColors();
@@ -736,6 +800,68 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     }
 
+    if (!compare && tabLabel === 'GRN Evaluation') {
+      this.selectedGrnView = 'tf_graph';
+
+      // Auto-select first "prob" property or default to cell_type
+      const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
+        prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
+      );
+      this.selectedView = probProperty || 'cell_type';
+
+      setTimeout(() => {
+        this.onColorbyPropertyChange(false);
+        this.loadTfGraph(false);
+        this.loadPrecomputedGrnGraph(false);
+      }, 300);
+      return;
+    }
+
+    if (compare && tabLabel.includes('Compare - GRN Evaluation')) {
+      this.selectedGrnViewCompare = 'tf_graph';
+
+      // Auto-select first "prob" property or default to cell_type
+      const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
+        prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
+      );
+      this.selectedCompareView = probPropertyCompare || 'cell_type';
+
+      setTimeout(() => {
+        this.onColorbyPropertyChange(true);
+        this.loadTfGraph(true);
+        this.loadPrecomputedGrnGraph(true);
+      }, 300);
+      return;
+    }
+
+    if (!compare && tabLabel === 'GRN Evaluation - On Demand') {
+      // Auto-select first "prob" property or default to cell_type
+      const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
+        prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
+      );
+      this.selectedView = probProperty || 'cell_type';
+
+      setTimeout(() => {
+        this.onColorbyPropertyChange(false);
+      }, 100);
+      return;
+    }
+
+    if (compare && tabLabel === 'GRN Evaluation - On Demand') {
+      // Auto-select first "prob" property or default to cell_type
+      const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
+        prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
+      );
+      this.selectedCompareView = probPropertyCompare || 'cell_type';
+
+      setTimeout(() => {
+        this.onColorbyPropertyChange(true);
+      }, 100);
+      return;
+    }
+
+
+
     // Map tab labels to view keys
     const tabMap: { [label: string]: string } = compare
       ? {
@@ -771,6 +897,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (newView) {
       this.onTabColorChange(newView, compare);
+    }
+  }
+
+  /**
+   * Handle GRN view selection change
+   */
+  public onGrnViewChange(view: 'peak_stats' | 'motif_stats' | 'tf_graph', compare: boolean = false): void {
+    if (view === 'tf_graph') {
+      // Load the TF graph when tf_graph view is selected
+      setTimeout(() => this.loadTfGraph(compare), 100);
     }
   }
 
@@ -1129,11 +1265,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
-  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
-  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
-  this.onColorbyPropertyChange(compare);
-  this.fetchAndUpdate('gene_expression', gene, compare);
-}
+    compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+    compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+    this.onColorbyPropertyChange(compare);
+    this.fetchAndUpdate('gene_expression', gene, compare);
+  }
 
 
   // Render the context heatmap
@@ -4448,6 +4584,845 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.svg.select('#detail-frame').style('display', 'none');
     this.detailLayer.style('display', 'none');
   }
+
+  /**
+   * Load TF graph data from the backend API
+   */
+  public loadTfGraph(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+
+    if (!dataset?.id) {
+      console.warn('No dataset selected');
+      return;
+    }
+
+    const loading = compare ? 'tfGraphLoadingCompare' : 'tfGraphLoading';
+    this[loading] = true;
+
+    // Build the API URL
+    const apiUrl = `/api/tf_graph/${dataset.id}`;
+    const fullUrl = `${this.sessionService.apiUrl}${apiUrl}`;
+
+    console.log('[TF Graph] Loading from:', fullUrl);
+    console.log('[TF Graph] Loading flag set for', compare ? 'compare' : 'main');
+
+    // Ensure container exists in DOM
+    const containerId = compare ? '#tf_gene_net_container_compare' : '#tf_gene_net_container';
+    const container = document.querySelector(containerId);
+    console.log('[TF Graph] Container exists:', !!container, 'ID:', containerId);
+
+    // Load the JSON file using fetch like GeoJSON does
+    fetch(fullUrl, { credentials: 'include' })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data: { nodes: any[], links: any[] }) => {
+        console.log('✓ Loaded TF graph data:', data);
+        this.visualizeTfGraph(data, compare);
+        this[loading] = false;
+      })
+      .catch((err) => {
+        console.error('✗ Failed to load TF graph:', err);
+        this[loading] = false;
+      });
+  }
+
+  /**
+   * Visualize TF graph using D3
+   */
+  private visualizeTfGraph(graphData: { nodes: any[], links: any[] }, compare: boolean = false): void {
+    const containerId = compare ? '#tf_gene_net_container_compare' : '#tf_gene_net_container';
+
+    console.log('[visualizeTfGraph] Selecting container:', containerId);
+    const container = d3.select(containerId);
+    console.log('[visualizeTfGraph] Container selected:', container.empty() ? 'EMPTY' : 'EXISTS');
+
+    // Clear previous content
+    container.html('');
+
+    if (!graphData.nodes || !graphData.links || graphData.nodes.length === 0) {
+      console.warn('[visualizeTfGraph] No graph data available');
+      container.append('p').text('No TF graph data available');
+      return;
+    }
+
+    console.log('[visualizeTfGraph] Nodes:', graphData.nodes.length, 'Links:', graphData.links.length);
+
+    // SVG dimensions
+    const width = 1000;
+    const height = 600;
+
+    // Create SVG
+    const svg = d3
+      .select(containerId)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', height)
+      .style('background-color', '#f8f9fa')
+      .style('border', '1px solid #ddd');
+
+    console.log('[visualizeTfGraph] SVG created and appended');
+
+    // Add zoom behavior
+    const g = svg.append('g');
+    const zoom = d3.zoom<SVGSVGElement, any>().on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
+
+    // Create map from node id to node object for efficient lookup
+    const nodeMap = new Map(graphData.nodes.map((node: any) => [node.id, node]));
+
+    // Transform links to use node objects instead of just ids
+    const links = graphData.links.map((link: any) => ({
+      source: nodeMap.get(link.source),
+      target: nodeMap.get(link.target),
+      edge_color: link.edge_color || '#999',
+      edge_width: link.edge_width || 1,
+      edge_dash: link.edge_dash || '0'
+    })).filter((link: any) => link.source && link.target);
+
+    console.log('[visualizeTfGraph] Filtered links:', links.length);
+
+    // Force simulation
+    const simulation = d3
+      .forceSimulation(graphData.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(links)
+          .id((d: any) => d.id)
+          .distance(50)
+          .strength(0.4)
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30));
+
+    // Draw links
+    const link = g
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.3)
+      .selectAll('line')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('stroke', (d: any) => d.edge_color)
+      .attr('stroke-width', (d: any) => d.edge_width)
+      .style('stroke-dasharray', (d: any) => d.edge_dash);
+
+    // Draw nodes
+    const node = g
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .selectAll('circle')
+      .data(graphData.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => d.type === 'from' ? 8 : 6)
+      .attr('fill', (d: any) => d.node_fill || '#999')
+      .attr('opacity', 0.9)
+      .call(
+        d3
+          .drag<SVGCircleElement, any>()
+          .on('start', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on('drag', (event: any, d: any) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on('end', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          })
+      );
+
+    // Add node labels
+    const labels = g
+      .append('g')
+      .selectAll('text')
+      .data(graphData.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .attr('font-size', (d: any) => d.type === 'from' ? '11px' : '10px')
+      .attr('font-weight', (d: any) => d.priorTF ? 'bold' : 'normal')
+      .attr('fill', '#333')
+      .attr('pointer-events', 'none')
+      .text((d: any) => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name);
+
+    // Add tooltips on hover
+    node.append('title').text((d: any) => `${d.name}${d.priorTF ? ' (Prior TF)' : ''}`);
+
+    // Update positions on simulation tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node
+        .attr('cx', (d: any) => d.x)
+        .attr('cy', (d: any) => d.y);
+
+      labels
+        .attr('x', (d: any) => d.x)
+        .attr('y', (d: any) => d.y);
+    });
+
+    // Add legend
+    this.addTfGraphLegend(svg, width, height);
+  }
+
+  /**
+   * Add legend to TF graph visualization
+   */
+  private addTfGraphLegend(svg: any, width: number, height: number): void {
+    const legendX = 20;
+    const legendY = 20;
+
+    const legend = svg.append('g')
+      .attr('transform', `translate(${legendX}, ${legendY})`);
+
+    // Background
+    legend.append('rect')
+      .attr('width', 180)
+      .attr('height', 100)
+      .attr('fill', 'white')
+      .attr('stroke', '#ccc')
+      .attr('rx', 4);
+
+    // Title
+    legend.append('text')
+      .attr('x', 10)
+      .attr('y', 20)
+      .attr('font-weight', 'bold')
+      .attr('font-size', '12px')
+      .text('Legend');
+
+    // TF nodes
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 40)
+      .attr('r', 5)
+      .attr('fill', '#1f77b4');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 45)
+      .attr('font-size', '11px')
+      .text('Regulator');
+
+    // Prior TF indicator
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 60)
+      .attr('r', 5)
+      .attr('fill', '#ff7f0e');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 65)
+      .attr('font-size', '11px')
+      .text('Prior TF');
+
+    // Target nodes
+    legend.append('circle')
+      .attr('cx', 20)
+      .attr('cy', 80)
+      .attr('r', 4)
+      .attr('fill', '#cccccc');
+
+    legend.append('text')
+      .attr('x', 35)
+      .attr('y', 85)
+      .attr('font-size', '11px')
+      .text('Target');
+  }
+
+  /**
+   * Load pre-computed GRN graph (from dataset metadata)
+   * Loads all 3 filter modes in parallel and stores them for display
+   */
+  public loadPrecomputedGrnGraph(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+
+    if (!dataset?.id) {
+      console.warn('[loadPrecomputedGrnGraph] No dataset selected');
+      return;
+    }
+
+    // Get the GRN evaluation name from dataset metadata or use default
+    const evalName = dataset.grn_evaluation_name || 'GRN_Evaluation';
+    console.log('[loadPrecomputedGrnGraph] Loading for dataset:', dataset.id, 'evaluation:', evalName);
+
+    // Load all 3 filter modes in parallel
+    const filterModes: Array<'prior' | 'extended' | 'full'> = ['prior', 'extended', 'full'];
+    const self = this as any;
+
+    filterModes.forEach((filterMode) => {
+      const loadingKey = compare
+        ? `isLoadingGrnGraph${filterMode.charAt(0).toUpperCase() + filterMode.slice(1)}Compare`
+        : `isLoadingGrnGraph${filterMode.charAt(0).toUpperCase() + filterMode.slice(1)}`;
+      const dataKey = compare
+        ? `grnGraphData${filterMode.charAt(0).toUpperCase() + filterMode.slice(1)}Compare`
+        : `grnGraphData${filterMode.charAt(0).toUpperCase() + filterMode.slice(1)}`;
+
+      self[loadingKey] = true;
+
+      const url = `/api/grn_evaluation/${dataset.id}/${evalName}/graph?filter_mode=${filterMode}`;
+      console.log(`[loadPrecomputedGrnGraph] Fetching ${filterMode}: ${url}`);
+
+      fetch(url, { credentials: 'include' })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+          return response.json();
+        })
+        .then((data) => {
+          console.log(`[loadPrecomputedGrnGraph] Loaded ${filterMode} data:`, data?.nodes?.length, 'nodes,', data?.links?.length, 'links');
+          self[dataKey] = data;
+          self[loadingKey] = false;
+
+          // Check if this is the currently selected filter and auto-visualize only then
+          const currentFilterKey = compare ? 'grnGraphFilterCompare' : 'grnGraphFilter';
+          if (self[currentFilterKey] === filterMode) {
+            console.log(`[loadPrecomputedGrnGraph] Auto-visualizing ${filterMode} (current selection)`);
+            // Use setTimeout to ensure DOM is ready
+            setTimeout(() => {
+              this.visualizeGrnGraph(data, compare, filterMode);
+            }, 50);
+          } else {
+            console.log(`[loadPrecomputedGrnGraph] Cached ${filterMode} data, not visualizing (current filter is ${self[currentFilterKey]})`);
+          }
+        })
+        .catch((err) => {
+          console.error(`[loadPrecomputedGrnGraph] Error loading ${filterMode}:`, err);
+          self[loadingKey] = false;
+        });
+    });
+  }
+
+  computeOnDemandGrnEvaluation(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) {
+      this.onDemandGrnError = 'No dataset selected';
+      return;
+    }
+
+    this.isComputingOnDemandGrn = true;
+    this.onDemandGrnError = '';
+
+    const payload = {
+      dataset_id: dataset.id,
+      grn_evaluation_obs_key: this.onDemandGrnParams.obsKey,
+      grn_evaluation_cluster: this.onDemandGrnParams.cluster,
+      grn_evaluation_name: this.onDemandGrnParams.name,
+      grn_evaluation_gene_set: this.onDemandGrnParams.geneSet,
+      grn_evaluation_use_prior_grn: this.onDemandGrnParams.usePriorGrn,
+    };
+
+    this.http.post('/api/on_demand_grn_evaluation', payload).subscribe({
+      next: (response: any) => {
+        this.isComputingOnDemandGrn = false;
+        alert('GRN Evaluation computed successfully');
+        if (compare) {
+          this.onDemandOutputPathCompare = response.output_path;
+        } else {
+          this.onDemandOutputPath = response.output_path;
+        }
+
+      },
+      error: (err) => {
+        this.isComputingOnDemandGrn = false;
+        this.onDemandGrnError = err?.error?.detail || err.message || 'Error computing GRN Evaluation';
+      }
+    });
+  }
+
+  public loadOnDemandGrnRuns(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return;
+
+    const isLoadingKey = compare ? 'isLoadingGrnRunsCompare' : 'isLoadingGrnRuns';
+    const runsKey = compare ? 'onDemandGrnRunsCompare' : 'onDemandGrnRuns';
+    const errorKey = compare ? 'grnTabErrorCompare' : 'grnTabError';
+
+    this[isLoadingKey] = true;
+    this[errorKey] = null;
+
+    this.http.get<{ runs: string[] }>(`/api/grn_evaluation/${dataset.id}/available_runs`)
+      .subscribe({
+        next: (response) => {
+          this[runsKey] = response.runs;
+          this[isLoadingKey] = false;
+        },
+        error: (err) => {
+          this[errorKey] = 'Failed to load available GRN runs';
+          this[isLoadingKey] = false;
+        }
+      });
+  }
+
+  /**
+   * Handle when user selects a GRN run
+   */
+  public onSelectGrnRun(runName: string, compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return;
+
+    const selectedRunKey = compare ? 'selectedOnDemandRunCompare' : 'selectedOnDemandRun';
+    const errorKey = compare ? 'grnTabErrorCompare' : 'grnTabError';
+
+    this[selectedRunKey] = runName;
+    this[errorKey] = null;
+
+    // Load graph, plots, and stats in parallel
+    this.loadGrnGraph(runName, compare);
+    this.loadGrnStats(runName, compare);
+    this.loadGrnPlots(runName, compare);
+  }
+
+  /**
+   * Load all 3 GRN graphs (prior, extended, full) and display selected one
+   */
+  private loadGrnGraph(runName: string, compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) {
+      console.warn('[loadGrnGraph] No dataset selected');
+      return;
+    }
+
+    console.log('[loadGrnGraph] Loading GRN graphs for run:', runName, 'Dataset:', dataset.id, 'Compare:', compare);
+
+    // Load PRIOR
+    this.isLoadingGrnGraphPrior = !compare ? true : this.isLoadingGrnGraphPrior;
+    if (compare) this.isLoadingGrnGraphPriorCompare = true;
+    this.http.get<any>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/graph`,
+      { params: { filter_mode: 'prior' } }
+    ).subscribe({
+      next: (graphData) => {
+        console.log('[loadGrnGraph] Loaded PRIOR data. Nodes:', graphData?.nodes?.length, 'Links:', graphData?.links?.length);
+        if (compare) {
+          this.grnGraphDataPriorCompare = graphData;
+          this.isLoadingGrnGraphPriorCompare = false;
+        } else {
+          this.grnGraphDataPrior = graphData;
+          this.isLoadingGrnGraphPrior = false;
+        }
+        this.visualizeGrnGraphForFilter('prior', compare);
+      },
+      error: (err) => {
+        console.error('[loadGrnGraph] Error loading PRIOR:', err);
+        if (compare) this.isLoadingGrnGraphPriorCompare = false;
+        else this.isLoadingGrnGraphPrior = false;
+      }
+    });
+
+    // Load EXTENDED
+    this.isLoadingGrnGraphExtended = !compare ? true : this.isLoadingGrnGraphExtended;
+    if (compare) this.isLoadingGrnGraphExtendedCompare = true;
+    this.http.get<any>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/graph`,
+      { params: { filter_mode: 'extended' } }
+    ).subscribe({
+      next: (graphData) => {
+        console.log('[loadGrnGraph] Loaded EXTENDED data. Nodes:', graphData?.nodes?.length, 'Links:', graphData?.links?.length);
+        if (compare) {
+          this.grnGraphDataExtendedCompare = graphData;
+          this.isLoadingGrnGraphExtendedCompare = false;
+        } else {
+          this.grnGraphDataExtended = graphData;
+          this.isLoadingGrnGraphExtended = false;
+        }
+        this.visualizeGrnGraphForFilter('extended', compare);
+      },
+      error: (err) => {
+        console.error('[loadGrnGraph] Error loading EXTENDED:', err);
+        if (compare) this.isLoadingGrnGraphExtendedCompare = false;
+        else this.isLoadingGrnGraphExtended = false;
+      }
+    });
+
+    // Load FULL
+    this.isLoadingGrnGraphFull = !compare ? true : this.isLoadingGrnGraphFull;
+    if (compare) this.isLoadingGrnGraphFullCompare = true;
+    this.http.get<any>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/graph`,
+      { params: { filter_mode: 'full' } }
+    ).subscribe({
+      next: (graphData) => {
+        console.log('[loadGrnGraph] Loaded FULL data. Nodes:', graphData?.nodes?.length, 'Links:', graphData?.links?.length);
+        if (compare) {
+          this.grnGraphDataFullCompare = graphData;
+          this.isLoadingGrnGraphFullCompare = false;
+        } else {
+          this.grnGraphDataFull = graphData;
+          this.isLoadingGrnGraphFull = false;
+        }
+        this.visualizeGrnGraphForFilter('full', compare);
+      },
+      error: (err) => {
+        console.error('[loadGrnGraph] Error loading FULL:', err);
+        if (compare) this.isLoadingGrnGraphFullCompare = false;
+        else this.isLoadingGrnGraphFull = false;
+      }
+    });
+  }
+
+  /**
+   * Visualize the currently selected GRN graph filter
+   */
+  private visualizeGrnGraphForFilter(filterMode: 'prior' | 'extended' | 'full', compare: boolean = false): void {
+    const currentFilter = compare ? this.grnGraphFilterCompare : this.grnGraphFilter;
+
+    console.log('[visualizeGrnGraphForFilter] Mode:', filterMode, 'CurrentFilter:', currentFilter, 'Match:', filterMode === currentFilter);
+
+    // Only visualize if this is the currently selected filter
+    if (filterMode === currentFilter) {
+      let graphData: any = null;
+
+      if (compare) {
+        if (filterMode === 'prior') graphData = this.grnGraphDataPriorCompare;
+        else if (filterMode === 'extended') graphData = this.grnGraphDataExtendedCompare;
+        else if (filterMode === 'full') graphData = this.grnGraphDataFullCompare;
+      } else {
+        if (filterMode === 'prior') graphData = this.grnGraphDataPrior;
+        else if (filterMode === 'extended') graphData = this.grnGraphDataExtended;
+        else if (filterMode === 'full') graphData = this.grnGraphDataFull;
+      }
+
+      console.log('[visualizeGrnGraphForFilter] Graph data exists:', !!graphData, 'Nodes:', graphData?.nodes?.length);
+
+      if (graphData) {
+        this.visualizeGrnGraph(graphData, compare);
+      } else {
+        console.warn('[visualizeGrnGraphForFilter] No graph data for mode:', filterMode);
+      }
+    }
+  }
+
+  /**
+   * Change graph filter mode and switch visualization
+   */
+  public onChangeGrnGraphFilter(newFilter: 'prior' | 'extended' | 'full', compare: boolean = false): void {
+    console.log('[onChangeGrnGraphFilter] Changing filter to:', newFilter, 'Compare:', compare);
+
+    if (compare) {
+      this.grnGraphFilterCompare = newFilter;
+    } else {
+      this.grnGraphFilter = newFilter;
+    }
+
+    // Get the data for the selected filter
+    let graphData: any = null;
+
+    if (compare) {
+      if (newFilter === 'prior') graphData = this.grnGraphDataPriorCompare;
+      else if (newFilter === 'extended') graphData = this.grnGraphDataExtendedCompare;
+      else if (newFilter === 'full') graphData = this.grnGraphDataFullCompare;
+    } else {
+      if (newFilter === 'prior') graphData = this.grnGraphDataPrior;
+      else if (newFilter === 'extended') graphData = this.grnGraphDataExtended;
+      else if (newFilter === 'full') graphData = this.grnGraphDataFull;
+    }
+
+    console.log('[onChangeGrnGraphFilter] Data exists for', newFilter + ':', !!graphData);
+
+    if (graphData) {
+      console.log('[onChangeGrnGraphFilter] Rendering immediately for filter:', newFilter);
+      this.visualizeGrnGraph(graphData, compare, newFilter);
+    } else {
+      // Otherwise load from backend
+      const runName = compare ? this.selectedOnDemandRunCompare : this.selectedOnDemandRun;
+    }
+  }
+
+  /**
+   * Load available plot images
+   */
+  private loadGrnPlots(runName: string, compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return;
+
+    const isLoadingKey = compare ? 'isLoadingGrnPlotsCompare' : 'isLoadingGrnPlots';
+    const plotsKey = compare ? 'grnPlotsCompare' : 'grnPlots';
+
+    this[isLoadingKey] = true;
+
+    this.http.get<{ [dir: string]: string[] }>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/plots`
+    ).subscribe({
+      next: (plots) => {
+        this[plotsKey] = plots;
+        this[isLoadingKey] = false;
+      },
+      error: (err) => {
+        this[plotsKey] = {};
+        this[isLoadingKey] = false;
+      }
+    });
+  }
+
+  /**
+   * Load peak and motif stats
+   */
+  private loadGrnStats(runName: string, compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return;
+
+    const isLoadingKey = compare ? 'isLoadingGrnStatsCompare' : 'isLoadingGrnStats';
+    const peakStatsKey = compare ? 'grnPeakStatsCompare' : 'grnPeakStats';
+    const motifStatsKey = compare ? 'grnMotifStatsCompare' : 'grnMotifStats';
+
+    this[isLoadingKey] = true;
+
+    // Load peak stats
+    this.http.get<any>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/stats/peak`
+    ).subscribe({
+      next: (stats) => {
+        this[peakStatsKey] = stats;
+      },
+      error: () => {
+        this[peakStatsKey] = null;
+      }
+    });
+
+    // Load motif stats
+    this.http.get<any>(
+      `/api/grn_evaluation/${dataset.id}/${runName}/stats/motif`
+    ).subscribe({
+      next: (stats) => {
+        this[motifStatsKey] = stats;
+        this[isLoadingKey] = false;
+      },
+      error: () => {
+        this[motifStatsKey] = null;
+        this[isLoadingKey] = false;
+      }
+    });
+  }
+
+  /**
+   * Visualize GRN graph using D3 (reuse TF Gene-Net logic)
+   */
+  private visualizeGrnGraph(graphData: any, compare: boolean = false, filterMode?: 'prior' | 'extended' | 'full'): void {
+    // If filterMode not provided, get it from component state
+    if (!filterMode) {
+      const filterKey = compare ? 'grnGraphFilterCompare' : 'grnGraphFilter';
+      filterMode = this[filterKey];
+    }
+
+    // Determine container ID based on filter mode and compare status
+    let containerId = '#tf_gene_net_container_' + filterMode;
+    if (compare) {
+      containerId = '#tf_gene_net_container_' + filterMode + '_compare';
+    }
+
+    console.log('[visualizeGrnGraph] Starting visualization');
+    console.log('[visualizeGrnGraph] Filter mode:', filterMode);
+    console.log('[visualizeGrnGraph] Container ID:', containerId);
+    console.log('[visualizeGrnGraph] Compare:', compare);
+    console.log('[visualizeGrnGraph] Graph data:', graphData);
+
+    // Check if container exists in DOM
+    const containerElement = document.querySelector(containerId);
+    console.log('[visualizeGrnGraph] Container element found in DOM:', !!containerElement);
+    if (!containerElement) {
+      console.error('[visualizeGrnGraph] Container not found in DOM! ID:', containerId);
+      return;
+    }
+
+    // Clear previous content
+    d3.select(containerId).html('');
+    console.log('[visualizeGrnGraph] Cleared previous content');
+
+    if (!graphData || !graphData.nodes || !graphData.links || graphData.nodes.length === 0) {
+      console.warn('[visualizeGrnGraph] No graph data available for mode:', filterMode);
+      d3.select(containerId).append('p').text('No GRN graph data available');
+      return;
+    }
+
+    console.log('[visualizeGrnGraph] Rendering graph with', graphData.nodes.length, 'nodes and', graphData.links.length, 'links');
+
+    // SVG dimensions
+    const width = 1000;
+    const height = 600;
+
+    // Create SVG
+    const svg = d3
+      .select(containerId)
+      .append('svg')
+      .attr('width', '100%')
+      .attr('height', height)
+      .style('background-color', '#f8f9fa')
+      .style('border', '1px solid #ddd');
+
+    // Add zoom behavior
+    const g = svg.append('g');
+    const zoom = d3.zoom<SVGSVGElement, any>().on('zoom', (event) => {
+      g.attr('transform', event.transform);
+    });
+    svg.call(zoom);
+
+    // Create map from node id to node object
+    const nodeMap = new Map(graphData.nodes.map((node: any) => [node.id, node]));
+
+    // Transform links to use node objects
+    const links = graphData.links.map((link: any) => ({
+      source: nodeMap.get(link.source),
+      target: nodeMap.get(link.target),
+      edge_color: link.edge_color || '#999',
+      edge_width: link.edge_width || 1,
+      edge_dash: link.edge_dash || '0'
+    })).filter((link: any) => link.source && link.target);
+
+    // Force simulation
+    const simulation = d3
+      .forceSimulation(graphData.nodes)
+      .force(
+        'link',
+        d3
+          .forceLink(links)
+          .id((d: any) => d.id)
+          .distance(50)
+          .strength(0.4)
+      )
+      .force('charge', d3.forceManyBody().strength(-500))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(30));
+
+    // Draw links
+    const link = g
+      .append('g')
+      .attr('stroke', '#999')
+      .attr('stroke-opacity', 0.3)
+      .selectAll('line')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('stroke', (d: any) => d.edge_color)
+      .attr('stroke-width', (d: any) => d.edge_width)
+      .style('stroke-dasharray', (d: any) => d.edge_dash);
+
+    // Draw nodes
+    const node = g
+      .append('g')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .selectAll('circle')
+      .data(graphData.nodes)
+      .enter()
+      .append('circle')
+      .attr('r', (d: any) => d.type === 'from' ? 8 : 6)
+      .attr('fill', (d: any) => d.node_fill || '#999')
+      .attr('opacity', 0.9)
+      .call(
+        d3
+          .drag<SVGCircleElement, any>()
+          .on('start', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on('drag', (event: any, d: any) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on('end', (event: any, d: any) => {
+            if (!event.active) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          })
+      );
+
+    // Add node labels
+    const labels = g
+      .append('g')
+      .selectAll('text')
+      .data(graphData.nodes)
+      .enter()
+      .append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.35em')
+      .attr('font-size', (d: any) => d.type === 'from' ? '11px' : '10px')
+      .attr('font-weight', (d: any) => d.priorTF ? 'bold' : 'normal')
+      .attr('fill', '#333')
+      .attr('pointer-events', 'none')
+      .text((d: any) => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name);
+
+    // Add tooltips
+    node.append('title').text((d: any) => `${d.name}${d.priorTF ? ' (Prior TF)' : ''}`);
+
+    // Update positions on tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', (d: any) => d.source.x)
+        .attr('y1', (d: any) => d.source.y)
+        .attr('x2', (d: any) => d.target.x)
+        .attr('y2', (d: any) => d.target.y);
+
+      node
+        .attr('cx', (d: any) => d.x)
+        .attr('cy', (d: any) => d.y);
+
+      labels
+        .attr('x', (d: any) => d.x)
+        .attr('y', (d: any) => d.y);
+    });
+  }
+
+  /**
+   * Get image URL for a plot
+   */
+  public getGrnImageUrl(imageName: string, compare: boolean = false): string {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    const selectedRun = compare ? this.selectedOnDemandRunCompare : this.selectedOnDemandRun;
+    if (!dataset || !selectedRun) return '';
+    return `/api/grn_evaluation/${dataset.id}/${selectedRun}/image/${imageName}`;
+  }
+
+  /**
+   * Register on-demand run to dataset
+   */
+  public registerOnDemandGrnRun(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    const selectedRun = compare ? this.selectedOnDemandRunCompare : this.selectedOnDemandRun;
+    if (!dataset || !selectedRun) return;
+
+    const formData = new FormData();
+    formData.append('grn_evaluation_name', selectedRun);
+
+    this.http.post(
+      `/api/grn_evaluation/${dataset.id}/register_on_demand`,
+      formData
+    ).subscribe({
+      next: () => {
+        alert(`GRN run '${selectedRun}' registered successfully`);
+      },
+      error: (err) => {
+        alert('Failed to register: ' + (err?.error?.detail || err.message));
+      }
+    });
+  }
+
+  // =========================================================================
+  // GRN Evaluation Methods
+  // =========================================================================
 }
 
 
@@ -4504,3 +5479,9 @@ interface GeneStatsResponse {
   per_dataset: { [datasetId: string]: { min: number; max: number } };
   missing_in: string[];
 }
+
+interface tfGraphData {
+  nodes: { id: string; name: string }[];
+  links: { source: string; target: string; weight: number }[];
+}
+

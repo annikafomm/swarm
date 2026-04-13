@@ -575,6 +575,7 @@ class DatasetRegistry:
                 geojson_path=geojson_path,
                 genie_network_path=genie_network_path,
                 sponge_network_path=sponge_network_path,
+                tf_graph_path=output_files.get("tf_graph_path"),
                 created_at=datetime.now(),
                 dataset_type=dataset_type,
                 use_tangram=use_tangram,
@@ -607,6 +608,8 @@ class DatasetRegistry:
                 chromvar_scores_csv_path=output_files.get("chromvar_scores_csv_path"),
                 diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
+                tf_graph_path=output_files.get("tf_graph_path"),
+                grn_evaluation_name = output_files.get("grn_evaluation_name")
             )
         else:
             # Default to VisiumDataset
@@ -626,6 +629,7 @@ class DatasetRegistry:
                 use_multiome=use_multiome,
                 adata_st_scores_path=output_files.get("adata_st_scores_path"),
                 adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
+                tf_graph_path=output_files.get("tf_graph_path")
             )
 
         # Register it
@@ -710,6 +714,7 @@ class DatasetRegistry:
                             if "output_files" in config:
                                 genie_network_path = config["output_files"].get("genie_network_path")
                                 sponge_network_path = config["output_files"].get("sponge_network_path")
+                                tf_graph_path = config["output_files"].get("tf_graph_path")
                     except Exception as e:
                         print(f"  ⚠ Could not parse config for {dataset_id}: {e}")
 
@@ -741,6 +746,7 @@ class DatasetRegistry:
                     dataset_type=dataset_type,
                     use_tangram=use_tangram,
                     use_multiome=use_multiome,
+                    tf_graph_path=tf_graph_path,
                 )
 
                 # Register the Dataset object

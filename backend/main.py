@@ -5,8 +5,10 @@ import os
 import shutil
 import subprocess
 import time
+import traceback
 from dataset_management import DatasetRegistry
 from dataset_structure import Params, DatasetFactory
+from grn_utils import GrnEvaluationUtils
 from contextlib import asynccontextmanager
 from enum import Enum
 from pathlib import Path
@@ -1290,6 +1292,311 @@ async def upload(
     # 9) Return clean JSON response
     return payload
 
+@app.post("/api/on_demand_grn_evaluation", dependencies=[Depends(cookie)])
+async def on_demand_grn_evaluation(
+    dataset_id: str = Form(...),
+    grn_evaluation_obs_key: str = Form(...),
+    grn_evaluation_cluster: str = Form(...),
+    grn_evaluation_name: str = Form(...),
+    grn_evaluation_gene_set: Optional[str] = Form(None),
+    grn_evaluation_use_prior_grn: bool = Form(False),
+    grn_prior_network: Optional[UploadFile] = File(None),
+    session_data: "SessionData" = Depends(verifier),
+):
+    """
+    On-demand GRN evaluation computation endpoint.
+
+    Accepts GRN evaluation parameters and optionally a prior GRN network file.
+    For now: stores params and returns output path.
+    TODO: Invoke pipeline script with these parameters.
+    """
+    try:
+        print(f"=== On-demand GRN Evaluation ===")
+        print(f"Dataset ID: {dataset_id}")
+        print(f"Obs Key: {grn_evaluation_obs_key}")
+        print(f"Cluster: {grn_evaluation_cluster}")
+        print(f"GRN Name: {grn_evaluation_name}")
+        print(f"Gene Set: {grn_evaluation_gene_set}")
+        print(f"Use Prior GRN: {grn_evaluation_use_prior_grn}")
+        print(f"Prior Network File: {grn_prior_network.filename if grn_prior_network else 'None'}")
+
+        # 1. Resolve the dataset from registry
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        if not adata_path:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+
+        # 2. Job directory is the parent of adata
+        job_dir = Path(adata_path).resolve().parent
+
+        # 3. Output will be in on_demand directory
+        output_dir = job_dir / "multiome" / "GRN_evaluation" / "on_demand" / grn_evaluation_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # TODO: Start script here with parameters:
+        # - obs_key: grn_evaluation_obs_key
+        # - cluster: grn_evaluation_cluster
+        # - gene_set: grn_evaluation_gene_set
+        # - use_prior_grn: grn_evaluation_use_prior_grn
+        # - prior_grn_file: save and pass path if grn_prior_network uploaded
+        # - output_dir: output_dir
+
+        # If prior GRN file uploaded, save it
+        if grn_prior_network:
+            prior_grn_path = output_dir / "prior_grn.csv"
+            contents = await grn_prior_network.read()
+            with open(prior_grn_path, 'wb') as f:
+                f.write(contents)
+            print(f"✓ Saved prior GRN file to {prior_grn_path}")
+
+        print(f"✓ On-demand GRN evaluation params accepted")
+        print(f"Output directory: {output_dir}")
+
+        return {
+            "status": "accepted",
+            "grn_evaluation_name": grn_evaluation_name,
+            "output_path": str(output_dir),
+            "message": "GRN evaluation parameters accepted. Pipeline will process shortly."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ Error in on_demand_grn_evaluation: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/grn_evaluation/{dataset_id}/available_runs", dependencies=[Depends(cookie)])
+async def list_grn_evaluation_runs(
+    dataset_id: str,
+    session_data: "SessionData" = Depends(verifier),
+):
+    """List available on-demand GRN evaluation runs for a dataset"""
+    try:
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        if not adata_path:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+
+        job_dir = Path(adata_path).resolve().parent
+        runs = GrnEvaluationUtils.list_available_runs(job_dir)
+        return {"runs": runs}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error listing GRN runs: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/grn_evaluation/{dataset_id}/{evaluation_name}/graph", dependencies=[Depends(cookie)])
+async def get_grn_graph(
+    dataset_id: str,
+    evaluation_name: str,
+    filter_mode: str = "full",
+    session_data: "SessionData" = Depends(verifier),
+):
+    """
+    Fetch GRN graph with optional filtering.
+    filter_mode: 'prior' (priorTF nodes only), 'extended' (no red/yellow), 'full' (no filter)
+    """
+    try:
+        if filter_mode not in ["prior", "extended", "full"]:
+            filter_mode = "full"
+
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        job_dir = Path(adata_path).resolve().parent
+
+        # Try on-demand first, then initial_upload
+        eval_path = GrnEvaluationUtils.get_grn_evaluation_path(
+            job_dir, evaluation_name, source="both"
+        )
+
+        if not eval_path:
+            raise HTTPException(status_code=404, detail="GRN evaluation not found")
+
+        graph_path = eval_path / "graph.json"
+        if not graph_path.exists():
+            raise HTTPException(status_code=404, detail="Graph file not found")
+
+        graph_data = GrnEvaluationUtils.load_graph_json(graph_path)
+        if not graph_data:
+            raise HTTPException(status_code=500, detail="Failed to load graph")
+
+        # Apply filter
+        filtered_graph = GrnEvaluationUtils.filter_graph_by_mode(graph_data, filter_mode)
+        return filtered_graph
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error loading GRN graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/grn_evaluation/{dataset_id}/{evaluation_name}/plots", dependencies=[Depends(cookie)])
+async def list_grn_plots(
+    dataset_id: str,
+    evaluation_name: str,
+    session_data: "SessionData" = Depends(verifier),
+):
+    """List available plot images for a GRN evaluation run (peak_plots and motif_plots)"""
+    try:
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        job_dir = Path(adata_path).resolve().parent
+
+        eval_path = GrnEvaluationUtils.get_grn_evaluation_path(
+            job_dir, evaluation_name, source="both"
+        )
+
+        if not eval_path:
+            raise HTTPException(status_code=404, detail="GRN evaluation not found")
+
+        plots = GrnEvaluationUtils.list_plot_images(eval_path)
+        return plots
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error listing GRN plots: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/grn_evaluation/{dataset_id}/{evaluation_name}/image/{image_name}", dependencies=[Depends(cookie)])
+async def get_grn_image(
+    dataset_id: str,
+    evaluation_name: str,
+    image_name: str,
+    session_data: "SessionData" = Depends(verifier),
+):
+    """Serve PNG image for GRN evaluation (from peak_plots or motif_plots)"""
+    try:
+        # Sanitize filename to prevent directory traversal
+        image_name = _sanitize_filename(image_name)
+
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        job_dir = Path(adata_path).resolve().parent
+
+        eval_path = GrnEvaluationUtils.get_grn_evaluation_path(
+            job_dir, evaluation_name, source="both"
+        )
+
+        if not eval_path:
+            raise HTTPException(status_code=404, detail="GRN evaluation not found")
+
+        # Search for image in peak_plots and motif_plots subdirectories
+        matches = []
+        for subdir in ["peak_plots", "motif_plots"]:
+            subdir_path = eval_path / subdir
+            if subdir_path.exists():
+                img_path = subdir_path / image_name
+                if img_path.exists() and img_path.is_file():
+                    matches.append(img_path)
+
+        if not matches:
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        return FileResponse(matches[0], media_type="image/png")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error serving GRN image: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/grn_evaluation/{dataset_id}/{evaluation_name}/stats/{stat_type}", dependencies=[Depends(cookie)])
+async def get_grn_stats(
+    dataset_id: str,
+    evaluation_name: str,
+    stat_type: str,
+    session_data: "SessionData" = Depends(verifier),
+):
+    """
+    Fetch peak or motif stats as JSON.
+    For on-demand: reads from CSV file
+    For initial_upload: reads from meta dict if available
+    stat_type: 'peak' or 'motif'
+    """
+    try:
+        if stat_type not in ["peak", "motif"]:
+            raise HTTPException(status_code=400, detail="Invalid stat type")
+
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        adata_path = dataset_dict.get("adata_path")
+        job_dir = Path(adata_path).resolve().parent
+
+        eval_path = GrnEvaluationUtils.get_grn_evaluation_path(
+            job_dir, evaluation_name, source="both"
+        )
+
+        if not eval_path:
+            raise HTTPException(status_code=404, detail="GRN evaluation not found")
+
+        # Try to load from CSV (on-demand)
+        csv_name = f"{stat_type}_stats.csv"
+        csv_path = eval_path / csv_name
+
+        if csv_path.exists():
+            stats = GrnEvaluationUtils.read_csv_as_json(csv_path)
+            if stats:
+                return stats
+
+        # Try to load from meta (initial_upload)
+        # Load the AnnData and check uns for stats
+        try:
+            adata = _load_adata_cached(str(adata_path))
+            meta_dict = adata.uns.get("meta", {})
+
+            # Convert meta stats to standard format if available
+            stats_by_name = meta_dict.get(f"{stat_type}_stats", {})
+            if isinstance(stats_by_name, dict) and evaluation_name in stats_by_name:
+                stats_data = stats_by_name[evaluation_name]
+                # Convert to rows/columns format
+                if isinstance(stats_data, dict):
+                    return stats_data
+        except:
+            pass
+
+        raise HTTPException(status_code=404, detail="Stats not found")
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error loading GRN stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/grn_evaluation/{dataset_id}/register_on_demand", dependencies=[Depends(cookie)])
+async def register_on_demand_grn_run(
+    dataset_id: str,
+    grn_evaluation_name: str = Form(...),
+    session_data: "SessionData" = Depends(verifier),
+):
+    """
+    Register an on-demand GRN evaluation run to the dataset.
+    This updates the dataset registry with the on-demand GRN metadata.
+    """
+    try:
+        if not grn_evaluation_name:
+            raise HTTPException(status_code=400, detail="grn_evaluation_name required")
+
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+
+        # Update dataset registry with on-demand GRN info
+        # This is optional - mainly for tracking purposes
+        # The dataset already knows about initial_upload GRNs via grn_evaluation_name field
+
+        return {
+            "success": True,
+            "message": f"GRN run '{grn_evaluation_name}' can now be accessed",
+            "grn_evaluation_name": grn_evaluation_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error registering GRN run: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/datasets", dependencies=[Depends(cookie)])
 async def get_datasets(session_data: SessionData = Depends(verifier)):
@@ -1544,6 +1851,44 @@ async def get_geojson(dataset_id: str):
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/tf_graph/{dataset_id}", dependencies=[Depends(cookie)])
+async def get_tf_graph(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier),
+):
+    """Serve TF graph JSON files for datasets"""
+    try:
+        # Authorize dataset access for current user
+        dataset_dict = _resolve_dataset_dict(session_data, dataset_id)
+        tf_graph_path = dataset_dict.get("tf_graph_path")
+
+        if not tf_graph_path:
+            print(f"[ERROR] Dataset {dataset_id} has no tf_graph_path")
+            raise HTTPException(status_code=404, detail=f"TF graph not available for dataset {dataset_id}")
+
+        # Normalize the path
+        tf_graph_path = Path(tf_graph_path).resolve()
+
+        if not tf_graph_path.exists():
+            print(f"[ERROR] TF graph file not found at {tf_graph_path}")
+            raise HTTPException(status_code=404, detail=f"TF graph file not found: {tf_graph_path}")
+
+        print(f"[DEBUG] Serving tf_graph from: {tf_graph_path}")
+        return FileResponse(
+            tf_graph_path,
+            media_type="application/json",
+            filename="graph.json"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] Exception in get_tf_graph: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 async def get_hexagon(user: str, subdir: str, filename: str):
     """
@@ -1927,6 +2272,8 @@ async def get_obsm_column(
         raise HTTPException(status_code=404, detail=f"Column '{column}' not found in table '{table}'. Available columns: {', '.join(obsm_data.columns)}")
 
     return obsm_data[column].to_dict()
+
+@app.get("")
 
 @app.get("/obsm/regulatory_scores/cell/{barcode}", dependencies=[Depends(cookie)])
 async def get_obsm_row(
