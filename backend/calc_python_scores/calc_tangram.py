@@ -13,6 +13,9 @@ import tangram as tg
 import gene_selection
 import torch
 import math
+import spapros as sp
+from scipy import sparse
+from SpatialDE.anndata import spatialde_test
 # Allow writing nullable strings in anndata
 import anndata as ad
 ad.settings.allow_write_nullable_strings = True
@@ -125,12 +128,66 @@ def select_genes(ad_sc, ad_sp, selection_mode, cell_label: str, user_genes=None)
             print("[gene_selection] hvg")
         elif mode == "spapros":
             sc.pp.highly_variable_genes(ad_sc, flavor="seurat", n_top_genes=2000)
-            genes = gene_selection.spapros(ad_sc, cell_label)
+
+            selector = sp.se.ProbesetSelector(
+                ad_sc,
+                celltype_key=cell_label,
+            )
+            selector.select_probeset()
+
+            probeset = selector.probeset
+            if "selection" in probeset.columns:
+                genes = probeset.index[probeset["selection"].astype(bool)].tolist()
+            else:
+                genes = probeset.index.tolist()
+
             print("[gene_selection] spapros")
         elif mode == "svg":
-            ad_sp_tmp = ad_sp.copy()
-            ad_sp_tmp.raw = ad_sp_tmp.copy()
-            genes = gene_selection.svg(ad_sp_tmp)
+            # NOT TESTED YET
+            if ad_sp.raw is None and "counts" not in ad_sp.layers:
+                print("[gene_selection] svg skipped: no raw counts available for SpatialDE")
+                genes = []
+            else:
+                # Prefer raw counts from layers["counts"], otherwise fall back to ad_sp.raw
+                if "counts" in ad_sp.layers:
+                    ad_sp_tmp = ad_sp.copy()
+                    ad_sp_tmp.X = ad_sp.layers["counts"].copy()
+                else:
+                    ad_sp_tmp = ad_sp.raw.to_adata().copy()
+                    if "spatial" in ad_sp.obsm:
+                        ad_sp_tmp.obsm["spatial"] = ad_sp.obsm["spatial"]
+
+                if "spatial" not in ad_sp_tmp.obsm:
+                    raise ValueError("ad_sp.obsm['spatial'] is required for SpatialDE.")
+
+                # spatialde_test / NaiveDE expects a dense matrix here
+                if sparse.issparse(ad_sp_tmp.X):
+                    ad_sp_tmp.X = ad_sp_tmp.X.toarray()
+
+                # Add spatial coordinates and library size covariate
+                ad_sp_tmp.obs["x"] = np.asarray(ad_sp_tmp.obsm["spatial"][:, 0]).ravel()
+                ad_sp_tmp.obs["y"] = np.asarray(ad_sp_tmp.obsm["spatial"][:, 1]).ravel()
+                ad_sp_tmp.obs["total_counts"] = np.asarray(ad_sp_tmp.X.sum(axis=1)).ravel()
+
+                # Run SpatialDE on raw counts
+                svg_full = spatialde_test(
+                    ad_sp_tmp,
+                    coord_columns=["x", "y"],
+                    regress_formula="~np.log(total_counts)",
+                )
+
+                # Extract selected genes from the result table
+                if "qval" in svg_full.columns and "g" in svg_full.columns:
+                    genes = svg_full.loc[svg_full["qval"] < 0.05, "g"].astype(str).tolist()
+                elif "padj" in svg_full.columns and "g" in svg_full.columns:
+                    genes = svg_full.loc[svg_full["padj"] < 0.05, "g"].astype(str).tolist()
+                elif "gene" in svg_full.columns:
+                    genes = svg_full["gene"].astype(str).tolist()
+                elif "g" in svg_full.columns:
+                    genes = svg_full["g"].astype(str).tolist()
+                else:
+                    genes = list(map(str, svg_full.index.tolist()))
+
             print("[gene_selection] svg")
         else:
             raise ValueError(
