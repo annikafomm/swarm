@@ -813,6 +813,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.onColorbyPropertyChange(false);
         this.loadTfGraph(false);
         this.loadPrecomputedGrnGraph(false);
+        this.loadPrecomputedGrnPlots(false);
       }, 300);
       return;
     }
@@ -830,19 +831,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.onColorbyPropertyChange(true);
         this.loadTfGraph(true);
         this.loadPrecomputedGrnGraph(true);
-      }, 300);
-      return;
-    }
-
-    if (!compare && tabLabel === 'GRN Evaluation - On Demand') {
-      // Auto-select first "prob" property or default to cell_type
-      const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
-        prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
-      );
-      this.selectedView = probProperty || 'cell_type';
-
-      setTimeout(() => {
-        this.onColorbyPropertyChange(false);
+        this.loadPrecomputedGrnPlots(true);
       }, 100);
       return;
     }
@@ -4915,6 +4904,49 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
+  /**
+   * Load pre-computed GRN plots (peak_plots and motif_plots directories)
+   */
+  public loadPrecomputedGrnPlots(compare: boolean = false): void {
+    const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+
+    if (!dataset?.id) {
+      console.warn('[loadPrecomputedGrnPlots] No dataset selected');
+      return;
+    }
+
+    // Get the GRN evaluation name from dataset metadata or use default
+    const evalName = dataset.grn_evaluation_name || 'GRN_Evaluation';
+    console.log('[loadPrecomputedGrnPlots] Loading for dataset:', dataset.id, 'evaluation:', evalName);
+
+    const plotsKey = compare ? 'grnPlotsCompare' : 'grnPlots';
+    const isLoadingKey = compare ? 'isLoadingGrnPlotsCompare' : 'isLoadingGrnPlots';
+
+    const self = this as any;
+    self[isLoadingKey] = true;
+
+    const url = `/api/grn_evaluation/${dataset.id}/${evalName}/plots`;
+    console.log(`[loadPrecomputedGrnPlots] Fetching from: ${url}`);
+
+    fetch(url, { credentials: 'include' })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      })
+      .then((data) => {
+        console.log('[loadPrecomputedGrnPlots] Loaded plots:', data);
+        self[plotsKey] = data;
+        self[isLoadingKey] = false;
+      })
+      .catch((err) => {
+        console.error('[loadPrecomputedGrnPlots] Error loading plots:', err);
+        self[isLoadingKey] = false;
+        self[plotsKey] = {}; // Empty object on error
+      });
+  }
+
   computeOnDemandGrnEvaluation(compare: boolean = false): void {
     const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
     if (!dataset) {
@@ -5391,9 +5423,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   public getGrnImageUrl(imageName: string, compare: boolean = false): string {
     const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return '';
+
+    // For on-demand runs, use the selected run name
     const selectedRun = compare ? this.selectedOnDemandRunCompare : this.selectedOnDemandRun;
-    if (!dataset || !selectedRun) return '';
-    return `/api/grn_evaluation/${dataset.id}/${selectedRun}/image/${imageName}`;
+    if (selectedRun) {
+      return `/api/grn_evaluation/${dataset.id}/${selectedRun}/image/${imageName}`;
+    }
+
+    // For pre-computed plots, use the dataset's GRN evaluation name
+    const evalName = dataset.grn_evaluation_name || 'GRN_Evaluation';
+    return `/api/grn_evaluation/${dataset.id}/${evalName}/image/${imageName}`;
   }
 
   /**
