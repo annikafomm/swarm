@@ -1024,6 +1024,43 @@
             </div>
 
           </mat-expansion-panel>
+
+          <!-- GRN Plots Panel -->
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              GRN Evaluation Plots
+            </mat-expansion-panel-header>
+
+            <div *ngIf="isLoadingGrnPlots" class="loading-container">
+              <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading GRN plots">
+              </mat-progress-spinner>
+            </div>
+
+            <!-- Peak Plots -->
+            <div *ngIf="grnPlots['peak_plots'] && !isLoadingGrnPlots">
+              <h4>Peak-Gene Link Plots</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <img *ngFor="let plotName of grnPlots['peak_plots']" [src]="getGrnImageUrl(plotName, false)"
+                  style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                  alt="{{ plotName }}" />
+              </div>
+            </div>
+
+            <!-- Motif Plots -->
+            <div *ngIf="grnPlots['motif_plots'] && !isLoadingGrnPlots" style="margin-top: 20px;">
+              <h4>Motif Plots</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <img *ngFor="let plotName of grnPlots['motif_plots']" [src]="getGrnImageUrl(plotName, false)"
+                  style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                  alt="{{ plotName }}" />
+              </div>
+            </div>
+
+            <p *ngIf="!grnPlots['peak_plots'] && !grnPlots['motif_plots'] && !isLoadingGrnPlots" style="color: #666;">
+              No GRN plots available
+            </p>
+
+          </mat-expansion-panel>
         </mat-tab>
 
         <mat-tab label="GRN Evaluation - On Demand">
@@ -2122,6 +2159,45 @@
                   style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
                 </div>
               </div>
+
+            </mat-expansion-panel>
+
+            <!-- GRN Plots Panel -->
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                GRN Evaluation Plots
+              </mat-expansion-panel-header>
+
+              <div *ngIf="isLoadingGrnPlotsCompare" class="loading-container">
+                <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                  aria-label="Loading GRN plots">
+                </mat-progress-spinner>
+              </div>
+
+              <!-- Peak Plots -->
+              <div *ngIf="grnPlotsCompare['peak_plots'] && !isLoadingGrnPlotsCompare">
+                <h4>Peak-Gene Link Plots</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                  <img *ngFor="let plotName of grnPlotsCompare['peak_plots']" [src]="getGrnImageUrl(plotName, true)"
+                    style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                    alt="{{ plotName }}" />
+                </div>
+              </div>
+
+              <!-- Motif Plots -->
+              <div *ngIf="grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare" style="margin-top: 20px;">
+                <h4>Motif Plots</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                  <img *ngFor="let plotName of grnPlotsCompare['motif_plots']" [src]="getGrnImageUrl(plotName, true)"
+                    style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                    alt="{{ plotName }}" />
+                </div>
+              </div>
+
+              <p *ngIf="!grnPlotsCompare['peak_plots'] && !grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare"
+                style="color: #666;">
+                No GRN plots available
+              </p>
 
             </mat-expansion-panel>
           </mat-tab>
