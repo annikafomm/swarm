@@ -37,6 +37,7 @@ export interface Dataset {
   chromvar_scores_csv_path?: string;  // chromVAR deviation scores (cells × motifs)
   diff_motif_activity_csv_paths?: { [comparison: string]: string }; // comparison → CSV path mapping
   footprint_pdf_paths?: { [motif_id: string]: string }; // motif_id → PDF path mapping
+  grn_evaluation_name: string; // Name of the GRN evaluation (if performed)
 
   // Multiome: Feature flags indicating which pipeline steps were executed
   use_chromvar?: boolean;

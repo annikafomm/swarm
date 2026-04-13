@@ -609,6 +609,7 @@ class DatasetRegistry:
                 diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
                 tf_graph_path=output_files.get("tf_graph_path"),
+                grn_evaluation_name = output_files.get("grn_evaluation_name")
             )
         else:
             # Default to VisiumDataset
@@ -628,7 +629,7 @@ class DatasetRegistry:
                 use_multiome=use_multiome,
                 adata_st_scores_path=output_files.get("adata_st_scores_path"),
                 adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
-                tf_graph_path=output_files.get("tf_graph_path"),
+                tf_graph_path=output_files.get("tf_graph_path")
             )
 
         # Register it

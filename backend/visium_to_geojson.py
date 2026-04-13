@@ -547,11 +547,24 @@ if __name__ == "__main__":
 
 
     # Add peak and motif statistics
+    # New structure: uns['peak_stats'][grn_evaluation_name] = {data}
+    # uns['motif_stats'][grn_evaluation_name] = {data}
     for stats_key in ['peak_stats', 'motif_stats']:
         if stats_key in spatial_data.uns:
             stats_data = spatial_data.uns[stats_key]
-            # Convert to JSON-serializable format (converts numpy arrays to lists)
-            meta_dict[stats_key] = _make_json_serializable(stats_data)
+            # Handle both old and new structure:
+            # If it's a dict of dicts (new structure with grn_evaluation_names as keys):
+            if isinstance(stats_data, dict) and len(stats_data) > 0:
+                first_val = next(iter(stats_data.values()))
+                if isinstance(first_val, dict):
+                    # New structure: stats_data = {grn_name: {data...}, grn_name2: {data...}}
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+                else:
+                    # Single dataset case or old structure
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+            else:
+                # Convert to JSON-serializable format (converts numpy arrays to lists)
+                meta_dict[stats_key] = _make_json_serializable(stats_data)
 
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
