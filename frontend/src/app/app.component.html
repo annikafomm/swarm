@@ -1,6 +1,6 @@
 <div class="app-shell">
-  <nav class="top-bar">
-    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" onclick="window.location.href='/'"/>
+  <nav class="top-bar" [class.disabled]="unregisteredDialogOpen">
+    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" onclick="window.location.href='/'" />
 
     <div class="nav-buttons">
       <button type="button" id="upload-data-btn" (click)="openForm()">Upload data</button>
@@ -21,10 +21,7 @@
   <!-- Upload-Sidepanel -->
   <div class="sidenav" *ngIf="formsOpen">
     <app-form-page (close)="closeSidenavForms()"></app-form-page>
-    <button
-      (click)="closeSidenavForms()"
-      class="sidenav-close-btn"
-    >
+    <button (click)="closeSidenavForms()" class="sidenav-close-btn">
       ✕
     </button>
   </div>

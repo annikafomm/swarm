@@ -29,6 +29,7 @@ import Shepherd from 'shepherd.js';
 export class AppComponent implements OnInit, OnDestroy {
   private destroy$ = new Subject<void>();
   private isLoadingPaths = false; // Prevent concurrent path loads
+  public unregisteredDialogOpen = false; // Track if unregistered datasets dialog is open
 
   constructor(
     private http: HttpClient,
@@ -111,6 +112,7 @@ export class AppComponent implements OnInit, OnDestroy {
         next: (response) => {
           const datasets = response.datasets || [];
           console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
+          this.unregisteredDialogOpen = true;
           const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
             width: '1000px',
             maxHeight: '80vh',
@@ -122,6 +124,7 @@ export class AppComponent implements OnInit, OnDestroy {
           dialogRef.afterClosed()
             .pipe(takeUntil(this.destroy$))
             .subscribe((result) => {
+              this.unregisteredDialogOpen = false;
               if (result?.datasetsChanged) {
                 // Reload available datasets to reflect any registrations/deletions
                 this.datasetService.loadAvailableDatasets();
