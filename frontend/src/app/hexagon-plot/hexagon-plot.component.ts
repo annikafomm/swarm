@@ -4018,6 +4018,44 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     tour.start();
   }
 
+  public selectDatasetTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'dataset-dropdown',
+      attachTo: { element: '#dataset-dropdown-main', on: 'left' },
+      text: 'This dropdown allows you to select the dataset you want to explore.  It shows:' +
+      ' <ul><li>All of your uploaded and the builtin datasets</li>' +
+      ' <li>Tangram datasets will allow you to also select to visualize the mapped data as well (under Tangram)</li></ul>',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
+  public globalRegulatoryScoresTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'global-regulatory-scores',
+      attachTo: { element: '#global-regulatory-scores-info', on: 'left' },
+      text: 'The global regulatory scores summarize overall regulatory activity per gene set by aggregating the scores over all cells. They can be used to identify genesets with overall high regulatory activity or to find general candidate genesets to prioritize for further analysis.',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
   private renderLegend(containerName: string): void {
     const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
 
