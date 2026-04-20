@@ -269,6 +269,17 @@ export class AppComponent implements OnInit, OnDestroy {
       ]
     });
 
+    tour.addStep({
+      id: 'final-step',
+      text:
+        'This concludes the tour! You are now ready to explore your data with SWARM. If you need more specific hints, try clicking the "?" Buttons all over the page. Happy analyzing!',
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Restart Tour', action: tour.start },
+        { text: 'Close', action: tour.complete }
+      ]
+    });
+
 
 
     tour.start();
