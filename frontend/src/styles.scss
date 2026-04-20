@@ -230,11 +230,16 @@ body,
     position: relative;
   }
 
+  .shepherd-content {
+    --bee-top: -50px;
+    --bee-bottom: auto;
+    --bee-left: auto;
+    --bee-right: -50px;
+  }
+
   .shepherd-content::after {
     content: '';
     position: absolute;
-    top: -50px;
-    right: -50px;
     width: 100px;
     height: 100px;
     background-image: url('/single_bee.png');
@@ -244,6 +249,8 @@ body,
     animation: beeFloat 3s ease-in-out infinite;
     transform: rotate(-15deg) scaleX(-1);
     z-index: 10;
+    top: -50px;
+    right: -50px;
   }
 
   @keyframes slideIn {

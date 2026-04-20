@@ -248,6 +248,7 @@ export class AppComponent implements OnInit, OnDestroy {
       text:
         'For more information about SWARM, including documentation and support resources, click on the "Info" button in the top navigation bar.',
       attachTo: { element: '.top-bar .info-btn', on: 'bottom' },
+      ...this.addBeeClass('bee-bottom-left'),
       buttons: [
         { text: 'Back', action: tour.back },
         { text: 'Next', action: tour.next },
@@ -260,6 +261,7 @@ export class AppComponent implements OnInit, OnDestroy {
       text:
         'The <b>download menu</b> allows you to explore export options for your data.<ul><li>Export files of the current visualization (<b>AnnData, GeoJSON, SVG</b>, etc.)</li><li>Select your dataset and go to the <b>Info-Page</b> to access other files from your analysis</li></ul>',
       attachTo: { element: 'app-download-menu', on: 'left' },
+      ...this.addBeeClass('bee-bottom-right'),
       buttons: [
         { text: 'Back', action: tour.back },
         { text: 'Next', action: tour.next },
@@ -270,6 +272,33 @@ export class AppComponent implements OnInit, OnDestroy {
 
 
     tour.start();
+  }
+
+  private beeStyleTag: HTMLStyleElement | null = null;
+
+  private addBeeClass(beePosition = 'bee-top-left'): { beforeShowPromise: () => Promise<void> } {
+    const positionCSS: Record<string, string> = {
+      'bee-top-left': `.shepherd-content::after { top: -50px !important; left: -50px !important; right: auto !important; bottom: auto !important; }`,
+      'bee-top-right': `.shepherd-content::after { top: -50px !important; right: -50px !important; left: auto !important; bottom: auto !important; }`,
+      'bee-bottom-left': `.shepherd-content::after { bottom: -50px !important; left: -50px !important; top: auto !important; right: auto !important; }`,
+      'bee-bottom-right': `.shepherd-content::after { bottom: -50px !important; right: -50px !important; top: auto !important; left: auto !important; }`
+    };
+
+    return {
+      beforeShowPromise: (): Promise<void> => {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            if (!this.beeStyleTag) {
+              this.beeStyleTag = document.createElement('style');
+              document.head.appendChild(this.beeStyleTag);
+            }
+            this.beeStyleTag.textContent = positionCSS[beePosition];
+            console.log('DEBUG: Applied CSS for', beePosition);
+            resolve();
+          }, 50);
+        });
+      }
+    };
   }
 
   public uploadTutorial(): void {
