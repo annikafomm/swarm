@@ -83,10 +83,17 @@ class GrnEvaluationUtils:
             ]
 
         elif filter_mode == "extended":
-            # Remove red and yellow edges
+            # Remove red and yellow edges only from non-priorTF nodes
+            prior_tf_ids = {
+            node["id"] for node in filtered["nodes"]
+            if node.get("priorTF") is True
+            }
             filtered["links"] = [
-                link for link in filtered["links"]
-                if link.get("edge_color") not in ["red", "yellow"]
+            link for link in filtered["links"]
+            if not (
+                link.get("edge_color") in ["red", "yellow"] and
+                link.get("source") not in prior_tf_ids
+            )
             ]
 
         # Find nodes referenced in filtered links

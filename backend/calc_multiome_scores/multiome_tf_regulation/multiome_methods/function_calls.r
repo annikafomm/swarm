@@ -270,7 +270,7 @@ do_local_motif_stats<-function(object,
     object@misc$filtered.motif_enrichment<-rbind(object@misc$filtered.motif_enrichment,
                                                  filtered.enrichment)
 
-    saveRDS(object, file = "/nfs/home/students/m.back/swarm/backend/calc_multiome_scores/multiome_tf_regulation/notebooks_pipeline/objects_AVN_fibroblast/filtered_motif_enrichment.rds")
+    # saveRDS(object, file = "/nfs/home/students/m.back/swarm/backend/calc_multiome_scores/multiome_tf_regulation/notebooks_pipeline/objects_AVN_fibroblast/filtered_motif_enrichment.rds")
     message('Adding footprint stats')
 
     # add bias

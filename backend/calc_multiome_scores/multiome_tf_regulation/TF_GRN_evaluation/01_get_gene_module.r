@@ -1,5 +1,7 @@
 
 # GET GENE MODULE FOR GO TERM
+# conda activate mzb_R
+# Rscript 01_get_gene_module.r GO:0030199 tmp
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) < 2) {
@@ -19,4 +21,4 @@ gene_module <- AnnotationDbi::select(
 )
 
 # write to file for use in python script
-write.csv(gene_module, file = paste0(outdir, "gene_module.csv"), row.names = FALSE)
+write.csv(gene_module, file = paste0(outdir, "/gene_module.csv"), row.names = FALSE)

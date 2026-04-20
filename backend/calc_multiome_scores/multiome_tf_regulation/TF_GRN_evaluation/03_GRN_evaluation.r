@@ -41,11 +41,23 @@ library(data.table)
 library(Rsamtools)
 library(stringi)
 library(jsonlite)
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+
+if (!requireNamespace("optparse", quietly = TRUE)) {
+  install.packages("optparse")
+}
 library(optparse)
 
 # ==============================================================================
 # GRN EVALUATION PIPELINE - MAIN FUNCTIONS
 # ==============================================================================
+add_EID_to_priorGRN <- function(priorGRN, gene_name_2_gene_id) {
+  priorGRN_with_EID <- priorGRN %>%
+    left_join(gene_name_2_gene_id, by = c("gene" = "gene_name")) %>%
+    rename(EID = gene_id)
+  
+  return(priorGRN_with_EID)
+}
 
 create_overview_plots <- function(object, ident, analysis_name, outpath) {
   dir.create(paste0(outpath, "/peak_plots"), recursive = TRUE, showWarnings = FALSE)
@@ -69,10 +81,13 @@ create_overview_plots <- function(object, ident, analysis_name, outpath) {
   ggsave(paste0(outpath, "/peak_plots/module_enrichment.pdf"), plot = res$plot, width = 8, height = 6)
 }
 
-compute_grn_analysis <- function(object, seed_genes, priorGRN, cluster, outpath, analysis_name) {
+compute_grn_analysis <- function(object, seed_genes, priorGRN, cluster, outpath, analysis_name, gene_name_2_gene_id, frag_path = NULL) {
   # 1. Link peaks to genes
+  print("Seed genes for GRN analysis: ")
+  print(seed_genes)
   res_links <- linking_peaks_for_module_cluster(
-    object, seed_genes, priorGRN, cluster = cluster
+    object, seed_genes, priorGRN, cluster = cluster, gene_name_2_gene_id = gene_name_2_gene_id,
+    frag_path = frag_path, genome = BSgenome.Hsapiens.UCSC.hg38
   )
   ggsave(paste0(outpath, "/peak_plots/links_distr.png"), plot = res_links$plot_links, width = 6, height = 6)
   
@@ -227,6 +242,16 @@ export_graph_json <- function(object, outpath, analysis_name) {
 # ==============================================================================
 # COMMAND-LINE ARGUMENTS
 # ==============================================================================
+# conda activate mzb_R
+# Rscript 03_GRN_evaluation.r \
+# --analysis_name collagen_fibral_orga_COL5A2 \
+# --gene_set_path tmp/gene_module_test.csv \
+# --priorGRN_path tmp/priorGRN_test.csv \
+# --global_analysis_out_path tmp/global_motif_analysis.rds \
+# --cluster Fibroblast \
+# --ident cell_type \
+# --jobdir_dir /nfs/home/students/m.back/swarm/backend/uploads/job_1776009725832_mopitas_hvg_ctg_mygenes_celltg/junkDNA420 \
+# --initial_upload FALSE \
 
 option_list <- list(
   make_option(c("--analysis_name"), type = "character", default = "collagen_fibral_orga",
@@ -244,7 +269,11 @@ option_list <- list(
   make_option(c("--jobdir_dir"), type = "character", default = "",
               help = "Base job directory for output organization"),
   make_option(c("--initial_upload"), type = "logical", default = TRUE,
-              help = "Whether this is initial upload (TRUE) or on-demand (FALSE)")
+              help = "Whether this is initial upload (TRUE) or on-demand (FALSE)"),
+  make_option(c("--gene_name_2_gene_id_path"), type = "character", default = "/nfs/data3/mopitas/mapra/TFnets/genename2EID.csv",
+              help = "Path to CSV file mapping gene names to gene IDs"),
+  make_option(c("--frag_path"), type = "character", default = "~/swarm/backend/data/cell_atlas/HCAHeartST11350194_HCAHeartST11445771_atac_fragments.tsv.gz",
+              help = "Path to fragments file for peak-gene linking (optional)")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list))
@@ -257,16 +286,27 @@ ident <- opt$ident
 initial_upload <- opt$initial_upload
 global_analysis_out_path <- opt$global_analysis_out_path
 jobdir_dir <- opt$jobdir_dir
-
+gene_name_2_gene_id_path <- opt$gene_name_2_gene_id_path
+frag_path <- opt$frag_path
 # Load data
-seed_genes <- read.csv(gene_set_path)$SYMBOL
+seed_genes <- unique(read.csv(gene_set_path)$SYMBOL)
+message("Seed genes loaded: ", seed_genes)
 priorGRN <- read.csv(priorGRN_path)
 global_analysis_out <- readRDS(global_analysis_out_path)
+gene_name_2_gene_id <- read.csv(gene_name_2_gene_id_path)
+
+# if genome wide analysis whas not done, motifs need to be added here
+# in this case assume it is not called "global_motif_analysis.rds" and that the object "object" does not contain motifs yet
+# log_message("Adding Motifs ...", logfile, 2)
+# object <- add_jaspar2024_motifs(object, out_path=outdir, genome=genome)
 
 # Determine output path
 if (initial_upload) {
+  dir.create(paste0(jobdir_dir, "/multiome/GRN_evaluation/initial_upload"), recursive = TRUE, showWarnings = FALSE)
   outpath <- paste0(jobdir_dir, "/multiome/GRN_evaluation/initial_upload/", analysis_name)
 } else {
+  # if not existing, create on-demand directory
+  dir.create(paste0(jobdir_dir, "/multiome/GRN_evaluation/on_demand"), recursive = TRUE, showWarnings = FALSE)
   outpath <- paste0(jobdir_dir, "/multiome/GRN_evaluation/on_demand/", analysis_name)
 }
 
@@ -276,7 +316,11 @@ if (initial_upload) {
 
 create_overview_plots(global_analysis_out, ident, analysis_name, outpath)
 
-object_w_net <- compute_grn_analysis(global_analysis_out, seed_genes, priorGRN, cluster, outpath, analysis_name)
+priorGRN <- add_EID_to_priorGRN(priorGRN, gene_name_2_gene_id)
+print(head(priorGRN))
+print(colnames(priorGRN))
+
+object_w_net <- compute_grn_analysis(global_analysis_out, seed_genes, priorGRN, cluster, outpath, analysis_name, gene_name_2_gene_id, frag_path = frag_path)
 
 export_results(object_w_net, outpath, analysis_name)
 
