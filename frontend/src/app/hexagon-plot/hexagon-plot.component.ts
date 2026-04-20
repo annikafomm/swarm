@@ -1129,11 +1129,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
-  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
-  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
-  this.onColorbyPropertyChange(compare);
-  this.fetchAndUpdate('gene_expression', gene, compare);
-}
+    compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+    compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+    this.onColorbyPropertyChange(compare);
+    this.fetchAndUpdate('gene_expression', gene, compare);
+  }
 
 
   // Render the context heatmap

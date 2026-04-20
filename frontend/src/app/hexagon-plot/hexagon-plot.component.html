@@ -37,7 +37,7 @@
           <mat-icon>help_outline</mat-icon>
         </button>
 
-        <mat-form-field appearance="fill" class="dataset-dropdown">
+        <mat-form-field id="dataset-dropdown-main" appearance="fill" class="dataset-dropdown">
           <mat-label>Select Dataset</mat-label>
           <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)"
             [disabled]="isInitializing">
