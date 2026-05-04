@@ -18,6 +18,12 @@ notebooks/
 *.rds
 *.h5Seurat
 
+# ignore .gz and .tsv and .pdf
+*.gz
+*.tbi
+*.tsv
+*.pdf
+
 # ignore logs
 *.log
 
