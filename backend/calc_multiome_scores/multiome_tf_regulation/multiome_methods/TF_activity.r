@@ -68,16 +68,16 @@ include_motifs_for_seed<-function(object, gene, cluster, TFs=c(),
     #      - named list of data.frames
     #        TF-> motif_stats
 
-    print(paste('include_motifs_for_seed:', gene, cluster))
+    # print(paste('include_motifs_for_seed:', gene, cluster))
     motif_stats_for_seed<-getMotifStats(object, gene, cluster)
-    print(paste0("motif stats for seed:", gene, cluster))
-    print(dim(motif_stats_for_seed))
-    motif_stats_for_seed<-motif_stats_for_seed[
-        motif_stats_for_seed$footprint_score< motif_stats_for_seed$bg_footprint_mean &
-        motif_stats_for_seed$footprint_score< th.footprint_score,]
+    # print(paste0("motif stats for seed:", gene, cluster))
+    # print(dim(motif_stats_for_seed))
+    # motif_stats_for_seed<-motif_stats_for_seed[
+    #     motif_stats_for_seed$footprint_score< motif_stats_for_seed$bg_footprint_mean &
+    #     motif_stats_for_seed$footprint_score< th.footprint_score,]
 
-    print(paste0("motif stats for seed:", gene, cluster))
-    print(dim(motif_stats_for_seed))
+    # print(paste0("motif stats for seed:", gene, cluster))
+    # print(dim(motif_stats_for_seed))
     
     # find TF that bind to the motifs, that are enriched or in promoter region
     for (motif in motif_stats_for_seed$motif){
@@ -552,6 +552,93 @@ draw_subNetwork<-function(object, gene_list, cluster, priorGRN,  cluster.specifi
 
 }   
 
+make_nonoverlap_layout <- function(graph,
+                                   method = c("fr", "kk", "graphopt"),
+                                   min_dist = 0.08,
+                                   repel_iter = 1000,
+                                   seed = 1) {
+  method <- match.arg(method)
+  set.seed(seed)
+
+  layout <- switch(
+    method,
+    fr = igraph::layout_with_fr(
+      graph,
+      niter = 5000,
+      grid = "nogrid"
+    ),
+    kk = igraph::layout_with_kk(graph, maxiter = 5000),
+    graphopt = igraph::layout_with_graphopt(
+      graph,
+      niter = 1000,
+      charge = 0.02,
+      spring.length = 0.6
+    )
+  )
+
+  layout <- igraph::norm_coords(
+    layout,
+    xmin = -1, xmax = 1,
+    ymin = -1, ymax = 1
+  )
+
+  layout <- repel_points(layout, min_dist = min_dist, iter = repel_iter)
+
+  layout <- igraph::norm_coords(
+    layout,
+    xmin = -1, xmax = 1,
+    ymin = -1, ymax = 1
+  )
+
+  layout
+}
+
+
+repel_points <- function(layout, min_dist = 0.08, iter = 1000) {
+  layout <- as.matrix(layout)
+
+  if (nrow(layout) <= 1) {
+    return(layout)
+  }
+
+  for (k in seq_len(iter)) {
+    moved <- FALSE
+
+    for (i in seq_len(nrow(layout) - 1)) {
+      for (j in (i + 1):nrow(layout)) {
+        dx <- layout[i, 1] - layout[j, 1]
+        dy <- layout[i, 2] - layout[j, 2]
+
+        d <- sqrt(dx^2 + dy^2)
+
+        if (is.na(d) || d == 0) {
+          dx <- runif(1, -0.001, 0.001)
+          dy <- runif(1, -0.001, 0.001)
+          d <- sqrt(dx^2 + dy^2)
+        }
+
+        if (d < min_dist) {
+          push <- (min_dist - d) / 2
+          ux <- dx / d
+          uy <- dy / d
+
+          layout[i, 1] <- layout[i, 1] + ux * push
+          layout[i, 2] <- layout[i, 2] + uy * push
+
+          layout[j, 1] <- layout[j, 1] - ux * push
+          layout[j, 2] <- layout[j, 2] - uy * push
+
+          moved <- TRUE
+        }
+      }
+    }
+
+    if (!moved) break
+  }
+
+  layout
+}
+
 
 plot_graph<-function(graph, path=NULL, 
                      resolution=200, width = 10, height = 10, pointsize=10, units='px',
@@ -582,7 +669,14 @@ plot_graph<-function(graph, path=NULL,
     }
     
     par(mar = c(1, 1, 1, 1))
-    layout =igraph::layout_with_kk(graph)
+    # layout =igraph::layout_with_kk(graph)
+    layout <- make_nonoverlap_layout(
+        graph,
+        method = "fr",
+        min_dist = 0.10,
+        repel_iter = 1000,
+        seed = 1
+        )
     edge_df = igraph::as_data_frame(graph)
     nodes = igraph::vertex_attr(graph)$name  
     # vertex size
@@ -616,7 +710,8 @@ plot_graph<-function(graph, path=NULL,
         vertex.size = rep(4, length(prior_nodes))
         vertex.size[ prior_nodes%in% all_genes  ] = 5
         
-        prior_layout<-layout[ nodes %in% prior_nodes,]
+        # prior_layout<-layout[ nodes %in% prior_nodes,]
+        prior_layout <- layout[match(prior_nodes, nodes), ]
 
 
         plot(prior_graph, 
@@ -721,7 +816,8 @@ plot_graph<-function(graph, path=NULL,
         #vertex.size[ de_novo_pos_nodes %in% all_genes  ] = 5
         vertex.size<-vertex.size.total[nodes %in% de_novo_pos_nodes]
 
-        de_novo_pos_layout<-layout[ nodes %in% de_novo_pos_nodes ,]
+        # de_novo_pos_layout<-layout[ nodes %in% de_novo_pos_nodes ,]
+        de_novo_pos_layout <- layout[match(de_novo_pos_nodes, nodes), ]
         
         # Plot the graph
         plot(de_novo_pos_graph, 
@@ -965,19 +1061,19 @@ create_subNetwork_for_context <- function(
         )
 
         tf_results <- tf_stats[[paste(gene, cluster)]]
-        print(colnames(tf_results))
+        # print(colnames(tf_results))
         combined_results[[gene]] <- do.call(rbind, tf_results)
 
         if (is.null(combined_results[[gene]]) || nrow(combined_results[[gene]]) == 0){
 
-            print(length(tf_results))
-            print(names(tf_results))
+            # print(length(tf_results))
+            # print(names(tf_results))
 
             if (is.null(object@misc$df.stats.filtered[object@misc$df.stats.filtered$gene == gene, ])){
-                message("No TFs found for seed, as no peak is linked to seed")
+                # message("No TFs found for seed, as no peak is linked to seed")
                 motif <- "--"
             } else {
-                message("unknown TF")
+                # message("unknown TF")
                 motif <- "-"
             }
 
@@ -1029,8 +1125,8 @@ create_subNetwork_for_context <- function(
     combined_results$result <- "yellow"
 
     combined_results$tmp <- rownames(combined_results)
-    print(colnames(combined_results))
-    print(colnames(priorGRN[, c("gene", "TF")]))
+    # print(colnames(combined_results))
+    # print(colnames(priorGRN[, c("gene", "TF")]))
     combined_results.prior <- merge(
         combined_results,
         priorGRN[, c("gene", "TF")],

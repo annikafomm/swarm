@@ -743,8 +743,8 @@ filter_gene_peak_links <- function(
         peak_stats$acc_cells_cluster >= min.cells &
         !is.na(peak_stats$FC.expr_given_acc) &
         peak_stats$FC.expr_given_acc > cluster_fc_min &
-        !is.na(peak_stats$expr_not_0.given_acc) &
-        peak_stats$expr_not_0.given_acc > expr_given_acc_th &
+        # !is.na(peak_stats$expr_not_0.given_acc) &
+        # peak_stats$expr_not_0.given_acc > expr_given_acc_th &
         !is.na(peak_stats$delta_expr_given_acc.same_peak_bg) &
         peak_stats$delta_expr_given_acc.same_peak_bg >= cluster_delta_same_peak_bg_min 
         
@@ -757,8 +757,8 @@ filter_gene_peak_links <- function(
         peak_stats$signac.zscores >= global_signac_z_min &
         !is.na(peak_stats$signac.pvalues) &
         peak_stats$signac.pvalues < global_signac_p_cutoff &
-        !is.na(peak_stats$expr_not_0.given_acc.all) &
-        peak_stats$expr_not_0.given_acc.all > global_expr_given_acc_min &
+        # !is.na(peak_stats$expr_not_0.given_acc.all) &
+        # peak_stats$expr_not_0.given_acc.all > global_expr_given_acc_min &
         !is.na(peak_stats$FC.expr_given_acc.all) &
         peak_stats$FC.expr_given_acc.all > global_fc_min 
 
