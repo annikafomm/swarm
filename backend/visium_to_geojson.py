@@ -355,13 +355,13 @@ if __name__ == "__main__":
         help="Path to the input .h5ad file.",
     )
     parser.add_argument(
-        "--radius", "-r", type=int, default=50, help="Radius of the hexagons."
+        "--radius", "-r", type=int, default=5, help="Radius of the hexagons."
     )
     parser.add_argument(
         "--scale",
         "-sc",
         type=float,
-        default=0.5,
+        default=0.1,
         help="Scale factor for the hexagons.",
     )
     parser.add_argument(

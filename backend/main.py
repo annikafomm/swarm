@@ -169,37 +169,40 @@ async def lifespan(app: FastAPI):
     dataset_registry = DatasetRegistry()
 
     # Register builtin datasets from backend/data (use absolute paths)
-    base_path = Path(__file__).parent  # backend/ directory
-    builtin_adata = base_path / "data" / "adata.h5ad"
-    builtin_geojson = base_path.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
-    builtin_genie = base_path / "data" / "genie_network_filt.csv"
-    builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
+    base_path = Path(__file__).parent
+    data_dir = base_path / "data"  # backend/ directory
+    builtin_dirs = [dir for dir in data_dir.iterdir() if dir.is_dir()]
 
-    print(f"Base path: {base_path}")
-    print(f"Adata exists: {builtin_adata.exists()} at {builtin_adata}")
+    for dir in builtin_dirs:
+        builtin_adata = dir / "adata.h5ad"
+        builtin_genie = dir / "genie3_network.csv"
+        builtin_sponge = dir / "sponge_network.csv"
+        config = json.loads((dir / "config.json").read_text()) if (dir / "config.json").exists() else {}
+        dataset_type = config.get("dataset_type", "visium")
+        dataset_name = config.get("dataset_name", "Default Dataset")
 
-    if builtin_adata.exists():
-        dataset_registry.register_builtin_dataset(
-            dataset_id="builtin_main",
-            alias="Default Dataset (Visium, BRCA)",
-            adata_path=str(builtin_adata),
-            geojson_path="/api/geojson/builtin_main",  # Use API URL for consistency
-            genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
-            sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
-            description="Pre-configured spatial transcriptomics dataset"
-        )
-        print(f"✓ Registered builtin dataset with paths:")
-        print(f"  - adata: {builtin_adata}")
-        print(f"  - geojson: /api/geojson/builtin_main")
-        print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
-        print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
-    else:
-        print(f"✗ Builtin adata not found at {builtin_adata}")
+        if builtin_adata.exists():
+            dataset_registry.register_builtin_dataset(
+                dataset_id=f"builtin_{dataset_name}",
+                alias=f"{dataset_type.capitalize()} - {dataset_name} (Builtin)",
+                adata_path=str(builtin_adata),
+                geojson_path=f"/api/geojson/builtin_{dataset_name}",  # Use API URL for consistency
+                genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
+                sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
+                description="Pre-configured spatial transcriptomics dataset"
+            )
+            print(f"✓ Registered builtin dataset with paths:")
+            print(f"  - adata: {builtin_adata}")
+            print(f"  - geojson: /api/geojson/builtin_{dataset_name}")
+            print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
+            print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
+        else:
+            print(f"✗ Builtin adata not found at {builtin_adata}")
 
-    asyncio.create_task(cleanup_expired_sessions())
-    yield
-    # Shutdown
-    pass
+        asyncio.create_task(cleanup_expired_sessions())
+        yield
+        # Shutdown
+        pass
 
 app = FastAPI(lifespan=lifespan)
 

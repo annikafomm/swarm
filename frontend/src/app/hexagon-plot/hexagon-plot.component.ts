@@ -384,11 +384,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     .range([
       '#ff9800',
       '#1976d2',
-      '#ff6f00',
+      '#dcafe9',
       '#00bcd4',
-      '#ffa726',
+      '#7689c5',
       '#9c27b0',
-      '#ff8a65',
+      '#439671',
       '#4caf50',
     ]);
   private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
@@ -396,11 +396,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public colorScaleCompare = d3.scaleOrdinal<string>().range([
     '#ff9800',
     '#1976d2',
-    '#ff6f00',
+    '#dcafe9',
     '#00bcd4',
-    '#ffa726',
+    '#7689c5',
     '#9c27b0',
-    '#ff8a65',
+    '#439671',
     '#4caf50',
   ]);
   // Yellow continuous color palette
@@ -1369,7 +1369,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
                     : '#ccc';
                 }
               })
-              .style('opacity', 0.8)
+
               .on('mouseover', (event, d) => this.mouseOver(event, d))
               .on('mouseleave', (event, d) => this.mouseLeave(event, d))
               .on('click', (event, d) => this.displayCellDetails(event, d, true));
@@ -1378,6 +1378,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         } else {
           this.features = data.features;
         }
+
 
         if (data.meta) {
           // save all features for potential downsampling in Xenium datasets
@@ -1776,51 +1777,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return this.sharedGeneExpressionDomain;
   }
 
-  private cloneGeoJsonData(data: GeoJsonData | null): GeoJsonData | null {
-    if (!data) return null;
-
-    try {
-      if (typeof structuredClone === 'function') {
-        return structuredClone(data);
-      }
-    } catch (e) {
-      console.warn('[compare:data] structuredClone failed, falling back to JSON clone', e);
-    }
-
-    return JSON.parse(JSON.stringify(data)) as GeoJsonData;
-  }
-
-  private async loadCompareGeoJsonData(): Promise<GeoJsonData | null> {
-    const comparePath = this.selectedDatasetCompare?.geojson_path
-      ?? this.selectedDataset?.geojson_path
-      ?? this.dataPath;
-
-    if (!comparePath) {
-      console.warn('[compare init] no compare geojson path available');
-      return null;
-    }
-
-    const fullUrl = comparePath.startsWith('/api/')
-      ? `${this.sessionService.apiUrl}${comparePath}`
-      : comparePath;
-
-    const response = await fetch(fullUrl, { credentials: 'include' });
-    if (!response.ok) {
-      throw new Error(`HTTP Error: ${response.status} ${response.statusText} (${fullUrl})`);
-    }
-
-    const data = await response.json() as GeoJsonData;
-    console.log('[compare init] loaded geojson from path', {
-      comparePath,
-      fullUrl,
-      featureCount: data?.features?.length ?? 0,
-      selectedCompareDatasetId: this.selectedDatasetCompare?.id ?? null,
-      selectedMainDatasetId: this.selectedDataset?.id ?? null,
-    });
-
-    return data;
-  }
-
   private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
     if (this.leidenCentralityProps.includes(view)) {
       return this.getLeidenClusterAnnotation(feature.properties.leiden, context == 'compare' ? true : false)?.centrality?.[view];
@@ -1863,19 +1819,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       max: result.max,
     });
     return result;
-  }
-
-  private getMergedMinMaxForView(view: string): { min: number; max: number } | null {
-    // Generalized: always merges min/max for both main and compare for a given view
-    const mainFeatures = this.features || [];
-    const compareFeatures = this.compareFeatures || [];
-    if (!mainFeatures.length && !compareFeatures.length) return null;
-    const mainMinMax = mainFeatures.length ? this.getMinMaxForView(mainFeatures, view, false) : null;
-    const compareMinMax = compareFeatures.length ? this.getMinMaxForView(compareFeatures, view, true) : null;
-    if (!mainMinMax && !compareMinMax) return null;
-    const min = [mainMinMax?.min, compareMinMax?.min].filter(x => x !== undefined).reduce((a, b) => Math.min(a as number, b as number));
-    const max = [mainMinMax?.max, compareMinMax?.max].filter(x => x !== undefined).reduce((a, b) => Math.max(a as number, b as number));
-    return { min, max };
   }
 
   private applySharedDomainAndRepaint(domain: { min: number; max: number } | null, contextKey: string, token: number): void {

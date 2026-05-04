@@ -6,7 +6,6 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClient, HttpEvent, HttpEventType } from '@angular/common/http';
 
 import { PathsService } from '../paths.service';
-import { DEFAULT_PATHS } from '../constants';
 import { MatTabBodyPortal } from '@angular/material/tabs';
 import { DatasetService } from '../datasets.service';
 import { Dataset } from '../datasets.service';
