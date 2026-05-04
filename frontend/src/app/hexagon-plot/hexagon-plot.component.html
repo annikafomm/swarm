@@ -37,7 +37,7 @@
           <mat-icon>help_outline</mat-icon>
         </button>
 
-        <mat-form-field appearance="fill" class="dataset-dropdown">
+        <mat-form-field id="dataset-dropdown-main" appearance="fill" class="dataset-dropdown">
           <mat-label>Select Dataset</mat-label>
           <mat-select [(ngModel)]="selectedDataset" (selectionChange)="onDatasetSelected($event.value)"
             [disabled]="isInitializing">
@@ -59,6 +59,10 @@
             </mat-optgroup>
           </mat-select>
         </mat-form-field>
+
+        <button mat-icon-button class="info-btn" (click)="selectDatasetTutorial()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
       </div>
 
       <button class="basic-button" id="compare-button" (click)="onCompareMode()"
@@ -311,7 +315,15 @@
             </div>
 
             <mat-expansion-panel expanded="true">
-              <mat-expansion-panel-header> Global Regulatory Scores </mat-expansion-panel-header>
+              <mat-expansion-panel-header>
+                <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                  <span>Global Regulatory Scores</span>
+                  <button mat-icon-button class="info-btn"
+                    (click)="globalRegulatoryScoresTutorial(); $event.stopPropagation()">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </div>
+              </mat-expansion-panel-header>
 
               <mat-form-field appearance="fill" class="dataset-dropdown">
                 <mat-label>Show Regulatory Statistic</mat-label>

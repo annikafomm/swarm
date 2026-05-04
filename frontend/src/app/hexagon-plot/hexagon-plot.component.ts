@@ -1129,11 +1129,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public showDgeaGeneOnMainPlot(gene: string, compare: boolean): void {
-  compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
-  compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
-  this.onColorbyPropertyChange(compare);
-  this.fetchAndUpdate('gene_expression', gene, compare);
-}
+    compare ? this.shownGeneOnPlotCompare = gene : this.shownGeneOnPlot = gene;
+    compare ? this.selectedCompareView = 'gene_expression' : this.selectedView = 'gene_expression';
+    this.onColorbyPropertyChange(compare);
+    this.fetchAndUpdate('gene_expression', gene, compare);
+  }
 
 
   // Render the context heatmap
@@ -4012,6 +4012,44 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       id: 'info-btn-dropdown',
       attachTo: { element: '#color-by-property', on: 'left' },
       text: 'This button allows you to select the view you want to access. You can choose different regulatory scores, LIANA+ scores, Leiden Clustering and more. You can color by your obs columns in the view',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
+  public selectDatasetTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'dataset-dropdown',
+      attachTo: { element: '#dataset-dropdown-main', on: 'left' },
+      text: 'This dropdown allows you to select the dataset you want to explore.  It shows:' +
+      ' <ul><li>All of your uploaded and the builtin datasets</li>' +
+      ' <li>Tangram datasets will allow you to also select to visualize the mapped data as well (under Tangram)</li></ul>',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
+  public globalRegulatoryScoresTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'global-regulatory-scores',
+      attachTo: { element: '#global-regulatory-scores-info', on: 'left' },
+      text: 'The global regulatory scores summarize overall regulatory activity per gene set by aggregating the scores over all cells. They can be used to identify genesets with overall high regulatory activity or to find general candidate genesets to prioritize for further analysis.',
       buttons: [{ text: "Done", action: tour.complete }]
     });
 
