@@ -7,12 +7,22 @@ notebooks/
 # Ignore local proxy config
 # Note: proxy.conf.json, package.json, package-lock.json are managed via --skip-worktree
 
+# */package.json
+# */package-lock.json
+*/package-lock_merit.json
+
 # Ignore all h5ad files
 *.h5ad
 *.parquet
 *.h5
 *.rds
 *.h5Seurat
+
+# ignore .gz and .tsv and .pdf
+*.gz
+*.tbi
+*.tsv
+*.pdf
 
 # ignore logs
 *.log
@@ -83,6 +93,7 @@ yarn-error.log
 
 # Visual Studio Code
 .vscode/*
+.vscode/settings.json
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
@@ -113,3 +124,5 @@ my-custom-image.tar
 apptainer_prompt.txt
 overlay.img
 backend/calc_multiome_scores/calc_multiome_scores_test.ipynb
+
+.vscode/

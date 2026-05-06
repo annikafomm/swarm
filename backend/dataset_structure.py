@@ -117,6 +117,7 @@ class Dataset(ABC):
         geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
+        tf_graph_path: Optional[str] = None,
         created_at: Optional[datetime] = None,
         **metadata
     ):
@@ -133,6 +134,7 @@ class Dataset(ABC):
             geojson_path: Optional path or URL to GeoJSON visualization
             genie_network_path: Optional path to GENIE3 network
             sponge_network_path: Optional path to SPONGE network
+            tf_graph_path: Optional path to TF graph JSON file
             created_at: Creation timestamp
             **metadata: Additional dataset-specific metadata
         """
@@ -145,6 +147,7 @@ class Dataset(ABC):
         self.geojson_path = geojson_path
         self.genie_network_path = genie_network_path
         self.sponge_network_path = sponge_network_path
+        self.tf_graph_path = tf_graph_path
         self.created_at = created_at or datetime.utcnow()
         self.metadata = metadata
 
@@ -196,6 +199,7 @@ class Dataset(ABC):
             "geojson_path": self.geojson_path,
             "genie_network_path": self.genie_network_path,
             "sponge_network_path": self.sponge_network_path,
+            "tf_graph_path": self.tf_graph_path,
             "created_at": self.created_at.isoformat() if isinstance(self.created_at, datetime) else self.created_at,
             "metadata": self.metadata,
         }
@@ -267,6 +271,7 @@ class VisiumDataset(Dataset):
         geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
+        tf_graph_path: Optional[str] = None,
         created_at: Optional[datetime] = None,
         dataset_type: Optional[str] = None,  # e.g., "Visium", "Xenium"
         use_tangram: bool = False,
@@ -284,6 +289,7 @@ class VisiumDataset(Dataset):
             use_multiome: Whether multiome data was processed
             adata_st_scores_path: Path to original ST data with computed scores (optional, when scores available)
             adata_tg_scores_path: Path to tangram-projected data with scores (optional, when tangram+scores)
+            tf_graph_path: Optional path to TF graph JSON file
             **metadata: Additional Visium-specific metadata
         """
         super().__init__(
@@ -296,6 +302,7 @@ class VisiumDataset(Dataset):
             geojson_path=geojson_path,
             genie_network_path=genie_network_path,
             sponge_network_path=sponge_network_path,
+            tf_graph_path=tf_graph_path,
             created_at=created_at,
             **metadata
         )
@@ -314,6 +321,7 @@ class VisiumDataset(Dataset):
             "use_multiome": self.use_multiome,
             "adata_st_scores_path": self.adata_st_scores_path,
             "adata_tg_scores_path": self.adata_tg_scores_path,
+            "tf_graph_path": self.tf_graph_path,
         })
         return data
 
@@ -404,6 +412,7 @@ class XeniumDataset(VisiumDataset):
         geojson_path: Optional[str] = None,
         genie_network_path: Optional[str] = None,
         sponge_network_path: Optional[str] = None,
+        tf_graph_path: Optional[str] = None,
         created_at: Optional[datetime] = None,
         dataset_type: Optional[str] = None,
         use_tangram: bool = False,
@@ -418,6 +427,7 @@ class XeniumDataset(VisiumDataset):
             adata_path: Primary visualization adata path (set by use_tangram logic)
             xenium_grid_adata_path: Path to grid-mapped xenium cells (used when tangram=False)
             use_tangram: Whether tangram deconvolution was applied
+            tf_graph_path: Optional path to TF graph JSON file
             **metadata: Additional Xenium-specific metadata
 
         Note:
@@ -436,6 +446,7 @@ class XeniumDataset(VisiumDataset):
             geojson_path=geojson_path,
             genie_network_path=genie_network_path,
             sponge_network_path=sponge_network_path,
+            tf_graph_path=tf_graph_path,
             created_at=created_at,
             dataset_type=dataset_type,
             use_tangram=use_tangram,
@@ -568,12 +579,16 @@ class MultiomeDataset(Dataset):
         chromvar_scores_csv_path: Optional[str] = None,
         diff_motif_activity_csv_paths: Optional[Dict[str, str]] = None,  # comparison -> path
         footprint_pdf_paths: Optional[Dict[str, str]] = None,  # motif_id -> path
+        tf_graph_path: Optional[str] = None,
+        grn_evaluation_name: Optional[str] = None,
+
         # Multiome flags
         use_chromvar: bool = False,
         use_differential_motif_activity: bool = False,
         use_footprinting: bool = False,
         use_moranI: bool = False,
         use_gearyC: bool = False,
+        grn_evaluation_on_demand_available: bool = False,
         **metadata
     ):
         """
@@ -608,6 +623,7 @@ class MultiomeDataset(Dataset):
             chromvar_scores_csv_path: chromVAR deviation scores (cells × motifs)
             diff_motif_activity_csv_paths: Dict mapping comparisons to CSV paths
             footprint_pdf_paths: Dict mapping motif IDs to footprint PDF paths
+            tf_graph_path: Optional path to TF graph JSON file
 
             # Feature flags (which commands were executed in the pipeline)
             use_chromvar: Whether chromVAR analysis was performed
@@ -628,6 +644,7 @@ class MultiomeDataset(Dataset):
             geojson_path=geojson_path,
             genie_network_path=genie_network_path,
             sponge_network_path=sponge_network_path,
+            tf_graph_path=tf_graph_path,
             created_at=created_at,
             **metadata
         )
@@ -656,6 +673,8 @@ class MultiomeDataset(Dataset):
         self.use_footprinting = use_footprinting
         self.use_moranI = use_moranI
         self.use_gearyC = use_gearyC
+        self.grn_evaluation_on_demand_available = grn_evaluation_on_demand_available
+        self.grn_evaluation_name = grn_evaluation_name
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize MultiomeDataset to dictionary."""
@@ -675,11 +694,14 @@ class MultiomeDataset(Dataset):
             "chromvar_scores_csv_path": self.chromvar_scores_csv_path,
             "diff_motif_activity_csv_paths": self.diff_motif_activity_csv_paths,
             "footprint_pdf_paths": self.footprint_pdf_paths,
+            "tf_graph_path": self.tf_graph_path,
             "use_chromvar": self.use_chromvar,
             "use_differential_motif_activity": self.use_differential_motif_activity,
             "use_footprinting": self.use_footprinting,
             "use_moranI": self.use_moranI,
             "use_gearyC": self.use_gearyC,
+            "grn_evaluation_on_demand_available": self.grn_evaluation_on_demand_available,
+            "grn_evaluation_name": self.grn_evaluation_name,
         })
         return data
 

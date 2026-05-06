@@ -95,7 +95,14 @@ message(paste0("spot_rds: ", spot_rds))
 message(paste0("dissociated_rds: ", dissociated_rds))
 message(paste0("adata_map.X.csv: ", M_path))
 message("reading dissociated object...")
-object   <- readRDS(dissociated_rds)
+
+# object   <- readRDS(dissociated_rds)
+# frag_obj <- CreateFragmentObject(
+#     path = '/workspaces/swarm/backend/uploads/job_1776009725832_mopitas_hvg_ctg_mygenes_celltg/HCAHeartST11350194_HCAHeartST11445771_atac_fragments.tsv.gz',
+#     cells = colnames(object)   # restrict to cells in this object
+# )
+# object[["peaks"]]@fragments <- list(frag_obj)
+
 message(paste0("M_path: ", M_path))
 M <- read.csv(M_path, row.names = 1, check.names = FALSE)
 message("reading spot object...")

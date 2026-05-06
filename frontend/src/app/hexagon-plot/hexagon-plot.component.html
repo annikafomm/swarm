@@ -105,10 +105,15 @@
                 {{ ds.alias }}
               </mat-option>
             </mat-optgroup>
+            <mat-optgroup label="Tangram" *ngIf="(tangram_Datasets$ | async)?.length">
+              <mat-option *ngFor="let ds of (tangram_Datasets$ | async)" [value]="ds"
+                (onSelectionChange)="onDatasetTangramSelected(ds, true)">
+                {{ ds.alias }} (Tangram)
+              </mat-option>
+            </mat-optgroup>
           </mat-select>
         </mat-form-field>
       </div>
-
     </div>
 
     <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
@@ -686,131 +691,7 @@
           </div>
         </mat-tab>
 
-        <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
-          [disabled]="!propertyAvailable('chromvar_total_sum')">
-          <div>
-            <div class="selected-gene-info">
-              <strong>Current selection</strong><br>
-              Score: {{ showChromvarMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
-            </div>
-            <div class="moran-geary-toggle"
-              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
-                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
-                (click)="showChromvarMoranI = !showChromvarMoranI">
-                Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
-              </button>
-            </div>
-          </div>
-          <div *ngIf="showChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
-          <ng-template #chromvarMoranI>
-            <h4>ChromVAR Moran's I</h4>
-            <app-table [data]="this.meta['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
-              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
-              (featuresUpdated)="updateHexColors()">
-            </app-table>
-          </ng-template>
 
-          <ng-template #chromvarGearyC>
-            <h4>ChromVAR Geary's C</h4>
-            <app-table [data]="this.meta['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
-              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
-              (featuresUpdated)="updateHexColors()">
-            </app-table>
-          </ng-template>
-        </mat-tab>
-
-
-        <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
-          <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
-            <h4>{{ comparison.key }}</h4>
-
-            <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
-
-            <br />
-          </div>
-        </mat-tab>
-
-        <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
-
-          <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
-          <div class="cluster-plots">
-            <h4>Pre-computed Footprint Plots</h4>
-
-            <div *ngIf="footprintPlotUrls.length === 0" class="no-data">
-              No pre-computed footprint plots for this dataset.
-            </div>
-
-            <div *ngFor="let url of footprintPlotUrls" style="margin-bottom: 16px;">
-              <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
-            </div>
-          </div>
-
-          <!-- ── Section 2: Compute on demand ───────────────────────────── -->
-          <div class="cluster-plots">
-            <h4>Compute New Footprint</h4>
-            <div class="footprint-form">
-              <!-- Cluster-by selector -->
-              <mat-form-field appearance="fill" style="width: 100%;">
-                <mat-label>Color / Group by</mat-label>
-                <mat-select [(ngModel)]="footprintClusterBy">
-                  <mat-option value="cell_type">Cell Type</mat-option>
-                  <mat-option value="leiden">Leiden</mat-option>
-                  <mat-optgroup *ngIf="availableCellTypes.length > 0" label="Specific Cell Type (is_…)">
-                    <mat-option *ngFor="let ct of availableCellTypes" [value]="'is_' + ct">
-                      {{ ct }}
-                    </mat-option>
-                  </mat-optgroup>
-                </mat-select>
-              </mat-form-field>
-
-              <!-- Motif multi-select with search -->
-              <mat-form-field appearance="fill" style="width: 100%;">
-                <mat-label>Motif ID(s)</mat-label>
-                <mat-select multiple [(ngModel)]="footprintMotifs" [disabled]="availableMotifs.length === 0">
-                  <mat-select-trigger>
-                    {{ footprintMotifs.length === 0 ? '' : footprintMotifs.length + ' motif(s) selected' }}
-                  </mat-select-trigger>
-                  <div
-                    style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
-                    <input placeholder="Search motifs…" [value]="motifSearchQuery"
-                      (input)="motifSearchQuery = $any($event.target).value" (click)="$event.stopPropagation()"
-                      (keydown)="$event.stopPropagation()"
-                      style="width: 100%; border: 1px solid #ccc; padding: 5px 8px; border-radius: 4px; font-size: 13px; outline: none;" />
-                  </div>
-                  <mat-option *ngFor="let m of filteredMotifs" [value]="m">{{ m }}</mat-option>
-                  <mat-option *ngIf="filteredMotifs.length === 0" disabled>No motifs match</mat-option>
-                </mat-select>
-              </mat-form-field>
-
-              <!-- submit button -->
-              <button class="hx-btn hx-btn-upload" [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
-                (click)="computeFootprint()">
-                <span *ngIf="!isComputingFootprint">Compute Footprints</span>
-                <span *ngIf="isComputingFootprint">
-                  Computing&hellip;
-                  <mat-progress-spinner mode="indeterminate" [diameter]="16"
-                    style="display:inline-block; vertical-align:middle; margin-left:6px;">
-                  </mat-progress-spinner>
-                </span>
-              </button>
-
-              <div *ngIf="footprintComputeError" class="error-msg" style="color: red; margin-top: 8px;">
-                {{ footprintComputeError }}
-              </div>
-            </div>
-
-          </div>
-
-          <!-- ── On-demand results ───────────────────────────── -->
-          <div class="cluster-plots" *ngIf="onDemandFootprintUrls.length > 0">
-            <h4>On-Demand Footprint Plots</h4>
-            <div *ngFor="let url of onDemandFootprintUrls" style="margin-bottom: 16px;">
-              <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
-            </div>
-          </div>
-
-        </mat-tab>
 
         <mat-tab label="Cell Composition TF Activity"
           [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
@@ -945,7 +826,445 @@
             </div>
           </ng-container>
         </mat-tab>
+
+        <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
+          [disabled]="!propertyAvailable('chromvar_total_sum')">
+          <div>
+            <div class="selected-gene-info">
+              <strong>Current selection</strong><br>
+              Score: {{ showChromvarMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
+            </div>
+            <div class="moran-geary-toggle"
+              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showChromvarMoranI"
+                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+                (click)="showChromvarMoranI = !showChromvarMoranI">
+                Show {{ showChromvarMoranI ? "Geary's C" : "Moran's I" }}
+              </button>
+            </div>
+          </div>
+          <div *ngIf="showChromvarMoranI; then chromvarMoranI; else chromvarGearyC"></div>
+          <ng-template #chromvarMoranI>
+            <h4>ChromVAR Moran's I</h4>
+            <app-table [data]="this.meta['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
+              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (featuresUpdated)="updateHexColors()">
+            </app-table>
+          </ng-template>
+
+          <ng-template #chromvarGearyC>
+            <h4>ChromVAR Geary's C</h4>
+            <app-table [data]="this.meta['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
+              [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (featuresUpdated)="updateHexColors()">
+            </app-table>
+          </ng-template>
+        </mat-tab>
+
+
+        <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
+          <div *ngFor="let comparison of this.meta['diff_motif_activity_top_motifs'] | keyvalue">
+            <h4>{{ comparison.key }}</h4>
+
+            <app-table [data]="asTableData(comparison.value)" [actionColumns]="[]"></app-table>
+
+            <br />
+          </div>
+        </mat-tab>
+
+        <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
+
+          <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
+          <div class="cluster-plots">
+            <h4>Pre-computed Footprint Plots</h4>
+
+            <div *ngIf="footprintPlotUrls.length === 0" class="no-data">
+              No pre-computed footprint plots for this dataset.
+            </div>
+
+            <div *ngFor="let url of footprintPlotUrls" style="margin-bottom: 16px;">
+              <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
+            </div>
+          </div>
+
+          <!-- ── Section 2: Compute on demand ───────────────────────────── -->
+          <div class="cluster-plots">
+            <h4>Compute New Footprint</h4>
+            <div class="footprint-form">
+              <!-- Cluster-by selector -->
+              <mat-form-field appearance="fill" style="width: 100%;">
+                <mat-label>Color / Group by</mat-label>
+                <mat-select [(ngModel)]="footprintClusterBy">
+                  <mat-option value="cell_type">Cell Type</mat-option>
+                  <mat-option value="leiden">Leiden</mat-option>
+                  <mat-optgroup *ngIf="availableCellTypes.length > 0" label="Specific Cell Type (is_…)">
+                    <mat-option *ngFor="let ct of availableCellTypes" [value]="'is_' + ct">
+                      {{ ct }}
+                    </mat-option>
+                  </mat-optgroup>
+                </mat-select>
+              </mat-form-field>
+
+              <!-- Motif multi-select with search -->
+              <mat-form-field appearance="fill" style="width: 100%;">
+                <mat-label>Motif ID(s)</mat-label>
+                <mat-select multiple [(ngModel)]="footprintMotifs" [disabled]="availableMotifs.length === 0">
+                  <mat-select-trigger>
+                    {{ footprintMotifs.length === 0 ? '' : footprintMotifs.length + ' motif(s) selected' }}
+                  </mat-select-trigger>
+                  <div
+                    style="padding: 8px 12px; position: sticky; top: 0; background: white; z-index: 1; border-bottom: 1px solid #e0e0e0;">
+                    <input placeholder="Search motifs…" [value]="motifSearchQuery"
+                      (input)="motifSearchQuery = $any($event.target).value" (click)="$event.stopPropagation()"
+                      (keydown)="$event.stopPropagation()"
+                      style="width: 100%; border: 1px solid #ccc; padding: 5px 8px; border-radius: 4px; font-size: 13px; outline: none;" />
+                  </div>
+                  <mat-option *ngFor="let m of filteredMotifs" [value]="m">{{ m }}</mat-option>
+                  <mat-option *ngIf="filteredMotifs.length === 0" disabled>No motifs match</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <!-- submit button -->
+              <button class="hx-btn hx-btn-upload" [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
+                (click)="computeFootprint()">
+                <span *ngIf="!isComputingFootprint">Compute Footprints</span>
+                <span *ngIf="isComputingFootprint">
+                  Computing&hellip;
+                  <mat-progress-spinner mode="indeterminate" [diameter]="16"
+                    style="display:inline-block; vertical-align:middle; margin-left:6px;">
+                  </mat-progress-spinner>
+                </span>
+              </button>
+
+              <div *ngIf="footprintComputeError" class="error-msg" style="color: red; margin-top: 8px;">
+                {{ footprintComputeError }}
+              </div>
+            </div>
+
+          </div>
+
+          <!-- ── On-demand results ───────────────────────────── -->
+          <div class="cluster-plots" *ngIf="onDemandFootprintUrls.length > 0">
+            <h4>On-Demand Footprint Plots</h4>
+            <div *ngFor="let url of onDemandFootprintUrls" style="margin-bottom: 16px;">
+              <iframe [src]="url" width="100%" height="500px" style="border: none;"></iframe>
+            </div>
+          </div>
+
+        </mat-tab>
+
+        <mat-tab label="GRN Evaluation" [disabled]="!this.meta['peak_stats']">
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              Peak-Gene Link Statistics
+            </mat-expansion-panel-header>
+            <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+              <app-table
+                [data]="this.meta['peak_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
+                [features]="compareFeatures" [datasetId]="selectedDataset?.id"
+                (featuresUpdated)="updateHexColors('#hexbin')">
+              </app-table>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel *ngIf="this.meta['motif_stats']">
+            <mat-expansion-panel-header>
+              Motif Statistics
+            </mat-expansion-panel-header>
+            <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+              <app-table
+                [data]="this.meta['motif_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
+                [features]="compareFeatures" [datasetId]="selectedDataset?.id"
+                (featuresUpdated)="updateHexColors('#hexbin')">
+              </app-table>
+            </div>
+          </mat-expansion-panel>
+
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              TF Gene Network Graph
+            </mat-expansion-panel-header>
+
+            <!-- Filter Mode Selector -->
+            <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+              <label style="font-weight: 500;">GRN Filter Mode:</label>
+              <mat-form-field style="min-width: 150px;">
+                <mat-label>Select Filter</mat-label>
+                <mat-select [value]="grnGraphFilter" (selectionChange)="onChangeGrnGraphFilter($event.value, false)">
+                  <mat-option value="prior">Prior (Strict)</mat-option>
+                  <mat-option value="extended">Extended (Medium)</mat-option>
+                  <mat-option value="full">Full (Complete)</mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+
+            <!-- Prior Filter Graph -->
+            <div [hidden]="grnGraphFilter !== 'prior'">
+              <div *ngIf="isLoadingGrnGraphPrior" class="loading-container graph-loading-container">
+                <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                  aria-label="Loading GRN graph (Prior filter)">
+                </mat-progress-spinner>
+              </div>
+              <div id="tf_gene_net_container_prior" class="tf-graph-container"
+                style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+              </div>
+            </div>
+
+            <!-- Extended Filter Graph -->
+            <div [hidden]="grnGraphFilter !== 'extended'">
+              <div *ngIf="isLoadingGrnGraphExtended" class="loading-container graph-loading-container">
+                <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                  aria-label="Loading GRN graph (Extended filter)">
+                </mat-progress-spinner>
+              </div>
+              <div id="tf_gene_net_container_extended" class="tf-graph-container"
+                style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+              </div>
+            </div>
+
+            <!-- Full Filter Graph -->
+            <div [hidden]="grnGraphFilter !== 'full'">
+              <div *ngIf="isLoadingGrnGraphFull" class="loading-container graph-loading-container">
+                <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                  aria-label="Loading GRN graph (Full filter)">
+                </mat-progress-spinner>
+              </div>
+              <div id="tf_gene_net_container_full" class="tf-graph-container"
+                style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+              </div>
+            </div>
+
+          </mat-expansion-panel>
+
+          <!-- GRN Plots Panel -->
+          <mat-expansion-panel>
+            <mat-expansion-panel-header>
+              GRN Evaluation Plots
+            </mat-expansion-panel-header>
+
+            <div *ngIf="isLoadingGrnPlots" class="loading-container">
+              <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading GRN plots">
+              </mat-progress-spinner>
+            </div>
+
+            <!-- Peak Plots -->
+            <div *ngIf="grnPlots['peak_plots'] && !isLoadingGrnPlots">
+              <h4>Peak-Gene Link Plots</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <img *ngFor="let plotName of grnPlots['peak_plots']" [src]="getGrnImageUrl(plotName, false)"
+                  style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                  alt="{{ plotName }}" />
+              </div>
+            </div>
+
+            <!-- Motif Plots -->
+            <div *ngIf="grnPlots['motif_plots'] && !isLoadingGrnPlots" style="margin-top: 20px;">
+              <h4>Motif Plots</h4>
+              <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                <img *ngFor="let plotName of grnPlots['motif_plots']" [src]="getGrnImageUrl(plotName, false)"
+                  style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                  alt="{{ plotName }}" />
+              </div>
+            </div>
+
+            <p *ngIf="!grnPlots['peak_plots'] && !grnPlots['motif_plots'] && !isLoadingGrnPlots" style="color: #666;">
+              No GRN plots available
+            </p>
+
+          </mat-expansion-panel>
+        </mat-tab>
+
+        <mat-tab label="GRN Evaluation - On Demand">
+          <div class="grn-ondemand-container" style="padding: 15px;">
+
+            <!-- Compute Form -->
+            <mat-expansion-panel class="grn-ondemand-form" [expanded]="true">
+              <mat-expansion-panel-header>
+                <mat-panel-title>Compute New GRN Evaluation</mat-panel-title>
+              </mat-expansion-panel-header>
+
+              <!-- Obs Key -->
+              <mat-form-field appearance="fill" style="margin-right: 15px;">
+                <mat-label>Observation Key</mat-label>
+                <mat-select [(ngModel)]="onDemandGrnParams.obsKey">
+                  <mat-option value="cell_type">Cell Type</mat-option>
+                  <mat-option value="leiden">Leiden</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <!-- Cluster -->
+              <mat-form-field appearance="fill" style="margin-right: 15px;">
+                <mat-label>Cluster</mat-label>
+                <input matInput [(ngModel)]="onDemandGrnParams.cluster" placeholder="0">
+              </mat-form-field>
+
+              <br style="margin: 10px 0;">
+
+              <!-- Name -->
+              <mat-form-field appearance="fill" style="margin-right: 15px;">
+                <mat-label>GRN Evaluation Name</mat-label>
+                <input matInput [(ngModel)]="onDemandGrnParams.name" placeholder="GRN_Evaluation">
+              </mat-form-field>
+
+              <!-- Gene Set -->
+              <mat-form-field appearance="fill">
+                <mat-label>Gene Set</mat-label>
+                <input matInput [(ngModel)]="onDemandGrnParams.geneSet" placeholder="comma-separated or GO ID">
+              </mat-form-field>
+
+              <br style="margin: 10px 0;">
+
+              <!-- Use Prior GRN -->
+              <mat-checkbox [(ngModel)]="onDemandGrnParams.usePriorGrn" style="margin-right: 20px;">
+                Use Prior GRN
+              </mat-checkbox>
+
+              <!-- Compute Button -->
+              <button class="hx-btn hx-btn-upload" [disabled]="isComputingOnDemandGrn"
+                (click)="computeOnDemandGrnEvaluation(false)">
+                <mat-icon *ngIf="!isComputingOnDemandGrn">play_arrow</mat-icon>
+                <span *ngIf="!isComputingOnDemandGrn">Compute GRN Evaluation</span>
+                <span *ngIf="isComputingOnDemandGrn">
+                  <mat-spinner diameter="20"></mat-spinner> Computing...
+                </span>
+              </button>
+
+              <!-- Error Message -->
+              <div *ngIf="onDemandGrnError" class="error-msg" style="color: red; margin-top: 10px;">
+                {{ onDemandGrnError }}
+              </div>
+
+              <!-- Result -->
+              <div *ngIf="onDemandOutputPath" class="success-msg" style="color: green; margin-top: 10px;">
+                ✓ Output path: {{ onDemandOutputPath }}
+              </div>
+            </mat-expansion-panel>
+
+            <!-- Run Selection -->
+            <div style="margin-top: 20px; margin-bottom: 15px;">
+              <h4>Load Existing GRN Evaluation Results</h4>
+
+              <mat-form-field appearance="fill" style="width: 300px;">
+                <mat-label>Select GRN Evaluation Run</mat-label>
+                <mat-select [(ngModel)]="selectedOnDemandRun" (selectionChange)="onSelectGrnRun($event.value, false)">
+                  <mat-option *ngFor="let run of onDemandGrnRuns" [value]="run">
+                    {{ run }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <button mat-raised-button color="primary" (click)="loadOnDemandGrnRuns(false)" style="margin-left: 10px;">
+                <mat-icon>refresh</mat-icon>
+                Refresh Runs
+              </button>
+            </div>
+
+            <!-- Error Message -->
+            <div *ngIf="grnTabError" class="error-msg" style="color: red; margin-bottom: 15px;">
+              {{ grnTabError }}
+            </div>
+
+            <!-- Results Section -->
+            <div *ngIf="selectedOnDemandRun" class="grn-results">
+
+              <!-- Peak & Motif Stats Tables -->
+              <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>Statistics</mat-panel-title>
+                </mat-expansion-panel-header>
+
+                <div *ngIf="isLoadingGrnStats" class="loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+                </div>
+
+                <div *ngIf="grnPeakStats && !isLoadingGrnStats">
+                  <h5>Peak Statistics</h5>
+                  <app-table [data]="grnPeakStats" [features]="features" [datasetId]="selectedDataset?.id">
+                  </app-table>
+                </div>
+
+                <div *ngIf="grnMotifStats && !isLoadingGrnStats" style="margin-top: 20px;">
+                  <h5>Motif Statistics</h5>
+                  <app-table [data]="grnMotifStats" [features]="features" [datasetId]="selectedDataset?.id">
+                  </app-table>
+                </div>
+              </mat-expansion-panel>
+
+              <!-- Graph Section -->
+              <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>GRN Graph</mat-panel-title>
+                </mat-expansion-panel-header>
+
+                <div style="margin-bottom: 15px;">
+                  <mat-form-field appearance="fill">
+                    <mat-label>Graph Filter</mat-label>
+                    <mat-select [(ngModel)]="grnGraphFilter"
+                      (selectionChange)="onChangeGrnGraphFilter($event.value, false)">
+                      <mat-option value="prior">Prior GRN (priorTF nodes only)</mat-option>
+                      <mat-option value="extended">Prior GRN Extended (exclude red/yellow edges)</mat-option>
+                      <mat-option value="full">Full Network (no filters)</mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+
+                <div *ngIf="isLoadingGrnGraph" class="loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+                </div>
+
+                <div id="grn_gene_net_container" [style.display]="isLoadingGrnGraph ? 'none' : 'block'">
+                </div>
+              </mat-expansion-panel>
+
+              <!-- Plots Section -->
+              <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>Plots</mat-panel-title>
+                </mat-expansion-panel-header>
+
+                <div *ngIf="isLoadingGrnPlots" class="loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+                </div>
+
+                <!-- Peak Plots -->
+                <div *ngIf="grnPlots['peak_plots'] && !isLoadingGrnPlots">
+                  <h5>Peak Plots</h5>
+                  <div class="plots-grid"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                    <img *ngFor="let plotName of grnPlots['peak_plots']" [src]="getGrnImageUrl(plotName, false)"
+                      [title]="plotName" style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+                  </div>
+                </div>
+
+                <!-- Motif Plots -->
+                <div *ngIf="grnPlots['motif_plots'] && !isLoadingGrnPlots" style="margin-top: 20px;">
+                  <h5>Motif Plots</h5>
+                  <div class="plots-grid"
+                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                    <img *ngFor="let plotName of grnPlots['motif_plots']" [src]="getGrnImageUrl(plotName, false)"
+                      [title]="plotName" style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+                  </div>
+                </div>
+
+                <p *ngIf="!grnPlots['peak_plots'] && !grnPlots['motif_plots'] && !isLoadingGrnPlots">
+                  No plots available
+                </p>
+              </mat-expansion-panel>
+
+              <!-- Register Button -->
+              <button mat-raised-button color="accent" (click)="registerOnDemandGrnRun(false)"
+                style="margin-top: 15px;">
+                <mat-icon>check_circle</mat-icon>
+                Register Run to Dataset
+              </button>
+            </div>
+
+          </div>
+        </mat-tab>
+
       </mat-tab-group>
+
 
 
       <div *ngIf="compareMode">
@@ -1560,6 +1879,86 @@
             </div>
           </mat-tab>
 
+          <mat-tab label="Compare - DGEA" [disabled]="!hasDgeaData(true)">
+            <ng-template #noDgeaCompareTpl>
+              <div class="no-data">No DGEA data available.</div>
+            </ng-template>
+
+            <ng-template #noComparisonTpl>
+              <div class="no-data">
+                No comparison found for this selection.
+              </div>
+            </ng-template>
+
+            <ng-container *ngIf="dgeaReadyCompare; else noDgeaCompareTpl">
+              <h4>DGEA Comparison</h4>
+
+              <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
+
+                <!-- GROUPING -->
+                <mat-form-field appearance="fill">
+                  <mat-label>Grouping</mat-label>
+                  <mat-select [(ngModel)]="selectedDgeaObsCol" (selectionChange)="onDgeaObsColChange(true)">
+                    <mat-option *ngFor="let col of getDgeaObsCols()" [value]="col">
+                      {{ getDgeaObsColLabel(col) }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <!-- GROUPS -->
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+
+                  <mat-form-field appearance="fill">
+                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 1' : 'Group 1' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="fill" *ngIf="!dgeaVsAll">
+                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 2' : 'Group 2' }}</mat-label>
+                    <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange(true)">
+                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
+                        {{ level }}
+                      </mat-option>
+                    </mat-select>
+                  </mat-form-field>
+                  <mat-checkbox [(ngModel)]="dgeaVsAll" (change)="onDgeaVsAllChange(true)">
+                    Compare Group 1 vs all others
+                  </mat-checkbox>
+                </div>
+
+              </div>
+
+              <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparisonTpl">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
+                  <div>
+                    <strong>Grouping:</strong>
+                    {{ getDgeaObsColLabel(selectedDgeaObsCol) }}
+                    <br>
+                    <strong>Comparison:</strong>
+                    {{ cmp['group1'] }} vs {{ cmp['group2'] }}
+                    (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+                  </div>
+                </div>
+
+                <div *ngIf="cmp['skipped']" class="no-data">
+                  This comparison was skipped: {{ cmp['skip_reason'] }}
+                </div>
+
+                <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
+                  [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
+                  (geneSelected)="onDgeaGeneSelected($event, true)">
+                </app-table>
+              </div>
+
+              <div #dgeaHeatmapCompare id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
+              </div>
+            </ng-container>
+          </mat-tab>
+
           <mat-tab label="Compare: ChromVar spatial correlation : Moran's I / Geary's C"
             [disabled]="!propertyAvailable('chromvar_total_sum','compare')">
             <div>
@@ -1689,87 +2088,326 @@
 
           </mat-tab>
 
-          <mat-tab label="Compare - DGEA" [disabled]="!hasDgeaData(true)">
-            <ng-template #noDgeaCompareTpl>
-              <div class="no-data">No DGEA data available.</div>
-            </ng-template>
 
-            <ng-template #noComparisonTpl>
-              <div class="no-data">
-                No comparison found for this selection.
+          <mat-tab label=" Compare - GRN Evaluation" [disabled]="!this.metaCompare['peak_stats']">
+
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                Peak-Gene Link Statistics
+              </mat-expansion-panel-header>
+              <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+                <app-table
+                  [data]="this.metaCompare['peak_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
+                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                </app-table>
               </div>
-            </ng-template>
+            </mat-expansion-panel>
 
-            <ng-container *ngIf="dgeaReadyCompare; else noDgeaCompareTpl">
-              <h4>DGEA Comparison</h4>
+            <mat-expansion-panel *ngIf="this.metaCompare['motif_stats']">
+              <mat-expansion-panel-header>
+                Motif Statistics
+              </mat-expansion-panel-header>
+              <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+                <app-table
+                  [data]="this.metaCompare['motif_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
+                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                </app-table>
+              </div>
+            </mat-expansion-panel>
 
-              <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                TF Gene Network Graph
+              </mat-expansion-panel-header>
 
-                <!-- GROUPING -->
+              <!-- Filter Mode Selector -->
+              <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+                <label style="font-weight: 500;">GRN Filter Mode:</label>
+                <mat-form-field style="min-width: 150px;">
+                  <mat-label>Select Filter</mat-label>
+                  <mat-select [value]="grnGraphFilterCompare"
+                    (selectionChange)="onChangeGrnGraphFilter($event.value, true)">
+                    <mat-option value="prior">Prior (Strict)</mat-option>
+                    <mat-option value="extended">Extended (Medium)</mat-option>
+                    <mat-option value="full">Full (Complete)</mat-option>
+                  </mat-select>
+                </mat-form-field>
+              </div>
+
+              <!-- Prior Filter Graph -->
+              <div [hidden]="grnGraphFilterCompare !== 'prior'">
+                <div *ngIf="isLoadingGrnGraphPriorCompare" class="loading-container graph-loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                    aria-label="Loading GRN graph (Prior filter)">
+                  </mat-progress-spinner>
+                </div>
+                <div id="tf_gene_net_container_prior_compare" class="tf-graph-container"
+                  style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+                </div>
+              </div>
+
+              <!-- Extended Filter Graph -->
+              <div [hidden]="grnGraphFilterCompare !== 'extended'">
+                <div *ngIf="isLoadingGrnGraphExtendedCompare" class="loading-container graph-loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                    aria-label="Loading GRN graph (Extended filter)">
+                  </mat-progress-spinner>
+                </div>
+                <div id="tf_gene_net_container_extended_compare" class="tf-graph-container"
+                  style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+                </div>
+              </div>
+
+              <!-- Full Filter Graph -->
+              <div [hidden]="grnGraphFilterCompare !== 'full'">
+                <div *ngIf="isLoadingGrnGraphFullCompare" class="loading-container graph-loading-container">
+                  <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                    aria-label="Loading GRN graph (Full filter)">
+                  </mat-progress-spinner>
+                </div>
+                <div id="tf_gene_net_container_full_compare" class="tf-graph-container"
+                  style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+                </div>
+              </div>
+
+            </mat-expansion-panel>
+
+            <!-- GRN Plots Panel -->
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                GRN Evaluation Plots
+              </mat-expansion-panel-header>
+
+              <div *ngIf="isLoadingGrnPlotsCompare" class="loading-container">
+                <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                  aria-label="Loading GRN plots">
+                </mat-progress-spinner>
+              </div>
+
+              <!-- Peak Plots -->
+              <div *ngIf="grnPlotsCompare['peak_plots'] && !isLoadingGrnPlotsCompare">
+                <h4>Peak-Gene Link Plots</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                  <img *ngFor="let plotName of grnPlotsCompare['peak_plots']" [src]="getGrnImageUrl(plotName, true)"
+                    style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                    alt="{{ plotName }}" />
+                </div>
+              </div>
+
+              <!-- Motif Plots -->
+              <div *ngIf="grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare" style="margin-top: 20px;">
+                <h4>Motif Plots</h4>
+                <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+                  <img *ngFor="let plotName of grnPlotsCompare['motif_plots']" [src]="getGrnImageUrl(plotName, true)"
+                    style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+                    alt="{{ plotName }}" />
+                </div>
+              </div>
+
+              <p *ngIf="!grnPlotsCompare['peak_plots'] && !grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare"
+                style="color: #666;">
+                No GRN plots available
+              </p>
+
+            </mat-expansion-panel>
+          </mat-tab>
+
+          <mat-tab label="GRN Evaluation - On Demand">
+            <div class="grn-ondemand-container" style="padding: 15px;">
+
+              <!-- Compute Form -->
+              <mat-expansion-panel class="grn-ondemand-form" [expanded]="true">
+                <mat-expansion-panel-header>
+                  <mat-panel-title>Compute New GRN Evaluation (Compare)</mat-panel-title>
+                </mat-expansion-panel-header>
+
+                <!-- Obs Key -->
+                <mat-form-field appearance="fill" style="margin-right: 15px;">
+                  <mat-label>Observation Key</mat-label>
+                  <mat-select [(ngModel)]="onDemandGrnParams.obsKey">
+                    <mat-option value="cell_type">Cell Type</mat-option>
+                    <mat-option value="leiden">Leiden</mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <!-- Cluster -->
+                <mat-form-field appearance="fill" style="margin-right: 15px;">
+                  <mat-label>Cluster</mat-label>
+                  <input matInput [(ngModel)]="onDemandGrnParams.cluster" placeholder="0">
+                </mat-form-field>
+
+                <br style="margin: 10px 0;">
+
+                <!-- Name -->
+                <mat-form-field appearance="fill" style="margin-right: 15px;">
+                  <mat-label>GRN Evaluation Name</mat-label>
+                  <input matInput [(ngModel)]="onDemandGrnParams.name" placeholder="GRN_Evaluation">
+                </mat-form-field>
+
+                <!-- Gene Set -->
                 <mat-form-field appearance="fill">
-                  <mat-label>Grouping</mat-label>
-                  <mat-select [(ngModel)]="selectedDgeaObsCol" (selectionChange)="onDgeaObsColChange(true)">
-                    <mat-option *ngFor="let col of getDgeaObsCols()" [value]="col">
-                      {{ getDgeaObsColLabel(col) }}
+                  <mat-label>Gene Set</mat-label>
+                  <input matInput [(ngModel)]="onDemandGrnParams.geneSet" placeholder="comma-separated or GO ID">
+                </mat-form-field>
+
+                <br style="margin: 10px 0;">
+
+                <!-- Use Prior GRN -->
+                <mat-checkbox [(ngModel)]="onDemandGrnParams.usePriorGrn" style="margin-right: 20px;">
+                  Use Prior GRN
+                </mat-checkbox>
+
+                <!-- Compute Button -->
+                <button class="hx-btn hx-btn-upload" [disabled]="isComputingOnDemandGrn"
+                  (click)="computeOnDemandGrnEvaluation(true)">
+                  <mat-icon *ngIf="!isComputingOnDemandGrn">play_arrow</mat-icon>
+                  <span *ngIf="!isComputingOnDemandGrn">Compute GRN Evaluation</span>
+                  <span *ngIf="isComputingOnDemandGrn">
+                    <mat-spinner diameter="20"></mat-spinner> Computing...
+                  </span>
+                </button>
+
+                <!-- Error Message -->
+                <div *ngIf="onDemandGrnError" class="error-msg" style="color: red; margin-top: 10px;">
+                  {{ onDemandGrnError }}
+                </div>
+
+                <!-- Result -->
+                <div *ngIf="onDemandOutputPathCompare" class="success-msg" style="color: green; margin-top: 10px;">
+                  ✓ Output path: {{ onDemandOutputPathCompare }}
+                </div>
+              </mat-expansion-panel>
+
+              <!-- Run Selection -->
+              <div style="margin-top: 20px; margin-bottom: 15px;">
+                <h4>Load Existing GRN Evaluation Results</h4>
+
+                <mat-form-field appearance="fill" style="width: 300px;">
+                  <mat-label>Select GRN Evaluation Run</mat-label>
+                  <mat-select [(ngModel)]="selectedOnDemandRunCompare"
+                    (selectionChange)="onSelectGrnRun($event.value, true)">
+                    <mat-option *ngFor="let run of onDemandGrnRunsCompare" [value]="run">
+                      {{ run }}
                     </mat-option>
                   </mat-select>
                 </mat-form-field>
 
-                <!-- GROUPS -->
-                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-
-                  <mat-form-field appearance="fill">
-                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 1' : 'Group 1' }}</mat-label>
-                    <mat-select [(ngModel)]="selectedDgeaGroup1" (selectionChange)="onDgeaSelectionChange(true)">
-                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
-                        {{ level }}
-                      </mat-option>
-                    </mat-select>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="fill" *ngIf="!dgeaVsAll">
-                    <mat-label>{{ selectedDgeaObsCol === 'cell_type' ? 'Cell type 2' : 'Group 2' }}</mat-label>
-                    <mat-select [(ngModel)]="selectedDgeaGroup2" (selectionChange)="onDgeaSelectionChange(true)">
-                      <mat-option *ngFor="let level of getDgeaLevels()" [value]="level">
-                        {{ level }}
-                      </mat-option>
-                    </mat-select>
-                  </mat-form-field>
-                  <mat-checkbox [(ngModel)]="dgeaVsAll" (change)="onDgeaVsAllChange(true)">
-                    Compare Group 1 vs all others
-                  </mat-checkbox>
-                </div>
-
+                <button mat-raised-button color="primary" (click)="loadOnDemandGrnRuns(true)"
+                  style="margin-left: 10px;">
+                  <mat-icon>refresh</mat-icon>
+                  Refresh Runs
+                </button>
               </div>
 
-              <div *ngIf="getSelectedDgeaComparison() as cmp; else noComparisonTpl">
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;">
-                  <div>
-                    <strong>Grouping:</strong>
-                    {{ getDgeaObsColLabel(selectedDgeaObsCol) }}
-                    <br>
-                    <strong>Comparison:</strong>
-                    {{ cmp['group1'] }} vs {{ cmp['group2'] }}
-                    (n={{ cmp['n1'] }} vs {{ cmp['n2'] }})
+              <!-- Error Message -->
+              <div *ngIf="grnTabErrorCompare" class="error-msg" style="color: red; margin-bottom: 15px;">
+                {{ grnTabErrorCompare }}
+              </div>
+
+              <!-- Results Section -->
+              <div *ngIf="selectedOnDemandRunCompare" class="grn-results">
+
+                <!-- Peak & Motif Stats Tables -->
+                <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>Statistics</mat-panel-title>
+                  </mat-expansion-panel-header>
+
+                  <div *ngIf="isLoadingGrnStatsCompare" class="loading-container">
+                    <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
                   </div>
-                </div>
 
-                <div *ngIf="cmp['skipped']" class="no-data">
-                  This comparison was skipped: {{ cmp['skip_reason'] }}
-                </div>
+                  <div *ngIf="grnPeakStatsCompare && !isLoadingGrnStatsCompare">
+                    <h5>Peak Statistics</h5>
+                    <app-table [data]="grnPeakStatsCompare" [features]="compareFeatures"
+                      [datasetId]="selectedDatasetCompare?.id">
+                    </app-table>
+                  </div>
 
-                <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
-                  [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
-                  (geneSelected)="onDgeaGeneSelected($event, true)">
-                </app-table>
+                  <div *ngIf="grnMotifStatsCompare && !isLoadingGrnStatsCompare" style="margin-top: 20px;">
+                    <h5>Motif Statistics</h5>
+                    <app-table [data]="grnMotifStatsCompare" [features]="compareFeatures"
+                      [datasetId]="selectedDatasetCompare?.id">
+                    </app-table>
+                  </div>
+                </mat-expansion-panel>
+
+                <!-- Graph Section -->
+                <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>GRN Graph</mat-panel-title>
+                  </mat-expansion-panel-header>
+
+                  <div style="margin-bottom: 15px;">
+                    <mat-form-field appearance="fill">
+                      <mat-label>Graph Filter</mat-label>
+                      <mat-select [(ngModel)]="grnGraphFilterCompare"
+                        (selectionChange)="onChangeGrnGraphFilter($event.value, true)">
+                        <mat-option value="prior">Prior GRN (priorTF nodes only)</mat-option>
+                        <mat-option value="extended">Prior GRN Extended (exclude red/yellow edges)</mat-option>
+                        <mat-option value="full">Full Network (no filters)</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+
+                  <div *ngIf="isLoadingGrnGraphCompare" class="loading-container">
+                    <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+                  </div>
+
+                  <div id="grn_gene_net_container_compare"
+                    [style.display]="isLoadingGrnGraphCompare ? 'none' : 'block'">
+                  </div>
+                </mat-expansion-panel>
+
+                <!-- Plots Section -->
+                <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>Plots</mat-panel-title>
+                  </mat-expansion-panel-header>
+
+                  <div *ngIf="isLoadingGrnPlotsCompare" class="loading-container">
+                    <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+                  </div>
+
+                  <!-- Peak Plots -->
+                  <div *ngIf="grnPlotsCompare['peak_plots'] && !isLoadingGrnPlotsCompare">
+                    <h5>Peak Plots</h5>
+                    <div class="plots-grid"
+                      style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                      <img *ngFor="let plotName of grnPlotsCompare['peak_plots']" [src]="getGrnImageUrl(plotName, true)"
+                        [title]="plotName" style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+                    </div>
+                  </div>
+
+                  <!-- Motif Plots -->
+                  <div *ngIf="grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare" style="margin-top: 20px;">
+                    <h5>Motif Plots</h5>
+                    <div class="plots-grid"
+                      style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                      <img *ngFor="let plotName of grnPlotsCompare['motif_plots']"
+                        [src]="getGrnImageUrl(plotName, true)" [title]="plotName"
+                        style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+                    </div>
+                  </div>
+
+                  <p
+                    *ngIf="!grnPlotsCompare['peak_plots'] && !grnPlotsCompare['motif_plots'] && !isLoadingGrnPlotsCompare">
+                    No plots available
+                  </p>
+                </mat-expansion-panel>
+
+                <!-- Register Button -->
+                <button mat-raised-button color="accent" (click)="registerOnDemandGrnRun(true)"
+                  style="margin-top: 15px;">
+                  <mat-icon>check_circle</mat-icon>
+                  Register Run to Dataset
+                </button>
               </div>
 
-              <div #dgeaHeatmapCompare id="dgea-heatmap" style="width: 100%; min-height: 500px; margin-top: 16px;">
-              </div>
-            </ng-container>
+            </div>
           </mat-tab>
         </mat-tab-group>
+
       </div>
-    </div>
-  </div>
-</div>

@@ -53,6 +53,29 @@ def _extract_autocorr_stat(autocorr_obj, preferred_col: str) -> dict[str, float]
     series = autocorr_obj[col]
     return {str(k): float(v) for k, v in series.items() if pd.notna(v)}
 
+
+def _make_json_serializable(obj):
+    """Recursively convert numpy arrays and types to JSON-serializable Python types."""
+    if isinstance(obj, dict):
+        return {str(k): _make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_make_json_serializable(item) for item in obj]
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict()
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    else:
+        return str(obj)
+
+
 class Hexagons:
     """
     Class to convert Visium or Transformed Xenium spatial data to GeoJSON format with hexagonal geometry.
@@ -523,6 +546,26 @@ if __name__ == "__main__":
                 meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
 
 
+    # Add peak and motif statistics
+    # New structure: uns['peak_stats'][grn_evaluation_name] = {data}
+    # uns['motif_stats'][grn_evaluation_name] = {data}
+    for stats_key in ['peak_stats', 'motif_stats']:
+        if stats_key in spatial_data.uns:
+            stats_data = spatial_data.uns[stats_key]
+            # Handle both old and new structure:
+            # If it's a dict of dicts (new structure with grn_evaluation_names as keys):
+            if isinstance(stats_data, dict) and len(stats_data) > 0:
+                first_val = next(iter(stats_data.values()))
+                if isinstance(first_val, dict):
+                    # New structure: stats_data = {grn_name: {data...}, grn_name2: {data...}}
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+                else:
+                    # Single dataset case or old structure
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+            else:
+                # Convert to JSON-serializable format (converts numpy arrays to lists)
+                meta_dict[stats_key] = _make_json_serializable(stats_data)
+
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
     colname_mapping = {
@@ -583,6 +626,9 @@ if __name__ == "__main__":
     geojson_data["meta"] = meta_dict
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
+
+    # Convert all numpy types to JSON-serializable types before dumping
+    geojson_data = geojson_data
 
     with open(args.outpath, "w+") as f:
         json.dump(geojson_data, f, indent=4, ignore_nan=True)

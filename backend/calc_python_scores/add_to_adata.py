@@ -218,6 +218,135 @@ def combine_files_multiome(filename, args, logfile, adata_map_path):
     log_message(f"Files in multiome directory: {files_in_dir}", logfile, 2)
 
     for filename in files_in_dir:
+        if filename.lower() == "peak_stats.csv":
+            file_path = os.path.join(scores_path, filename)
+            df = pd.read_csv(file_path)
+
+            # clean column names and string values a bit
+            df.columns = df.columns.str.strip()
+            for col in df.select_dtypes(include="object").columns:
+                df[col] = df[col].astype(str).str.strip()
+
+            desired_cols = [
+                "Gene",
+                "Cluster",
+                "Annotation",
+                "Peak",
+                "Class",
+                "Link Score",
+                "Link Z",
+                "Link P",
+                "Acc. T-stat",
+                "Acc. FDR",
+                "Accessible Cells",
+                "P(expr|acc), cluster",
+                "P(expr|acc), bg",
+                "P(expr & acc), cluster",
+                "P(expr & acc), all",
+                "Enrichment, cluster",
+                "Enrichment, all",
+                "Delta P(expr|acc)",
+                "Promoter Peaks",
+                "Distal Peaks",
+                "Pass Type",
+            ]
+
+            existing_cols = [col for col in desired_cols if col in df.columns]
+            remaining_cols = [col for col in df.columns if col not in existing_cols]
+            df = df[existing_cols + remaining_cols]
+
+            if "peak_stats" in adata.uns:
+                log_message(
+                    "adata.uns['peak_stats'] is overwritten.",
+                    logfile,
+                    2
+                )
+            peak_stats_dict = df.to_dict(orient="list")
+            adata.uns["peak_stats_dict"] = peak_stats_dict
+            adata.uns["peak_stats"] = df
+            log_message(
+                "peak_stats added to adata.uns['peak_stats']",
+                logfile,
+                2
+            )
+        
+        # motif stats
+        if filename.lower() == "motif_stats.csv":
+            file_path = os.path.join(scores_path, filename)
+            df = pd.read_csv(file_path)
+
+            # clean column names and string values
+            df.columns = df.columns.str.strip()
+            for col in df.select_dtypes(include="object").columns:
+                df[col] = df[col].astype(str).str.strip()
+
+            desired_cols = [
+                "Gene",
+                "Cluster",
+                "TF",
+                "Motif",
+                "Prox Motif count",
+                "Prox Bg count",
+                "Prox Log2FC",
+                "Prox p-value adj",
+                "Dist Motif count",
+                "Dist Bg count",
+                "Dist Log2FC",
+                "Dist p-value adj",
+                "Prom Motif count",
+                "FP Score",
+                "Bg FP Score",
+                "FP p-value adj",
+                "Bg Size",
+                "Flank sd",
+                "Bg Flank sd",
+                "Left Flank != 0",
+                "Right Flank != 0",
+            ]
+
+            existing_cols = [col for col in desired_cols if col in df.columns]
+            remaining_cols = [col for col in df.columns if col not in existing_cols]
+            df = df[existing_cols + remaining_cols]
+
+            for col in [
+                "Cluster",
+                "Prox Motif count",
+                "Prox Bg count",
+                "Prox Log2FC",
+                "Prox p-value adj",
+                "Dist Motif count",
+                "Dist Bg count",
+                "Dist Log2FC",
+                "Dist p-value adj",
+                "Prom Motif count",
+                "FP Score",
+                "Bg FP Score",
+                "FP p-value adj",
+                "Bg Size",
+                "Flank sd",
+                "Bg Flank sd",
+                "Left Flank != 0",
+                "Right Flank != 0",
+            ]:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            if "motif_stats" in adata.uns:
+                log_message(
+                    "adata.uns['motif_stats'] is overwritten.",
+                    logfile,
+                    2
+                )
+
+            motif_stats_dict = df.to_dict(orient="list")
+            adata.uns["motif_stats"] = df
+            adata.uns["motif_stats_dict"] = motif_stats_dict
+            log_message(
+                "motif_stats added to adata.uns['motif_stats']",
+                logfile,
+                2
+            )
+        
         if filename.lower() == "chromvar_scores.csv":
             file_path = os.path.join(scores_path, filename)
             chromvar_scores = pd.read_csv(file_path, index_col=0)

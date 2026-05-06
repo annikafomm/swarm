@@ -198,7 +198,8 @@
       <div class="section" style="margin-top:10px;">
         <label>Upload custom gene list (.txt / .csv / .tsv):</label>
         <div class="file">
-          <input id="geneListMultiome" type="file" (change)="onFileSelected($event, 'geneList')" accept=".txt,.csv,.tsv">
+          <input id="geneListMultiome" type="file" (change)="onFileSelected($event, 'geneList')"
+            accept=".txt,.csv,.tsv">
           <label for="geneListMultiome" class="file-control">
             <span class="btn">Choose file</span>
             <span class="file-name" [title]="geneListFile?.name || 'No file selected'">
@@ -214,8 +215,71 @@
         <small>Optional. If left empty, the first column will be used.</small>
       </div>
     </div>
+
+
+
+    <div class="section" style="margin-top:10px;" *ngIf="useTangramMultiomeChecked()">
+      <div class="section-title">GRN Evaluation</div>
+
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="peakMotifStats">
+        Compute Peak & Motif Stats
+      </label>
+    </div>
+
+    <div formGroupName="GRNEvaluation" *ngIf="form.get('peakMotifStats')?.value">
+
+      <div class="section" style="margin-top:10px;">
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="computeGraph">
+          Compute GRN Evaluation Graph
+        </label>
+      </div>
+
+      <div class="section" style="margin-top:10px;">
+
+        <label>Annotation key (e.g. cell_type):</label>
+        <input type="text" formControlName="GRNEvaluationObsKey" placeholder="default: cell_type"
+          style="margin-bottom:10px;">
+
+        <label>Specific cell type or cluster:</label>
+        <input type="text" formControlName="GRNEvaluationCluster" placeholder="default: 0" style="margin-bottom:10px;">
+
+        <label>GRN evaluation name (optional):</label>
+        <br>
+        <span class="hint" style="color: #ff9800">Warning: Can be overwritten</span>
+        <input type="text" formControlName="GRNEvaluationName" placeholder="default: GRN_Evaluation"
+          style="margin-bottom:10px;">
+
+
+
+        <label>Gene set (comma-separated or GO ID) <span class="required">*</span>:</label>
+        <input type="text" formControlName="GRNEvaluationGeneSet" placeholder="e.g. geneA,geneB or GO:0001234"
+          style="margin-bottom:10px;">
+
+        <label style="display: flex; gap: 10px; align-items: center; margin-bottom:10px;">
+          <input type="checkbox" formControlName="GRNEvaluationUsePriorGRN">
+          Use prior GRN
+        </label>
+
+        <!-- Upload prior GRN file or choose not to upload and prior net from omnipathdb will be used-->
+        <div *ngIf="form.get('GRNEvaluation.GRNEvaluationUsePriorGRN')?.value" style="margin-top:10px;">
+          <label>Prior GRN file (.csv) or leave empty to use OmniPathDB:</label>
+          <div class="file">
+            <input id="priorGRN" type="file" (change)="onFileSelected($event, 'priorGRN')" accept=".csv">
+            <label for="priorGRN" class="file-control">
+              <span class="btn">Choose file</span>
+              <span class="file-name" [title]="priorGRNFile?.name || 'No file selected'">
+                {{ priorGRNFile?.name || 'No file selected' }}
+              </span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <!-- MULTIOME input end-->
   </div>
-  <!-- MULTIOME input end-->
 
   <!-- Scores master switches -->
   <div class="section">
