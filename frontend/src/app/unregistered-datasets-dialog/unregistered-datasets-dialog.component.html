@@ -47,8 +47,7 @@
         <ng-container matColumnDef="dataset_type">
           <th mat-header-cell *matHeaderCellDef>Type</th>
           <td mat-cell *matCellDef="let element">
-            <span class="dataset-type-badge" [ngClass]="element.dataset_type.toLowerCase()">{{ element.dataset_type
-              }}</span>
+            <span class="dataset-type-badge" [ngClass]="'type-' + element.dataset_type.toLowerCase()">{{ element.dataset_type }}</span>
           </td>
         </ng-container>
 

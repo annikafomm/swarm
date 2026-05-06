@@ -2067,7 +2067,10 @@ async def get_geneset_connections_genie(
     gene_set = adata.uns["genie_genesets"].get(
         gene_set_name, None
     )
-    gene_set = list(gene_set) + [gene_set_name]
+    if gene_set is None:
+        gene_set = [gene_set_name]
+    else:
+        gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from genie_network
     connections, slider_data = get_subnetwork_data(
