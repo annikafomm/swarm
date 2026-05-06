@@ -1,0 +1,13 @@
+name: multiome
+channels:
+  - conda-forge
+  - bioconda
+  - r
+dependencies:
+  - r-base=4.4.*
+  - r-signac
+  - r-seurat=5.3.0
+  - r-seuratobject=5.2.0
+  - r-essentials
+  - conda-forge::hdf5
+  #- r-seuratdisk not installable like this

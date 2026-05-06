@@ -23,9 +23,13 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() actionColumns: string[] = [];
   @Input() features!: any;
   @Input() updateColumn!: string;
+  @Input() datasetId?: string;
+  @Input() isLoading: boolean = false;
   @Input() emptyMessage: string = '';
+  @Input() isCompare: boolean = false;
   @Output() featuresUpdated = new EventEmitter<void>();
-
+  @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
+  @Output() geneSelectedCompare = new EventEmitter<{ gene: string; action: string }>();
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
@@ -38,6 +42,23 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   sortColumn: string | null = null;
   sortAsc: boolean = true;
   availableActionColumns: string[] = [];
+  private readonly virtualActionColumns = new Set<string>([
+    'gene_expression',
+    'chromvar_spot_scores',
+    'tf_activity_score_ulm',
+    'tf_activity_padj_ulm',
+    'pathway_activity_score_mlm',
+    'pathway_activity_padj_mlm',
+    'cell_comp_tf_activity_cosine_similarity',
+    'cell_comp_tf_activity_category',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category',
+    'ligand_receptor_NMF_factors',
+    'ligand_receptor_cosine_similarity',
+    'ligand_receptor_p_value',
+    'ligand_receptor_category'
+  ]);
 
   // Pagination
   pageSize = 6; // number of rows per page
@@ -59,7 +80,12 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   prepareTable() {
-    if (Array.isArray(this.data)) {
+    if (!this.data) {
+      this.columns = [];
+      this.rows = [];
+      return;
+    }
+    else if (Array.isArray(this.data)) {
       this.columns = [];
       this.rows = this.data.map((val) => ({
         index: val,
@@ -91,26 +117,62 @@ export class FilterableTableComponent implements OnInit, OnChanges {
       return;
     }
 
-    // Check if action columns exist in the actual data
-    if (!Array.isArray(this.data)) {
+    if ('motif_id' in this.data) {
+      this.availableActionColumns = this.actionColumns;
+    } else if (!Array.isArray(this.data)) {
       const tableData = this.data as {
         [col: string]: { [index: string]: string | number };
       };
-      this.availableActionColumns = this.actionColumns.filter(
+      const matchingColumns = this.actionColumns.filter(
         (col) => col in tableData
+      );
+      const virtualColumns = this.actionColumns.filter(
+        (col) => this.virtualActionColumns.has(col)
+      );
+
+      // Show only actually available columns, plus known virtual actions.
+      this.availableActionColumns = Array.from(
+        new Set([...matchingColumns, ...virtualColumns])
       );
     } else {
       this.availableActionColumns = this.actionColumns;
     }
-  }
 
-  hasData(): boolean {
-    if (!this.data) return false;
-    if (Array.isArray(this.data)) return this.data.length > 0;
+
+    // Check if action columns exist in the actual data
+    // if (!Array.isArray(this.data)) {
+    //   const tableData = this.data as {
+    //     [col: string]: { [index: string]: string | number };
+    //   };
+    //   this.availableActionColumns = this.actionColumns.filter(
+    //     (col) => col in tableData
+    //   );
+    // } else {
+    //   this.availableActionColumns = this.actionColumns;
+    // }
+
+
+    if (Array.isArray(this.data)) {
+      this.availableActionColumns = this.actionColumns;
+      return;
+    }
+
     const tableData = this.data as {
       [col: string]: { [index: string]: string | number };
     };
-    return Object.keys(tableData).length > 0;
+
+    this.availableActionColumns = this.actionColumns.filter((col) => {
+      if (col === 'show_on_plot') return true;
+      if (col === 'gene_expression') return true;
+      if (col === 'chromvar_spot_scores') return true;
+      if (this.virtualActionColumns.has(col)) return true;  // ADD THIS LINE
+
+      return col in tableData;
+    });
+  }
+
+  hasData(): boolean {
+    return this.rows && this.rows.length > 0;
   }
 
   displayColumnName(col: string): string {
@@ -228,11 +290,59 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     this.sortAsc = ascending;
   }
 
+  // async fetchAndUpdate(columnName: string, index: string) {
+  //   let isGeneExpression = columnName === 'gene_expression';
+  //   let request = isGeneExpression
+  //     ? `${this.sessionService.apiUrl}/X/${index}`
+  //     : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+  //   this.sessionService
+  //     .callWithSession(() => this.http.get(request, { withCredentials: true }))
+  //     .subscribe({
+  //       next: (res) => {
+  //         const data = res as { [barcode: string]: any };
+
+  //         if (this.features) {
+  //           for (const feature of this.features) {
+  //             const barcode = feature.properties?.barcode;
+  //             if (barcode && data[barcode] !== undefined) {
+  //               feature.properties[this.updateColumn] = data[barcode];
+  //             }
+  //           }
+  //         }
+  //         if (isGeneExpression) {
+  //           console.log(`[Backend] Loaded adata[:, ${index}].X`);
+  //         } else {
+  //           console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
+  //         }
+
+  //         this.featuresUpdated.emit();
+  //       },
+  //       error: (err) => {
+  //         if (isGeneExpression) {
+  //           console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+  //         } else {
+  //           console.error(
+  //             `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
+  //             err,
+  //           );
+  //         }
+  //       },
+  //     });
+  // }
+
   async fetchAndUpdate(columnName: string, index: string) {
-    let isGeneExpression = columnName === 'gene_expression';
-    let request = isGeneExpression
-      ? `${this.sessionService.apiUrl}/X/${index}`
-      : `${this.sessionService.apiUrl}/obsm/${columnName}/${index}`;
+    const isGeneExpression = columnName === 'gene_expression';
+    const isChromvar = columnName === 'chromvar_spot_scores';
+
+    const safeIndex = encodeURIComponent(index);
+    const datasetQuery = this.datasetId ? `?dataset_id=${encodeURIComponent(this.datasetId)}` : '';
+
+    const request = isGeneExpression
+      ? `${this.sessionService.apiUrl}/X/${safeIndex}${datasetQuery}`
+      : isChromvar
+        ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}${datasetQuery}`
+        : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}${datasetQuery}`;
+
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
@@ -247,8 +357,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
               }
             }
           }
+
           if (isGeneExpression) {
             console.log(`[Backend] Loaded adata[:, ${index}].X`);
+          } else if (isChromvar) {
+            console.log(`[Backend] Loaded ChromVAR score for motif '${index}'`);
           } else {
             console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
           }
@@ -256,13 +369,19 @@ export class FilterableTableComponent implements OnInit, OnChanges {
           this.featuresUpdated.emit();
         },
         error: (err) => {
+          if (this.features) {
+            for (const feature of this.features) {
+              feature.properties[this.updateColumn] = undefined;
+            }
+            this.featuresUpdated.emit();
+          }
+
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);
+          } else if (isChromvar) {
+            console.error(`[Backend] Failed to load ChromVAR score for motif '${index}'`, err);
           } else {
-            console.error(
-              `[Backend] Failed to load adata.obsm[${columnName}][${index}]`,
-              err,
-            );
+            console.error(`[Backend] Failed to load adata.obsm[${columnName}][${index}]`, err);
           }
         },
       });
@@ -276,4 +395,95 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     const minWidth = computedStyle.getPropertyValue('--ftable-min-width').trim();
     return minWidth || '0';
   }
+
+
+  // --- ChromVAR sum state ---
+  private chromvarBaseMotif: string | null = null;
+  private sumMotifs = new Set<string>();
+
+  private getMotifId(row: any): string {
+    return String(row?.motif_id ?? row?.['motif_id']);
+  }
+
+  isSumSelected(row: any): boolean {
+    const id = this.getMotifId(row);
+    return this.sumMotifs.has(id);
+  }
+
+  toggleSumMotif(row: any, checked: boolean): void {
+    const id = this.getMotifId(row);
+    if (!id) return;
+
+    if (checked) this.sumMotifs.add(id);
+    else this.sumMotifs.delete(id);
+
+    // If user already clicked "Show" for a base motif, update the displayed score immediately
+    this.updateChromvarCombinedIfReady();
+  }
+
+  async onShowAction(action: string, row: any): Promise<void> {
+    const geneName = String(row.index);
+
+    // DGEA-only UI action:
+    // do NOT call backend here, let the parent convert it to gene_expression
+    if (action === 'show_on_plot') {
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
+      return;
+    }
+
+    if (action === 'chromvar_spot_scores') {
+      this.chromvarBaseMotif = this.getMotifId(row);
+      this.updateChromvarCombinedIfReady(true);
+
+      if (this.isCompare) {
+        this.geneSelectedCompare.emit({ gene: geneName, action });
+      } else {
+        this.geneSelected.emit({ gene: geneName, action });
+      }
+      return;
+    }
+
+    if (this.isCompare) {
+      this.geneSelectedCompare.emit({ gene: geneName, action });
+    } else {
+      this.geneSelected.emit({ gene: geneName, action });
+    }
+
+    this.fetchAndUpdate(action, geneName);
+  }
+
+  private updateChromvarCombinedIfReady(force = false): void {
+    if (!this.chromvarBaseMotif) {
+      // Nothing to show yet until user clicks "Show"
+      return;
+    }
+
+    // combined list = base motif + all checked motifs
+    const motifs = new Set<string>([this.chromvarBaseMotif, ...this.sumMotifs]);
+
+    // If you want "Show" to always hit backend even with no boxes ticked, keep force=true
+    if (!force && motifs.size === 0) return;
+
+    const index = Array.from(motifs).join(','); // backend will split and sum
+    void this.fetchAndUpdate('chromvar_spot_scores', index);
+  }
+
+  get selectedSumCount(): number {
+    return this.sumMotifs.size;
+  }
+
+  showSumChromvar(): void {
+    const motifs = Array.from(this.sumMotifs);
+    if (!motifs.length) return;
+
+    //  sum-only (ignores base motif)
+    void this.fetchAndUpdate('chromvar_spot_scores', motifs.join(','));
+
+  }
+
+
 }

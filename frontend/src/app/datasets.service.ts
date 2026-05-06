@@ -4,15 +4,54 @@ import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 
 export interface Dataset {
+  // Basic fields
   id: string;
   alias: string;
   adata_path: string;
+  type: 'builtin' | 'uploaded';
+  user?: string;
+  created_at?: string;
+  dataset_type?: string; // e.g., "Visium", "Xenium", "Multiome"
+
+  // Core spatial/network paths
   tangram_adata_path?: string;
   genie_network_path?: string;
   sponge_network_path?: string;
   geojson_path?: string;
-  type: 'builtin' | 'uploaded';
-  created_at?: string;
+  tf_graph_path?: string;
+
+  // Multiome: Always-present outputs
+  adata_st_scores_path?: string;      // Spatial transcriptomics with scores (H5AD)
+  adata_tg_scores_path?: string;      // Tangram-projected data with scores (H5AD)
+  adata_map_path?: string;            // Tangram mapping matrix (cells × spots, H5AD)
+  adata_map_X_csv_path?: string;      // Tangram mapping as CSV
+  adata_map_var_csv_path?: string;    // Spot metadata from Tangram
+  calc_scores_log_path?: string;      // Pipeline execution log
+  global_motif_analysis_path?: string; // Complete Seurat multiome object (RDS)
+
+  // Multiome: Conditional outputs
+  motif_to_tf_csv_path?: string;      // Motif ID ↔ TF name mapping
+  spot_obj_chromvar_path?: string;    // Spot-level chromVAR object (RDS)
+  spot_obj_footprints_path?: string;  // Spot-level footprints (RDS)
+  dissociated_obj_footprints_path?: string; // Dissociated cell footprints (RDS)
+  chromvar_scores_csv_path?: string;  // chromVAR deviation scores (cells × motifs)
+  diff_motif_activity_csv_paths?: { [comparison: string]: string }; // comparison → CSV path mapping
+  footprint_pdf_paths?: { [motif_id: string]: string }; // motif_id → PDF path mapping
+  grn_evaluation_name: string; // Name of the GRN evaluation (if performed)
+
+  // Multiome: Feature flags indicating which pipeline steps were executed
+  use_chromvar?: boolean;
+  use_differential_motif_activity?: boolean;
+  use_footprinting?: boolean;
+  use_moranI?: boolean;
+  use_gearyC?: boolean;
+
+  // Visium-specific flag
+  use_tangram?: boolean;
+  use_multiome?: boolean;
+
+  // Deprecated: kept for backward compatibility
+  footprint_list?: string[];
 }
 
 @Injectable({
@@ -113,5 +152,24 @@ export class DatasetService {
         error: (err) => console.error('✗ Failed to load SPONGE network:', err)
       });
     }
+  }
+
+  // Load unregistered datasets from uploads folder
+  loadUnregisteredDatasets(): Observable<any> {
+    return this.http.get<any>('/api/unregistered_datasets', { withCredentials: true });
+  }
+
+  // Register an unregistered dataset
+  registerDataset(datasetId: string): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('dataset_id', datasetId);
+    return this.http.post<any>(`/api/register_dataset?${params.toString()}`, {}, { withCredentials: true });
+  }
+
+  // Delete an unregistered dataset
+  deleteUnregisteredDataset(datasetId: string): Observable<any> {
+    const params = new URLSearchParams();
+    params.set('dataset_id', datasetId);
+    return this.http.post<any>(`/api/delete_unregistered_dataset?${params.toString()}`, {}, { withCredentials: true });
   }
 }

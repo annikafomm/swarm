@@ -1,0 +1,122 @@
+<div mat-dialog-container class="unregistered-datasets-dialog">
+  <h2 mat-dialog-title>Recover Previous Datasets</h2>
+
+  <mat-dialog-content>
+    <p class="dialog-description">
+      The following datasets from previous sessions are available in the uploads folder.
+      You can register them to make them available in the application or delete them.
+    </p>
+
+    <div *ngIf="isLoading" class="loading-container">
+      <mat-spinner [diameter]="40"></mat-spinner>
+      <p>Loading datasets...</p>
+    </div>
+
+    <div *ngIf="!isLoading && datasets.length === 0" class="empty-state">
+      <p>No datasets available in the uploads folder. All your previous uploads have been registered or removed.
+      </p>
+    </div>
+
+    <div *ngIf="!isLoading && datasets.length > 0" class="datasets-table-container">
+      <table mat-table [dataSource]="datasets" class="datasets-table">
+        <!-- Checkbox Column -->
+        <ng-container matColumnDef="checkbox">
+          <th mat-header-cell *matHeaderCellDef>
+            <mat-checkbox [checked]="isAllSelected()" (change)="toggleAllSelection()"
+              [indeterminate]="selectedDatasets.size > 0 && !isAllSelected()">
+            </mat-checkbox>
+          </th>
+          <td mat-cell *matCellDef="let element">
+            <mat-checkbox [checked]="isDatasetSelected(element.dataset_id)"
+              (change)="toggleDatasetSelection(element.dataset_id)" [disabled]="isDatasetIncomplete(element)"
+              [matTooltip]="isDatasetIncomplete(element) ? 'Dataset is incomplete. Cannot register.' : ''">
+            </mat-checkbox>
+          </td>
+        </ng-container>
+
+        <!-- Alias Column -->
+        <ng-container matColumnDef="alias">
+          <th mat-header-cell *matHeaderCellDef>Dataset Name</th>
+          <td mat-cell *matCellDef="let element">
+            <div class="dataset-name">{{ element.alias }}</div>
+            <div class="dataset-id">{{ element.dataset_id }}</div>
+          </td>
+        </ng-container>
+
+        <!-- Type Column -->
+        <ng-container matColumnDef="dataset_type">
+          <th mat-header-cell *matHeaderCellDef>Type</th>
+          <td mat-cell *matCellDef="let element">
+            <span class="dataset-type-badge" [ngClass]="'type-' + element.dataset_type.toLowerCase()">{{ element.dataset_type }}</span>
+          </td>
+        </ng-container>
+
+        <!-- Created Date Column -->
+        <ng-container matColumnDef="created_at">
+          <th mat-header-cell *matHeaderCellDef>Created</th>
+          <td mat-cell *matCellDef="let element">
+            {{ element.created_at | date:'short' }}
+          </td>
+        </ng-container>
+
+        <!-- Status Column -->
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>Status</th>
+          <td mat-cell *matCellDef="let element">
+            <span [ngClass]="getStatusBadgeClass(element.status)" [matTooltip]="getStatusTooltip(element)">
+              <span *ngIf="element.status === 'ready'">✓ Ready</span>
+              <span *ngIf="element.status === 'missing_files'">✗ Incomplete</span>
+            </span>
+            <div *ngIf="isDatasetIncomplete(element)" class="missing-files-note">
+              Missing: {{ element.missing_files }}
+            </div>
+          </td>
+        </ng-container>
+
+        <!-- Actions Column -->
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>Actions</th>
+          <td mat-cell *matCellDef="let element">
+            <div class="action-buttons">
+              <button mat-icon-button (click)="registerDataset(element)"
+                [disabled]="isDatasetIncomplete(element) || actionInProgress.has(element.dataset_id)"
+                [matTooltip]="isDatasetIncomplete(element) ? 'Cannot register incomplete dataset. ' + (element.missing_files || '') : 'Register this dataset'">
+                <mat-icon>
+                  <span *ngIf="actionInProgress.has(element.dataset_id)" class="spinner-icon">↻</span>
+                  <span *ngIf="!actionInProgress.has(element.dataset_id)">check_circle</span>
+                </mat-icon>
+              </button>
+              <button mat-icon-button color="warn" (click)="deleteDataset(element)"
+                [disabled]="actionInProgress.has(element.dataset_id)" matTooltip="Delete this dataset">
+                <mat-icon>
+                  <span *ngIf="actionInProgress.has(element.dataset_id)" class="spinner-icon">↻</span>
+                  <span *ngIf="!actionInProgress.has(element.dataset_id)">delete</span>
+                </mat-icon>
+              </button>
+            </div>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+      </table>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end" *ngIf="!isLoading && datasets.length > 0">
+    <button mat-stroked-button (click)="deleteSelectedDatasets()" [disabled]="selectedDatasets.size === 0" color="warn">
+      Delete Selected
+    </button>
+    <button mat-raised-button (click)="registerSelectedDatasets()" [disabled]="selectedDatasets.size === 0"
+      color="primary">
+      Register Selected
+    </button>
+    <button mat-raised-button (click)="close()" color="accent">
+      Close
+    </button>
+  </mat-dialog-actions>
+
+  <mat-dialog-actions align="end" *ngIf="!isLoading && datasets.length === 0">
+    <button mat-raised-button (click)="close()">Close</button>
+  </mat-dialog-actions>
+</div>

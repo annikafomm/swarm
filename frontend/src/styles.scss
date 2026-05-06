@@ -33,11 +33,11 @@ body {
 .mat-mdc-flat-button.mat-accent,
 .mat-mdc-icon-button.mat-accent,
 .mat-mdc-stroked-button.mat-accent {
-  --mdc-theme-secondary: #ffeb3b !important;
+  --mdc-theme-secondary: #fabc36 !important;
 
   &.mdc-button--raised,
   &.mdc-button--unelevated {
-    background-color: #ffeb3b !important;
+    background-color: #fabc36 !important;
     color: black !important;
   }
 }
@@ -59,7 +59,7 @@ body {
 }
 
 .mat-form-field-focus-overlay {
-  background-color: rgba(255, 235, 59, 0.08) !important;
+  background-color: rgba(250, 188, 54, 0.08) !important;
 }
 
 /* Tabs - yellow indicator and lines only, text always black */
@@ -93,11 +93,11 @@ body {
 }
 
 .mdc-tab-indicator__content--underline {
-  border-bottom-color: #ffeb3b !important;
+  border-bottom-color: #fabc36 !important;
 }
 
 .mat-mdc-tab-header-pagination::before {
-  border-color: #ffeb3b !important;
+  border-color: #fabc36 !important;
 }
 
 /* Icons - orange for primary, yellow only for icons/svgs */
@@ -143,7 +143,7 @@ svg.mat-accent {
 
 /* Material ripple effect */
 .mat-ripple-element {
-  background-color: rgba(255, 235, 59, 0.2) !important;
+  background-color: rgba(250, 188, 54, 0.2) !important;
 }
 
 /* Dividers and lines - grey (Material default) */
@@ -212,21 +212,45 @@ body,
   color: #1a1a1a !important;
 }
 
-/* Custom Shepherd Theme for SWARM with Yellow Aesthetic */
+/* Custom Shepherd Theme for SWARM with Bee Vibe Colors */
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Varela+Round&display=swap');
 
 .shepherd-theme-custom {
 
   /* Container and tooltip styling */
   .shepherd-content {
-    background: linear-gradient(135deg, #fefef9 0%, #fffef0 100%);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(240, 228, 66, 0.25), 0 0 0 1px rgba(240, 228, 66, 0.1);
-    border: 3px solid #f0e442;
+    background: linear-gradient(135deg, #fffef9 0%, #fff9f0 100%);
+    border-radius: 0px;
+    box-shadow: 0 8px 32px rgba(255, 152, 0, 0.25), 0 0 0 1px rgba(255, 152, 0, 0.1);
+    border: 3px solid #ff9800;
     color: #1a1a1a;
     font-family: 'Varela Round', 'Fredoka', sans-serif;
-    overflow: hidden;
+    overflow: visible;
     animation: slideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+  }
+
+  .shepherd-content {
+    --bee-top: -50px;
+    --bee-bottom: auto;
+    --bee-left: auto;
+    --bee-right: -50px;
+  }
+
+  .shepherd-content::after {
+    content: '';
+    position: absolute;
+    width: 100px;
+    height: 100px;
+    background-image: url('/single_bee.png');
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0.9;
+    animation: beeFloat 3s ease-in-out infinite;
+    transform: rotate(-15deg) scaleX(-1);
+    z-index: 10;
+    top: -50px;
+    right: -50px;
   }
 
   @keyframes slideIn {
@@ -243,7 +267,7 @@ body,
 
   /* Title styling */
   .shepherd-title {
-    background: linear-gradient(135deg, #f0e442 0%, #ffd966 50%, #ffed4e 100%);
+    background: linear-gradient(135deg, #ff9800 0%, #ffb74d 50%, #ffca28 100%);
     color: #1a1a1a;
     font-size: 1.4rem;
     font-weight: 700;
@@ -258,7 +282,7 @@ body,
     gap: 0.8rem;
 
     &::before {
-      content: '✨';
+      content: '🐝';
       font-size: 1.3rem;
       animation: bounce 2s ease-in-out infinite;
     }
@@ -276,6 +300,56 @@ body,
     }
   }
 
+  /* Bee helper styling */
+  .shepherd-bee-helper {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    opacity: 0.9;
+    pointer-events: none;
+    animation: beeFloat 3s ease-in-out infinite;
+  }
+
+  .shepherd-bee-helper.top-right {
+    top: -30px;
+    right: -20px;
+    transform: rotate(-15deg) scaleX(-1);
+  }
+
+  .shepherd-bee-helper.bottom-left {
+    bottom: -20px;
+    left: -30px;
+    transform: rotate(20deg);
+  }
+
+  @keyframes beeFloat {
+
+    0%,
+    100% {
+      transform: translateY(0px) rotate(-15deg) scaleX(-1);
+    }
+
+    50% {
+      transform: translateY(-10px) rotate(-15deg) scaleX(-1);
+    }
+  }
+
+  .shepherd-bee-helper.bottom-left {
+    animation: beeFloatLeft 3s ease-in-out infinite;
+  }
+
+  @keyframes beeFloatLeft {
+
+    0%,
+    100% {
+      transform: translateY(0px) rotate(20deg);
+    }
+
+    50% {
+      transform: translateY(-10px) rotate(20deg);
+    }
+  }
+
   /* Text/description styling */
   .shepherd-text {
     padding: 1.2rem 1.5rem;
@@ -288,7 +362,7 @@ body,
 
   /* Button styling */
   .shepherd-button {
-    background: linear-gradient(135deg, #f0e442 0%, #ffd966 100%);
+    background: linear-gradient(135deg, #ffeb3b 0%, #ffd966 100%);
     color: #1a1a1a;
     border: none;
     border-radius: 12px;
@@ -298,7 +372,7 @@ body,
     transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
     font-size: 1rem;
     font-family: 'Fredoka', sans-serif;
-    box-shadow: 0 4px 12px rgba(240, 228, 66, 0.3);
+    box-shadow: 0 4px 12px rgba(255, 235, 59, 0.3);
     position: relative;
     overflow: hidden;
 
@@ -315,8 +389,8 @@ body,
     }
 
     &:hover {
-      background: linear-gradient(135deg, #ffd966 0%, #ffed4e 100%);
-      box-shadow: 0 8px 24px rgba(240, 228, 66, 0.4);
+      background: linear-gradient(135deg, #ffd966 0%, #ffb74d 100%);
+      box-shadow: 0 8px 24px rgba(255, 152, 0, 0.4);
       transform: translateY(-4px) scale(1.05);
       letter-spacing: 0.5px;
 
@@ -336,27 +410,28 @@ body,
     gap: 1rem;
     padding: 1.2rem 1.5rem;
     justify-content: flex-end;
-    background: linear-gradient(90deg, #fafaf6 0%, #fffef0 100%);
-    border-top: 3px solid #f0e442;
+    background: linear-gradient(90deg, #fffaf6 0%, #fff9f0 100%);
+    border-top: 3px solid #ffeb3b;
   }
 
   /* Arrow styling */
   .shepherd-arrow {
-    border-color: #f0e442;
-    filter: drop-shadow(0 4px 8px rgba(240, 228, 66, 0.2));
+    border-color: #ff9800;
+    filter: drop-shadow(0 4px 8px rgba(255, 152, 0, 0.2));
   }
 
   /* Arrow after pseudo element */
   .shepherd-arrow::after {
-    border-color: transparent transparent #fefef9 transparent;
+    border-color: transparent transparent #fffef9 transparent;
   }
 
   /* Target highlight styling */
   .shepherd-target.shepherd-enabled {
     .shepherd-enabled::after {
-      background-color: rgba(240, 228, 66, 0.15);
-      border: 3px solid #f0e442;
-      box-shadow: 0 0 20px rgba(240, 228, 66, 0.3);
+      background-color: rgba(255, 235, 59, 0.15);
+      border: 3px solid #ffeb3b;
+      border-radius: 0px;
+      box-shadow: 0 0 20px rgba(255, 235, 59, 0.3);
     }
   }
 
@@ -407,17 +482,23 @@ body,
   .shepherd-button:not(:last-child) {
     background: transparent;
     color: #1a1a1a;
-    border: 3px solid #f0e442;
+    border: 3px solid #ff9800;
     box-shadow: none;
 
     &:hover {
-      background: rgba(240, 228, 66, 0.15);
-      border-color: #ffd966;
-      box-shadow: 0 4px 12px rgba(240, 228, 66, 0.2);
+      background: rgba(255, 152, 0, 0.15);
+      border-color: #ffb74d;
+      box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
     }
   }
 
   .shepherd-button:last-child {
-    background: linear-gradient(135deg, #f0e442 0%, #ffd966 100%);
+    background: linear-gradient(135deg, #ffc107 0%, #ffb74d 100%);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+  }
+
+  .shepherd-button:last-child:hover {
+    background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
+    box-shadow: 0 8px 24px rgba(255, 152, 0, 0.4);
   }
 }

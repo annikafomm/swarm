@@ -5,12 +5,19 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import simplejson as json
+from scipy import sparse
+
+# python ../backend/visium_to_geojson.py --adata ../backend/uploads/job_1764657831787_merit/junkDNA420/adata_st_scores.h5ad --outpath /workspaces/swarm/backend/uploads/job_1764657831787_merit/junkDNA420/hexagons.geojson
 
 grn_score_names = (
     "aucell_scores",
     "spongeffects_GSVA_scores",
     "spongeffects_ssGSEA_scores",
     "viper_scores",
+    "grid_viper_scores",
+    "grid_aucell_scores",
+    "grid_spongeffects_GSVA_scores",
+    "grid_spongeffects_ssGSEA_scores",
 )
 
 genie3_score_names = [name + "_genie3" for name in grn_score_names]
@@ -21,6 +28,52 @@ sponge_score_names = [
 ]
 
 genewise_scores = ["moranI", "gearyC"]
+motifwise_scores = ["chromvar_moranI", "chromvar_gearyC"]
+cluster_wise_scores = ["diff_motif_activity_top_motifs"]
+
+
+def _extract_autocorr_stat(autocorr_obj, preferred_col: str) -> dict[str, float]:
+    if autocorr_obj is None:
+        return {}
+
+    if not isinstance(autocorr_obj, pd.DataFrame):
+        autocorr_obj = pd.DataFrame(autocorr_obj)
+
+    if autocorr_obj.empty:
+        return {}
+
+    if preferred_col in autocorr_obj.columns:
+        col = preferred_col
+    else:
+        numeric_cols = [c for c in autocorr_obj.columns if pd.api.types.is_numeric_dtype(autocorr_obj[c])]
+        if len(numeric_cols) == 0:
+            return {}
+        col = numeric_cols[0]
+
+    series = autocorr_obj[col]
+    return {str(k): float(v) for k, v in series.items() if pd.notna(v)}
+
+
+def _make_json_serializable(obj):
+    """Recursively convert numpy arrays and types to JSON-serializable Python types."""
+    if isinstance(obj, dict):
+        return {str(k): _make_json_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_make_json_serializable(item) for item in obj]
+    elif isinstance(obj, pd.DataFrame):
+        return obj.to_dict()
+    elif isinstance(obj, pd.Series):
+        return obj.to_dict()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, (np.integer, np.floating)):
+        return obj.item()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, (int, float, str, bool, type(None))):
+        return obj
+    else:
+        return str(obj)
 
 
 class Hexagons:
@@ -36,6 +89,7 @@ class Hexagons:
         radius=5,
         scale=0.1,
         data_type="visium",
+        motif_groups=None,
     ):
 
         self.anndata = anndata
@@ -44,6 +98,14 @@ class Hexagons:
         self.geometry_type = "Polygon"
         self.scale = scale
         self.data_type = data_type
+
+        self.global_scores = {}
+        self.motif_groups = motif_groups or {}
+        self.motif_names = list(anndata.uns["chromvar_motifs"]) if "chromvar_motifs" in anndata.uns else []
+        # mapping for case-insensitive gene lookups
+        self.var_upper_to_name = {
+            g.upper(): g for g in self.anndata.var_names
+        }
         self.coordinates, self.centers = self.parse_coordinates()
         self.obs = self.parse_obs()
 
@@ -67,36 +129,51 @@ class Hexagons:
         ] + [(x + radius * np.cos(0), y + radius * np.sin(0))]
 
     def parse_coordinates(self):
+        anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
+        barcodes = self.anndata.obs.index
+
+        hex_coords = []
+        coords = []
         if self.data_type == "visium":
-            anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
-            hex_coords = []
-            coords = []
             for coord_tuple in anndata_spatial_coordinates:
                 x, y = coord_tuple
                 hexagon = self.hexagon_points(x=x, y=y, radius=self.radius)
                 hex_coords.append(hexagon)
                 coords.append([int(x) * self.scale, int(y) * self.scale])
             barcodes = self.anndata.obs.index
-            # Convert to list of tuples (x, y)
-            hex_coordinates_dict = [
-                {barcode: hex_coord}
-                for hex_coord, barcode in zip(hex_coords, barcodes)
-            ]
-            coordinates_dict = {
-                barcode: coord for barcode, coord in zip(barcodes, coords)
-            }
-            return hex_coordinates_dict, coordinates_dict
-        if self.data_type == "xenium":
-            print("Xenium data type is not implemented yet.")
-            return [], {}
+
+        # Xenium mode:
+        # Render each cell as a small hexagon instead of a large spot.
+        # Grid-level scores are already broadcasted into obs/obsm and will be attached
+        # to each cell feature for visualization.
+
+        elif self.data_type == "xenium":
+            small_r = getattr(self, "cell_radius", None)
+            if small_r is None:
+                small_r = self.radius * 0.2
+
+            for coord_tuple in anndata_spatial_coordinates:
+                x, y = coord_tuple
+                hexagon = self.hexagon_points(x=x, y=y, radius=small_r)
+                hex_coords.append(hexagon)
+                coords.append([float(x) * self.scale, float(y) * self.scale])
         else:
             raise ValueError(
                 f"Unsupported data type: {self.data_type}. Supported types are 'visium' and 'xenium'."
             )
+        hex_coordinates_dict = [
+            {barcode: hex_coord}
+            for hex_coord, barcode in zip(hex_coords, barcodes)
+        ]
+        coordinates_dict = {
+            barcode: coord for barcode, coord in zip(barcodes, coords)
+        }
+
+        return hex_coordinates_dict, coordinates_dict
 
     def get_obsm(self, key, barcode, col=None, dtype=float):
         """
-        Return `adata.obsm[key].loc[barcode, col]` where col defaults to the
+        Return 'adata.obsm[key].loc[barcode, col]' where col defaults to the
         first column of the dataframe.
         """
         if col is None:
@@ -105,13 +182,26 @@ class Hexagons:
 
     def get_X(self, barcode, gene=None, dtype=float):
         """
-        Return `adata[barcode, gene].X.toarray()` where gene defaults to the
+        Return 'adata[barcode, gene].X.toarray()' where gene defaults to the
         first gene in var.index. If the result is a single number, return as
         dtype.
         """
         if gene is None:
             gene = self.anndata.var.index[0]
-        expressions = self.anndata[barcode, gene].X.toarray()
+
+        original_gene = self.var_upper_to_name.get(gene.upper(), gene)
+        X = self.anndata[barcode, original_gene].X
+
+        #X = self.anndata[barcode, gene].X
+
+        # Handle both sparse and dense matrices
+        if sparse.issparse(X):
+            expressions = X.toarray()
+        else:
+            expressions = np.asarray(X)
+
+        #original_gene = self.var_upper_to_name.get(gene.upper())
+        #expressions = self.anndata[barcode, original_gene].X.toarray()
         if expressions.size == 1:
             return dtype(expressions.flatten()[0])
 
@@ -136,34 +226,6 @@ class Hexagons:
                 "barcode": barcode,
             }
 
-            leiden_cluster = (
-                int(self.anndata.obs.get("leiden", {}).get(barcode, -1))
-                if "leiden" in self.anndata.obs.columns
-                else None
-            )
-
-            if leiden_cluster is not None:
-                property_dict["leiden"] = leiden_cluster
-
-                if "leiden_centrality_scores" in self.anndata.uns:
-                    property_dict["leiden_centrality"] = (
-                        self.anndata.uns["leiden_centrality_scores"]
-                        .iloc[leiden_cluster]
-                        .to_dict()
-                    )
-
-                if "leiden_co_occurrence" in self.anndata.uns:
-                    property_dict["leiden_co_occurrence"] = self.anndata.uns[
-                        "leiden_co_occurrence"
-                    ]["occ"][leiden_cluster].tolist()
-
-                if "leiden_nhood_enrichment" in self.anndata.uns:
-                    property_dict["leiden_nhood_enrichment"] = (
-                        self.anndata.uns["leiden_nhood_enrichment"]["zscore"][
-                            leiden_cluster
-                        ].tolist()
-                    )
-
             property_dict["centroid"] = (
                 self.centers[barcode] if barcode in self.centers else None
             )
@@ -176,8 +238,6 @@ class Hexagons:
                         score
                     ].loc[barcode, first_col]
                     break
-
-
 
 
             score_mappings = {
@@ -207,6 +267,43 @@ class Hexagons:
                     )
                     break
 
+
+            # Add motif group scores if chromvar_activity is available
+            if self.motif_groups and "chromvar_activity" in self.anndata.obsm:
+                chromvar_df = self.anndata.obsm["chromvar_activity"]
+
+                # case-insensitive mapping motif_name_upper -> actual column name
+                motif_upper_to_col = {
+                    m.upper(): m for m in chromvar_df.columns
+                }
+
+                # total sum of all motifs
+                all_cols = [
+                    motif_upper_to_col.get(motif_name.upper())
+                    for motif_name in self.motif_names
+                ]
+                all_cols = [c for c in all_cols if c is not None]
+
+                total_sum = float(chromvar_df.loc[barcode, all_cols].sum()) if all_cols else 0.0
+                property_dict["chromvar_total_sum"] = total_sum
+
+                for group_name, motif_list in self.motif_groups.items():
+                    cols_for_group = []
+                    for motif_name in motif_list:
+                        col = motif_upper_to_col.get(motif_name.upper())
+                        if col is not None:
+                            cols_for_group.append(col)
+
+                    if not cols_for_group:
+                        # none of the motifs in this group found, skip
+                        continue
+
+                    group_score = float(
+                        chromvar_df.loc[barcode, cols_for_group].sum()
+                    )
+                    property_dict[f"motif_{group_name}"] = group_score
+
+
             # Add additional properties from obs
             for key, value in self.obs[barcode].items():
                 if value is None or value == "":
@@ -231,6 +328,11 @@ class Hexagons:
 
 
 def load_adata(path: str) -> sc.AnnData:
+    # NOTE (Xenium):
+    # This script expects CELL-LEVEL AnnData with broadcasted grid scores
+    # (e.g. xenium_cells_with_grid_scores.h5ad).
+    # Passing a grid-level AnnData (st_grid.h5ad) will make Xenium look like Visium.
+
     spatial_data = sc.read_h5ad(path)
 
     # Reconstruct liana columns for placeholder fields in the geojson
@@ -249,6 +351,16 @@ def load_adata(path: str) -> sc.AnnData:
                 columns=spatial_data.uns["liana_columns"][col_names_key],
                 index=spatial_data.obs_names,
             )
+    if (
+        "chromvar_spot_scores" in spatial_data.obsm
+        and "chromvar_motifs" in spatial_data.uns
+    ):
+        motif_names = list(spatial_data.uns["chromvar_motifs"])
+        spatial_data.obsm["chromvar_activity"] = pd.DataFrame(
+            spatial_data.obsm["chromvar_spot_scores"],
+            index=spatial_data.obs_names,
+            columns=motif_names,
+        )
 
     return spatial_data
 
@@ -291,8 +403,21 @@ if __name__ == "__main__":
         help="Output path for the GeoJSON file.",
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--motif_groups",
+        type=str,
+        default=None,#"../backend/data/motif_groups.json",
+        # make this a dict
+            #     motif_groups = {
+            #       "GATA_like": ["m1", "m4"],
+            #       "RUNX": ["m3"],
+            #       "MYC_cluster": ["m10", "m20"],
+            #       }
+        help="JSON dict: {group_name: [motif1, motif2, ...]} for chromVAR motif groups.",
+    )
 
+
+    args = parser.parse_args()
     spatial_data = load_adata(args.adata)
 
     # Sort global liana scores by cosine similarity std
@@ -302,6 +427,8 @@ if __name__ == "__main__":
         "cell_comp_tf_activity_global_scores": "cosine_similarity_std",
         "moranI": "I",
         "gearyC": "C",
+        "chromvar_moranI": "I",
+        "chromvar_gearyC": "C",
     }
     for global_score, sort_key in global_scores_sort_keys.items():
         if global_score in spatial_data.uns:
@@ -309,26 +436,135 @@ if __name__ == "__main__":
                 global_score
             ].sort_values(sort_key, ascending=False)
 
+
+    if args.motif_groups is not None:
+        motif_groups = json.loads(args.motif_groups)
+    else:
+        motif_groups = {"GATA_like": [
+                            "MA0076.3",
+                            "MA0079.5"
+                        ],
+                        "RUNX_like": [
+                            "MA0003.5"
+                        ],
+                        "MYC_cluster": [
+                            "MA0140.3",
+                            "MA0141.4"
+                        ],
+                        "NFkB_like": [
+                            "MA0105.4",
+                            "MA0107.1"
+                        ]
+                        }
+
+
+        #motif_groups = json.loads(args.motif_groups)
+
     hexagons = Hexagons(
         spatial_data,
         radius=args.radius,
         scale=args.scale,
         data_type=args.data_type,
+        motif_groups=motif_groups,
     )
+
+    print("uns keys:", sorted([k for k in spatial_data.uns.keys()
+                          if "moran" in k.lower() or "geary" in k.lower()]))
 
     geojson_data = hexagons.to_geojson()
 
     # Add meta information like ligand receptor pair names for api fetching
     meta_dict = {}
-    for global_score in global_scores_sort_keys:
-        if global_score in spatial_data.uns:
-            meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
-        elif hasattr(hexagons, 'global_scores') and global_score in hexagons.global_scores:
-            meta_dict[global_score] = hexagons.global_scores[global_score]
+
+    meta_dict["leiden_cluster_annotations"] = {}
+
+    if "leiden" in spatial_data.obs.columns:
+        cluster_ids = sorted(
+            spatial_data.obs["leiden"].dropna().astype(int).unique().tolist()
+        )
+
+        for cluster_id in cluster_ids:
+            cluster_key = str(cluster_id)
+            meta_dict["leiden_cluster_annotations"][cluster_key] = {}
+
+            # Centrality scores for this cluster
+            if "leiden_centrality_scores" in spatial_data.uns:
+                meta_dict["leiden_cluster_annotations"][cluster_key]["centrality"] = (
+                    spatial_data.uns["leiden_centrality_scores"]
+                    .iloc[cluster_id]
+                    .to_dict()
+                )
+
+            # Co-occurrence scores for this cluster
+            if "leiden_co_occurrence" in spatial_data.uns:
+                occ = spatial_data.uns["leiden_co_occurrence"].get("occ")
+                if occ is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["co_occurrence"] = (
+                        occ[cluster_id].tolist()
+                    )
+
+            # Neighborhood enrichment scores for this cluster
+            if "leiden_nhood_enrichment" in spatial_data.uns:
+                zscore = spatial_data.uns["leiden_nhood_enrichment"].get("zscore")
+                if zscore is not None:
+                    meta_dict["leiden_cluster_annotations"][cluster_key]["neighborhood_enrichment"] = (
+                        zscore[cluster_id].tolist()
+                    )
+
+    if any(gs in spatial_data.uns for gs in global_scores_sort_keys):
+        for global_score in global_scores_sort_keys:
+            if global_score in spatial_data.uns:
+                meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
 
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
 
+    meta_dict['global_regulatory_moranI_genie3'] = {}
+    meta_dict['global_regulatory_moranI_sponge'] = {}
+    meta_dict['global_regulatory_gearyC_genie3'] = {}
+    meta_dict['global_regulatory_gearyC_sponge'] = {}
+
+    for score in genie3_score_names + sponge_score_names:
+        if score not in spatial_data.obsm:
+            continue
+
+        moran_key = f"{score}_moranI"
+        geary_key = f"{score}_gearyC"
+
+        moran_stats = _extract_autocorr_stat(spatial_data.uns.get(moran_key), "I")
+        geary_stats = _extract_autocorr_stat(spatial_data.uns.get(geary_key), "C")
+
+        if score.endswith('_genie3'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_genie3'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_genie3'][score] = geary_stats
+        elif score.endswith('_sponge'):
+            if len(moran_stats) > 0:
+                meta_dict['global_regulatory_moranI_sponge'][score] = moran_stats
+            if len(geary_stats) > 0:
+                meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
+
+
+    # Add peak and motif statistics
+    # New structure: uns['peak_stats'][grn_evaluation_name] = {data}
+    # uns['motif_stats'][grn_evaluation_name] = {data}
+    for stats_key in ['peak_stats', 'motif_stats']:
+        if stats_key in spatial_data.uns:
+            stats_data = spatial_data.uns[stats_key]
+            # Handle both old and new structure:
+            # If it's a dict of dicts (new structure with grn_evaluation_names as keys):
+            if isinstance(stats_data, dict) and len(stats_data) > 0:
+                first_val = next(iter(stats_data.values()))
+                if isinstance(first_val, dict):
+                    # New structure: stats_data = {grn_name: {data...}, grn_name2: {data...}}
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+                else:
+                    # Single dataset case or old structure
+                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+            else:
+                # Convert to JSON-serializable format (converts numpy arrays to lists)
+                meta_dict[stats_key] = _make_json_serializable(stats_data)
 
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
@@ -374,9 +610,25 @@ if __name__ == "__main__":
             "interval"
         ].tolist()
 
+    meta_dict["data_type"] = args.data_type
+    # Add differential motif activity top-motif tables
+    if "diff_motif_activity_top_motifs" in spatial_data.uns:
+        meta_dict["diff_motif_activity_top_motifs"] = {}
+
+        for comparison, df in spatial_data.uns["diff_motif_activity_top_motifs"].items():
+            # If stored as DataFrame, convert to table-friendly dict
+            if isinstance(df, pd.DataFrame):
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = df.to_dict()
+            else:
+                # fallback in case it already came in as a plain dict-like object
+                meta_dict["diff_motif_activity_top_motifs"][comparison] = pd.DataFrame(df).to_dict()
+
     geojson_data["meta"] = meta_dict
 
     os.makedirs(os.path.dirname(args.outpath), exist_ok=True)
+
+    # Convert all numpy types to JSON-serializable types before dumping
+    geojson_data = geojson_data
 
     with open(args.outpath, "w+") as f:
         json.dump(geojson_data, f, indent=4, ignore_nan=True)

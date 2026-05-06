@@ -1,7 +1,31 @@
+# Ignore session cookies
+cookies.txt
+
+# Ignore notebooks folder
+notebooks/
+
+# Ignore local proxy config
+# Note: proxy.conf.json, package.json, package-lock.json are managed via --skip-worktree
+
+# */package.json
+# */package-lock.json
+*/package-lock_merit.json
+
 # Ignore all h5ad files
 *.h5ad
 *.parquet
 *.h5
+*.rds
+*.h5Seurat
+
+# ignore .gz and .tsv and .pdf
+*.gz
+*.tbi
+*.tsv
+*.pdf
+
+# ignore logs
+*.log
 
 # Ignore network files
 backend/networks
@@ -15,6 +39,12 @@ backend/calc_R_scores/.Rprofile
 backend/calc_R_scores/.RData*
 
 backend/results/*
+backend/uploads/*
+backend/datasets_runtime/*
+backend/prepro/*
+
+backend/uploads/
+backend/uploads/*
 
 .Rproj.user
 
@@ -26,6 +56,8 @@ backend/.DS_Store
 # Python Cache
 __pycache__/
 *.py[cod]
+
+frontend/public/assets/hexagons_Xenium.geojson
 
 backend/datasets_scores/*
 frontend/uploads/*
@@ -61,11 +93,13 @@ yarn-error.log
 
 # Visual Studio Code
 .vscode/*
+.vscode/settings.json
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
 .history/*
+.claude
 
 # Miscellaneous
 .angular/cache
@@ -77,6 +111,8 @@ testem.log
 typings
 .angular
 
+# Note: session.service.ts and environment.prod.ts are managed via --skip-worktree
+
 # System files
 .DS_Store
 Thumbs.db
@@ -87,3 +123,6 @@ my-container.sif
 my-custom-image.tar
 apptainer_prompt.txt
 overlay.img
+backend/calc_multiome_scores/calc_multiome_scores_test.ipynb
+
+.vscode/

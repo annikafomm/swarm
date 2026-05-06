@@ -1,3 +1,12 @@
+# Pipeline overview:
+# 1) Load spatial AnnData (Visium or Xenium).
+# 2) Optional preprocessing (filter / normalize).
+# 3) If Xenium: build a grid-level AnnData for scoring + keep cell-level AnnData for visualization.
+# 4) Optional Tangram -> compute scores on Tangram output.
+# 5) Compute scores on spatial data (Visium: original; Xenium: grid-level).
+# 6) If Xenium: broadcast grid-level scores back to cells and write cell-level output.
+
+
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="xarray_schema")
@@ -9,6 +18,8 @@ import squidpy as sq
 from scipy import io, sparse
 import pandas as pd
 import time
+import subprocess
+from scipy.io import mmwrite
 
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -16,7 +27,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from preprocessing.preprocessing_functions import *
 from calc_liana import run_liana
-from calc_tangram import run_tangram
+from xenium.gridding_mapping import (
+    map_cells_to_grid,
+)
+
+
+import anndata as ad
+ad.settings.allow_write_nullable_strings = True
 
 def log_message(msg, logfile, indent=0):
     prefix = " " * indent
@@ -34,6 +51,7 @@ def format_runtime(t0):
 def compute_spatial_scores(adata, description, args, logfile):
     # Calculate spatial scores
     if args.liana or args.centrality_scores or args.co_occurrence or args.nhood_enrichment or args.moranI or args.gearyC:
+
 
         if description == "tg":
             log_message("Preparing score calculation for the Tangram output ...", logfile)
@@ -122,14 +140,28 @@ def compute_spatial_scores(adata, description, args, logfile):
         log_message("Saving calculations ...", logfile, 2)
 
     #  TODO: tidy up andata --> delete entries, that are not used further
+    # --- FIX: ensure all obsm DataFrame column names are strings ---
+    for key, val in adata.obsm.items():
+        if isinstance(val, pd.DataFrame):
+            # cast column names to str
+            val.columns = val.columns.astype(str)
+    # ---------------------------------------------------------------
 
     t0 = time.time()
-    filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
-    adata.write(os.path.join(args.outdir, filename))
+    #filename = os.path.basename(args.input).replace(".h5ad", f"_{description}_scores.h5ad")
+    #adata.write(os.path.join(args.outdir, filename))
+    # Also save with fixed name for downstream multiome processing
+    if description == "tg":
+        adata.write(os.path.join(args.outdir, "adata_tg_scores.h5ad"))
+    elif description == "st":
+        adata.write(os.path.join(args.outdir, "adata_st_scores.h5ad"))
     log_message(f"AnnData object written in {format_runtime(t0)}", logfile, 4)
+    log_message(f"R scores params {args.R_scores}", logfile, 4)
 
     # R scores should be calculated
     if args.R_scores:
+        print("Saving expression matrix for R scores ...")
+        log_message("Saving expression matrix for R scores ...", logfile, 4)
         folder_path = os.path.join(args.outdir, f"expr_info_{description}")
         t0 = time.time()
 
@@ -153,6 +185,7 @@ def main():
     parser.add_argument('-input', type=str, required=True, help='Input AnnData file path')
     parser.add_argument('-outdir', type=str, required=True, help='Output dir file path')
     parser.add_argument('-log', type=str, required=True, help='Path to the log file')
+    parser.add_argument('-dataset', type=str, choices=['visium', 'xenium'], required=True, help='Type of spatial data')
 
     # preprocessing options
     parser.add_argument('-filter_st', action='store_true', help='Apply filtering for ST data')
@@ -163,10 +196,31 @@ def main():
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
-    parser.add_argument('-gene_selection', type=str, choices=['ctg', 'hvg', 'spapros', 'svg'], default=None, help="Gene selection strategy. Default: use all overlapping genes.")
+    parser.add_argument(
+        '-gene_selection',
+        nargs='*',
+        default=None,
+        help="One or more gene selection methods: ctg hvg spapros svg. "
+            "Also accepts comma-separated values, e.g. 'ctg,hvg'."
+    )
+    parser.add_argument(
+        '-gene_list_path',
+        type=str,
+        default=None,
+        help="Optional path to a user-provided gene list (txt/csv/tsv)."
+    )
+    parser.add_argument(
+        '-gene_list_column',
+        type=str,
+        default='',
+        help="Optional column name for csv/tsv gene list files. "
+            "If empty, the first column is used."
+    )
     parser.add_argument('-cell_label', type=str, default='cell_type', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
+    #parser.add_argument('-cell_label', type=str, default='RNA_peaks_clusters_res0.1', help="Column in adata_sc.obs with cluster/cell annotations (e.g. 'cell_type' or 'cell_subclass').")
     parser.add_argument('-ensembl_col', type=str, default='', help="Column in adata.var with ensembl ids")
     parser.add_argument('-feature_col', type=str, default='', help="Column in adata.var with type of gene")
+    parser.add_argument('-multiome', action='store_true', help='Whether the single-cell data is from a multiome experiment (default: False)')
 
     # liana
     parser.add_argument("-liana", action='store_true', help='Compute Liana')
@@ -204,8 +258,25 @@ def main():
 
     parser.add_argument('-R_scores', action='store_true', help="Shows if the expression matrix needs to be safed for the calculation of additional scores in R")
 
+    parser.add_argument('-chromvar', action='store_true', help='chromvar scores present, add geary C and Moran I for chromvar motifs')
 
     args = parser.parse_args()
+
+    os.makedirs(args.outdir, exist_ok=True)
+
+
+    if args.gene_selection is not None:
+        cleaned_gene_selection = []
+        for item in args.gene_selection:
+            if item is None:
+                continue
+            item = str(item).strip()
+            if not item or item.lower() == "none":
+                continue
+            cleaned_gene_selection.append(item)
+
+        args.gene_selection = cleaned_gene_selection or None
+
 
     # Prepare log file
     logfile = args.log
@@ -217,8 +288,10 @@ def main():
     # Spatial Transcriptomics
     if not os.path.exists(args.input):
         log_message(f"The spatial data file {args.input} does not exist.", logfile)
+        return
     elif not args.input.endswith('.h5ad'):
         log_message(f"The spatial data file {args.input} has an unsupported file format. Please provide a .h5ad file.", logfile)
+        return
     else:
         log_message("Loading ST AnnData object ...", logfile)
 
@@ -226,13 +299,25 @@ def main():
         adata = sc.read_h5ad(args.input)
         log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 2)
 
+        # Data objects:
+        # - adata: original spatial AnnData (Visium spots OR Xenium cells)
+        # - adata_work: the object we compute scores on (Visium: adata, Xenium: grid-level)
+        # - adata_cells: Xenium-only, cell-level object kept for visualization + final output
+        # - adata_grid: Xenium-only, grid-level object used for scoring
+
+        adata_cells = None          # will only be used for xenium
+        adata_grid = None           # will only be used for xenium
+        adata_work = adata          # this is what we compute scores on
+
+
+        st_preprocessed = args.input
         # Preprocessing
         if args.filter_st:
             log_message("Filtering the ST data ...", logfile)
             log_message(f"Number of cells before filtering: {adata.n_obs}", logfile, 2)
             t0 = time.time()
 
-            small_filtering(adata, 'st')
+            small_filtering(adata, 'st', args.dataset)
 
             log_message(f"Number of cells after filtering: {adata.n_obs}", logfile, 2)
             log_message(f"ST data filtered in {format_runtime(t0)}", logfile, 2)
@@ -242,12 +327,50 @@ def main():
             t0 = time.time()
             # TODO: add check if counts are already normalized
             # is_integer = np.all(np.mod(dense_layer, 1) == 0)
-            normalize(adata)
+            normalize(adata, args.dataset)
             log_message(f"ST data normalized in {format_runtime(t0)}", logfile, 2)
+
+        if args.filter_st or args.normalize_st:
+            st_preprocessed = os.path.join(args.outdir, "st_for_scores.h5ad")
+            adata.write(st_preprocessed)
+
+        # If Xenium: create grid-level representation for scoring
+        if args.dataset == "xenium":
+            log_message("Performing gridding for Xenium data ...", logfile)
+            t0 = time.time()
+            from xenium.gridding_pipeline import choose_grid_n, gridding_xenium
+
+            adata_cells = adata.copy()
+
+            # 2) Create grid-level for scoring
+            n_ = choose_grid_n(adata, target_cells_per_spot=20)
+            log_message(f"Chosen grid size: {n_} x {n_} spots", logfile, 2)
+
+            adata_grid = gridding_xenium(adata, n_spots_side=n_)
+            log_message(f"Gridding performed in {format_runtime(t0)}", logfile, 2)
+
+            adata_work = adata_grid
+
+            # 3) Create mapping: each cell -> nearest grid spot
+            adata_cells = map_cells_to_grid(
+                adata_cells=adata_cells,
+                adata_grid=adata_work,
+            )
+            adata_cells.write(
+                os.path.join(args.outdir, "xenium_map.h5ad")
+            )
+            log_message(f"Mapping cells to grid performed in {format_runtime(t0)}", logfile, 2)
+
+            # 4) Proceed with all further analyses at the spot level
+            st_grid = os.path.join(args.outdir, "xenium_grid.h5ad")
+            adata_work.write(st_grid)
+
+            st_preprocessed = st_grid
+
 
         if args.tangram:
             log_message("Prepping Tangram calculations ...", logfile)
-            # Single Cell
+
             if not os.path.exists(args.sc_path):
                 log_message(f"The single cell data file {args.sc_path} does not exist.", logfile)
             elif not args.sc_path.endswith('.h5ad'):
@@ -259,16 +382,17 @@ def main():
                 adata_sc = sc.read_h5ad(args.sc_path)
                 log_message(f"AnnData object loaded in {format_runtime(t0)}", logfile, 4)
 
-                if not args.cell_label in adata_sc.obs.keys():
+                if args.cell_label not in adata_sc.obs.keys():
                     log_message(f"'{args.cell_label}' is not a column in adata.obs (SingleCell). Please provide a valid cell label key.", logfile, 2)
                 else:
+                    sc_preprocessed = args.sc_path
                     # Preprocessing
                     if args.filter_sc:
                         log_message("Filtering the SC data ...", logfile, 2)
                         log_message(f"Number of cells before filtering: {adata_sc.n_obs}", logfile, 4)
                         t0 = time.time()
 
-                        small_filtering(adata_sc, 'sc')
+                        small_filtering(adata_sc, 'sc', args.dataset)
 
                         log_message(f"Number of cells after filtering: {adata_sc.n_obs}", logfile, 4)
                         log_message(f"SC data filtered in {format_runtime(t0)}", logfile, 4)
@@ -278,19 +402,60 @@ def main():
                         t0 = time.time()
                         # TODO: add check if counts are already normalized
                         # is_integer = np.all(np.mod(dense_layer, 1) == 0)
-                        normalize(adata_sc)
+                        normalize(adata_sc, args.dataset)
                         log_message(f"SC data normalized in {format_runtime(t0)}", logfile, 4)
 
-                    log_message("Running Tangram script ...", logfile, 2)
+                    if args.filter_sc or args.normalize_sc:
+                        sc_preprocessed = os.path.join(args.outdir, "sc_for_tangram.h5ad")
+                        adata_sc.write(sc_preprocessed)
+
+                    tangram_out = os.path.join(args.outdir, "tangram_output.h5ad")
+
+                    cmd = [
+                        "micromamba", "run", "-n", "tangram",
+                        "python", "../backend/calc_python_scores/calc_tangram.py",
+                        "--sc_path", sc_preprocessed,
+                        "--sp_path", st_preprocessed,
+                        "--outdir", args.outdir,
+                        "--device", "cpu",
+                    ]
+
+                    if args.gene_selection is not None:
+                        cmd += ["--gene_selection_mode", *args.gene_selection]
+
+                    if args.gene_list_path:
+                        cmd += ["--gene_list_path", args.gene_list_path]
+
+                    if args.gene_list_column:
+                        cmd += ["--gene_list_column", args.gene_list_column]
+                    if args.cell_label:
+                        cmd += ["--cell_label", args.cell_label]
+                    if args.ensembl_col:
+                        cmd += ["--ensembl_col", args.ensembl_col]
+                    if args.feature_col:
+                        cmd += ["--feature_col", args.feature_col]
+
+                    if args.multiome:
+                        cmd += ["--multiome"]
+
+                    log_message(f"Running Tangram in tangram_env ...", logfile, 2)
                     t0 = time.time()
-                    adata_tangram = run_tangram(adata_sc, adata, args.gene_selection, args.cell_label, args.ensembl_col, args.feature_col, 'cpu')
+                    subprocess.run(cmd, check=True)
                     log_message(f"Tangram script executed in {format_runtime(t0)}", logfile, 4)
 
-                    compute_spatial_scores(adata_tangram, "tg", args, logfile)
+                    if os.path.exists(tangram_out):
+                        adata_tangram = sc.read_h5ad(tangram_out)
+                        compute_spatial_scores(adata_tangram, "tg", args, logfile)
+                    else:
+                        log_message(
+                            f"Tangram output file {tangram_out} not found – skipping Tangram scores.",
+                            logfile,
+                            2,
+                        )
+        else:
+            compute_spatial_scores(adata_work, "st", args, logfile)
 
-    compute_spatial_scores(adata, "st", args, logfile)
-
-    log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
+        log_message(f"Python score pipeline finished at {time.strftime('%Y-%m-%d %H:%M:%S')}\n", logfile)
 
 
 if __name__ == "__main__":

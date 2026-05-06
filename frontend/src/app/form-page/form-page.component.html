@@ -6,7 +6,7 @@
 
 <form [formGroup]="form" (ngSubmit)="onSubmit()" class="panel">
 
-  <!-- Email (required) -->
+  <!-- Email  -->
   <div class="section">
     <div class="field">
       <label class="field-label" for="email">
@@ -58,7 +58,7 @@
   </div>
 
   <!-- Tangram toggle -->
-  <div class="section">
+  <div class="section" *ngIf="!useTangramMultiomeChecked()">
     <label style="display:flex; gap:10px; align-items:center;">
       <input type="checkbox" formControlName="useTangram" />
       Use Tangram for Mapping
@@ -66,7 +66,7 @@
 
     <!-- Only visible if Tangram is enabled -->
     <div *ngIf="useTangramChecked()" class="section" [formGroup]="tangramGroup">
-      <label>Upload single-cell dataset (.h5ad):</label>
+      <label>Upload single-cell dataset (.h5ad) file:</label>
       <div class="file">
         <input id="singleCell" type="file" (change)="onFileSelected($event, 'singleCell')" accept=".h5ad">
         <label for="singleCell" class="file-control">
@@ -93,7 +93,192 @@
       <div class="hint" *ngIf="form.get('useTangram')?.value && !singleCellFile" style="margin-top:6px;">
         Please upload a single-cell file (required when Tangram is enabled).
       </div>
+
+      <div class="section" style="margin-top:10px;" formGroupName="geneSelectionModes">
+        <label>Gene selection modes:</label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="ctg">
+          ctg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="hvg">
+          hvg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="spapros">
+          spapros
+        </label>
+
+        <!--<label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="svg">
+          svg
+        </label>-->
+
+        <small>
+          Optional. Multiple selections are allowed. If nothing is selected, all overlapping genes will be used.
+        </small>
+      </div>
+
+      <div class="section" style="margin-top:10px;">
+        <label>Upload custom gene list (.txt / .csv / .tsv):</label>
+        <div class="file">
+          <input id="geneList" type="file" (change)="onFileSelected($event, 'geneList')" accept=".txt,.csv,.tsv">
+          <label for="geneList" class="file-control">
+            <span class="btn">Choose file</span>
+            <span class="file-name" [title]="geneListFile?.name || 'No file selected'">
+              {{ geneListFile?.name || 'No file selected' }}
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top:10px;" *ngIf="showGeneListColumnField()">
+        <label>Gene list column (for CSV/TSV):</label>
+        <input type="text" formControlName="geneListColumn" placeholder="e.g. gene_symbol">
+        <small>Optional. If left empty, the first column will be used.</small>
+      </div>
     </div>
+  </div>
+
+  <!-- Tangram toggle MULTIOME -->
+  <div class="section" *ngIf="!useTangramChecked()">
+    <label style="display:flex; gap:10px; align-items:center;">
+      <input type="checkbox" formControlName="useTangramMultiome" />
+      Analyse 10xMultiome data (mapped to spaial data with Tangram)
+    </label>
+
+    <!-- Only visible if Tangram is enabled -->
+    <div *ngIf="useTangramMultiomeChecked()" class="section" [formGroup]="tangramGroup">
+      <label>Upload multiome dataset (.rds) file:</label>
+      <div class="file">
+        <input id="multiome" type="file" (change)="onFileSelected($event, 'multiome')" accept=".rds">
+        <label for="multiome" class="file-control">
+          <span class="btn">Choose file</span>
+          <span class="file-name" [title]="multiomeFile?.name || 'No file selected'">
+            {{ multiomeFile?.name || 'No file selected' }}
+          </span>
+        </label>
+      </div>
+
+      <div class="hint" *ngIf="form.get('useTangramMultiome')?.value && !multiomeFile" style="margin-top:6px;">
+        Please upload a multiome file. If multiome and single cell file are uploaded, only multiome will be concidered.
+      </div>
+
+      <div class="section" style="margin-top:10px;" formGroupName="geneSelectionModes">
+        <label>Gene selection modes:</label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="ctg">
+          ctg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="hvg">
+          hvg
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="spapros">
+          spapros
+        </label>
+
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="svg">
+          svg
+        </label>
+
+        <small>
+          Optional. Multiple selections are allowed. If nothing is selected, all overlapping genes will be used.
+        </small>
+      </div>
+
+      <div class="section" style="margin-top:10px;">
+        <label>Upload custom gene list (.txt / .csv / .tsv):</label>
+        <div class="file">
+          <input id="geneListMultiome" type="file" (change)="onFileSelected($event, 'geneList')"
+            accept=".txt,.csv,.tsv">
+          <label for="geneListMultiome" class="file-control">
+            <span class="btn">Choose file</span>
+            <span class="file-name" [title]="geneListFile?.name || 'No file selected'">
+              {{ geneListFile?.name || 'No file selected' }}
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section" style="margin-top:10px;" *ngIf="showGeneListColumnField()">
+        <label>Gene list column (for CSV/TSV):</label>
+        <input type="text" formControlName="geneListColumn" placeholder="e.g. gene_symbol">
+        <small>Optional. If left empty, the first column will be used.</small>
+      </div>
+    </div>
+
+
+
+    <div class="section" style="margin-top:10px;" *ngIf="useTangramMultiomeChecked()">
+      <div class="section-title">GRN Evaluation</div>
+
+      <label style="display:flex; gap:10px; align-items:center;">
+        <input type="checkbox" formControlName="peakMotifStats">
+        Compute Peak & Motif Stats
+      </label>
+    </div>
+
+    <div formGroupName="GRNEvaluation" *ngIf="form.get('peakMotifStats')?.value">
+
+      <div class="section" style="margin-top:10px;">
+        <label style="display:flex; gap:10px; align-items:center;">
+          <input type="checkbox" formControlName="computeGraph">
+          Compute GRN Evaluation Graph
+        </label>
+      </div>
+
+      <div class="section" style="margin-top:10px;">
+
+        <label>Annotation key (e.g. cell_type):</label>
+        <input type="text" formControlName="GRNEvaluationObsKey" placeholder="default: cell_type"
+          style="margin-bottom:10px;">
+
+        <label>Specific cell type or cluster:</label>
+        <input type="text" formControlName="GRNEvaluationCluster" placeholder="default: 0" style="margin-bottom:10px;">
+
+        <label>GRN evaluation name (optional):</label>
+        <br>
+        <span class="hint" style="color: #ff9800">Warning: Can be overwritten</span>
+        <input type="text" formControlName="GRNEvaluationName" placeholder="default: GRN_Evaluation"
+          style="margin-bottom:10px;">
+
+
+
+        <label>Gene set (comma-separated or GO ID) <span class="required">*</span>:</label>
+        <input type="text" formControlName="GRNEvaluationGeneSet" placeholder="e.g. geneA,geneB or GO:0001234"
+          style="margin-bottom:10px;">
+
+        <label style="display: flex; gap: 10px; align-items: center; margin-bottom:10px;">
+          <input type="checkbox" formControlName="GRNEvaluationUsePriorGRN">
+          Use prior GRN
+        </label>
+
+        <!-- Upload prior GRN file or choose not to upload and prior net from omnipathdb will be used-->
+        <div *ngIf="form.get('GRNEvaluation.GRNEvaluationUsePriorGRN')?.value" style="margin-top:10px;">
+          <label>Prior GRN file (.csv) or leave empty to use OmniPathDB:</label>
+          <div class="file">
+            <input id="priorGRN" type="file" (change)="onFileSelected($event, 'priorGRN')" accept=".csv">
+            <label for="priorGRN" class="file-control">
+              <span class="btn">Choose file</span>
+              <span class="file-name" [title]="priorGRNFile?.name || 'No file selected'">
+                {{ priorGRNFile?.name || 'No file selected' }}
+              </span>
+            </label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <!-- MULTIOME input end-->
   </div>
 
   <!-- Scores master switches -->
@@ -112,6 +297,61 @@
         <input type="checkbox" formControlName="lianaPlus" />
         <span class="score-text">LIANA+</span>
       </label>
+      <!-- Multiome data Scores master switches -->
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="chromVAR" />
+        <span class="score-text">chromVAR</span>
+      </label>
+      <!-- <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="diffMotifActivity" />
+        <span class="score-text">differential chromVar motif Activity</span>
+      </label> -->
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="motifEnrichment" />
+        <span class="score-text">Motif Enrichment</span>
+      </label>
+      <label *ngIf="useTangramMultiomeChecked()" class="score-option">
+        <input type="checkbox" formControlName="FootprintingBias" />
+        <span class="score-text">Footprinting Bias</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- if footprint bias is checked, fragment file + tbi is needed -->
+  <div *ngIf="needFragmentFiles()" class="section"> <!-- [formGroup]="tangramGroup">-->
+    <label>Upload Fragment file for rds file (.tsv.gz)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragments" type="file" (change)="onFileSelected($event, 'fragments')" accept=".gz">
+      <label for="fragments" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsFile?.name || 'No file selected'">
+          {{ fragmentsFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+
+    <label>Upload Fragment tabix file (.tsv.gz.tbi)<span class="required">*</span>:</label>
+    <div class="file">
+      <input id="fragmentsTabix" type="file" (change)="onFileSelected($event, 'fragmentsTabix')" accept=".tbi">
+      <label for="fragmentsTabix" class="file-control">
+        <span class="btn">Choose file</span>
+        <span class="file-name" [title]="fragmentsTabixFile?.name || 'No file selected'">
+          {{ fragmentsTabixFile?.name || 'No file selected' }}
+        </span>
+      </label>
+    </div>
+  </div>
+
+  <!-- Genome for Motif stuff -->
+  <div *ngIf="useTangramMultiomeChecked()" class="section">
+    <div class="field">
+      <label class="field-label">Select Genome</label>
+      <div class="select">
+        <select formControlName="genome">
+          <option value="hg37">hg37</option>
+          <option value="hg38">hg38</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -141,7 +381,7 @@
 
     <!-- VIPER needs Genie3 only -->
     <div class="section" *ngIf="form.get('network.algorithms.viper')?.value">
-      <label>Upload Genie3 network (.csv) — <span class="required">required</span>:</label>
+      <label>Upload Genie3 network (.csv) <span class="required">*</span>:</label>
       <div class="file">
         <input id="genie3Net" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
         <label for="genie3Net" class="file-control">
@@ -153,93 +393,91 @@
       </div>
     </div>
 
-        <div class="section" *ngIf="form.get('network.algorithms.viper')?.value && genie3Selected"
-          formGroupName="genie3Params">
-          <div class="section-title">Genie3 — options</div>
+    <div class="section" *ngIf="form.get('network.algorithms.viper')?.value && genie3Selected"
+      formGroupName="genie3Params">
+      <div class="section-title">Genie3 — options</div>
 
-          <div class="field-grid">
-            <div class="field">
-              <label>top n weights</label>
-              <input type="number" formControlName="topNWeights" placeholder="100000" />
-              <small>Default: 100000</small>
-            </div>
-            <div class="field">
-              <label>Number of connections used to score regulons</label>
-              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-            <div class="field">
-              <label>number of regulons</label>
-              <input type="number" formControlName="nRegulons" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-          </div>
+      <div class="field-grid">
+        <div class="field">
+          <label>top n weights</label>
+          <input type="number" formControlName="topNWeights" placeholder="100000" />
+          <small>Default: 100000</small>
         </div>
+        <div class="field">
+          <label>Number of connections used to score regulons</label>
+          <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+          <small>Default: 20</small>
+        </div>
+        <div class="field">
+          <label>number of regulons</label>
+          <input type="number" formControlName="nRegulons" placeholder="20" />
+          <small>Default: 20</small>
+        </div>
+      </div>
+    </div>
 
     <!-- AUCell / GSVA / ssGSEA share the same options & upload rules -->
     <div class="section" *ngIf="hasTriadSelected()">
 
       <!-- Upload rule: Genie3 OR both SPONGE files -->
-      <div class="section" style="margin-top:10px;">
-        <div class="subsection">
-          <label>Upload Genie3 network (.csv) — optional (required if SPONGE not provided):</label>
-          <div class="file">
-            <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
-            <label for="genie3NetTriad" class="file-control">
-              <span class="btn">Choose file</span>
-              <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
-                {{ genie3NetFile?.name || 'No file selected' }}
-              </span>
-            </label>
+      <div class="subsection">
+        <label>Upload Genie3 network (.csv) — optional (required if SPONGE not provided):</label>
+        <div class="file">
+          <input id="genie3NetTriad" type="file" (change)="onFileSelected($event, 'genie3Net')" accept=".csv">
+          <label for="genie3NetTriad" class="file-control">
+            <span class="btn">Choose file</span>
+            <span class="file-name" [title]="genie3NetFile?.name || 'No file selected'">
+              {{ genie3NetFile?.name || 'No file selected' }}
+            </span>
+          </label>
+        </div>
+      </div>
+      <!-- Genie3 parameters — only when network scores ON + a Genie3 file selected -->
+      <div class="section" *ngIf="form.get('scores.networkScores')?.value && genie3Selected"
+        formGroupName="genie3Params">
+        <div class="section-title">Genie3 — options</div>
+
+        <div class="field-grid">
+          <div class="field">
+            <label>top n weights</label>
+            <input type="number" formControlName="topNWeights" placeholder="100000" />
+            <small>Default: 100000</small>
+          </div>
+          <div class="field">
+            <label>Number of connections used to score regulons</label>
+            <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
+            <small>Default: 20</small>
+          </div>
+          <div class="field">
+            <label>number of regulons</label>
+            <input type="number" formControlName="nRegulons" placeholder="20" />
+            <small>Default: 20</small>
           </div>
         </div>
-        <!-- Genie3 parameters — only when network scores ON + a Genie3 file selected -->
-        <div class="section" *ngIf="form.get('scores.networkScores')?.value && genie3Selected"
-          formGroupName="genie3Params">
-          <div class="section-title">Genie3 — options</div>
+      </div>
 
-          <div class="field-grid">
-            <div class="field">
-              <label>top n weights</label>
-              <input type="number" formControlName="topNWeights" placeholder="100000" />
-              <small>Default: 100000</small>
-            </div>
-            <div class="field">
-              <label>Number of connections used to score regulons</label>
-              <input type="number" formControlName="nRegulatoryGenes" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-            <div class="field">
-              <label>number of regulons</label>
-              <input type="number" formControlName="nRegulons" placeholder="20" />
-              <small>Default: 20</small>
-            </div>
-          </div>
+
+      <div class="subsection" style="margin-top:12px;">
+        <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
+        <div class="file">
+          <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv">
+          <label for="spongeNA" class="file-control">
+            <span class="btn">Choose <br> networkanalysis</span>
+            <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
+              {{ spongeNAFile?.name || 'No file selected' }}
+            </span>
+          </label>
         </div>
-
-
-        <div class="subsection" style="margin-top:12px;">
-          <label>SPONGE files <span class="required">*</span> (both required if using SPONGE):</label>
-          <div class="file">
-            <input id="spongeNA" type="file" (change)="onFileSelected($event, 'spongeNA')" accept=".csv">
-            <label for="spongeNA" class="file-control">
-              <span class="btn">Choose <br> networkanalysis</span>
-              <span class="file-name" [title]="spongeNAFile?.name || 'No file selected'">
-                {{ spongeNAFile?.name || 'No file selected' }}
-              </span>
-            </label>
-          </div>
-          <div class="file" style="margin-top:8px;">
-            <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv">
-            <label for="spongeNI" class="file-control">
-              <span class="btn">Choose <br> networkinteractions</span>
-              <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
-                {{ spongeNIFile?.name || 'No file selected' }}
-              </span>
-            </label>
-          </div>
-          <small>Please upload either a Genie3 network or both SPONGE files.</small>
+        <div class="file" style="margin-top:8px;">
+          <input id="spongeNI" type="file" (change)="onFileSelected($event, 'spongeNI')" accept=".csv">
+          <label for="spongeNI" class="file-control">
+            <span class="btn">Choose <br> networkinteractions</span>
+            <span class="file-name" [title]="spongeNIFile?.name || 'No file selected'">
+              {{ spongeNIFile?.name || 'No file selected' }}
+            </span>
+          </label>
         </div>
+        <small>Please upload either a Genie3 network or both SPONGE files.</small>
       </div>
       <!-- Show SPONGE parameters only if both SPONGE input files are provided -->
       <div class="section" *ngIf="usingSponge" formGroupName="params">
@@ -279,6 +517,89 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ChromVar — options (checkboxes) -->
+  <div *ngIf="form.get('scores.chromVAR')?.value" class="section" formGroupName="chromVAR">
+    <div class="section-title">ChromVAR — options</div>
+
+    <!-- Method checkboxes -->
+    <div class="checkbox-list" formGroupName="methods">
+      <label class="score-option">
+        <input type="checkbox" formControlName="moranI" />
+        <span class="score-text">MoranI</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="gearyC" />
+        <span class="score-text">GearyC</span>
+      </label>
+      <label class="score-option">
+        <input type="checkbox" formControlName="differential_motif_activity" />
+        <span class="score-text">Differential Motif Activity</span>
+      </label>
+
+    </div>
+
+    <!-- MoranI -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.moranI')?.value" formGroupName="moranI">
+      <h3> MoranI </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+        <label class="field-label">one-tailed or two-tailed</label>
+        <div class="select">
+          <select formControlName="tails">
+            <option value="oneTailed">one-tailed</option>
+            <option value="twoTailed">two-tailed</option>
+          </select>
+        </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
+    <!-- gearyC -->
+    <div class="section" *ngIf="form.get('chromVAR.methods.gearyC')?.value" formGroupName="gearyC">
+      <h3> GearyC </h3>
+      <div class="field">
+        <label>n permutations for autocorrelation</label>
+        <input formControlName="nPerms" placeholder="1000">
+        <small>Default: 1000</small>
+      </div>
+      <br>
+      <div class="field">
+        <label class="field-label">one-tailed or two-tailed</label>
+        <div class="select">
+          <select formControlName="tails">
+            <option value="oneTailed">one-tailed</option>
+            <option value="twoTailed">two-tailed</option>
+          </select>
+        </div>
+      </div>
+      <br>
+      <div class="field">
+        <label>correlation methods</label>
+        <div class="select">
+          <select formControlName="corrMethod">
+            <option value="fdr_bh">fdr_bh</option>
+          </select>
+        </div>
+        <small>Default: fdr_bh</small>
+      </div>
+    </div>
+
   </div>
 
   <!-- Squidpy — options (checkboxes, multiple methods) -->

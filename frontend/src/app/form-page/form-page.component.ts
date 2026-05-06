@@ -21,11 +21,20 @@ import { map } from 'rxjs/operators';
   styleUrls: ['./form-page.component.scss'],
 })
 export class FormPageComponent {
+
+
   form: FormGroup;
 
   // files
   spatialFile?: File;
   singleCellFile?: File;
+  geneListFile?: File;
+  multiomeFile?: File;
+  // Needed for Footprinting
+  fragmentsFile?: File;
+  fragmentsTabixFile?: File;
+  // Needed for GRN evaluation with prior GRN
+  priorGRNFile?: File;
   // network scores uploads (shared)
   genie3NetFile?: File;          // for VIPER and/or AUCell/GSVA/ssGSEA
   spongeNAFile?: File;           // SPONGE networkanalysis
@@ -67,15 +76,28 @@ export class FormPageComponent {
       tangram: this.fb.group({
         filterSingleCell: [false],
         normalizeSingleCell: [false],
+        geneSelectionModes: this.fb.group({
+          ctg: [false],
+          hvg: [false],
+          spapros: [false],
+          svg: [false],
+        }),
+        geneListColumn: [''],
       }),
+
+      useTangramMultiome: [false],
 
       // score toggles
       scores: this.fb.group({
         networkScores: [false],
         squidpy: [false],
         lianaPlus: [false],
+        chromVAR: [false],
+        diffMotifActivity: [false],
+        motifEnrichment: [false],
+        FootprintingBias: [false],
       }),
-
+      genome: ['hg38'],
       // network scores options
       network: this.fb.group({
         algorithms: this.fb.group({
@@ -84,18 +106,18 @@ export class FormPageComponent {
           gsva: [false],
           ssgsea: [false],
         }),
-      params: this.fb.group({
-        mScoreThreshold: ['0.1'],
-        pAdjust: ['0.05'],
-        ensemblId: ['ensembl_id'],
-        featureCol: ['feature_type'],
-        rnaTypes: ['lncRNA,protein_coding'],
-        maxModules: ['20'],
+        params: this.fb.group({
+          mScoreThreshold: ['0.1'],
+          pAdjust: ['0.05'],
+          ensemblId: ['ensembl_id'],
+          featureCol: ['feature_type'],
+          rnaTypes: ['lncRNA,protein_coding'],
+          maxModules: ['20'],
         }),
-      genie3Params: this.fb.group({
-        topNWeights: [100000],
-        nRegulatoryGenes: [20],
-        nRegulons: [20],
+        genie3Params: this.fb.group({
+          topNWeights: [100000],
+          nRegulatoryGenes: [20],
+          nRegulons: [20],
         }),
       }),
 
@@ -137,16 +159,53 @@ export class FormPageComponent {
       liana: this.fb.group({
         compositionColumn: ['tangram_ct_pred'],
       }),
+
+      // chromVAR options
+      chromVAR: this.fb.group({
+        methods: this.fb.group({
+          moranI: [false],
+          gearyC: [false],
+          differential_motif_activity: [false],
+        }),
+        moranI: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        gearyC: this.fb.group({
+          nPerms: [1000],
+          tails: ['oneTailed'],
+          corrMethod: ['fdr_bh'],
+        }),
+        // differential_motif_activity: this.fb.group({
+        //   add fields if needed
+        // }),
+      }),
+
+      peakMotifStats: [false],
+
+      GRNEvaluation: this.fb.group({
+        computeGraph: [false],
+        GRNEvaluationObsKey: ['cell_type'],
+        GRNEvaluationCluster: ['0'],
+        GRNEvaluationName: [''],
+        GRNEvaluationGeneSet: [''],
+        GRNEvaluationUsePriorGRN: [false],
+      }),
     });
 
     // clear single-cell if Tangram toggled off
     this.form.get('useTangram')!.valueChanges.subscribe(on => {
-      if (!on) {
-        this.singleCellFile = undefined;
-        this.form.get('tangram')!.reset({
-          filterSingleCell: false,
-          normalizeSingleCell: false,
-        });
+      if (on) {
+        this.form.get('useTangramMultiome')!.setValue(false, { emitEvent: false });
+        this.multiomeFile = undefined;
+        return;
+      }
+
+      this.singleCellFile = undefined;
+
+      if (!this.form.get('useTangramMultiome')!.value) {
+        this.resetTangramSharedState();
       }
     });
 
@@ -159,6 +218,36 @@ export class FormPageComponent {
         this.genie3NetFile = undefined;
         this.spongeNAFile = undefined;
         this.spongeNIFile = undefined;
+      }
+    });
+
+    // handle fragment files reset
+    this.form.get('scores.FootprintingBias')!.valueChanges.subscribe(on => {
+      if (!on) {
+        this.fragmentsFile = undefined;
+        this.fragmentsTabixFile = undefined;
+      }
+    });
+
+    // handle prior GRN file reset
+    this.form.get('GRNEvaluation.GRNEvaluationUsePriorGRN')!.valueChanges.subscribe(on => {
+      if (!on) {
+        this.priorGRNFile = undefined;
+      }
+    });
+
+
+    this.form.get('useTangramMultiome')!.valueChanges.subscribe(on => {
+      if (on) {
+        this.form.get('useTangram')!.setValue(false, { emitEvent: false });
+        this.singleCellFile = undefined;
+        return;
+      }
+
+      this.multiomeFile = undefined;
+
+      if (!this.form.get('useTangram')!.value) {
+        this.resetTangramSharedState();
       }
     });
 
@@ -188,8 +277,17 @@ export class FormPageComponent {
   useTangramChecked(): boolean {
     return !!this.form.get('useTangram')?.value;
   }
+  useTangramMultiomeChecked(): boolean {
+    return !!this.form.get('useTangramMultiome')?.value;
+  }
+  needFragmentFiles(): boolean {
+    return !!this.form.get('scores.FootprintingBias')?.value;
+  }
   squidpyMethodIs(m: string): boolean {
     return this.form.get('squidpy.method')?.value === m;
+  }
+  chromVARMethodIs(m: string): boolean {
+    return this.form.get('chromVAR.method')?.value === m;
   }
   hasTriadSelected(): boolean {
     const a = this.form.get('network.algorithms.aucell')?.value;
@@ -198,21 +296,47 @@ export class FormPageComponent {
     return !!(a || g || s);
   }
 
+  showGeneListColumnField(): boolean {
+    if (!this.geneListFile) return false;
+    const name = this.geneListFile.name.toLowerCase();
+    return name.endsWith('.csv') || name.endsWith('.tsv');
+  }
+
+  private resetTangramSharedState(): void {
+    this.geneListFile = undefined;
+    this.form.get('tangram')!.reset({
+      filterSingleCell: false,
+      normalizeSingleCell: false,
+      geneSelectionModes: {
+        ctg: false,
+        hvg: false,
+        spapros: false,
+        svg: false,
+      },
+      geneListColumn: '',
+    });
+  }
+
   // ---------- file handling ----------
   onFileSelected(evt: Event, type:
-      'spatial' | 'singleCell' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway') {
-    const input = evt.target as HTMLInputElement;
+    'spatial' | 'singleCell' | 'geneList' | 'multiome' | 'fragments' | 'fragmentsTabix' | 'genie3Net' | 'spongeNA' | 'spongeNI' | 'lianaGenie3' | 'lianaPathway' | 'priorGRN') {
+    const input = evt.target as HTMLInputElement
     const file = input.files && input.files[0] ? input.files[0] : undefined;
     if (!file) return;
 
     switch (type) {
       case 'spatial': this.spatialFile = file; break;
       case 'singleCell': this.singleCellFile = file; break;
+      case 'geneList': this.geneListFile = file; break;
+      case 'multiome': this.multiomeFile = file; break;
+      case 'fragments': this.fragmentsFile = file; break;
+      case 'fragmentsTabix': this.fragmentsTabixFile = file; break;
       case 'genie3Net': this.genie3NetFile = file; break;
       case 'spongeNA': this.spongeNAFile = file; break;
       case 'spongeNI': this.spongeNIFile = file; break;
       case 'lianaGenie3': this.lianaGenie3File = file; break;
       case 'lianaPathway': this.lianaPathwayFile = file; break;
+      case 'priorGRN': this.priorGRNFile = file; break;
     }
   }
 
@@ -232,20 +356,33 @@ export class FormPageComponent {
   }
 
   canSubmit(): boolean {
+    // console.log('Checking if form can be submitted'); constantly printed
     const spatialOk = !!this.spatialFile;
 
     const needsSingleCell = !!this.form.get('useTangram')!.value;
     const singleCellOk = !needsSingleCell || !!this.singleCellFile;
 
+    const needsMultiome = !!this.form.get('useTangramMultiome')!.value;
+    const multiomeOK = !needsMultiome || !!this.multiomeFile;
+
+    const needFragmentFiles = !!this.form.get('scores.FootprintingBias')!.value;
+    // this.needFragmentFiles();
+    const fragmentsOk = !needFragmentFiles || (!!this.fragmentsFile && !!this.fragmentsTabixFile);
+    if (!fragmentsOk) return false;
+
     const networkOn = !!this.form.get('scores.networkScores')?.value;
     const networkOk = !networkOn || this.networkUploadsOk();
 
-    return spatialOk && singleCellOk && networkOk && !this.uploading;
+    return spatialOk && singleCellOk && multiomeOK && networkOk && !this.uploading;
   }
 
   // ---------- submit ----------
   async onSubmit() {
+    //console.log('submitting form...');
+
     if (!this.canSubmit()) return;
+
+    //console.log('can submit, building FormData');
 
     this.errorMsg = '';
     this.resultJsonUrl = null;
@@ -253,12 +390,14 @@ export class FormPageComponent {
     this.uploading = true;
     this.uploadProgress = 0;
 
+    //console.log('built FormData, starting upload...');
     const fd = this.buildFormData();
-
+    //console.log('FormData built:', fd);
+    //console.log('FormData ready, sending POST request...');
     this.http.post<{ ok: boolean; json_url: string; json_filename: string; payload: any }>(
       '/api/upload',
       fd,
-      { observe: 'events', reportProgress: true }
+      { observe: 'events', reportProgress: true, withCredentials: true }
     ).subscribe({
       next: (evt: HttpEvent<any>) => {
         if (evt.type === HttpEventType.UploadProgress && evt.total) {
@@ -272,9 +411,12 @@ export class FormPageComponent {
           this.uploading = false;
           this.resultJsonUrl = body.json_url || null;
           this.serverPayload = body.payload || null;
-
           this.dataSetService.loadAvailableDatasets();  // Refresh dataset list to include any new uploaded datasets
-
+          //const geojsonPath = body.output_files?.geojsonPath; // e.g., "uploads/alice/results/hexagons.geojson"
+          // const parts = geojsonPath?.split('/');
+          // const user = parts?.at(-3);
+          // const subdir = parts?.at(-2);
+          // const filename = parts?.at(-1);
         }
       },
       error: (err) => {
@@ -285,11 +427,14 @@ export class FormPageComponent {
   }
 
   private buildFormData(): FormData {
+    //console.log('in buildFormData for submission...');
     const fd = new FormData();
 
     // --- core
     fd.append('email', this.form.value.email);
     fd.append('dataset', this.form.value.dataset);
+
+    //console.log('Appending core form data');
 
     // --- spatial
     if (this.spatialFile) fd.append('spatial_h5ad', this.spatialFile);
@@ -298,17 +443,69 @@ export class FormPageComponent {
 
     // --- tangram
     fd.append('use_tangram', String(this.form.value.useTangram));
+
+    const tangramActive = this.form.value.useTangram || this.form.value.useTangramMultiome;
+
     if (this.form.value.useTangram && this.singleCellFile) {
       fd.append('single_cell_h5ad', this.singleCellFile);
+    }
+
+    if (tangramActive) {
       fd.append('singlecell_filtering', String(this.form.value.tangram.filterSingleCell));
       fd.append('singlecell_normalization', String(this.form.value.tangram.normalizeSingleCell));
+
+      const tangram = this.form.value.tangram;
+      const selectedModes = Object.entries(tangram.geneSelectionModes ?? {})
+        .filter(([_, checked]) => !!checked)
+        .map(([mode]) => mode);
+
+      selectedModes.forEach((mode: string) => fd.append('gene_selection_mode', mode));
+
+      if (this.geneListFile) {
+        fd.append('gene_list_file', this.geneListFile);
+      }
+
+      const geneListColumn = this.form.value.tangram?.geneListColumn?.trim();
+      if (geneListColumn) {
+        fd.append('gene_list_column', geneListColumn);
+      }
     }
+
+    // --- multiome
+    fd.append('use_multiome', String(this.form.value.useTangramMultiome));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('multiome_rds', this.multiomeFile);
+    }
+
+    // Send fragment files ONLY if footprinting bias is checked
+    // if (this.form.value.scores.FootprintingBias) {
+    //   if (this.fragmentsFile) {
+    //     fd.append('fragments_tsv_gz', this.fragmentsFile);
+    //   }
+    //   if (this.fragmentsTabixFile) {
+    //     fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
+    //   }
+    // }
+
+
+    //  // --- multiome
+    // fd.append('use_multiome', String(this.form.value.useTangramMultiome));
+    // if (this.form.value.useTangramMultiome && this.multiomeFile) {
+    //   fd.append('multiome_rds', this.multiomeFile);
+    // }
 
     // --- scores toggles
     const scores = this.form.value.scores;
     fd.append('score_network', String(scores.networkScores));
     fd.append('score_squidpy', String(scores.squidpy));
     fd.append('score_liana_plus', String(scores.lianaPlus));
+    if (this.form.value.useTangramMultiome && this.multiomeFile) {
+      fd.append('score_chromVar', String(scores.chromVAR));
+      fd.append('score_diffMotifActivity', String(scores.diffMotifActivity));
+      fd.append('score_motifEnrichment', String(scores.motifEnrichment));
+      fd.append('score_FootprintingBias', String(scores.FootprintingBias));
+      fd.append('genome', this.form.value.genome);
+    }
 
     // --- network details
     if (scores.networkScores) {
@@ -352,7 +549,7 @@ export class FormPageComponent {
         if (sq.moranI.nPerms !== null && sq.moranI.nPerms !== undefined && sq.moranI.nPerms !== '') {
           fd.append('squidpy_moranI_n_perms', String(sq.moranI.nPerms));
         }
-        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.twoTailed));
+        fd.append('squidpy_moranI_two_tailed', String(!!sq.moranI.tails));
         fd.append('squidpy_moranI_corr_method', sq.moranI.corrMethod ?? '');
       }
       if (m.gearyC) {
@@ -360,7 +557,8 @@ export class FormPageComponent {
         if (sq.gearyC.nPerms !== null && sq.gearyC.nPerms !== undefined && sq.gearyC.nPerms !== '') {
           fd.append('squidpy_gearyC_n_perms', String(sq.gearyC.nPerms));
         }
-        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.twoTailed));
+        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.tails));
+        fd.append('squidpy_gearyC_two_tailed', String(!!sq.gearyC.tails));
         fd.append('squidpy_gearyC_corr_method', sq.gearyC.corrMethod ?? '');
       }
       if (m.centrality_score) {
@@ -387,10 +585,67 @@ export class FormPageComponent {
     if (scores.lianaPlus) {
       const l = this.form.value.liana;
       fd.append('liana_composition_column', l.compositionColumn ?? '');
-      if (this.lianaGenie3File)  fd.append('liana_genie3_network', this.lianaGenie3File);
+      if (this.lianaGenie3File) fd.append('liana_genie3_network', this.lianaGenie3File);
       if (this.lianaPathwayFile) fd.append('liana_pathway_network', this.lianaPathwayFile);
     }
 
+    // --- chromVAR parameters
+    if (scores.chromVAR) {
+      const cv = this.form.value.chromVAR;
+      const m = cv.methods;
+      if (m.moranI) {
+        fd.append('chromVar_moranI', 'true');
+        fd.append('chromVar_moranI_n_perms', String(cv.moranI.nPerms));
+        fd.append('chromVar_moranI_two_tailed', cv.moranI.tails ?? '');
+        fd.append('chromVar_moranI_corr_method', cv.moranI.corrMethod ?? '');
+      }
+      if (m.gearyC) {
+        fd.append('chromVar_gearyC', 'true');
+        fd.append('chromVar_gearyC_n_perms', String(cv.gearyC.nPerms));
+        fd.append('chromVar_gearyC_two_tailed', cv.gearyC.tails ?? '');
+        fd.append('chromVar_gearyC_corr_method', cv.gearyC.corrMethod ?? '');
+      }
+      if (m.differential_motif_activity) {
+        fd.append('chromVar_differential_motif_activity', 'true');
+        // add params if needed
+      }
+      // if (m.centrality_score) {
+      //   fd.append('squidpy_centrality_score', 'true');
+      //   fd.append('squidpy_centrality_score_cluster_key', sq.centrality_score.clusterKey ?? '');
+      // }
+    }
+
+    // --- Footprinting --- Send fragment files ONLY if footprinting bias is checked
+    // console.log('FootprintingBias score selected:', scores.FootprintingBias);
+    if (scores.FootprintingBias) {
+      if (!this.fragmentsFile || !this.fragmentsTabixFile) {
+        throw new Error('Fragment files are required for Footprinting Bias score.');
+      }
+      fd.append('fragments_tsv_gz', this.fragmentsFile);
+      fd.append('fragments_tsv_gz_tbi', this.fragmentsTabixFile);
+    }
+
+    // --- GRN Evaluation
+    const peakMotifStats = this.form.value.peakMotifStats;
+    if (peakMotifStats) {
+      fd.append('compute_peak_stats', 'true');
+      fd.append('compute_motif_stats', 'true');
+
+      const grnEval = this.form.value.GRNEvaluation;
+      if (grnEval.computeGraph) {
+        fd.append('compute_grn_evaluation_graph', 'true');
+        fd.append('grn_evaluation_obs_key', grnEval.GRNEvaluationObsKey ?? '');
+        fd.append('grn_evaluation_cluster', grnEval.GRNEvaluationCluster ?? '');
+        fd.append('grn_evaluation_name', grnEval.GRNEvaluationName ?? '');
+        fd.append('grn_evaluation_gene_set', grnEval.GRNEvaluationGeneSet ?? '');
+        fd.append('grn_evaluation_use_prior_grn', String(grnEval.GRNEvaluationUsePriorGRN ?? false));
+
+        if (grnEval.GRNEvaluationUsePriorGRN && this.priorGRNFile) {
+          fd.append('grn_prior_network', this.priorGRNFile);
+        }
+      }
+    }
+    // console.log('returning FormData for submission');
     return fd;
   }
 
@@ -402,7 +657,18 @@ export class FormPageComponent {
       dataset: 'Visium',
       spatialOptions: { normalization: false, filtering: false },
       useTangram: false,
-      tangram: { filterSingleCell: false, normalizeSingleCell: false },
+      useTangramMultiome: false,
+      tangram: {
+        filterSingleCell: false,
+        normalizeSingleCell: false,
+        geneSelectionModes: {
+          ctg: false,
+          hvg: false,
+          spapros: false,
+          svg: false,
+        },
+        geneListColumn: '',
+      },
       scores: { networkScores: false, squidpy: false, lianaPlus: false },
       network: {
         algorithms: { viper: false, aucell: false, gsva: false, ssgsea: false },
@@ -432,17 +698,42 @@ export class FormPageComponent {
       },
 
       liana: { compositionColumn: 'tangram_ct_pred' },
+      genome: 'hg38',
+      chromVAR: {
+        methods: {
+          moranI: false,
+          gearyC: false,
+          differential_motif_activity: false,
+        },
+        moranI: { nPerms: 1000, tails: 'oneTailed', corrMethod: 'fdr_bh' },
+        gearyC: { nPerms: 1000, tails: 'oneTailed', corrMethod: 'fdr_bh' },
+      },
+      peakMotifStats: false,
+      GRNEvaluation: {
+        computeGraph: false,
+        GRNEvaluationObsKey: 'cell_type',
+        GRNEvaluationCluster: '0',
+        GRNEvaluationName: '',
+        GRNEvaluationGeneSet: '',
+        GRNEvaluationUsePriorGRN: false,
+      },
+      FootprintingBias: false
     });
 
 
     // clear files
     this.spatialFile = undefined;
     this.singleCellFile = undefined;
+    this.geneListFile = undefined;
     this.genie3NetFile = undefined;
     this.spongeNAFile = undefined;
     this.spongeNIFile = undefined;
     this.lianaGenie3File = undefined;
     this.lianaPathwayFile = undefined;
+    this.multiomeFile = undefined;
+    this.fragmentsFile = undefined;
+    this.fragmentsTabixFile = undefined;
+    this.priorGRNFile = undefined;
 
 
     this.errorMsg = '';

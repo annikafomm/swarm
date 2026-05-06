@@ -1,0 +1,171 @@
+.unregistered-datasets-dialog {
+  min-width: 900px;
+  max-width: 1200px;
+  max-height: 80vh;
+
+  mat-dialog-content {
+    overflow-y: auto;
+  }
+}
+
+.dialog-description {
+  margin-bottom: 1.5rem;
+  color: rgba(0, 0, 0, 0.6);
+  font-size: 0.95rem;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+
+  p {
+    margin: 0;
+    color: rgba(0, 0, 0, 0.6);
+  }
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  color: rgba(0, 0, 0, 0.5);
+  text-align: center;
+
+  p {
+    margin: 0;
+  }
+}
+
+.datasets-table-container {
+  overflow-x: auto;
+  margin-bottom: 1rem;
+}
+
+.datasets-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th {
+    font-weight: 600;
+    background-color: #f5f5f5;
+    padding: 12px;
+    text-align: left;
+    border-bottom: 2px solid #e0e0e0;
+  }
+
+  td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  tr:hover {
+    background-color: #fafafa;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
+  }
+}
+
+.dataset-name {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.dataset-id {
+  font-size: 0.85rem;
+  color: rgba(0, 0, 0, 0.5);
+  font-family: monospace;
+}
+
+.dataset-type-badge {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+
+  &.type-visium {
+    background-color: #cfe9f8 !important;
+    color: #1976d2 !important;
+  }
+
+  &.type-xenium {
+    background-color: #e1bee7 !important;
+    color: #9c27b0 !important;
+  }
+
+  &.type-multiome {
+    background-color: #ffcdd2 !important;
+    color: #d32f2f !important;
+  }
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+
+  &.status-ready {
+    background-color: #a5d6a7 !important;
+    color: #388e3c !important;
+  }
+
+  &.status-missing {
+    background-color: #ef9a9a !important;
+    color: #d32f2f !important;
+  }
+}
+
+.missing-files-note {
+  font-size: 0.75rem;
+  color: #c62828;
+  margin-top: 4px;
+  font-style: italic;
+  word-break: break-word;
+  max-width: 200px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+
+  button {
+    &[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+
+.spinner-icon {
+  display: inline-block;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+mat-dialog-actions {
+  padding: 1rem;
+  gap: 0.5rem;
+  border-top: 1px solid #e0e0e0;
+}

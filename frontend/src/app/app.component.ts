@@ -1,4 +1,4 @@
-import { Component, OnInit, HostListener, HostBinding } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostListener, HostBinding } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormPageComponent } from './form-page/form-page.component';
@@ -6,6 +6,11 @@ import { DownloadMenuComponent } from './download-menu/download-menu.component';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
 import { PathsService } from './paths.service';
+import { DatasetService } from './datasets.service';
+import { MatDialog } from '@angular/material/dialog';
+import { UnregisteredDatasetsDialogComponent } from './unregistered-datasets-dialog/unregistered-datasets-dialog.component';
+import { Subject } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
 
 @Component({
@@ -21,36 +26,117 @@ import Shepherd from 'shepherd.js';
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
+  private destroy$ = new Subject<void>();
+  private isLoadingPaths = false; // Prevent concurrent path loads
+  public unregisteredDialogOpen = false; // Track if unregistered datasets dialog is open
+
   constructor(
     private http: HttpClient,
     public sessionService: SessionService,
     private pathsService: PathsService,
+    private datasetService: DatasetService,
+    private dialog: MatDialog,
   ) { }
 
   ngOnInit() {
     this.sessionService.initSession();
 
-    this.pathsService.paths$.subscribe((paths) => {
-      if (!paths) return;
+    // Show unregistered datasets dialog after session is initialized
+    // Track by session ID - show dialog on each NEW session (page refresh creates new session)
+    setTimeout(() => {
+      const currentSessionId = this.sessionService.sessionId;
+      const lastDialogSessionId = sessionStorage.getItem('lastUnregisteredDialogSessionId');
 
-      const loadPath = (backendUrl: string, path: string, label: string) => {
-        this.sessionService.callWithSession(() =>
-          this.http.post(
-            `${this.sessionService.apiUrl}/${backendUrl}`,
-            { path },
-            { withCredentials: true }
-          )
-        ).subscribe({
-          next: (res) => console.log(`[Backend] Loaded ${label}`, res),
-          error: (err) => console.error(`[Backend] Failed to load ${label} ${path}`, err),
+      console.log(`[APP] Current session: ${currentSessionId}, Last dialog session: ${lastDialogSessionId}`);
+
+      // Show dialog if this is a new session (different from last time we showed it)
+      if (currentSessionId && currentSessionId !== lastDialogSessionId) {
+        console.log('[APP] New session detected, showing unregistered datasets dialog');
+        this.showUnregisteredDatasetsDialog();
+        sessionStorage.setItem('lastUnregisteredDialogSessionId', currentSessionId);
+      } else {
+        console.log('[APP] Same session, skipping unregistered datasets dialog');
+      }
+    }, 1000);  // Increased timeout to ensure session is ready
+
+    this.pathsService.paths$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((paths) => {
+        if (!paths || this.isLoadingPaths) return;
+
+        this.isLoadingPaths = true;
+
+        const loadPath = (backendUrl: string, path: string, label: string) => {
+          return this.sessionService.callWithSession(() =>
+            this.http.post(
+              `${this.sessionService.apiUrl}/${backendUrl}`,
+              { path },
+              { withCredentials: true }
+            )
+          ).toPromise().then(
+            res => {
+              console.log(`[Backend] Loaded ${label}`, res);
+              return res;
+            },
+            err => {
+              console.error(`[Backend] Failed to load ${label} ${path}`, err);
+              return null;
+            }
+          );
+        };
+
+        // Load paths sequentially to avoid race conditions
+        const promises: Promise<any>[] = [];
+        if (paths.adataPath) promises.push(loadPath('read_adata', paths.adataPath, 'adata'));
+        if (paths.genieFiltPath) promises.push(loadPath('read_network_genie', paths.genieFiltPath, 'network_genie'));
+        if (paths.spongeFiltPath) promises.push(loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge'));
+
+        Promise.all(promises).finally(() => {
+          this.isLoadingPaths = false;
         });
-      };
+      });
+  }
 
-      if (paths.adataMainPath) loadPath('read_adata', paths.adataMainPath, 'adata');
-      if (paths.genieFiltPath) loadPath('read_network_genie', paths.genieFiltPath, 'network_genie');
-      if (paths.spongeFiltPath) loadPath('read_network_sponge', paths.spongeFiltPath, 'network_sponge');
-    });
+  ngOnDestroy() {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private showUnregisteredDatasetsDialog(): void {
+    this.sessionService.callWithSession(() =>
+      this.datasetService.loadUnregisteredDatasets()
+    )
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (response) => {
+          const datasets = response.datasets || [];
+          console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
+          this.unregisteredDialogOpen = true;
+          const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
+            width: '1000px',
+            maxHeight: '80vh',
+            disableClose: false,
+            autoFocus: 'first-button',
+          });
+
+          // Reload datasets when dialog closes
+          dialogRef.afterClosed()
+            .pipe(takeUntil(this.destroy$))
+            .subscribe((result) => {
+              this.unregisteredDialogOpen = false;
+              if (result?.datasetsChanged) {
+                // Reload available datasets to reflect any registrations/deletions
+                this.datasetService.loadAvailableDatasets();
+              }
+            });
+        },
+        error: (error) => {
+          console.error('[DEBUG] Error loading unregistered datasets:', error);
+          console.warn('Could not check for unregistered datasets:', error);
+          // Silently fail - not critical to functionality
+        }
+      });
   }
 
   title = 'frontend';
@@ -80,75 +166,173 @@ export class AppComponent implements OnInit {
 
     tour.addStep({
       id: 'hexagon-plot-intro',
-      text: 'Welcome to SWARM! In this tutorial, we will guide you through the main features of the tool.',
+      text: 'Welcome to SWARM! I am your helper bee, here to guide you through the main features of this tool. Let\'s take a quick tour to get you started.',
       buttons: [
-        { text: 'Next', action: tour.next }
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
       ]
     });
 
     tour.addStep({
       id: 'main-view',
       text:
-        'This is the main view visualizing the spatial transcriptomics data as a hexagon plot. It allows you to explore your data interactively.' +
-        ' Depending on the selected view, different properties of the cells are represented by the colors in the graph as also indicated by the legend in the top left corner.' +
-        ' You can click individual hexagons to get more information about the cells or spots they represent.' +
-        ' Additionally you can use the zoom and pan functionality to navigate through the plot.',
+        'This is the <b>main view</b> visualizing the spatial coordinates of your data as <b>hexagons</b>. It allows you to explore your data interactively.<ul><li>All <b>obs columns</b> and computed features are available for coloring the hexagons (if it is cell/spot level information)</li><li>The <b>zoom and pan</b> functionality allows you to navigate through the plot</li><li>Clicking on a hexagon allows you to display detailed information about the spot/cell in the <b>Cell Information Tab</b></li><li>The <b>legend</b> on the left helps you interpret the colors on the map (continuous values are normalized between 0 and 1, categorical values are assigned distinct colors)</li></ul>',
       attachTo: { element: '#hexbin', on: 'bottom' },
       buttons: [
         { text: 'Back', action: tour.back },
-        { text: 'Next', action: tour.next }
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
       ]
     });
+
+    tour.addStep({
+      id: 'upload-data-btn',
+      text:
+        'To <b>upload your data</b>, click on the <b>"Upload data"</b> button in the top navigation bar.<br>To get a detailed tutorial for the upload process, click on the <b>"Upload"</b> button.',
+      attachTo: { element: '#upload-data-btn', on: 'bottom' },
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next },
+        {
+          text: 'Upload', action: () => {
+            tour.complete();
+            this.uploadTutorial();
+            // Handle tutorial button click
+          }
+        },
+        { text: 'Close', action: tour.complete }
+      ]
+    });
+
 
     tour.addStep({
       id: 'selectViews',
       text:
-        'You can select different views to visualize various aspects of your data.' +
-        ' Use the tabs to switch between views such as gene expression, cell type, regulatory scores and LIANA+ scores.' +
-        ' Each view provides unique insights into the spatial organization and characteristics of your data.',
+        'To explore the different parts of your analysis, as defined in the upload forms, there are several different <b>modes</b> available.<br>Use the <b>tabs</b> to switch between modes such as <b>gene expression</b>, <b>regulatory scores</b>, <b>LIANA+ scores</b>, <b>DGEA</b>, and <b>Multiome</b> specific modes.<br>Each mode provides unique insights into the regulatory landscape of your data.',
       attachTo: { element: '.metadata-tables', on: 'left' },
       buttons: [
         { text: 'Back', action: tour.back },
-        { text: 'Next', action: tour.next }
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
       ]
     });
 
     tour.addStep({
-      id: 'download-menu',
+      id: 'dataset-selection',
       text:
-        'The download menu allows you to export the current visualization in various formats such as SVG, PNG, GeoJSON, and AnnData.' +
-        ' This enables you to save your results and share them with others or use them for further analysis.',
-      attachTo: { element: 'app-download-menu', on: 'left' },
+        'If you have uploaded multiple datasets, you can select which one to visualize using the <b>dataset selection dropdown</b>.<br><b>Previous uploads</b> can be recovered in the pop-up dialog that appears on initialization of the tool.'
+      ,
+      attachTo: { element: '#dataset-dropdown-main', on: 'bottom' },
       buttons: [
         { text: 'Back', action: tour.back },
-        { text: 'Next', action: tour.next }
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
       ]
     });
 
     tour.addStep({
-      id: 'upload-data',
+      id: 'compare-view',
       text:
-        'To upload new data, click on the "Upload data" button in the top navigation bar.' +
-        ' This will open a form where you can select and upload your spatial transcriptomics data files.' +
-        ' Follow the instructions in the form to ensure successful data upload and processing.',
-      attachTo: { element: '.top-bar button', on: 'bottom' },
+        'If there is something within or between datasets you want to directly compare, this is possible by using the comparison feature.' +
+        'You can toggle the comparison view using this button.',
+      attachTo: { element: '#compare-button', on: 'bottom' },
       buttons: [
         { text: 'Back', action: tour.back },
-        { text: 'Next', action: tour.next }
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
       ]
     });
 
     tour.addStep({
       id: 'info-page',
       text:
-        'For more information about SWARM, including documentation and support resources, click on the "Info" button in the top navigation bar.' +
-        ' This will take you to the info page where you can find helpful materials to assist you in using the tool effectively.',
+        'For more information about SWARM, including documentation and support resources, click on the "Info" button in the top navigation bar.',
       attachTo: { element: '.top-bar .info-btn', on: 'bottom' },
+      ...this.addBeeClass('bee-bottom-left'),
       buttons: [
         { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next },
         { text: 'Done', action: tour.complete }
       ]
     });
+
+    tour.addStep({
+      id: 'download-menu',
+      text:
+        'The <b>download menu</b> allows you to explore export options for your data.<ul><li>Export files of the current visualization (<b>AnnData, GeoJSON, SVG</b>, etc.)</li><li>Select your dataset and go to the <b>Info-Page</b> to access other files from your analysis</li></ul>',
+      attachTo: { element: 'app-download-menu', on: 'left' },
+      ...this.addBeeClass('bee-bottom-right'),
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
+      ]
+    });
+
+    tour.addStep({
+      id: 'final-step',
+      text:
+        'This concludes the tour! You are now ready to explore your data with SWARM. If you need more specific hints, try clicking the "?" Buttons all over the page. Happy analyzing!',
+      buttons: [
+        { text: 'Back', action: tour.back },
+        { text: 'Restart Tour', action: tour.start },
+        { text: 'Close', action: tour.complete }
+      ]
+    });
+
+
+
+    tour.start();
+  }
+
+  private beeStyleTag: HTMLStyleElement | null = null;
+
+  private addBeeClass(beePosition = 'bee-top-left'): { beforeShowPromise: () => Promise<void> } {
+    const positionCSS: Record<string, string> = {
+      'bee-top-left': `.shepherd-content::after { top: -50px !important; left: -50px !important; right: auto !important; bottom: auto !important; }`,
+      'bee-top-right': `.shepherd-content::after { top: -50px !important; right: -50px !important; left: auto !important; bottom: auto !important; }`,
+      'bee-bottom-left': `.shepherd-content::after { bottom: -50px !important; left: -50px !important; top: auto !important; right: auto !important; }`,
+      'bee-bottom-right': `.shepherd-content::after { bottom: -50px !important; right: -50px !important; top: auto !important; left: auto !important; }`
+    };
+
+    return {
+      beforeShowPromise: (): Promise<void> => {
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            if (!this.beeStyleTag) {
+              this.beeStyleTag = document.createElement('style');
+              document.head.appendChild(this.beeStyleTag);
+            }
+            this.beeStyleTag.textContent = positionCSS[beePosition];
+            console.log('DEBUG: Applied CSS for', beePosition);
+            resolve();
+          }, 50);
+        });
+      }
+    };
+  }
+
+  public uploadTutorial(): void {
+    // Open forms
+    this.openForm();
+
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom',
+        scrollTo: true
+      }
+    });
+
+    tour.addStep({
+      id: 'upload-tutorial-intro',
+      text: 'This tutorial will guide you through the process of uploading your data to SWARM. We will cover the different types of data you can upload and how to fill out the upload form correctly.',
+      buttons: [
+        { text: 'Next', action: tour.next },
+        { text: 'Close', action: tour.complete }
+      ]
+    });
+
 
     tour.start();
   }
