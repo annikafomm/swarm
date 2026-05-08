@@ -546,7 +546,7 @@
                   <span class="stat-item">Avg: {{ getIntervalStats().avg}}</span>
                   <span class="interval-info">(0-{{ maxInterval }})</span>
                   <span *ngIf="getIntervalBoundaries().length">
-                    <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                    <span class="stat-item">Radius of Interval {{ selectedInterval }}:&nbsp;&nbsp;&nbsp;&nbsp;</span>
                     <span class="interval-info">{{ formatActualIntervalRange(selectedInterval) }}</span>
                   </span>
                 </div>
@@ -597,7 +597,7 @@
               <button class="nav-btn" (click)="
             selectedInterval = Math.min(maxInterval-1, selectedInterval + 1);
             updateCoOccurrenceTable()
-          " [disabled]="selectedInterval === maxInterval">
+          " [disabled]="selectedInterval === maxInterval - 1">
                 Next →
               </button>
             </div>
@@ -1700,7 +1700,7 @@
                     <select id="interval-select" [(ngModel)]="this.selectedIntervalCompare"
                       (change)="updateCoOccurrenceTable(true)">
                       <option *ngFor="
-                  let i of [].constructor(maxIntervalCompare + 1);
+                  let i of [].constructor(maxIntervalCompare);
                   let idx = index
                 " [ngValue]="idx">
                         Interval {{ idx }}
@@ -1715,7 +1715,7 @@
                     <span class="stat-item">Avg: {{ getIntervalStats(true).avg }}</span>
                     <span class="interval-info">(0-{{ maxIntervalCompare }})</span>
                     <span *ngIf="getIntervalBoundaries(true).length">
-                      <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                      <span class="stat-item">Radius of Interval {{ selectedIntervalCompare }}:&nbsp;&nbsp;&nbsp;&nbsp;</span>
                       <span class="interval-info">{{ formatActualIntervalRange(selectedIntervalCompare, true) }}</span>
                     </span>
                   </div>
@@ -1763,11 +1763,11 @@
           " [disabled]="selectedIntervalCompare === 0">
                   ← Previous
                 </button>
-                <span class="current-interval">Interval {{ selectedIntervalCompare }} of {{ maxIntervalCompare }}</span>
+                <span class="current-interval">Interval {{ selectedIntervalCompare }} of {{ maxIntervalCompare -1 }}</span>
                 <button class="nav-btn" (click)="
             selectedIntervalCompare = Math.min(maxIntervalCompare, selectedIntervalCompare + 1);
             updateCoOccurrenceTable(true)
-          " [disabled]="selectedIntervalCompare === maxIntervalCompare">
+          " [disabled]="selectedIntervalCompare === maxIntervalCompare - 1">
                   Next →
                 </button>
               </div>
