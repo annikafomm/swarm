@@ -161,6 +161,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
+  public selectedActionByView: { [view: string]: string | null } = {};
+  public selectedActionByViewCompare: { [view: string]: string | null } = {};
+
   public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public regulatoryScoreDisplayModeCompare: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
@@ -1859,6 +1862,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return NaN;
   }
 
+  private isPValueLikeKey(key?: string | null): boolean {
+    const k = String(key ?? '').toLowerCase();
+
+    return (
+      k.includes('p_value') ||
+      k.includes('p-value') ||
+      k.includes('pvalue') ||
+      k.includes('p_val') ||
+      k.includes('padj') ||
+      k.includes('p_adj') ||
+      k.includes('p.adj') ||
+      k.includes('p_adjusted')
+    );
+  }
+
   private normalizeGeneKey(gene: string): string {
     return gene.trim().toLowerCase();
   }
@@ -2095,7 +2113,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
     const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    const selectedActionMap = compare ? this.selectedActionByViewCompare : this.selectedActionByView;
+
     selectedMap[view] = event.gene;
+    selectedActionMap[view] = event.action;
+
     this.fetchAndUpdate(event.action, event.gene, compare, view);
   }
 
@@ -2313,6 +2335,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // Determine if the property is continuous
     const isContinuous = this.isContinuousScale(viewToUse, features, !isMainView);
 
+    const selectedAction = isMainView
+      ? this.selectedActionByView[viewToUse]
+      : this.selectedActionByViewCompare[viewToUse];
+
+    const selectedRegulatoryAction = isMainView
+      ? this.selectedRegulatoryScore
+      : this.selectedRegulatoryScoreCompare;
+
+    const isPValue =
+      this.isPValueLikeKey(viewToUse) ||
+      this.isPValueLikeKey(selectedAction) ||
+      this.isPValueLikeKey(selectedRegulatoryAction);
+
     if (isContinuous) {
       const compareSharedDomain = this.getPairedContinuousDomainForCompare();
       console.log('[updateHexColors] Computed compareSharedDomain:', compareSharedDomain);
@@ -2356,7 +2391,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
           return Number.isFinite(n)
-            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
+            ? viewVariablesToUpdate.continuous(
+                isPValue
+                  ? n
+                  : (n - min) / (max - min)
+              )
             : '#ccc';
         });
     } else {
