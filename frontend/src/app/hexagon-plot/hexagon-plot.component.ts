@@ -1666,18 +1666,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Group similar properties together
         const chromvarKeys = ['chromvar_total_sum'];
+        const currentColorableProperties = compare
+          ? this.colorablePropertiesCompare
+          : this.colorableProperties;
+
         const currentgroupedProperties = [
-          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
+          { key: 'Scores', value: currentColorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: currentColorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: currentColorableProperties.filter((p) => chromvarKeys.includes(p)) },
           {
-            key: 'Other', value: this.colorableProperties.filter(
+            key: 'Other',
+            value: currentColorableProperties.filter(
               (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
             )
           },
         ];
 
-        compare ? this.groupedPropertiesCompare = currentgroupedProperties : this.groupedProperties = currentgroupedProperties;
+        if (compare) {
+          this.groupedPropertiesCompare = currentgroupedProperties;
+        } else {
+          this.groupedProperties = currentgroupedProperties;
+        }
 
 
         // compute availability for everything we've decided to show

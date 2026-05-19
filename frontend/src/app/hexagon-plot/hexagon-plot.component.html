@@ -82,7 +82,7 @@
         <mat-form-field appearance="fill" *ngIf="compareMode">
           <mat-label>Compare hexagons by</mat-label>
           <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange(true)">
-            <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-optgroup *ngFor="let group of groupedPropertiesCompare" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop"
                 [disabled]="!propertyAvailable(prop, 'compare')">
                 {{ prop | translate | async }}
@@ -1843,7 +1843,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell"
+          <mat-tab label="Compare - TF Activity"
             [disabled]="!propertyAvailable('tf_activity', 'compare')">
             <div *ngIf="selectedCompareView === 'tf_activity'">
               <div class="selected-gene-info">
