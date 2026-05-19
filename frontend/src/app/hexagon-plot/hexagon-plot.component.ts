@@ -161,6 +161,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
+  public selectedActionByView: { [view: string]: string | null } = {};
+  public selectedActionByViewCompare: { [view: string]: string | null } = {};
+
   public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public regulatoryScoreDisplayModeCompare: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
@@ -2110,7 +2113,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
     const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    const selectedActionMap = compare ? this.selectedActionByViewCompare : this.selectedActionByView;
+    const currentView = compare ? this.selectedCompareView : this.selectedView;
+
     selectedMap[view] = event.gene;
+
+    // Store the clicked action both under the table-specific view and the active spatial-plot view.
+    selectedActionMap[view] = event.action;
+    selectedActionMap[currentView] = event.action;
+
     this.fetchAndUpdate(event.action, event.gene, compare, view);
   }
 
@@ -2153,6 +2164,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('[onColorbyPropertyChange] Updating main hexagons');
       this.updateHexColors();
     }
+  }
+
+  private isPValueAction(action: string | null | undefined): boolean {
+    const key = String(action ?? '').toLowerCase();
+
+    return (
+      key.includes('p_value') ||
+      key.includes('p-value') ||
+      key.includes('pvalue') ||
+      key.includes('padj') ||
+      key.includes('p_adj') ||
+      key.includes('p.adj')
+    );
+  }
+
+  private isPValueSpatialPlot(view: string, compare: boolean = false): boolean {
+    const selectedAction = compare
+      ? this.selectedActionByViewCompare[view]
+      : this.selectedActionByView[view];
+
+    return this.isPValueAction(selectedAction);
   }
 
   /**
@@ -2370,9 +2402,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('fill', (d) => {
           const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
-          return Number.isFinite(n)
-            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
-            : '#ccc';
+          if (!Number.isFinite(n)) {
+            return '#ccc';
+          }
+
+          const normalized = Math.max(0, Math.min(1, (n - min) / (max - min)));
+          const colorValue = this.isPValueSpatialPlot(viewToUse, !isMainView)
+            ? 1 - normalized
+            : normalized;
+
+          return viewVariablesToUpdate.continuous(colorValue);
         });
     } else {
       // categorical scale
@@ -4225,10 +4264,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       for (let i = 0; i <= numStops; i++) {
         const t = i / numStops;
         const value = min + t * (max - min);
+        const normalized = max === min ? 0 : (value - min) / (max - min);
+        const colorValue = this.isPValueSpatialPlot(
+          viewVariablesToUpdate.view,
+          !viewVariablesToUpdate.isMainView
+        )
+          ? 1 - normalized
+          : normalized;
+
         gradient
           .append('stop')
           .attr('offset', `${t * 100}%`)
-          .attr('stop-color', viewVariablesToUpdate.continuous(value));
+          .attr('stop-color', viewVariablesToUpdate.continuous(colorValue));
       }
 
       const legendG = viewVariablesToUpdate.svg
