@@ -1596,13 +1596,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.geneSetsSponge = this.meta['sponge_genesets'] || {};
           }
           // Populate dropdown options from gene set keys
-          this.genie3Elements = Object.keys(this.geneSetsGenie3);
-          this.spongeElements = Object.keys(this.geneSetsSponge);
-          this.selectedGeneSetGenie3 =
-            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-          this.selectedGeneSetSponge =
-            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+          if (compare) {
+            this.genie3ElementsCompare = Object.keys(this.geneSetsGenie3Compare);
+            this.spongeElementsCompare = Object.keys(this.geneSetsSpongeCompare);
 
+            this.selectedGeneSetGenie3Compare = this.genie3ElementsCompare[0] || null;
+            this.selectedGeneSetSpongeCompare = this.spongeElementsCompare[0] || null;
+          } else {
+            this.genie3Elements = Object.keys(this.geneSetsGenie3);
+            this.spongeElements = Object.keys(this.geneSetsSponge);
+
+            this.selectedGeneSetGenie3 = this.genie3Elements[0] || null;
+            this.selectedGeneSetSponge = this.spongeElements[0] || null;
+          }
           if (compare) {
             this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
             this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
@@ -2530,42 +2536,37 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public visualizeGenie3Subgraph(compare: boolean = false): void {
     const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const network = compare ? this.genie3NetworkCompare : this.genie3Network;
+    const cutoff = compare ? this.genie3WeightCutoffCompare : this.genie3WeightCutoff;
+    const minEdges = compare ? this.genie3MinEdgesCompare : this.genie3MinEdges;
 
 
     compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
     d3.select(graphContainerId).html('');
 
-    if (!geneSet || compare ? !this.genie3NetworkCompare : !this.genie3Network || compare ? this.genie3NetworkCompare.length === 0 : this.genie3Network.length === 0) {
+    if (!geneSet || !network || network.length === 0) {
       compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = geneSet ?? '';
-    let targets = this.geneSetsGenie3[regulator] || [];
+    const regulator = geneSet;
+    const targets = compare
+      ? this.geneSetsGenie3Compare[regulator] || []
+      : this.geneSetsGenie3[regulator] || [];
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     let edges: { source: string; target: string; weight: number }[] = [];
 
-    let candidateEdges: { source: string; target: string; weight: number }[] = [];
-    let slicedEdges: { source: string; target: string; weight: number }[] = [];
-
-    if (compare) {
-      candidateEdges = this.genie3NetworkCompare.filter((edge) => edge.weight > this.genie3WeightCutoffCompare).map((e) => ({
+    let candidateEdges: { source: string; target: string; weight: number }[] = network
+      .filter((edge) => edge.weight > cutoff)
+      .map((e) => ({
         source: String(e.source),
         target: String(e.target),
         weight: e.weight,
       }));
-    }
-    else {
-      candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
-        source: String(e.source),
-        target: String(e.target),
-        weight: e.weight,
-      }));
-    }
     candidateEdges.sort((a, b) => b.weight - a.weight);
-    slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
+    const slicedEdges = candidateEdges.slice(0, minEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2600,7 +2601,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log(nodes);
 
-    edges.push(...candidateEdges);
+    // edges.push(...candidateEdges);
 
     // Create the graph
     let graph = {
@@ -2838,43 +2839,36 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
     const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
     const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const network = compare ? this.spongeNetworkCompare : this.spongeNetwork;
+    const cutoff = compare ? this.spongePValueCutoffCompare : this.spongePValueCutoff;
+    const minEdges = compare ? this.spongeMinEdgesCompare : this.spongeMinEdges;
 
     compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
     d3.select(graphContainerId).html('');
 
-    if (!geneSet || !datasetId || compare ? !this.spongeNetworkCompare || this.spongeNetworkCompare.length === 0 : !this.spongeNetwork || this.spongeNetwork.length === 0) {
+    if (!geneSet || !datasetId || !network || network.length === 0) {
       compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
       this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = geneSet ?? '';
-    let targets = this.geneSetsGenie3[regulator] || [];
-
+    const regulator = geneSet;
+    const targets = compare
+      ? this.geneSetsSpongeCompare[regulator] || []
+      : this.geneSetsSponge[regulator] || [];
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     let edges: { source: string; target: string; p_adjusted: number }[] = [];
 
-    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
-    let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
-
-    if (compare) {
-      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = network
+      .filter((edge) => edge.p_adjusted < cutoff)
+      .map((e) => ({
         source: String(e.source),
         target: String(e.target),
         p_adjusted: e.p_adjusted,
       }));
-    }
-    else {
-      candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
-        source: String(e.source),
-        target: String(e.target),
-        p_adjusted: e.p_adjusted,
-      }));
-    }
-
     candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-    slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
+    const slicedEdges = candidateEdges.slice(0, minEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2908,7 +2902,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    edges.push(...candidateEdges);
+    //edges.push(...candidateEdges);
 
     // Create the graph
     let graph = {
