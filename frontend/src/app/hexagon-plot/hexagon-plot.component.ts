@@ -161,6 +161,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
+  public selectedActionByView: { [view: string]: string | null } = {};
+  public selectedActionByViewCompare: { [view: string]: string | null } = {};
+
   public regulatoryScoreDisplayMode: 'raw' | 'moranI' | 'gearyC' = 'raw';
   public regulatoryScoreDisplayModeCompare: 'raw' | 'moranI' | 'gearyC' = 'raw';
 
@@ -1596,13 +1599,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.geneSetsSponge = this.meta['sponge_genesets'] || {};
           }
           // Populate dropdown options from gene set keys
-          this.genie3Elements = Object.keys(this.geneSetsGenie3);
-          this.spongeElements = Object.keys(this.geneSetsSponge);
-          this.selectedGeneSetGenie3 =
-            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-          this.selectedGeneSetSponge =
-            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+          if (compare) {
+            this.genie3ElementsCompare = Object.keys(this.geneSetsGenie3Compare);
+            this.spongeElementsCompare = Object.keys(this.geneSetsSpongeCompare);
 
+            this.selectedGeneSetGenie3Compare = this.genie3ElementsCompare[0] || null;
+            this.selectedGeneSetSpongeCompare = this.spongeElementsCompare[0] || null;
+          } else {
+            this.genie3Elements = Object.keys(this.geneSetsGenie3);
+            this.spongeElements = Object.keys(this.geneSetsSponge);
+
+            this.selectedGeneSetGenie3 = this.genie3Elements[0] || null;
+            this.selectedGeneSetSponge = this.spongeElements[0] || null;
+          }
           if (compare) {
             this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
             this.isLoadingSpongeCompare = !!this.selectedGeneSetSpongeCompare;
@@ -1660,18 +1669,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Group similar properties together
         const chromvarKeys = ['chromvar_total_sum'];
+        const currentColorableProperties = compare
+          ? this.colorablePropertiesCompare
+          : this.colorableProperties;
+
         const currentgroupedProperties = [
-          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
+          { key: 'Scores', value: currentColorableProperties.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: currentColorableProperties.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: currentColorableProperties.filter((p) => chromvarKeys.includes(p)) },
           {
-            key: 'Other', value: this.colorableProperties.filter(
+            key: 'Other',
+            value: currentColorableProperties.filter(
               (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
             )
           },
         ];
 
-        compare ? this.groupedPropertiesCompare = currentgroupedProperties : this.groupedProperties = currentgroupedProperties;
+        if (compare) {
+          this.groupedPropertiesCompare = currentgroupedProperties;
+        } else {
+          this.groupedProperties = currentgroupedProperties;
+        }
 
 
         // compute availability for everything we've decided to show
@@ -2095,7 +2113,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onItemSelected(event: { gene: string; action: string }, view: string, compare: boolean = false): void {
     const selectedMap = compare ? this.selectedItemByViewCompare : this.selectedItemByView;
+    const selectedActionMap = compare ? this.selectedActionByViewCompare : this.selectedActionByView;
+    const currentView = compare ? this.selectedCompareView : this.selectedView;
+
     selectedMap[view] = event.gene;
+
+    // Store the clicked action both under the table-specific view and the active spatial-plot view.
+    selectedActionMap[view] = event.action;
+    selectedActionMap[currentView] = event.action;
+
     this.fetchAndUpdate(event.action, event.gene, compare, view);
   }
 
@@ -2138,6 +2164,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       console.log('[onColorbyPropertyChange] Updating main hexagons');
       this.updateHexColors();
     }
+  }
+
+  private isPValueAction(action: string | null | undefined): boolean {
+    const key = String(action ?? '').toLowerCase();
+
+    return (
+      key.includes('p_value') ||
+      key.includes('p-value') ||
+      key.includes('pvalue') ||
+      key.includes('padj') ||
+      key.includes('p_adj') ||
+      key.includes('p.adj')
+    );
+  }
+
+  private isPValueSpatialPlot(view: string, compare: boolean = false): boolean {
+    const selectedAction = compare
+      ? this.selectedActionByViewCompare[view]
+      : this.selectedActionByView[view];
+
+    return this.isPValueAction(selectedAction);
   }
 
   /**
@@ -2355,9 +2402,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         .attr('fill', (d) => {
           const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
-          return Number.isFinite(n)
-            ? viewVariablesToUpdate.continuous((n - min) / (max - min))
-            : '#ccc';
+          if (!Number.isFinite(n)) {
+            return '#ccc';
+          }
+
+          const normalized = Math.max(0, Math.min(1, (n - min) / (max - min)));
+          const colorValue = this.isPValueSpatialPlot(viewToUse, !isMainView)
+            ? 1 - normalized
+            : normalized;
+
+          return viewVariablesToUpdate.continuous(colorValue);
         });
     } else {
       // categorical scale
@@ -2530,42 +2584,37 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public visualizeGenie3Subgraph(compare: boolean = false): void {
     const graphContainerId = compare ? '#aucell_graph_genie3_compare' : '#aucell_graph_genie3';
     const geneSet = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const network = compare ? this.genie3NetworkCompare : this.genie3Network;
+    const cutoff = compare ? this.genie3WeightCutoffCompare : this.genie3WeightCutoff;
+    const minEdges = compare ? this.genie3MinEdgesCompare : this.genie3MinEdges;
 
 
     compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
     d3.select(graphContainerId).html('');
 
-    if (!geneSet || compare ? !this.genie3NetworkCompare : !this.genie3Network || compare ? this.genie3NetworkCompare.length === 0 : this.genie3Network.length === 0) {
+    if (!geneSet || !network || network.length === 0) {
       compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
       this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = geneSet ?? '';
-    let targets = this.geneSetsGenie3[regulator] || [];
+    const regulator = geneSet;
+    const targets = compare
+      ? this.geneSetsGenie3Compare[regulator] || []
+      : this.geneSetsGenie3[regulator] || [];
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     let edges: { source: string; target: string; weight: number }[] = [];
 
-    let candidateEdges: { source: string; target: string; weight: number }[] = [];
-    let slicedEdges: { source: string; target: string; weight: number }[] = [];
-
-    if (compare) {
-      candidateEdges = this.genie3NetworkCompare.filter((edge) => edge.weight > this.genie3WeightCutoffCompare).map((e) => ({
+    let candidateEdges: { source: string; target: string; weight: number }[] = network
+      .filter((edge) => edge.weight > cutoff)
+      .map((e) => ({
         source: String(e.source),
         target: String(e.target),
         weight: e.weight,
       }));
-    }
-    else {
-      candidateEdges = this.genie3Network.filter((edge) => edge.weight > this.genie3WeightCutoff).map((e) => ({
-        source: String(e.source),
-        target: String(e.target),
-        weight: e.weight,
-      }));
-    }
     candidateEdges.sort((a, b) => b.weight - a.weight);
-    slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
+    const slicedEdges = candidateEdges.slice(0, minEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2600,7 +2649,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log(nodes);
 
-    edges.push(...candidateEdges);
+    // edges.push(...candidateEdges);
 
     // Create the graph
     let graph = {
@@ -2838,43 +2887,36 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
     const geneSet = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
     const graphContainerId = compare ? '#aucell_graph_sponge_compare' : '#aucell_graph_sponge';
+    const network = compare ? this.spongeNetworkCompare : this.spongeNetwork;
+    const cutoff = compare ? this.spongePValueCutoffCompare : this.spongePValueCutoff;
+    const minEdges = compare ? this.spongeMinEdgesCompare : this.spongeMinEdges;
 
     compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
     d3.select(graphContainerId).html('');
 
-    if (!geneSet || !datasetId || compare ? !this.spongeNetworkCompare || this.spongeNetworkCompare.length === 0 : !this.spongeNetwork || this.spongeNetwork.length === 0) {
+    if (!geneSet || !datasetId || !network || network.length === 0) {
       compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
       this.checkInitializationComplete(compare);
       return;
     }
 
-    let regulator = geneSet ?? '';
-    let targets = this.geneSetsGenie3[regulator] || [];
-
+    const regulator = geneSet;
+    const targets = compare
+      ? this.geneSetsSpongeCompare[regulator] || []
+      : this.geneSetsSponge[regulator] || [];
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
     let edges: { source: string; target: string; p_adjusted: number }[] = [];
 
-    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = [];
-    let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
-
-    if (compare) {
-      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+    let candidateEdges: { source: string; target: string; p_adjusted: number }[] = network
+      .filter((edge) => edge.p_adjusted < cutoff)
+      .map((e) => ({
         source: String(e.source),
         target: String(e.target),
         p_adjusted: e.p_adjusted,
       }));
-    }
-    else {
-      candidateEdges = this.spongeNetwork.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
-        source: String(e.source),
-        target: String(e.target),
-        p_adjusted: e.p_adjusted,
-      }));
-    }
-
     candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-    slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
+    const slicedEdges = candidateEdges.slice(0, minEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2908,7 +2950,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     });
 
-    edges.push(...candidateEdges);
+    //edges.push(...candidateEdges);
 
     // Create the graph
     let graph = {
@@ -4222,10 +4264,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       for (let i = 0; i <= numStops; i++) {
         const t = i / numStops;
         const value = min + t * (max - min);
+        const normalized = max === min ? 0 : (value - min) / (max - min);
+        const colorValue = this.isPValueSpatialPlot(
+          viewVariablesToUpdate.view,
+          !viewVariablesToUpdate.isMainView
+        )
+          ? 1 - normalized
+          : normalized;
+
         gradient
           .append('stop')
           .attr('offset', `${t * 100}%`)
-          .attr('stop-color', viewVariablesToUpdate.continuous(value));
+          .attr('stop-color', viewVariablesToUpdate.continuous(colorValue));
       }
 
       const legendG = viewVariablesToUpdate.svg

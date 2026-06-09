@@ -82,7 +82,7 @@
         <mat-form-field appearance="fill" *ngIf="compareMode">
           <mat-label>Compare hexagons by</mat-label>
           <mat-select [(ngModel)]="selectedCompareView" (selectionChange)="onColorbyPropertyChange(true)">
-            <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-optgroup *ngFor="let group of groupedPropertiesCompare" [label]="group.key">
               <mat-option *ngFor="let prop of group.value" [value]="prop"
                 [disabled]="!propertyAvailable(prop, 'compare')">
                 {{ prop | translate | async }}
@@ -1504,7 +1504,7 @@
                           <mat-select [(ngModel)]="this.selectedGeneSetGenie3Compare"
                             (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
-                            <mat-option *ngFor="let gene of this.genie3Elements" [value]="gene">
+                            <mat-option *ngFor="let gene of this.genie3ElementsCompare" [value]="gene">
                               {{ gene }}
                             </mat-option>
                           </mat-select>
@@ -1524,8 +1524,8 @@
                             }}</label>
                           <input type="range" id="min-weight-slider-compare" class="slider"
                             [min]="genie3SliderDataCompare.min_border" [max]="genie3SliderDataCompare.max_border"
-                            [step]="genie3SliderDataCompare.step" [value]="genie3SliderDataCompare.default_value"
-                            (input)="onGeneSetChange(true)" [(ngModel)]="genie3WeightCutoffCompare" />
+                            [step]="genie3SliderDataCompare.step"
+                            (input)="visualizeGenie3Subgraph(true)" [(ngModel)]="genie3WeightCutoffCompare" />
                           <div class="helper small">{{ genie3SliderDataCompare.min_border }} ← → {{
                             genie3SliderDataCompare.max_border }}
                           </div>
@@ -1535,7 +1535,7 @@
                           <label for="max-edges-slider-compare">Minimum Edges in Graph: {{ genie3MinEdgesCompare
                             }}</label>
                           <input type="range" id="max-edges-slider-compare" class="slider" min="1" max="50" step="1"
-                            (input)="onGeneSetChange(true)" [(ngModel)]="genie3MinEdgesCompare" />
+                            (input)="visualizeGenie3Subgraph(true)" [(ngModel)]="genie3MinEdgesCompare" />
                           <div class="helper small">1 ←→ 50</div>
                         </div>
                       </div>
@@ -1563,7 +1563,7 @@
                           <mat-select [(ngModel)]="this.selectedGeneSetSpongeCompare"
                             (selectionChange)="onGeneSetChange(true)">
                             <mat-option [value]="null">None</mat-option>
-                            <mat-option *ngFor="let gene of spongeElements" [value]="gene">
+                            <mat-option *ngFor="let gene of spongeElementsCompare" [value]="gene">
                               {{ gene }}
                             </mat-option>
                           </mat-select>
@@ -1582,8 +1582,8 @@
                             }}</label>
                           <input type="range" id="max-pvalue-slider-compare" class="slider"
                             [min]="spongeSliderDataCompare.min_border" [max]="spongeSliderDataCompare.max_border"
-                            [step]="spongeSliderDataCompare.step" [value]="spongeSliderDataCompare.default_value"
-                            [(ngModel)]="this.spongePValueCutoffCompare" (input)="onGeneSetChange(true)" />
+                            [step]="spongeSliderDataCompare.step"
+                            [(ngModel)]="this.spongePValueCutoffCompare" (input)="visualizeSpongeSubgraph(true)" />
                           <div class="helper small">{{ spongeSliderDataCompare.min_border }} ← → {{
                             spongeSliderDataCompare.max_border }}
                           </div>
@@ -1593,7 +1593,7 @@
                           <label for="max-edges-slider-sponge-compare">Minimum Edges in Graph: {{ spongeMinEdgesCompare
                             }}</label>
                           <input type="range" id="max-edges-slider-sponge-compare" class="slider" min="1" max="50"
-                            step="1" (input)="onGeneSetChange(true)" [(ngModel)]="this.spongeMinEdgesCompare" />
+                            step="1" (input)="visualizeSpongeSubgraph(true)" [(ngModel)]="this.spongeMinEdgesCompare" />
                           <div class="helper small">1 ←→ 50</div>
                         </div>
                       </div>
@@ -1843,7 +1843,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell"
+          <mat-tab label="Compare - TF Activity"
             [disabled]="!propertyAvailable('tf_activity', 'compare')">
             <div *ngIf="selectedCompareView === 'tf_activity'">
               <div class="selected-gene-info">
