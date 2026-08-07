@@ -9,7 +9,7 @@ RUN npm ci
 
 # Copy the rest of the frontend source and build for production
 COPY frontend/ ./
-RUN npx ng build --configuration production
+RUN npx ng build --configuration production --base-href /swarm/
 
 # ── Stage 2: Serve compiled app with nginx ───────────────────────────────────
 FROM nginx:alpine
