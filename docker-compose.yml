@@ -1,0 +1,47 @@
+version: '3.8'
+
+# Log rotation: 3 files × max 10 MB; oldest deleted when full
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  swarm-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: ghcr.io/daisybio/swarm-backend:latest
+    container_name: swarm-backend
+    logging: *logging
+    restart: unless-stopped
+    volumes:
+      # Builtin dataset — read-only NFS bind mount (container never writes here)
+      - ./backend/data:/app/backend/data:ro
+      # User uploads + dataset registry — Docker named volume (stays inside Docker)
+      - swarm-uploads:/app/backend/uploads
+    networks:
+      - swarm-net
+
+  swarm-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: ghcr.io/daisybio/swarm-frontend:latest
+    container_name: swarm-frontend
+    logging: *logging
+    restart: unless-stopped
+    ports:
+      - "4204:80"   # exposed on the host; your host nginx proxies here
+    depends_on:
+      - swarm-backend
+    networks:
+      - swarm-net
+
+networks:
+  swarm-net:
+
+volumes:
+  swarm-uploads:   # persists uploaded datasets and the dataset registry across restarts

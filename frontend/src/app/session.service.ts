@@ -2,14 +2,17 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, ReplaySubject, switchMap } from 'rxjs';
 import { DatasetService } from './datasets.service';
+import { environment } from '../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class SessionService {
-  // NOTE: If you access the website under 127.0.0.1 instead of
-  // localhost you need to change this here as well.
-  public apiUrl = 'http://localhost:3000';
+  // Reads from environment.ts (dev: 'http://localhost:3000') or
+  // environment.prod.ts (production: '' = same-origin, routed by nginx).
+  // No more hardcoded URLs — no need for --skip-worktree on this file.
+  public apiUrl = environment.apiBaseUrl;
   private sessionReady$ = new ReplaySubject<void>(1);
   public sessionId: string | null = null;
+
 
   constructor(private http: HttpClient, private datasetService: DatasetService) { }
 

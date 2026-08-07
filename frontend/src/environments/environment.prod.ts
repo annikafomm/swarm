@@ -1,7 +1,7 @@
 export const environment = {
-  production: true, // Indicates that this is the production build.
+  production: true,
 
-  // Base URL for API requests in production.
-  // Should point to the deployed backend service.
-  apiBaseUrl: 'http://0.0.0.0:3000',
+  // Empty string = same-origin. In production, nginx serves the Angular app
+  // and proxies /api/ requests to the backend container. No hardcoded host needed.
+  apiBaseUrl: '',
 };

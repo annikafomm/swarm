@@ -1,7 +1,7 @@
 FROM mambaorg/micromamba:1.5.8 AS base
 
-COPY docker_environment.yml /tmp/docker_environment.yml
-COPY tangram.yml /tmp/tangram.yml
+COPY --chmod=644 docker_environment.yml /tmp/docker_environment.yml
+COPY --chmod=644 tangram.yml /tmp/tangram.yml
 
 # COPY multiome.yml /tmp/multiome.yml
 
