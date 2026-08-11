@@ -27,8 +27,8 @@ find "$TEMP_DIR" -name "adata.h5ad" -exec mv {} "$BACKEND_DIR/" \;
 find "$TEMP_DIR" -name "genie_network_filt.csv" -exec mv {} "$BACKEND_DIR/" \;
 find "$TEMP_DIR" -name "sponge_network_smaller.csv" -exec mv {} "$BACKEND_DIR/" \;
 
-# Move hexagons.geojson to frontend/public/assets
-find "$TEMP_DIR" -name "hexagons.geojson" -exec mv {} "$FRONTEND_DIR/" \;
+# Move hexagons.geojson to backend/data (served via /api/geojson/ endpoint)
+find "$TEMP_DIR" -name "hexagons.geojson" -exec mv {} "$BACKEND_DIR/" \;
 
 # Optional: Clean up temp directory (uncomment if desired)
 # rm -rf "$TEMP_DIR"

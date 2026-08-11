@@ -173,7 +173,7 @@ async def lifespan(app: FastAPI):
     # Register builtin datasets from backend/data (use absolute paths)
     base_path = Path(__file__).parent  # backend/ directory
     builtin_adata = base_path / "data" / "adata.h5ad"
-    builtin_geojson = base_path.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+    builtin_geojson = base_path / "data" / "hexagons.geojson"
     builtin_genie = base_path / "data" / "genie_network_filt.csv"
     builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
 
@@ -1825,8 +1825,8 @@ async def get_geojson(dataset_id: str):
         # Builtin datasets have format: builtin_{name}
 
         if dataset_id.startswith("builtin_"):
-            # Builtin dataset - located in frontend/public/assets/
-            geojson_path = Path(__file__).parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+            # Builtin dataset - located in backend/data/ alongside adata.h5ad
+            geojson_path = Path(__file__).parent / "data" / "hexagons.geojson"
             print(f"[DEBUG] Looking for builtin geojson at: {geojson_path}")
         else:
             # Uploaded dataset - extract job_id from dataset_id format: job_TIMESTAMP_USER
