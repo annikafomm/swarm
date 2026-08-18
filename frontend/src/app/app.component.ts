@@ -112,6 +112,10 @@ export class AppComponent implements OnInit, OnDestroy {
         next: (response) => {
           const datasets = response.datasets || [];
           console.log(`[DEBUG] Found ${datasets.length} unregistered datasets`);
+          if (datasets.length === 0) {
+            console.log('[APP] No unregistered datasets found, skipping dialog');
+            return;
+          }
           this.unregisteredDialogOpen = true;
           const dialogRef = this.dialog.open(UnregisteredDatasetsDialogComponent, {
             width: '1000px',
