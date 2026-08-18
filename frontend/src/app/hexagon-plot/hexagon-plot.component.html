@@ -12,13 +12,13 @@
   <div id="main-visualization" [class.with-sidenav]="selectedCell">
 
     <div id="comparison-box">
-      <div *ngIf="isLoadingHexagons" class="loading-container">
-        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading hexagon plot">
-        </mat-progress-spinner>
-
+      <div class="map-container-wrapper" id="main-map-container">
+        <div id="hexbin"></div>
+        <div *ngIf="isLoadingHexagons" class="map-loading-overlay">
+          <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading hexagon plot">
+          </mat-progress-spinner>
+        </div>
       </div>
-
-      <div id="hexbin" [class.hidden]="isLoadingHexagons"></div>
 
       <div class="centered-row-container" style="width: 100%;">
         <mat-form-field appearance="fill" id="color-by-property">
@@ -71,12 +71,13 @@
         <mat-icon style="color: black;">compare_arrows</mat-icon>
       </button>
 
-      <div *ngIf="compareMode && isLoadingCompare" class="loading-container">
-        <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading hexagon plot">
-        </mat-progress-spinner>
+      <div class="map-container-wrapper" id="compare-map-container" *ngIf="compareMode">
+        <div id="hexbin-compare"></div>
+        <div *ngIf="isLoadingCompare" class="map-loading-overlay">
+          <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading compare hexagon plot">
+          </mat-progress-spinner>
+        </div>
       </div>
-
-      <div id="hexbin-compare" [class.hidden]="isLoadingCompare || !compareMode"></div>
 
       <div class="row-container" *ngIf="compareMode">
         <mat-form-field appearance="fill" *ngIf="compareMode">
@@ -343,12 +344,14 @@
               <app-table [data]="getRegulatoryTableData('genie3', false)" [features]="features"
                 [datasetId]="selectedDataset?.id" [actionColumns]="getRegulatoryActionColumns('genie3', false)"
                 [updateColumn]="'regulatory_scores'" [emptyMessage]="getRegulatoryEmptyMessage('genie3', false)"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="updateHexColors()"
                 (geneSelected)="onGeneSelectedFromTable($event, 'genie3')"></app-table>
               <app-table [data]="getRegulatoryTableData('sponge', false)" [features]="features"
                 [datasetId]="selectedDataset?.id" [updateColumn]="'regulatory_scores'"
                 [actionColumns]="getRegulatoryActionColumns('sponge', false)"
                 [emptyMessage]="getRegulatoryEmptyMessage('sponge', false)" (featuresUpdated)="updateHexColors()"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneSelectedFromTable($event, 'sponge')"></app-table>
 
             </mat-expansion-panel>
@@ -502,6 +505,7 @@
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                 [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneSelectedFromTable($event, 'genie3', false)">
               </app-table>
@@ -512,6 +516,7 @@
                 [updateColumn]="'regulatory_scores'"
                 [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                 [datasetId]="selectedDataset?.id" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onGeneSelectedFromTable($event, 'sponge', false)">
               </app-table>
@@ -639,6 +644,7 @@
             'ligand_receptor_category',
           ]" [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor global scores loaded'" [datasetId]="selectedDataset?.id"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="updateHexColors()"
                 (geneSelected)="onItemSelected($event, 'ligand_receptor_global_scores')"></app-table>
             </ng-template>
@@ -648,6 +654,7 @@
               <app-table [data]="this.meta['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
                 [features]="features" [updateColumn]="'ligand_receptor_relationships'"
                 [emptyMessage]="'No ligand-receptor NMF factors loaded'" [datasetId]="selectedDataset?.id"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="updateHexColors()"
                 (geneSelected)="onItemSelected($event, 'ligand_receptor_NMF_factors')"></app-table>
             </ng-template>
@@ -668,6 +675,7 @@
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
                 [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
 
@@ -676,6 +684,7 @@
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
                 [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneExpressionSelected($event, 'main')"></app-table>
             </ng-template>
 
@@ -707,6 +716,7 @@
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category']" [features]="features" [updateColumn]="'cell_comp_tf_activity_similarity'"
               [datasetId]="selectedDataset?.id" [emptyMessage]="'No cell composition TF activity scores loaded'"
+              (loadingChange)="onTableLoadingChange($event)"
               (featuresUpdated)="updateHexColors()"
               (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores')"></app-table>
           </div>
@@ -725,6 +735,7 @@
               [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="features"
               [updateColumn]="'tf_activity'" [emptyMessage]="'No TF activity scores loaded'"
               [datasetId]="selectedDataset?.id" (featuresUpdated)="updateHexColors()"
+              (loadingChange)="onTableLoadingChange($event)"
               (geneSelected)="onItemSelected($event, 'tf_activity')"></app-table>
           </div>
         </mat-tab>
@@ -743,6 +754,7 @@
           'pathway_activity_padj_mlm',
         ]" [features]="features" [updateColumn]="'pathway_activity'"
               [emptyMessage]="'No pathway activity scores loaded'" [datasetId]="selectedDataset?.id"
+              (loadingChange)="onTableLoadingChange($event)"
               (featuresUpdated)="updateHexColors()"
               (geneSelected)="onItemSelected($event, 'pathway_activity')"></app-table>
           </div>
@@ -818,6 +830,7 @@
 
               <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
                 [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onDgeaGeneSelected($event, false)">
               </app-table>
             </div>
@@ -848,6 +861,7 @@
             <h4>ChromVAR Moran's I</h4>
             <app-table [data]="this.meta['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
               [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (loadingChange)="onTableLoadingChange($event)"
               (featuresUpdated)="updateHexColors()">
             </app-table>
           </ng-template>
@@ -856,6 +870,7 @@
             <h4>ChromVAR Geary's C</h4>
             <app-table [data]="this.meta['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
               [features]="features" [updateColumn]="'chromvar_total_sum'" [datasetId]="selectedDataset?.id"
+              (loadingChange)="onTableLoadingChange($event)"
               (featuresUpdated)="updateHexColors()">
             </app-table>
           </ng-template>
@@ -963,6 +978,7 @@
               <app-table
                 [data]="this.meta['peak_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
                 [features]="compareFeatures" [datasetId]="selectedDataset?.id"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="updateHexColors('#hexbin')">
               </app-table>
             </div>
@@ -976,6 +992,7 @@
               <app-table
                 [data]="this.meta['motif_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
                 [features]="compareFeatures" [datasetId]="selectedDataset?.id"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="updateHexColors('#hexbin')">
               </app-table>
             </div>
@@ -1180,13 +1197,15 @@
 
                 <div *ngIf="grnPeakStats && !isLoadingGrnStats">
                   <h5>Peak Statistics</h5>
-                  <app-table [data]="grnPeakStats" [features]="features" [datasetId]="selectedDataset?.id">
+                  <app-table [data]="grnPeakStats" [features]="features" [datasetId]="selectedDataset?.id"
+                    (loadingChange)="onTableLoadingChange($event)">
                   </app-table>
                 </div>
 
                 <div *ngIf="grnMotifStats && !isLoadingGrnStats" style="margin-top: 20px;">
                   <h5>Motif Statistics</h5>
-                  <app-table [data]="grnMotifStats" [features]="features" [datasetId]="selectedDataset?.id">
+                  <app-table [data]="grnMotifStats" [features]="features" [datasetId]="selectedDataset?.id"
+                    (loadingChange)="onTableLoadingChange($event)">
                   </app-table>
                 </div>
               </mat-expansion-panel>
@@ -1482,12 +1501,14 @@
                   [actionColumns]="getRegulatoryActionColumns('genie3', true)"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [updateColumn]="'regulatory_scores'"
                   [isCompare]="true" [emptyMessage]="getRegulatoryEmptyMessage('genie3', true)"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()"></app-table>
                 <app-table [data]="getRegulatoryTableData('sponge', true)" [features]="compareFeatures"
                   [updateColumn]="'regulatory_scores'" [actionColumns]="getRegulatoryActionColumns('sponge', true)"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
                   [emptyMessage]="getRegulatoryEmptyMessage('sponge', true)" (featuresUpdated)="repaintBothViews()"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)">
                 </app-table>
               </mat-expansion-panel>
@@ -1630,6 +1651,7 @@
                   [features]="compareFeatures" [updateColumn]="'regulatory_scores'"
                   [actionColumns]="['aucell_scores_genie3', 'viper_scores_genie3', 'spongeffects_ssGSEA_scores_genie3', 'spongeffects_GSVA_scores_genie3']"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelectedCompare)="onGeneSelectedFromTable($event, 'genie3', true)"
                   (featuresUpdated)="repaintBothViews()">
                 </app-table>
@@ -1639,6 +1661,8 @@
                 <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
                   [updateColumn]="'regulatory_scores'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
+                  [isCompare]="true"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (featuresUpdated)="updateHexColors()">
                 </app-table>
 
@@ -1652,19 +1676,15 @@
           <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', 'compare')">
             <div *ngIf="selectedCompareView === 'gene_expression'">
               <div class="selected-gene-info">
-                <strong>Comparison selection</strong><br>
-                Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
-                Gene: {{ selectedGeneExpressionCompare || selectedGeneExpressionMain || 'None' }}
-              </div>
-
-              <h4>Gene Expression Comparison</h4>
+                      <h4>Gene Expression Comparison</h4>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
 
               <ng-template #moranI>
                 <h4>Moran's I</h4>
                 <app-table [data]="this.metaCompare['moranI']" [actionColumns]="['gene_expression']"
-                  [features]="compareFeatures" [updateColumn]="'gene_expression'"
+                  [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Moran\'s I scores loaded'"></app-table>
               </ng-template>
@@ -1672,8 +1692,9 @@
               <ng-template #gearyC>
                 <h4>Geary's C</h4>
                 <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
-                  [features]="compareFeatures" [updateColumn]="'gene_expression'"
+                  [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelected)="onGeneExpressionSelected($event, 'compare')"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
@@ -1808,16 +1829,18 @@
             'ligand_receptor_cosine_similarity',
             'ligand_receptor_p_value',
             'ligand_receptor_category',
-          ]" [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
+          ]" [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'" [isCompare]="true"
                   [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelected)="onItemSelected($event, 'ligand_receptor_global_scores', true)"></app-table>
               </ng-template>
 
               <ng-template #nmf_scores>
                 <h4>Ligand-Receptor NMF Scores</h4>
                 <app-table [data]="this.metaCompare['nmf_factors']" [actionColumns]="['ligand_receptor_NMF_factors']"
-                  [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDatasetCompare?.id"
+                  [features]="compareFeatures" [updateColumn]="'ligand_receptor_relationships'" [isCompare]="true"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (featuresUpdated)="repaintBothViews()"
                   (geneSelected)="onItemSelected($event, 'ligand_receptor_NMF_factors', true)"></app-table>
               </ng-template>
@@ -1837,8 +1860,9 @@
               <app-table [data]="this.metaCompare['cell_comp_tf_activity_global_scores']" [actionColumns]="[
           'cell_comp_tf_activity_cosine_similarity',
           'cell_comp_tf_activity_category',
-        ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'"
+        ]" [features]="compareFeatures" [updateColumn]="'cell_comp_tf_activity_similarity'" [isCompare]="true"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onItemSelected($event, 'cell_comp_tf_activity_global_scores', true)"></app-table>
             </div>
           </mat-tab>
@@ -1855,7 +1879,8 @@
               <h4>TF Activity Comparison</h4>
               <app-table [data]="this.metaCompare['tf_names']"
                 [actionColumns]="['tf_activity_score_ulm', 'tf_activity_padj_ulm']" [features]="compareFeatures"
-                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                [updateColumn]="'tf_activity'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [isCompare]="true"
+                (loadingChange)="onTableLoadingChange($event)"
                 (featuresUpdated)="repaintBothViews()"
                 (geneSelected)="onItemSelected($event, 'tf_activity', true)"></app-table>
             </div>
@@ -1873,8 +1898,9 @@
               <app-table [data]="this.metaCompare['pathway_names']" [actionColumns]="[
           'pathway_activity_score_mlm',
           'pathway_activity_padj_mlm',
-        ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'"
+        ]" [features]="compareFeatures" [updateColumn]="'pathwayActivity'" [isCompare]="true"
                 [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onItemSelected($event, 'pathway_activity', true)"></app-table>
             </div>
           </mat-tab>
@@ -1949,7 +1975,8 @@
                 </div>
 
                 <app-table *ngIf="!cmp['skipped']" [data]="cmp['table']" [actionColumns]="['show_on_plot']"
-                  [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id"
+                  [features]="features" [updateColumn]="'dgea'" [datasetId]="selectedDataset?.id" [isCompare]="true"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (geneSelected)="onDgeaGeneSelected($event, true)">
                 </app-table>
               </div>
@@ -1980,16 +2007,18 @@
             <ng-template #chromvarMoranI>
               <h4>ChromVAR Moran's I</h4>
               <app-table [data]="this.metaCompare['chromvar_moranI']" [actionColumns]="['chromvar_spot_scores']"
-                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'"
-                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [isCompare]="true"
+                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')"
+                (loadingChange)="onTableLoadingChange($event)">
               </app-table>
             </ng-template>
 
             <ng-template #chromvarGearyC>
               <h4>ChromVAR Geary's C</h4>
               <app-table [data]="this.metaCompare['chromvar_gearyC']" [actionColumns]="['chromvar_spot_scores']"
-                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'"
-                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')">
+                [features]="compareFeatures" [updateColumn]="'chromvar_total_sum'" [isCompare]="true"
+                [datasetId]="selectedDatasetCompare?.id" (featuresUpdated)="updateHexColors('#hexbin-compare')"
+                (loadingChange)="onTableLoadingChange($event)">
               </app-table>
             </ng-template>
           </mat-tab>
@@ -2098,7 +2127,8 @@
               <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
                 <app-table
                   [data]="this.metaCompare['peak_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
-                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id" [isCompare]="true"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (featuresUpdated)="updateHexColors('#hexbin-compare')">
                 </app-table>
               </div>
@@ -2111,7 +2141,8 @@
               <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
                 <app-table
                   [data]="this.metaCompare['motif_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
-                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id" [isCompare]="true"
+                  (loadingChange)="onTableLoadingChange($event)"
                   (featuresUpdated)="updateHexColors('#hexbin-compare')">
                 </app-table>
               </div>
@@ -2321,15 +2352,15 @@
 
                   <div *ngIf="grnPeakStatsCompare && !isLoadingGrnStatsCompare">
                     <h5>Peak Statistics</h5>
-                    <app-table [data]="grnPeakStatsCompare" [features]="compareFeatures"
-                      [datasetId]="selectedDatasetCompare?.id">
+                    <app-table [data]="grnPeakStatsCompare" [features]="compareFeatures" [isCompare]="true"
+                      [datasetId]="selectedDatasetCompare?.id" (loadingChange)="onTableLoadingChange($event)">
                     </app-table>
                   </div>
 
                   <div *ngIf="grnMotifStatsCompare && !isLoadingGrnStatsCompare" style="margin-top: 20px;">
                     <h5>Motif Statistics</h5>
-                    <app-table [data]="grnMotifStatsCompare" [features]="compareFeatures"
-                      [datasetId]="selectedDatasetCompare?.id">
+                    <app-table [data]="grnMotifStatsCompare" [features]="compareFeatures" [isCompare]="true"
+                      [datasetId]="selectedDatasetCompare?.id" (loadingChange)="onTableLoadingChange($event)">
                     </app-table>
                   </div>
                 </mat-expansion-panel>

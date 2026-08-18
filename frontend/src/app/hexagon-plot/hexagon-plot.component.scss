@@ -92,31 +92,47 @@
   font-weight: normal;
 }
 
+.map-container-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  margin-right: 1rem;
+  border-radius: 12px;
+}
+
 #hexbin-compare,
-#hexbin,
-#comparison-box .loading-container {
+#hexbin {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
   padding: 1rem;
-  margin-bottom: 1rem;
-  margin-right: 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 400px;
   width: 500px;
   min-height: 0;
+  box-sizing: border-box;
 }
 
-#comparison-box #hexbin.hidden,
-#comparison-box #hexbin-compare.hidden {
-  visibility: hidden;
-  display: none;
-  height: 0;
-  width: 0;
-  padding: 0;
+.map-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: auto;
 }
 
 

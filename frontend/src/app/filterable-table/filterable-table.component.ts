@@ -30,6 +30,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
   @Output() geneSelectedCompare = new EventEmitter<{ gene: string; action: string }>();
+  @Output() loadingChange = new EventEmitter<{ loading: boolean; isCompare: boolean }>();
   constructor(
     private http: HttpClient,
     private sessionService: SessionService,
@@ -343,6 +344,8 @@ export class FilterableTableComponent implements OnInit, OnChanges {
         ? `${this.sessionService.apiUrl}/obsm/chromvar_spot_scores/${safeIndex}${datasetQuery}`
         : `${this.sessionService.apiUrl}/obsm/${encodeURIComponent(columnName)}/${safeIndex}${datasetQuery}`;
 
+    this.loadingChange.emit({ loading: true, isCompare: this.isCompare });
+
     this.sessionService
       .callWithSession(() => this.http.get(request, { withCredentials: true }))
       .subscribe({
@@ -366,6 +369,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
             console.log(`[Backend] Loaded adata.obsm[${columnName}][${index}]`);
           }
 
+          this.loadingChange.emit({ loading: false, isCompare: this.isCompare });
           this.featuresUpdated.emit();
         },
         error: (err) => {
@@ -375,6 +379,8 @@ export class FilterableTableComponent implements OnInit, OnChanges {
             }
             this.featuresUpdated.emit();
           }
+
+          this.loadingChange.emit({ loading: false, isCompare: this.isCompare });
 
           if (isGeneExpression) {
             console.error(`[Backend] Failed to load adata[:, ${index}].X`, err);

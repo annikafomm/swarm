@@ -304,6 +304,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Loading screen trackers
   public isLoadingHexagons: boolean = true;
   public isLoadingCompare: boolean = false;
+  private mainMapLoadingCount: number = 1;
+  private compareMapLoadingCount: number = 0;
   public isLoadingSponge: boolean = false;
   public isLoadingGenie3: boolean = false;
   public isLoadingGenie3Compare: boolean = false;
@@ -312,6 +314,28 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public isLoadingRegulatoryScores: boolean = false; // Track regulatory scores fetches during init
   public isLoadingRegulatoryScoresCompare: boolean = false; // Track regulatory scores fetches during init for compare view
   public isAppInitializing: boolean = true; // Only for initial app load
+
+  public setMapLoading(loading: boolean, compare: boolean = false): void {
+    if (compare) {
+      if (loading) {
+        this.compareMapLoadingCount++;
+      } else {
+        this.compareMapLoadingCount = Math.max(0, this.compareMapLoadingCount - 1);
+      }
+      this.isLoadingCompare = this.compareMapLoadingCount > 0;
+    } else {
+      if (loading) {
+        this.mainMapLoadingCount++;
+      } else {
+        this.mainMapLoadingCount = Math.max(0, this.mainMapLoadingCount - 1);
+      }
+      this.isLoadingHexagons = this.mainMapLoadingCount > 0;
+    }
+  }
+
+  public onTableLoadingChange(event: { loading: boolean; isCompare: boolean }): void {
+    this.setMapLoading(event.loading, event.isCompare);
+  }
 
   // Returns true if any initial data loading is in progress (ONLY for first time)
   public get isInitializing(): boolean {
@@ -1177,6 +1201,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       } catch (e) { }
 
       // Clear the service state
+      this.compareMapLoadingCount = 0;
+      this.isLoadingCompare = false;
       this.datasetService.selectDatasetCompare(null);
       this.refreshSharedGeneExpressionDomain();
     }
@@ -1428,6 +1454,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   private loadAndRenderData(dataPath: string, compare: boolean = false): void {
+    this.setMapLoading(true, compare);
 
     const tokenType = compare ? 'hexagons_compare' : 'hexagons_main';
     const token = this.nextRequestToken(tokenType);
@@ -1830,21 +1857,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         this.onColorbyPropertyChange(compare);
         setTimeout(() => {
-          if (compare) {
-            this.isLoadingCompare = false;
-          } else {
-            this.isLoadingHexagons = false;
-          }
+          this.setMapLoading(false, compare);
           this.checkInitializationComplete(compare);
         }, 0);
       })
       .catch((error) => {
         console.error('Error loading or rendering data:', error);
-        if (compare) {
-          this.isLoadingCompare = false;
-        } else {
-          this.isLoadingHexagons = false;
-        }
+        this.setMapLoading(false, compare);
         this.checkInitializationComplete(compare);
       });
   }
@@ -2033,35 +2052,43 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Fetch pending gene stats if needed
     if (pending.length > 0) {
-      const results = await Promise.allSettled(
-        pending.map((r) =>
-          firstValueFrom(
-            this.sessionService.callWithSession(() =>
-              this.http.get<GeneStatsResponse>(
-                `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
-                { withCredentials: true },
+      this.setMapLoading(true, false);
+      if (this.compareMode) this.setMapLoading(true, true);
+
+      try {
+        const results = await Promise.allSettled(
+          pending.map((r) =>
+            firstValueFrom(
+              this.sessionService.callWithSession(() =>
+                this.http.get<GeneStatsResponse>(
+                  `${this.sessionService.apiUrl}/X_stats/${encodeURIComponent(r.gene)}?dataset_ids=${encodeURIComponent(r.datasetId)}`,
+                  { withCredentials: true },
+                )
               )
             )
           )
-        )
-      );
+        );
 
-      if (token !== this.geneDomainToken) {
-        return;
-      }
-
-      results.forEach((result, idx) => {
-        const req = pending[idx];
-        if (result.status === 'fulfilled') {
-          this.geneDomainCache.set(req.cacheKey, {
-            min: result.value.global_min,
-            max: result.value.global_max,
-            expiresAt: now + this.geneDomainCacheTtlMs,
-          });
-        } else {
-          console.warn('[gene-domain] failed to fetch global stats', req, result.reason);
+        if (token !== this.geneDomainToken) {
+          return;
         }
-      });
+
+        results.forEach((result, idx) => {
+          const req = pending[idx];
+          if (result.status === 'fulfilled') {
+            this.geneDomainCache.set(req.cacheKey, {
+              min: result.value.global_min,
+              max: result.value.global_max,
+              expiresAt: now + this.geneDomainCacheTtlMs,
+            });
+          } else {
+            console.warn('[gene-domain] failed to fetch global stats', req, result.reason);
+          }
+        });
+      } finally {
+        this.setMapLoading(false, false);
+        if (this.compareMode) this.setMapLoading(false, true);
+      }
     }
 
     // Gather all valid cached domains
@@ -3880,6 +3907,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const request = `${baseRequest}${datasetQuery}`;
 
+    this.setMapLoading(true, compare);
+
     this.sessionService
       .callWithSession(() =>
         this.http.get(
@@ -3889,7 +3918,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       )
       .subscribe({
         next: (res) => {
-          if (token !== this.requestTokens[tokenType]) return;
+          if (token !== this.requestTokens[tokenType]) {
+            this.setMapLoading(false, compare);
+            return;
+          }
           const data = res as { [barcode: string]: any };
 
           // 1. Update ONLY the main view if compare is false
@@ -3915,6 +3947,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
 
           this.repaintBothViews();
+          this.setMapLoading(false, compare);
 
           // Mark regulatory scores fetch as complete if during initialization
           if (this.isInitializing) {
@@ -3927,6 +3960,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             `[Backend] Failed to load adata.obsm["${columnName}][${index}]`,
             err,
           );
+          this.setMapLoading(false, compare);
           // Mark as complete even on error
           if (this.isInitializing) {
             this.isLoadingRegulatoryScores = false;
