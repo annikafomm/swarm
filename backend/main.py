@@ -319,10 +319,15 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
     """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
 
     if file_path is None:
-        # Fall back to builtin dataset if none is set
-        base_path = Path(__file__).parent
-        file_path = base_path / "data" / "adata.h5ad"
-        if not file_path.exists():
+        # Fall back to the first available builtin dataset if none is set yet
+        # (e.g. a fresh session that hasn't selected/uploaded anything).
+        builtins = dataset_registry.get_all_datasets(as_dict=True).get("builtin", {}) if dataset_registry else {}
+        for dataset_dict in builtins.values():
+            candidate = dataset_dict.get("adata_path")
+            if candidate and Path(candidate).exists():
+                file_path = candidate
+                break
+        if file_path is None:
             raise ValueError("No adata file has been loaded. Please call /read_adata first.")
 
     adata = sc.read_h5ad(str(file_path))
