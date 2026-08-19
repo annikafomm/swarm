@@ -2016,7 +2016,7 @@ async def create_session(request: Request, response: Response):
     Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session`
     """
     try:
-        existing_session_id = await cookie(request)
+        existing_session_id = cookie(request)
         existing_data = await backend.read(existing_session_id)
     except HTTPException:
         existing_data = None
