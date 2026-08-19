@@ -199,7 +199,7 @@ DEFAULT_DATASETS = [
     {
         "id": "builtin_main",
         "alias": "Default Dataset (Visium, BRCA)",
-        "dir": "data",
+        "dir": "data/brca_visium",
         "description": "Pre-configured spatial transcriptomics dataset (BRCA Visium)",
     },
     {
@@ -1102,7 +1102,10 @@ async def upload(
         h5ad_path = re.sub(r"\.rds$", ".h5ad", rds_path)
         log_path = Path(h5ad_path).with_suffix(".log")
         with log_path.open("w") as log_file:
-            result = subprocess.run(
+            # Offloaded to a worker thread so this blocking Rscript call doesn't stall
+            # the single asyncio event loop (and every other user's request) while it runs.
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [
                     "Rscript",
                     "../backend/rds_to_h5ad.R",
@@ -1237,7 +1240,10 @@ async def upload(
             print("geojson input adata:", adata_path)
             print("geojson data_type:", dataset.lower())
 
-            subprocess.run(
+            # Offloaded to a worker thread so this blocking call doesn't stall the
+            # single asyncio event loop (and every other user's request) while it runs.
+            await asyncio.to_thread(
+                subprocess.run,
                 [
                     "python3",
                     "../backend/visium_to_geojson.py",
@@ -2650,6 +2656,28 @@ async def get_available_cell_types(
         raise HTTPException(status_code=504, detail="Rscript timed out reading cell types")
 
 
+def _run_streaming_subprocess(cmd: List[str]) -> tuple[int, list[str]]:
+    """
+    Run cmd, streaming its merged stdout/stderr to our own stdout line-by-line as it
+    runs, and return (returncode, output_lines). Blocking end-to-end (Popen creation,
+    the stdout read loop, and wait()) — call via asyncio.to_thread so it doesn't stall
+    the single asyncio event loop for the whole duration of the R script.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # merge stderr into stdout so both stream together
+        text=True,
+        bufsize=1,  # line-buffered
+    )
+    output_lines: list[str] = []
+    for line in proc.stdout:  # type: ignore[union-attr]
+        print(f"[R] {line}", end="", flush=True)
+        output_lines.append(line)
+    proc.wait()
+    return proc.returncode, output_lines
+
+
 @app.post("/api/compute_footprint", dependencies=[Depends(cookie)])
 async def compute_footprint(
     motif: List[str] = Form(...),
@@ -2702,23 +2730,15 @@ async def compute_footprint(
         "--cluster_by", cluster_by,
     ]
     print(f"[compute_footprint] Running: {' '.join(cmd)}")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,  # merge stderr into stdout so both stream together
-        text=True,
-        bufsize=1,  # line-buffered
-    )
-    output_lines: list[str] = []
-    for line in proc.stdout:  # type: ignore[union-attr]
-        print(f"[R] {line}", end="", flush=True)
-        output_lines.append(line)
-    proc.wait()
-    if proc.returncode != 0:
+    # Offloaded to a worker thread so this blocking R script (Popen + streaming stdout
+    # read + wait) doesn't stall the single asyncio event loop for every other user's
+    # request while it runs.
+    returncode, output_lines = await asyncio.to_thread(_run_streaming_subprocess, cmd)
+    if returncode != 0:
         full_output = "".join(output_lines)
         raise HTTPException(
             status_code=500,
-            detail=f"R script failed (exit {proc.returncode}): {full_output[-2000:]}"
+            detail=f"R script failed (exit {returncode}): {full_output[-2000:]}"
         )
 
     # Collect one result entry per requested motif

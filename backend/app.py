@@ -332,16 +332,18 @@ async def calculate_scores_helper(job_dir, json_dict):
             print("Using dataset type:", dataset)
 
 
-            # Run scripts sequentially
+            # Run scripts sequentially. Each is a blocking subprocess.run() offloaded to a
+            # worker thread via asyncio.to_thread so it doesn't stall the single asyncio
+            # event loop (and therefore every other user's request) for the whole pipeline.
             if multiome_params:
-                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "../backend/calc_python_scores/calc_scores.py",
                                 "-dataset", dataset,
                                 "-outdir", out_dir,
                                 "-multiome",
                                 "-log", log_file] + python_params,
                                 check=True)
             else:
-                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "../backend/calc_python_scores/calc_scores.py",
                                 "-dataset", dataset,
                                 "-outdir", out_dir,
                                 "-log", log_file] + python_params,
@@ -352,29 +354,29 @@ async def calculate_scores_helper(job_dir, json_dict):
                 print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
                                 "--outdir", {out_dir},\
                                 "--log", {log_file} + {multiome_params}"')
-                subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
+                await asyncio.to_thread(subprocess.run, ["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
                                 "--outdir", out_dir,
                                 "--log", log_file] + multiome_params,
                                 check=True)
-                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "../backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
                                 "-log", log_file,
                                 "-multiome"],
                                 check=True)
 
-                subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
                                 "--dir", out_dir,
                                 "--log", log_file] + multiome_params_py,
                                 check=True)
 
             if [p for p in R_params if p != "--tangram"]:
-                subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
+                await asyncio.to_thread(subprocess.run, ["Rscript", "../backend/calc_R_scores/calc_scores.R",
                                 "--dir", out_dir,
                                 "--log", log_file] + R_params,
                                 check=True)
 
 
-                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "../backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
                                 "-log", log_file,
                                 "-Rscores"],
@@ -400,7 +402,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                     #if tangram_used:
                     #cmd.append("-tangram")
 
-                    subprocess.run(cmd, check=True)
+                    await asyncio.to_thread(subprocess.run, cmd, check=True)
 
         # finish the log file
         message = f"Finished! Check out the log file and the AnnData object(s) in {out_dir} for details."
