@@ -1676,7 +1676,8 @@
           <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', 'compare')">
             <div *ngIf="selectedCompareView === 'gene_expression'">
               <div class="selected-gene-info">
-                      <h4>Gene Expression Comparison</h4>
+                <h4>Gene Expression Comparison</h4>
+              </div>
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
 
               <ng-template #moranI>
