@@ -186,43 +186,93 @@ class GenieNetworkPath(BaseModel):
 
 
 # =============================================================================
-# Application
+# Application & Registry
 # =============================================================================
-# Lifespan event handler
+dataset_registry: Optional[DatasetRegistry] = None
 
+# =============================================================================
+# Built-in Default Datasets List
+# Edit this single list to configure which default datasets SWARM loads.
+# Paths, scores, and metadata are automatically inferred from the dataset directory and its config.json.
+# =============================================================================
+DEFAULT_DATASETS = [
+    {
+        "id": "builtin_main",
+        "alias": "Default Dataset (Visium, BRCA)",
+        "dir": "data",
+        "description": "Pre-configured spatial transcriptomics dataset (BRCA Visium)",
+    },
+    {
+        "id": "builtin_visual_cortex",
+        "alias": "Visual Cortex (Visium)",
+        "dir": "data/visual_cortex",
+        "description": "Mouse Visual Cortex spatial transcriptomics dataset",
+    },
+]
+
+# Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     global dataset_registry
-    dataset_registry = DatasetRegistry()
+    if dataset_registry is None:
+        dataset_registry = DatasetRegistry()
 
-    # Register builtin datasets from backend/data (use absolute paths)
     base_path = Path(__file__).parent  # backend/ directory
-    builtin_adata = base_path / "data" / "adata.h5ad"
-    builtin_geojson = base_path / "data" / "hexagons.geojson"
-    builtin_genie = base_path / "data" / "genie_network_filt.csv"
-    builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
 
-    print(f"Base path: {base_path}")
-    print(f"Adata exists: {builtin_adata.exists()} at {builtin_adata}")
+    for ds_conf in DEFAULT_DATASETS:
+        dataset_id = ds_conf["id"]
+        alias = ds_conf["alias"]
+        ds_dir = base_path / ds_conf.get("dir", "data")
+        description = ds_conf.get("description", "")
 
-    if builtin_adata.exists():
-        dataset_registry.register_builtin_dataset(
-            dataset_id="builtin_main",
-            alias="Default Dataset (Visium, BRCA)",
-            adata_path=str(builtin_adata),
-            geojson_path="/api/geojson/builtin_main",  # Use API URL for consistency
-            genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
-            sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
-            description="Pre-configured spatial transcriptomics dataset"
-        )
-        print(f"✓ Registered builtin dataset with paths:")
-        print(f"  - adata: {builtin_adata}")
-        print(f"  - geojson: /api/geojson/builtin_main")
-        print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
-        print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
-    else:
-        print(f"✗ Builtin adata not found at {builtin_adata}")
+        if not ds_dir.exists():
+            print(f"✗ Default dataset dir not found: {ds_dir}")
+            continue
+
+        # Look for config file in dataset directory
+        config_files = list(ds_dir.glob("config.json")) or list(ds_dir.glob("*config*.json"))
+        if config_files:
+            try:
+                dataset_registry.register_builtin_from_config(
+                    config_file=config_files[0],
+                    dataset_id=dataset_id,
+                    alias=alias,
+                    description=description,
+                )
+                continue
+            except Exception as e:
+                print(f"⚠ Failed to register {dataset_id} from config ({e}), falling back to direct files...")
+
+        # Fallback: Infer directly from files in directory (e.g. data/ root)
+        ds_adata = ds_dir / "adata.h5ad"
+        if not ds_adata.exists():
+            h5ad_files = list(ds_dir.rglob("*scores*.h5ad")) or list(ds_dir.glob("*.h5ad"))
+            ds_adata = h5ad_files[0] if h5ad_files else ds_adata
+
+        ds_genie = ds_dir / "genie_network_filt.csv"
+        if not ds_genie.exists():
+            genie_files = list(ds_dir.rglob("*genie*.csv"))
+            ds_genie = genie_files[0] if genie_files else ds_genie
+
+        ds_sponge = ds_dir / "sponge_network_smaller.csv"
+        if not ds_sponge.exists():
+            sponge_files = list(ds_dir.rglob("*sponge*.csv"))
+            ds_sponge = sponge_files[0] if sponge_files else ds_sponge
+
+        if ds_adata.exists():
+            dataset_registry.register_builtin_dataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=str(ds_adata),
+                geojson_path=f"/api/geojson/{dataset_id}",
+                genie_network_path=str(ds_genie) if ds_genie.exists() else None,
+                sponge_network_path=str(ds_sponge) if ds_sponge.exists() else None,
+                description=description,
+            )
+            print(f"✓ Registered default dataset {dataset_id} directly from files")
+        else:
+            print(f"✗ Builtin adata not found for {dataset_id} at {ds_adata}")
 
     asyncio.create_task(cleanup_expired_sessions())
     yield
@@ -1851,8 +1901,33 @@ async def get_geojson(dataset_id: str):
         # Builtin datasets have format: builtin_{name}
 
         if dataset_id.startswith("builtin_"):
-            # Builtin dataset - located in backend/data/ alongside adata.h5ad
-            geojson_path = Path(__file__).parent / "data" / "hexagons.geojson"
+            geojson_path = None
+            base_path = Path(__file__).parent
+
+            # 1. Match from DEFAULT_DATASETS directory
+            match_conf = next((d for d in DEFAULT_DATASETS if d["id"] == dataset_id), None)
+            if match_conf:
+                candidate = base_path / match_conf.get("dir", "data") / "hexagons.geojson"
+                if candidate.exists():
+                    geojson_path = candidate
+
+            # 2. Match from dataset directory name directly
+            if not geojson_path or not geojson_path.exists():
+                dir_name = dataset_id.replace("builtin_", "")
+                candidate = base_path / "data" / dir_name / "hexagons.geojson"
+                if candidate.exists():
+                    geojson_path = candidate
+
+            # 3. Fallbacks (legacy root backend/data or frontend/public/assets)
+            if not geojson_path or not geojson_path.exists():
+                candidate_paths = [
+                    Path(__file__).parent / "data" / "hexagons.geojson",
+                    Path(__file__).resolve().parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson",
+                    Path("/app/backend/data/hexagons.geojson"),
+                    Path("/app/frontend/public/assets/hexagons.geojson"),
+                ]
+                geojson_path = next((path for path in candidate_paths if path.exists()), candidate_paths[0])
+
             print(f"[DEBUG] Looking for builtin geojson at: {geojson_path}")
         else:
             # Uploaded dataset - extract job_id from dataset_id format: job_TIMESTAMP_USER

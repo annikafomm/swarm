@@ -314,13 +314,14 @@ class DatasetRegistry:
             return True
         return False
 
-    def find_config_files(self, uploads_dir: Path) -> List[Path]:
+    def find_config_files(self, uploads_dir: Path, user: Optional[str] = None) -> List[Path]:
         """
         Scan uploads directory for unregistered configuration files.
         Returns list of config files for datasets not yet in registry.
 
         Args:
             uploads_dir: Path to uploads directory
+            user: Optional username to filter datasets for
 
         Returns:
             List of Paths to unregistered config files
@@ -332,7 +333,7 @@ class DatasetRegistry:
         unregistered = []
         uploads_dir = Path(uploads_dir)
 
-        print(f"[DEBUG] Scanning for config files in: {uploads_dir}")
+        print(f"[DEBUG] Scanning for config files in: {uploads_dir} (filter user: {user})")
         print(f"[DEBUG] Currently registered uploaded datasets: {list(self.datasets.get('uploaded', {}).keys())}")
 
         # Find all config files matching pattern job_*_config.json
@@ -346,6 +347,20 @@ class DatasetRegistry:
                 parent_dir = config_file.parent
                 dataset_id = parent_dir.name
 
+                # Filter by user if specified
+                if user is not None:
+                    # Check if directory name ends with _{user} or matches user
+                    if not (dataset_id.endswith(f"_{user}") or dataset_id == user):
+                        # Also check config file content if user field is present
+                        try:
+                            with open(config_file, 'r') as f:
+                                cfg = json.load(f)
+                                cfg_user = cfg.get("user") or cfg.get("email")
+                                if cfg_user != user:
+                                    continue
+                        except Exception:
+                            continue
+
                 print(f"[DEBUG] Checking config: {dataset_id} - Registered: {dataset_id in self.datasets.get('uploaded', {})}")
 
                 # Allow re-registration even if already registered
@@ -358,7 +373,7 @@ class DatasetRegistry:
         print(f"[DEBUG] Total unregistered config files found: {len(unregistered)}")
         return unregistered
 
-    def get_unregistered_datasets(self, uploads_dir: Path) -> List[Dict[str, Any]]:
+    def get_unregistered_datasets(self, uploads_dir: Path, user: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get summary info about unregistered datasets from config files.
         Suitable for displaying in UI popup.
@@ -367,6 +382,7 @@ class DatasetRegistry:
 
         Args:
             uploads_dir: Path to uploads directory
+            user: Optional username to filter datasets for
 
         Returns:
             List of dicts with dataset info for UI display
@@ -375,7 +391,7 @@ class DatasetRegistry:
         # This ensures newly registered datasets show up after refresh
         self._refresh_uploaded_datasets()
 
-        config_files = self.find_config_files(uploads_dir)
+        config_files = self.find_config_files(uploads_dir, user=user)
         unregistered = []
 
         for config_file in config_files:
@@ -635,6 +651,144 @@ class DatasetRegistry:
         # Register it
         self.register_uploaded_dataset(dataset=dataset)
         print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
+        return dataset
+
+    def _resolve_config_path(self, path_str: Optional[str], base_dir: Path) -> Optional[str]:
+        """Resolve a path from config, whether absolute or relative to base_dir."""
+        if not path_str:
+            return None
+        if path_str.startswith("/api/"):
+            return path_str
+        p = Path(path_str)
+        if p.is_absolute() and p.exists():
+            return str(p)
+        candidate = base_dir / p
+        if candidate.exists():
+            return str(candidate)
+        candidates = list(base_dir.rglob(p.name))
+        if candidates:
+            return str(candidates[0])
+        return str(candidate if not p.is_absolute() else p)
+
+    def register_builtin_from_config(
+        self,
+        config_file: Path,
+        dataset_id: str,
+        alias: str,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        """
+        Register a built-in dataset directly from its configuration file.
+        Infers all paths and scores relative to the dataset directory.
+        """
+        config_file = Path(config_file)
+        if not config_file.exists():
+            raise ValueError(f"Builtin config file not found: {config_file}")
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        base_dir = config_file.parent
+        output_files = config.get("output_files", {})
+        dataset_type = config.get("dataset", "Visium")
+
+        if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
+            dataset_type = "Multiome"
+
+        # Determine adata path
+        raw_adata_path = self._determine_adata_path(dataset_type, output_files, config)
+        adata_path = self._resolve_config_path(raw_adata_path, base_dir)
+
+        if not adata_path or not Path(adata_path).exists():
+            # Fallback to finding any .h5ad
+            h5ad_files = list(base_dir.rglob("*scores*.h5ad")) or list(base_dir.glob("*.h5ad"))
+            if h5ad_files:
+                adata_path = str(h5ad_files[0])
+            else:
+                raise ValueError(f"AnnData file not found for builtin dataset {dataset_id} in {base_dir}")
+
+        geojson_path = f"/api/geojson/{dataset_id}"
+        genie_network_path = self._resolve_config_path(output_files.get("genie_network_path"), base_dir)
+        sponge_network_path = self._resolve_config_path(output_files.get("sponge_network_path"), base_dir)
+        tangram_adata_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
+        adata_st_scores_path = self._resolve_config_path(output_files.get("adata_st_scores_path"), base_dir)
+        adata_tg_scores_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
+        tf_graph_path = self._resolve_config_path(output_files.get("tf_graph_path"), base_dir)
+
+        use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+        use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
+
+        dataset_type_lower = dataset_type.lower()
+        if "xenium" in dataset_type_lower:
+            xenium_grid_adata_path = self._resolve_config_path(output_files.get("xenium_grid_adata_path") or raw_adata_path, base_dir)
+            dataset = XeniumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                tf_graph_path=tf_graph_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                xenium_grid_adata_path=xenium_grid_adata_path,
+                description=description,
+            )
+        elif "multiome" in dataset_type_lower:
+            dataset = MultiomeDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=adata_tg_scores_path,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                adata_st_scores_path=adata_st_scores_path,
+                adata_tg_scores_path=adata_tg_scores_path,
+                adata_map_path=self._resolve_config_path(output_files.get("adata_map_path"), base_dir),
+                adata_map_X_csv_path=self._resolve_config_path(output_files.get("adata_map_X_csv_path"), base_dir),
+                adata_map_var_csv_path=self._resolve_config_path(output_files.get("adata_map_var_csv_path"), base_dir),
+                calc_scores_log_path=self._resolve_config_path(output_files.get("calc_scores_log_path"), base_dir),
+                global_motif_analysis_path=self._resolve_config_path(output_files.get("global_motif_analysis_path"), base_dir),
+                motif_to_tf_csv_path=self._resolve_config_path(output_files.get("motif_to_tf_csv_path"), base_dir),
+                spot_obj_chromvar_path=self._resolve_config_path(output_files.get("spot_obj_chromvar_path"), base_dir),
+                spot_obj_footprints_path=self._resolve_config_path(output_files.get("spot_obj_footprints_path"), base_dir),
+                dissociated_obj_footprints_path=self._resolve_config_path(output_files.get("dissociated_obj_footprints_path"), base_dir),
+                chromvar_scores_csv_path=self._resolve_config_path(output_files.get("chromvar_scores_csv_path"), base_dir),
+                diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
+                footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
+                tf_graph_path=tf_graph_path,
+                grn_evaluation_name=output_files.get("grn_evaluation_name"),
+                description=description,
+            )
+        else:
+            dataset = VisiumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                adata_st_scores_path=adata_st_scores_path,
+                adata_tg_scores_path=adata_tg_scores_path,
+                tf_graph_path=tf_graph_path,
+                description=description,
+            )
+
+        self.register_builtin_dataset(dataset=dataset)
+        print(f"✓ Registered builtin dataset from config: {dataset_id} ({alias})")
         return dataset
 
     def delete_unregistered_dataset(self, dataset_id: str, uploads_dir: Path, delete_files: bool = True) -> bool:
