@@ -2750,6 +2750,18 @@ async def compute_footprint(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    # Autoreload on code changes — dev only (devcontainer.json sets this env
+    # var); prod runs the built Docker image without it. uvicorn requires an
+    # import string rather than the app object to support reload, and the
+    # watched dir is scoped to backend/ so it doesn't also crawl
+    # frontend/node_modules, data/, and uploads/ on every reload check.
+    reload = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
+    uvicorn.run(
+        "main:app" if reload else app,
+        host="0.0.0.0",
+        port=3000,
+        reload=reload,
+        reload_dirs=[str(Path(__file__).resolve().parent)] if reload else None,
+    )
     # for merit
     # uvicorn.run(app, host="0.0.0.0", port=3005)

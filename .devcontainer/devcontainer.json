@@ -1,20 +1,33 @@
 {
+  "name": "swarm-dev",
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
   },
+  "workspaceFolder": "/workspaces/swarm",
+  "remoteUser": "mopitaner",
+  "containerEnv": {
+    "ALLOWED_ORIGINS": "http://localhost:4200,http://127.0.0.1:4200",
+    "UVICORN_RELOAD": "true"
+  },
   "customizations": {
     "vscode": {
-      "settings": { "terminal.integrated.defaultProfile.linux": "bash" },
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "git.openRepositoryInParentFolders": "always"
+      },
       "extensions": [
         "EditorConfig.EditorConfig",
-        "angular.ng-template"
+        "angular.ng-template",
+        "ms-python.python",
+        "ms-toolsai.jupyter"
       ]
     }
   },
-  "forwardPorts": [4200],
+  "forwardPorts": [3000, 4200],
   "portsAttributes": {
-    "4200": { "label": "Frontend Development Server" }
+    "3000": { "label": "Backend API" },
+    "4200": { "label": "Frontend Development Server" },
   },
-  "postCreateCommand": "cd frontend && npm install"
+  "postCreateCommand": "cd /workspaces/swarm/frontend && npm install && cd /workspaces/swarm && git config --global --add safe.directory /workspaces/swarm"
 }

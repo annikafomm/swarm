@@ -86,10 +86,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
 # Install SSH to push with git (when cloning with ssh)
 RUN apt-get install -y --no-install-recommends openssh-client
 
-# Create non-root user
-RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/mopitas-mapra \
+# Create non-root user and match the actual repo path used in this workspace.
+RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/swarm \
     && chown -R $username:$username /workspaces
 
 USER $username
 ENV USER=$username
-WORKDIR /workspaces/mopitas-mapra
+WORKDIR /workspaces/swarm
