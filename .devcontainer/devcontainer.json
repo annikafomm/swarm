@@ -8,8 +8,14 @@
   "remoteUser": "mopitaner",
   "containerEnv": {
     "ALLOWED_ORIGINS": "http://localhost:4200,http://127.0.0.1:4200",
-    "UVICORN_RELOAD": "true"
+    "UVICORN_RELOAD": "true",
+    // Keeps .claude.json inside the state dir below, so one volume covers everything.
+    "CLAUDE_CONFIG_DIR": "/home/mopitaner/.claude"
   },
+  "mounts": [
+    // Claude Code state (session transcripts, credentials, memory) survives rebuilds.
+    "source=swarm-claude-state,target=/home/mopitaner/.claude,type=volume"
+  ],
   "customizations": {
     "vscode": {
       "settings": {

@@ -90,6 +90,10 @@ RUN apt-get install -y --no-install-recommends openssh-client
 RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/swarm \
     && chown -R $username:$username /workspaces
 
+# Pre-create the Claude state dir so the named volume mounted here inherits
+# $username ownership instead of being created root-owned by Docker.
+RUN mkdir -p /home/$username/.claude && chown -R $username:$username /home/$username/.claude
+
 USER $username
 ENV USER=$username
 WORKDIR /workspaces/swarm
