@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, HostListener, HostBinding } from '@angular/core';
+import { Component, OnInit, OnDestroy, HostBinding } from '@angular/core';
 import { RouterOutlet, RouterLink } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormPageComponent } from './form-page/form-page.component';
@@ -9,7 +9,7 @@ import { PathsService } from './paths.service';
 import { DatasetService } from './datasets.service';
 import { MatDialog } from '@angular/material/dialog';
 import { UnregisteredDatasetsDialogComponent } from './unregistered-datasets-dialog/unregistered-datasets-dialog.component';
-import { Subject } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
 
@@ -42,23 +42,21 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.sessionService.initSession();
 
-    // Show unregistered datasets dialog after session is initialized
-    // Track by session ID - show dialog on each NEW session (page refresh creates new session)
-    setTimeout(() => {
-      const currentSessionId = this.sessionService.sessionId;
-      const lastDialogSessionId = sessionStorage.getItem('lastUnregisteredDialogSessionId');
+    // Check for unregistered datasets once session is ready
+    this.sessionService.callWithSession(() => {
+      const currentUsername = this.sessionService.username;
+      const lastDialogUsername = sessionStorage.getItem('lastUnregisteredDialogSessionId');
 
-      console.log(`[APP] Current session: ${currentSessionId}, Last dialog session: ${lastDialogSessionId}`);
+      console.log(`[APP] Current user: ${currentUsername}, Last dialog user: ${lastDialogUsername}`);
 
-      // Show dialog if this is a new session (different from last time we showed it)
-      if (currentSessionId && currentSessionId !== lastDialogSessionId) {
-        console.log('[APP] New session detected, showing unregistered datasets dialog');
+      if (currentUsername && currentUsername !== lastDialogUsername) {
         this.showUnregisteredDatasetsDialog();
-        sessionStorage.setItem('lastUnregisteredDialogSessionId', currentSessionId);
-      } else {
-        console.log('[APP] Same session, skipping unregistered datasets dialog');
+        sessionStorage.setItem('lastUnregisteredDialogSessionId', currentUsername);
       }
-    }, 1000);  // Increased timeout to ensure session is ready
+      return of(null);
+    })
+      .pipe(takeUntil(this.destroy$))
+      .subscribe();
 
     this.pathsService.paths$
       .pipe(takeUntil(this.destroy$))
@@ -339,17 +337,5 @@ export class AppComponent implements OnInit, OnDestroy {
 
 
     tour.start();
-  }
-
-  @HostListener('window:beforeunload', ['$event'])
-  beforeUnloadHandler(_event: Event) {
-    // Use sendBeacon for reliable delivery during page unload
-    // It works even if the page is being closed/refreshed
-    const sessionId = this.sessionService.sessionId;
-    if (sessionId) {
-      const url = `${this.sessionService.apiUrl}/delete_session`;
-      navigator.sendBeacon(url, JSON.stringify({ session_id: sessionId }));
-      console.log('[Frontend] Sent delete_session beacon');
-    }
   }
 }

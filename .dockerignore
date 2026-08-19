@@ -29,7 +29,10 @@ node_modules/
 *.err
 
 # ───── Local envs ─────
+# Note: .dockerignore does NOT recurse for slash-less patterns like .gitignore
+# does — backend/.env needs its own entry or it would get baked into the image.
 .env
+**/.env
 .venv/
 venv/
 env/

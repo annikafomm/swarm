@@ -17,6 +17,10 @@ services:
     container_name: swarm-backend
     logging: *logging
     restart: unless-stopped
+    # Secret is injected at container runtime, not baked into the image —
+    # backend/.env must exist on this server (see backend/.env.example).
+    env_file:
+      - ./backend/.env
     volumes:
       # Builtin dataset — read-only NFS bind mount (container never writes here)
       - ./backend/data:/app/backend/data:ro

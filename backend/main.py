@@ -59,16 +59,42 @@ from starlette.responses import RedirectResponse
 from datetime import datetime, timedelta
 import asyncio
 from scipy import sparse
+from dotenv import load_dotenv
 
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 
+# Secrets live in backend/.env, which is gitignored and never baked into the
+# Docker image (see .dockerignore) — each deployment (devcontainer, prod
+# server) creates its own local copy with a real, unshared secret.
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY")
+if not SESSION_SECRET_KEY:
+    raise RuntimeError(
+        "SESSION_SECRET_KEY is not set. Create backend/.env (see "
+        "backend/.env.example) with a real secret, e.g.:\n"
+        '  python -c "import secrets; print(secrets.token_hex(32))"'
+    )
+
 # Base folder for all uploads (created on startup).
 # Use path relative to this file to avoid depending on current working dir.
-#BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
-BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
-BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Store uploads inside the backend package directory to avoid depending on
+# the current working directory (which may be different when running via
+# devcontainers, docker, or production). This ensures the path is
+# repository-relative and writable by the runtime user.
+BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+try:
+    BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    # Fall back to a writable temp directory if creation fails due to
+    # host mount permissions. This keeps the server running while
+    # surfacing a clear warning in the logs.
+    import tempfile
+    fallback = Path(tempfile.mkdtemp(prefix="swarm-uploads-"))
+    print(f"Warning: cannot create {BASE_UPLOAD_DIR}; using fallback {fallback}")
+    BASE_UPLOAD_DIR = fallback
 
 # Allow configuring CORS origins via environment variable (comma-separated).
 # Example: ALLOWED_ORIGINS="https://myapp.com,https://staging.myapp.com"
@@ -215,13 +241,13 @@ app.add_middleware(
 )
 
 # Uses UUID
-cookie_params = CookieParameters(secure=False, httponly=True, samesite="lax")
+cookie_params = CookieParameters(secure=True, httponly=True, samesite="lax")
 
 cookie = SessionCookie(
     cookie_name="cookie",
     identifier="general_verifier",
     auto_error=True,
-    secret_key="DONOTUSE",
+    secret_key=SESSION_SECRET_KEY,
     cookie_params=cookie_params,
 )
 backend = InMemoryBackend[UUID, SessionData]()
@@ -1901,18 +1927,34 @@ async def get_hexagon(user: str, subdir: str, filename: str):
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
 
-@app.post("/create_session/{name}")
-async def create_session(name: str, response: Response):
+@app.post("/create_session")
+async def create_session(request: Request, response: Response):
     """
-    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session/mopitas`
-    """
-    session = uuid4()
-    data = SessionData(username=name)
+    Identifies the caller purely from its session cookie: the client can no
+    longer choose its own username (that was an ownership-check bypass,
+    since dataset ownership is checked as `owner == session_data.username`).
 
+    If the request already carries a valid, known session cookie, that
+    session is reused as-is so a returning user keeps seeing their own
+    uploads. Otherwise a fresh, server-generated identity is created.
+
+    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session`
+    """
+    try:
+        existing_session_id = await cookie(request)
+        existing_data = await backend.read(existing_session_id)
+    except HTTPException:
+        existing_data = None
+
+    if existing_data is not None:
+        return {"username": existing_data.username, "is_new": False}
+
+    session = uuid4()
+    data = SessionData(username=str(session))
     await backend.create(session, data)
     cookie.attach_to_response(response, session)
 
-    return f"created session for {name}"
+    return {"username": data.username, "is_new": True}
 
 
 @app.get("/whoami", dependencies=[Depends(cookie)])

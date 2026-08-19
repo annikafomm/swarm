@@ -1,6 +1,10 @@
 # Ignore session cookies
 cookies.txt
 
+# Secrets — never commit, each deployment has its own (see backend/.env.example)
+.env
+**/.env
+
 # Ignore notebooks folder
 notebooks/
 
