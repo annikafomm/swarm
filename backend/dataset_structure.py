@@ -204,32 +204,41 @@ class Dataset(ABC):
             "metadata": self.metadata,
         }
 
-    def to_registry_dict(self) -> Dict[str, Any]:
-        """
-        Serialize to registry-compatible format (for JSON persistence).
-        Used by DatasetRegistry to store in JSON.
-
-        Returns:
-            Dictionary compatible with registry JSON format
-        """
-        return self.to_dict()
-
-    @classmethod
-    def from_registry_dict(cls, data: Dict[str, Any]) -> Dataset:
-        """
-        Deserialize from registry dictionary.
-        Routes to appropriate subclass based on 'type' field using DatasetFactory.
-
-        Args:
-            data: Dictionary from registry (should have 'type' field)
-
-        Returns:
-            Appropriate Dataset subclass instance (VisiumDataset, XeniumDataset, or MultiomeDataset)
-        """
-        # Delegate to DatasetFactory which properly routes by type field
-        # This ensures multiome and xenium datasets are deserialized to correct classes
-        from dataset_structure import DatasetFactory
-        return DatasetFactory.from_registry_dict(data)
+    # to_registry_dict / from_registry_dict supported (de)serializing datasets to/from
+    # dataset_registry.json. That disk persistence is disabled (see DatasetRegistry
+    # in dataset_management.py — _load_registry/_save_registry are now no-ops), so
+    # these are unused. Kept commented out rather than deleted in case disk
+    # persistence is revisited; note from_registry_dict as written here is also
+    # broken (infinite recursion — it delegates to DatasetFactory.from_registry_dict,
+    # which calls back into this same inherited method) and would need a real,
+    # non-delegating implementation before being reinstated.
+    #
+    # def to_registry_dict(self) -> Dict[str, Any]:
+    #     """
+    #     Serialize to registry-compatible format (for JSON persistence).
+    #     Used by DatasetRegistry to store in JSON.
+    #
+    #     Returns:
+    #         Dictionary compatible with registry JSON format
+    #     """
+    #     return self.to_dict()
+    #
+    # @classmethod
+    # def from_registry_dict(cls, data: Dict[str, Any]) -> Dataset:
+    #     """
+    #     Deserialize from registry dictionary.
+    #     Routes to appropriate subclass based on 'type' field using DatasetFactory.
+    #
+    #     Args:
+    #         data: Dictionary from registry (should have 'type' field)
+    #
+    #     Returns:
+    #         Appropriate Dataset subclass instance (VisiumDataset, XeniumDataset, or MultiomeDataset)
+    #     """
+    #     # Delegate to DatasetFactory which properly routes by type field
+    #     # This ensures multiome and xenium datasets are deserialized to correct classes
+    #     from dataset_structure import DatasetFactory
+    #     return DatasetFactory.from_registry_dict(data)
 
     @classmethod
     @abstractmethod
@@ -990,17 +999,20 @@ class DatasetFactory:
 
         return dataset
 
-    @classmethod
-    def from_registry_dict(cls, data: Dict[str, Any]) -> Dataset:
-        """
-        Deserialize from registry dictionary and route to appropriate type.
-
-        Args:
-            data: Dictionary from registry containing 'type' field
-
-        Returns:
-            Dataset instance of appropriate type
-        """
-        dataset_type = data.get("type", "visium").lower()
-        dataset_class = cls.DATASET_CLASSES.get(dataset_type, VisiumDataset)
-        return dataset_class.from_registry_dict(data)
+    # Unused now that dataset_registry.json persistence is disabled (see Dataset.from_registry_dict
+    # above for why). Kept commented out rather than deleted.
+    #
+    # @classmethod
+    # def from_registry_dict(cls, data: Dict[str, Any]) -> Dataset:
+    #     """
+    #     Deserialize from registry dictionary and route to appropriate type.
+    #
+    #     Args:
+    #         data: Dictionary from registry containing 'type' field
+    #
+    #     Returns:
+    #         Dataset instance of appropriate type
+    #     """
+    #     dataset_type = data.get("type", "visium").lower()
+    #     dataset_class = cls.DATASET_CLASSES.get(dataset_type, VisiumDataset)
+    #     return dataset_class.from_registry_dict(data)

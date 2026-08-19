@@ -15,13 +15,16 @@ class DatasetRegistry:
     """
 
     def __init__(self, registry_file: Path = None):
-        if registry_file is None:
-            # Use absolute path based on script location
-            base_path = Path(__file__).parent
-            registry_file = base_path / "uploads" / "dataset_registry.json"
-        self.registry_file = registry_file
-        self.registry_file.parent.mkdir(parents=True, exist_ok=True)
-        print(f"Dataset registry path: {self.registry_file}")
+        # Disk persistence (dataset_registry.json) is disabled — see _load_registry
+        # and _save_registry below. Kept commented out rather than deleted since the
+        # registry_file plumbing would need to come back if that ever changes.
+        # if registry_file is None:
+        #     # Use absolute path based on script location
+        #     base_path = Path(__file__).parent
+        #     registry_file = base_path / "uploads" / "dataset_registry.json"
+        # self.registry_file = registry_file
+        # self.registry_file.parent.mkdir(parents=True, exist_ok=True)
+        # print(f"Dataset registry path: {self.registry_file}")
         # self.datasets now stores Dataset objects organized by category
         self.datasets = self._load_registry()
 
@@ -30,100 +33,71 @@ class DatasetRegistry:
         Load existing registry or create new one.
         Deserializes JSON into Dataset objects.
 
+        Disk persistence is disabled (see below) — this always returns empty
+        buckets. Builtins are rebuilt fresh from DEFAULT_DATASETS + their
+        config/files by main.py's startup lifespan hook; uploaded datasets are
+        recovered from job_*_config.json via find_config_files/register_dataset_from_config
+        instead, which also verifies the referenced output files still exist on disk
+        (dataset_registry.json never did — it was a write-only snapshot nothing read back,
+        since this method was always called with clear_uploads=True).
+
         Args:
             clear_uploads: If True (on startup), clear uploaded datasets.
                           If False (runtime), preserve existing uploads.
 
         Returns:
             Dict with "builtin" and "uploaded" keys containing Dataset objects
+            (both always start empty; "builtin" is populated later by the startup hook)
         """
         datasets = {"builtin": {}, "uploaded": {}}
 
-        if self.registry_file.exists():
-            try:
-                with open(self.registry_file, 'r') as f:
-                    data = json.load(f)
-
-                    # Load builtin datasets
-                    for dataset_id, dataset_dict in data.get("builtin", {}).items():
-                        try:
-                            # Mark as builtin to preserve category
-                            dataset_dict["category"] = "builtin"
-                            dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                            datasets["builtin"][dataset_id] = dataset
-                        except Exception as e:
-                            print(f"⚠ Failed to load builtin dataset {dataset_id}: {e}")
-
-                    # Load uploaded datasets (if not clearing)
-                    if not clear_uploads:
-                        for dataset_id, dataset_dict in data.get("uploaded", {}).items():
-                            try:
-                                dataset_dict["category"] = "uploaded"
-                                dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                                datasets["uploaded"][dataset_id] = dataset
-                            except Exception as e:
-                                print(f"⚠ Failed to load uploaded dataset {dataset_id}: {e}")
-
-                return datasets
-
-            except Exception as e:
-                print(f"Error loading registry: {e}")
-                return datasets
+        # if self.registry_file.exists():
+        #     try:
+        #         with open(self.registry_file, 'r') as f:
+        #             data = json.load(f)
+        #
+        #             # Load uploaded datasets (if not clearing)
+        #             if not clear_uploads:
+        #                 for dataset_id, dataset_dict in data.get("uploaded", {}).items():
+        #                     try:
+        #                         dataset_dict["category"] = "uploaded"
+        #                         dataset = DatasetFactory.from_registry_dict(dataset_dict)
+        #                         datasets["uploaded"][dataset_id] = dataset
+        #                     except Exception as e:
+        #                         print(f"⚠ Failed to load uploaded dataset {dataset_id}: {e}")
+        #
+        #         return datasets
+        #
+        #     except Exception as e:
+        #         print(f"Error loading registry: {e}")
+        #         return datasets
 
         return datasets
 
     def _save_registry(self):
         """
-        Persist registry to disk.
-        Converts Dataset objects to dictionaries for JSON serialization.
+        Disk persistence is disabled — this is now a no-op.
+        Previously converted Dataset objects to dicts and wrote them to
+        dataset_registry.json, but nothing ever read that file back (_load_registry
+        is always called with clear_uploads=True), so it was pure write overhead.
+        Kept commented out rather than deleted in case disk persistence is revisited.
         """
-        try:
-            # Convert Dataset objects to dicts for JSON storage
-            json_data = {
-                "builtin": {
-                    dataset_id: dataset.to_registry_dict()
-                    for dataset_id, dataset in self.datasets.get("builtin", {}).items()
-                },
-                "uploaded": {
-                    dataset_id: dataset.to_registry_dict()
-                    for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
-                }
-            }
-
-            with open(self.registry_file, 'w') as f:
-                json.dump(json_data, indent=2, fp=f, default=str)
-            print(f"✓ Registry saved to {self.registry_file}")
-        except Exception as e:
-            print(f"✗ Error saving registry: {e}")
-            raise
-
-    def _refresh_uploaded_datasets(self):
-        """
-        Reload uploaded datasets from the registry file.
-        This keeps the in-memory registry in sync with disk, so newly registered
-        datasets are visible after a page refresh without restarting.
-        """
-        if not self.registry_file.exists():
-            return
-
-        try:
-            with open(self.registry_file, 'r') as f:
-                data = json.load(f)
-
-            # Reload uploaded datasets
-            uploaded = {}
-            for dataset_id, dataset_dict in data.get("uploaded", {}).items():
-                try:
-                    dataset_dict["category"] = "uploaded"
-                    dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                    uploaded[dataset_id] = dataset
-                except Exception as e:
-                    print(f"⚠ Failed to reload uploaded dataset {dataset_id}: {e}")
-
-            self.datasets["uploaded"] = uploaded
-            print(f"[DEBUG] Reloaded {len(uploaded)} uploaded datasets from disk")
-        except Exception as e:
-            print(f"✗ Error reloading uploaded datasets: {e}")
+        pass
+        # try:
+        #     # Convert Dataset objects to dicts for JSON storage
+        #     json_data = {
+        #         "uploaded": {
+        #             dataset_id: dataset.to_registry_dict()
+        #             for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
+        #         }
+        #     }
+        #
+        #     with open(self.registry_file, 'w') as f:
+        #         json.dump(json_data, indent=2, fp=f, default=str)
+        #     print(f"✓ Registry saved to {self.registry_file}")
+        # except Exception as e:
+        #     print(f"✗ Error saving registry: {e}")
+        #     raise
 
     def register_uploaded_dataset(
         self,
@@ -163,8 +137,8 @@ class DatasetRegistry:
         else:
             print()
 
-        print(f"Saving registry to {self.registry_file}")
-        self._save_registry()
+        # print(f"Saving registry to {self.registry_file}")
+        # self._save_registry()
         print(f"✓ Registered dataset {dataset_id if dataset is None else dataset.id}")
 
     def register_builtin_dataset(
@@ -218,7 +192,7 @@ class DatasetRegistry:
             self.datasets["builtin"][dataset_id] = dataset_obj
             print(f"Registered legacy builtin dataset: {dataset_id}")
 
-        self._save_registry()
+        # self._save_registry()
 
     def get_all_datasets(self, as_dict: bool = True) -> Dict:
         """
@@ -287,7 +261,7 @@ class DatasetRegistry:
         for category in ["builtin", "uploaded"]:
             if category in self.datasets and dataset_id in self.datasets[category]:
                 del self.datasets[category][dataset_id]
-                self._save_registry()
+                # self._save_registry()
                 return True
         return False
 
@@ -310,7 +284,7 @@ class DatasetRegistry:
                     setattr(dataset, key, value)
                 else:
                     print(f"⚠ Dataset attribute '{key}' does not exist")
-            self._save_registry()
+            # self._save_registry()
             return True
         return False
 
@@ -387,10 +361,6 @@ class DatasetRegistry:
         Returns:
             List of dicts with dataset info for UI display
         """
-        # Reload uploaded datasets from disk to sync with latest registry
-        # This ensures newly registered datasets show up after refresh
-        self._refresh_uploaded_datasets()
-
         config_files = self.find_config_files(uploads_dir, user=user)
         unregistered = []
 
