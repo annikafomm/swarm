@@ -13,7 +13,7 @@
 
     <div id="comparison-box">
       <div class="map-container-wrapper" id="main-map-container">
-        <app-hexagon-view #mainView [isCompare]="false" [selectedCell]="selectedCell"
+        <app-hexagon-view #mainView [isCompare]="false" [selectedCell]="selectedCell" [selectedView]="selectedView"
           (cellClicked)="displayCellDetails($event.event, $event.cell, false)"></app-hexagon-view>
         <div *ngIf="isLoadingHexagons" class="map-loading-overlay">
           <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading hexagon plot">
@@ -73,7 +73,7 @@
       </button>
 
       <div class="map-container-wrapper" id="compare-map-container" *ngIf="compareMode">
-        <app-hexagon-view #compareView [isCompare]="true" [selectedCell]="selectedCellCompare"
+        <app-hexagon-view #compareView [isCompare]="true" [selectedCell]="selectedCellCompare" [selectedView]="selectedCompareView"
           (cellClicked)="displayCellDetails($event.event, $event.cell, true)"></app-hexagon-view>
         <div *ngIf="isLoadingCompare" class="map-loading-overlay">
           <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading compare hexagon plot">
@@ -126,7 +126,7 @@
         dynamicHeight="false" class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
         <mat-tab label="Cell Information" #cellInfoTab>
-          <app-cell-info-panel [cell]="selectedCell" [currentView]="selectedView"></app-cell-info-panel>
+          <app-cell-info-panel [cell]="selectedCell" [currentView]="selectedView" [datasetFeatures]="features"></app-cell-info-panel>
         </mat-tab>
 
         <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null" #clusterInfoTab>
@@ -1128,7 +1128,7 @@
           dynamicHeight="false" class="metadata-tables-compare">
 
           <mat-tab label="Compare - Cell Information" #cellInfoTabCompare>
-            <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView"></app-cell-info-panel>
+            <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView" [datasetFeatures]="compareFeatures"></app-cell-info-panel>
           </mat-tab>
 
           <mat-tab label="Compare - Cluster Information" *ngIf="selectedClusterCompare !== null"

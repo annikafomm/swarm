@@ -26,6 +26,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 export class CellInfoPanelComponent {
   @Input() cell: CellFeature | null = null;
   @Input() currentView = '';
+  @Input() datasetFeatures: CellFeature[] = [];
 
   constructor(
     public infoService: InfoService,
@@ -37,10 +38,68 @@ export class CellInfoPanelComponent {
   private expandedGroupKeys = new Set<string>();
   private lastCellBarcode: string | null = null;
 
+  // Cache non-empty properties per datasetFeatures reference
+  private nonEmptyPropsCache = new Set<string>();
+  private lastFeaturesRef: CellFeature[] | null = null;
+
   shouldShowProperty(key: string): boolean {
     if (key == null) return true;
     const k = String(key).toLowerCase();
     return !this.hiddenPropKeys.has(k);
+  }
+
+  public isValueEmpty(v: unknown): boolean {
+    if (v === null || v === undefined) return true;
+    if (typeof v === 'string') {
+      const trimmed = v.trim();
+      return (
+        trimmed === '' ||
+        trimmed.toLowerCase() === 'nan' ||
+        trimmed.toLowerCase() === 'null' ||
+        trimmed.toLowerCase() === 'none' ||
+        trimmed.toLowerCase() === 'undefined'
+      );
+    }
+    if (typeof v === 'number') {
+      return !Number.isFinite(v);
+    }
+    if (Array.isArray(v)) {
+      return v.length === 0 || v.every((x) => this.isValueEmpty(x));
+    }
+    if (typeof v === 'object') {
+      return Object.keys(v).length === 0;
+    }
+    return false;
+  }
+
+  private computeNonEmptyProps(): void {
+    if (this.datasetFeatures === this.lastFeaturesRef) return;
+    this.lastFeaturesRef = this.datasetFeatures;
+    this.nonEmptyPropsCache.clear();
+
+    if (!this.datasetFeatures || this.datasetFeatures.length === 0) return;
+
+    // Collect all property keys that appear anywhere in the dataset
+    const allKeys = new Set<string>();
+    for (let i = 0; i < this.datasetFeatures.length; i++) {
+      const p = this.datasetFeatures[i]?.properties;
+      if (p) {
+        for (const k of Object.keys(p)) {
+          allKeys.add(k);
+        }
+      }
+    }
+
+    // A property is considered present in the dataset if at least one cell has a non-empty value
+    for (const key of allKeys) {
+      const hasValue = this.datasetFeatures.some((f) => {
+        const val = f.properties?.[key];
+        return !this.isValueEmpty(val);
+      });
+      if (hasValue) {
+        this.nonEmptyPropsCache.add(key);
+      }
+    }
   }
 
   /**
@@ -85,12 +144,25 @@ export class CellInfoPanelComponent {
   }
 
   private computeGroupedProperties(cell: CellFeature): PropertyGroup[] {
+    this.computeNonEmptyProps();
+
     const buckets = new Map<string, PropertyGroupItem[]>();
     for (const key of Object.keys(cell.properties)) {
       if (!this.shouldShowProperty(key)) continue;
-      const value = (cell.properties as any)[key];
-      const category = this.infoService.getCategoryForKey(key, value);
-      const item: PropertyGroupItem = { key, label: this.label(key), value, info: this.infoService.getFieldInfo(key) };
+
+      // If datasetFeatures is provided and this property is 100% empty across the entire dataset, skip it
+      if (this.datasetFeatures.length > 0 && !this.nonEmptyPropsCache.has(key)) {
+        continue;
+      }
+
+      const rawValue = (cell.properties as any)[key];
+      const category = this.infoService.getCategoryForKey(key, rawValue);
+      const item: PropertyGroupItem = {
+        key,
+        label: this.label(key),
+        value: rawValue,
+        info: this.infoService.getFieldInfo(key),
+      };
       const bucket = buckets.get(category);
       if (bucket) {
         bucket.push(item);

@@ -743,6 +743,107 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
+  public activeTabLabel = 'Cell Information';
+  public activeTabLabelCompare = 'Compare - Cell Information';
+
+  public isClusterInfoTabActive(compare: boolean = false): boolean {
+    const label = compare ? this.activeTabLabelCompare : this.activeTabLabel;
+    return label === 'Cluster Information' || label === 'Compare - Cluster Information';
+  }
+
+  public syncClusterHighlight(compare: boolean = false): void {
+    const isComp = compare;
+    const currentView = isComp ? this.selectedCompareView : this.selectedView;
+    const targetView = isComp ? this.compareView : this.mainView;
+
+    if (currentView === 'leiden') {
+      let clusterId = isComp ? this.selectedClusterCompare : this.selectedCluster;
+      if (clusterId === null) {
+        this.autoSelectDefaultCluster(isComp);
+        clusterId = isComp ? this.selectedClusterCompare : this.selectedCluster;
+      }
+      if (clusterId !== null) {
+        targetView?.extendCluster(clusterId);
+      }
+    } else {
+      targetView?.resetClusterExtension();
+    }
+  }
+
+  public getTabLabelForProperty(property: string, compare: boolean = false): string {
+    const prefix = compare ? 'Compare - ' : '';
+    const prop = (property || '').toLowerCase();
+
+    if (prop === 'leiden') {
+      return `${prefix}Cluster Information`;
+    }
+    if (prop === 'cell_type') {
+      return `${prefix}Cell Information`;
+    }
+    if (prop === 'regulatory_scores' || prop.includes('regulatory_score') || prop.endsWith('_genie3') || prop.endsWith('_sponge')) {
+      return `${prefix}Regulatory Scores`;
+    }
+    if (prop === 'co_occurrence') {
+      return `${prefix}Co-occurence`;
+    }
+    if (prop === 'gene_expression') {
+      return `${prefix}Gene Expression`;
+    }
+    if (prop.includes('ligand_receptor') || prop.startsWith('liana')) {
+      return `${prefix}Ligand-Receptor Relationships`;
+    }
+    if (prop.includes('cell_comp_tf_activity')) {
+      return `${prefix}Cell Composition TF Activity`;
+    }
+    if (prop === 'tf_activity') {
+      return `${prefix}TF Activity`;
+    }
+    if (prop === 'pathway_activity') {
+      return `${prefix}Pathway Activity`;
+    }
+    if (prop === 'dgea') {
+      return `${prefix}DGEA`;
+    }
+    if (prop.includes('chromvar') || prop.includes('moran') || prop.includes('geary')) {
+      return compare ? "Compare: ChromVar spatial correlation : Moran's I / Geary's C" : "ChromVar spatial correlation : Moran's I / Geary's C";
+    }
+    if (prop.includes('diff_motif')) {
+      return 'Differential Motif Activity';
+    }
+    if (prop.includes('footprint')) {
+      return 'Footprints';
+    }
+    if (prop.includes('grn')) {
+      return compare ? " Compare - GRN Evaluation" : "GRN Evaluation";
+    }
+    return `${prefix}Cell Information`;
+  }
+
+  public jumpToTabByLabel(tabLabel: string, compare: boolean = false): void {
+    const group = compare ? this.tabGroupCompare : this.tabGroup;
+    if (!group) return;
+
+    const select = () => {
+      const tabs: MatTab[] = (group as any)._tabs?.toArray?.() ?? [];
+      const targetTab = tabs.find(t => t.textLabel?.trim().toLowerCase() === tabLabel.trim().toLowerCase());
+      if (targetTab) {
+        const index = tabs.indexOf(targetTab);
+        if (index !== -1) {
+          group.selectedIndex = index;
+          if (compare) {
+            this.activeTabLabelCompare = targetTab.textLabel;
+            this.syncClusterHighlight(true);
+          } else {
+            this.activeTabLabel = targetTab.textLabel;
+            this.syncClusterHighlight(false);
+          }
+        }
+      }
+    };
+    select();
+    setTimeout(select, 0);
+  }
+
   /**
    * Selects `tab` within `group`, resolved via the group's own tab list rather than a
    * hardcoded index — the Cell/Cluster Information tabs are added/removed with *ngIf, which
@@ -755,6 +856,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       const index = tabs.indexOf(tab);
       if (index !== -1) {
         group.selectedIndex = index;
+        if (group === this.tabGroup) {
+          this.activeTabLabel = tab.textLabel;
+          this.syncClusterHighlight(false);
+        } else if (group === this.tabGroupCompare) {
+          this.activeTabLabelCompare = tab.textLabel;
+          this.syncClusterHighlight(true);
+        }
       }
     };
     select();
@@ -795,37 +903,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let newView: string | null = null;
     const tabLabel = event.tab.textLabel;
 
+    if (compare) {
+      this.activeTabLabelCompare = tabLabel;
+    } else {
+      this.activeTabLabel = tabLabel;
+    }
+    this.syncClusterHighlight(compare);
 
     if (!compare && tabLabel === 'Cluster Information') {
-      // Opening this tab cold (no cluster selected yet) defaults to leiden coloring + the
-      // first available cluster, same pattern as the DGEA/GRN Evaluation branches below
-      // (switch view, then trigger the side effects that would normally follow a manual pick).
-      if (this.selectedCluster === null) {
+      if (this.selectedView !== 'leiden') {
         this.selectedView = 'leiden';
         this.onColorbyPropertyChange(false);
-        this.autoSelectDefaultCluster(false);
       }
-      // The panel only renders its heatmap container while colored by 'leiden' (see
-      // ClusterInfoPanelComponent's isLeidenView-gated template) — skip the call entirely
-      // otherwise, so we don't hit its "container not found" console.error needlessly.
-      if (this.selectedView === 'leiden') {
+      let cluster = this.selectedCluster;
+      if (cluster === null) {
+        this.autoSelectDefaultCluster(false);
+        cluster = this.selectedCluster;
+      }
+      if (cluster !== null) {
+        this.mainView?.extendCluster(cluster);
         setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
-          this.selectedCell?.properties?.leiden,
+          cluster,
           this.meta?.['leiden_cluster_annotations'],
         ), 300);
       }
       return;
     }
     if (compare && tabLabel === 'Compare - Cluster Information') {
-      // Same reasoning as the main branch above, for the compare view.
-      if (this.selectedClusterCompare === null) {
+      if (this.selectedCompareView !== 'leiden') {
         this.selectedCompareView = 'leiden';
         this.onColorbyPropertyChange(true);
-        this.autoSelectDefaultCluster(true);
       }
-      if (this.selectedCompareView === 'leiden') {
+      let cluster = this.selectedClusterCompare;
+      if (cluster === null) {
+        this.autoSelectDefaultCluster(true);
+        cluster = this.selectedClusterCompare;
+      }
+      if (cluster !== null) {
+        this.compareView?.extendCluster(cluster);
         setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
-          this.selectedCellCompare?.properties?.leiden,
+          cluster,
           this.metaCompare?.['leiden_cluster_annotations'],
         ), 300);
       }
@@ -2054,6 +2171,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onColorbyPropertyChange(compare: boolean = false): void {
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
+    const targetView = compare ? this.compareView : this.mainView;
+    targetView?.setCurrentView(colorProp);
+
+    // Automatically jump sidebar to matching tab for the selected property
+    const matchingTabLabel = this.getTabLabelForProperty(colorProp, compare);
+    this.jumpToTabByLabel(matchingTabLabel, compare);
+
     const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
     const geneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
     const geneSetSponge = compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
@@ -2082,6 +2206,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.updateSubgraphGenie3(compare);
         this.updateSubgraphSponge(compare);
       }
+    }
+
+    if (colorProp === 'leiden') {
+      const cluster = compare ? this.selectedClusterCompare : this.selectedCluster;
+      if (cluster !== null) {
+        targetView?.extendCluster(cluster);
+      }
+    } else {
+      targetView?.resetClusterExtension();
     }
 
     if (compare) {
@@ -2222,23 +2355,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     }
 
-    if (viewToUse !== (isMainView ? this.selectedView : this.selectedCompareView)) {
-      // Note: unconditionally targets the main view, matching this call's pre-existing
-      // behavior — it was never passed a compare flag here even when isMainView is false.
-      this.mainView?.resetClusterExtension(this.features);
-    }
-
-    if (this.selectedCell && this.selectedCluster) {
-      this.selectedCluster = null;
-      this.clusterCells = [];
-      this.clusterCellTypes = [];
-      this.clusterCentralityAvg = {
-        degree_centrality: 0,
-        average_clustering: 0,
-        closeness_centrality: 0,
-      };
-    }
-    if (this.selectedCell) this.selectedCell = null;
+    const targetView = isMainView ? this.mainView : this.compareView;
+    targetView?.setCurrentView(viewToUse);
 
     const layerToColor = (
       (containerName === '#hexbin' && this.isXenium)
@@ -2303,10 +2421,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       viewVariablesToUpdate.setLegendType('continuous');
 
       sel
-        .transition()
-        .duration(300)
-        .attr('stroke-width', 1)
-        .attr('stroke', 'transparent')
+        .interrupt()
         .attr('fill', (d) => {
           const raw = this.extractViewValue(d, viewToUse);
           const n = this.toNumber(raw);
@@ -2323,15 +2438,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       viewVariablesToUpdate.setLegendType('categorical');
 
       sel
-        .transition()
-        .duration(300)
-        .attr('stroke-width', 1)
-        .attr('stroke', 'transparent')
+        .interrupt()
         .attr('fill', (d) => {
           const raw = this.extractViewValue(d, viewToUse);
           return viewVariablesToUpdate.ordinal(String(raw));
         });
     }
+
+    this.syncClusterHighlight(!isMainView);
+    targetView?.updateSelectionHighlight();
 
     if (containerName === '#hexbin') {
       this.mainView?.refreshDetailWindowIfVisible();
@@ -3091,52 +3206,95 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public displayCellDetails(event: MouseEvent, cell: CellFeature, compare: boolean = false): void {
     if (!compare) {
-      this.mainView?.resetClusterExtension(this.features);
+      // 1. Always select the clicked cell
       this.selectedCell = cell;
-      if (this.selectedView === 'regulatory_scores') {
-        this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id)
-      }
-      if (this.selectedView === 'leiden') {
-        this.displayClusterDetails(cell.properties.leiden);
-        this.mainView?.extendCluster(cell.properties.leiden, this.features);
-        this.jumpToTab(this.tabGroup, this.clusterInfoTab);
-      } else {
-        this.mainView?.updateSelectionHighlight();
-        this.jumpToTab(this.tabGroup, this.cellInfoTab);
+
+      // 2. Always update cluster information in the background if leiden is present
+      const rawLeiden = cell.properties?.leiden;
+      const clusterId = rawLeiden !== undefined && rawLeiden !== null && !isNaN(Number(rawLeiden))
+        ? Number(rawLeiden)
+        : null;
+
+      if (clusterId !== null) {
+        this.selectedCluster = clusterId;
+        this.clusterCells = (this.features || []).filter(
+          (c) => Number(c.properties?.leiden) === clusterId,
+        );
+        this.calculateClusterStats(false);
+        this.updateCoOccurrenceTable(false);
+        setTimeout(() => this.updateSubgraphGenie3(false), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+        setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+          clusterId,
+          this.meta?.['leiden_cluster_annotations'],
+        ), 300);
       }
 
-      setTimeout(() => this.updateSubgraphGenie3(), 0);
-    }
-    else {
-      this.compareView?.resetClusterExtension(this.compareFeatures);
+      // 3. Fetch regulatory scores if in that view
+      if (this.selectedView === 'regulatory_scores') {
+        this.getRegulatoryScoresforSpots(cell.properties.barcode, this.selectedDataset?.id, false);
+      }
+
+      // 4. View-dependent highlighting & tab navigation
+      if (this.selectedView === 'leiden' && clusterId !== null) {
+        // Outline entire cluster (thin) + clicked cell (thick)
+        this.mainView?.extendCluster(clusterId);
+        this.jumpToTab(this.tabGroup, this.clusterInfoTab);
+      } else {
+        // Outline only clicked cell (thick)
+        this.mainView?.resetClusterExtension();
+        this.jumpToTab(this.tabGroup, this.cellInfoTab);
+      }
+    } else {
+      // 1. Always select the clicked cell in compare view
       this.selectedCellCompare = cell;
+
+      // 2. Always update compare cluster information in the background if leiden is present
+      const rawLeiden = cell.properties?.leiden;
+      const clusterId = rawLeiden !== undefined && rawLeiden !== null && !isNaN(Number(rawLeiden))
+        ? Number(rawLeiden)
+        : null;
+
+      if (clusterId !== null) {
+        this.selectedClusterCompare = clusterId;
+        this.compareClusterCells = (this.compareFeatures || []).filter(
+          (c) => Number(c.properties?.leiden) === clusterId,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+        setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+          clusterId,
+          this.metaCompare?.['leiden_cluster_annotations'],
+        ), 300);
+      }
+
+      // 3. Fetch regulatory scores if in that view
       if (this.selectedCompareView === 'regulatory_scores') {
         this.getRegulatoryScoresforSpots(
           cell.properties.barcode,
           this.selectedDatasetCompare?.id ?? this.selectedDataset?.id,
-        )
-      }
-      if (this.selectedCompareView === 'leiden') {
-        this.selectedClusterCompare = cell.properties.leiden;
-        this.compareClusterCells = this.compareFeatures.filter(
-          (c) => c.properties.leiden === cell.properties.leiden,
+          true,
         );
-        this.calculateClusterStats(true);
-        this.updateCoOccurrenceTable(true);
-        this.compareView?.extendCluster(cell.properties.leiden, this.compareFeatures);
-        setTimeout(() => this.updateSubgraphGenie3(true), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      }
+
+      // 4. View-dependent highlighting & tab navigation
+      if (this.selectedCompareView === 'leiden' && clusterId !== null) {
+        // Outline entire cluster (thin) + clicked cell (thick)
+        this.compareView?.extendCluster(clusterId);
         this.jumpToTab(this.tabGroupCompare, this.clusterInfoTabCompare);
       } else {
-        this.compareView?.updateSelectionHighlight();
+        // Outline only clicked cell (thick)
+        this.compareView?.resetClusterExtension();
         this.jumpToTab(this.tabGroupCompare, this.cellInfoTabCompare);
       }
     }
   }
 
   /**
-   * Auto-selects the first cluster that has co-occurrence data, so tabs relying on a
-   * selected cluster (e.g. Co-occurrence) show something without requiring a click.
+   * Auto-selects the first cluster that has co-occurrence data in the background,
+   * without applying map selection borders or selecting an individual cell.
    */
   private autoSelectDefaultCluster(compare: boolean = false): void {
     const meta = compare ? this.metaCompare : this.meta;
@@ -3149,59 +3307,92 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
 
     if (defaultClusterId !== undefined) {
-      this.selectCluster(Number(defaultClusterId), compare);
+      const clusterNum = Number(defaultClusterId);
+      if (compare) {
+        this.selectedClusterCompare = clusterNum;
+        this.compareClusterCells = (this.compareFeatures || []).filter(
+          (c) => Number(c.properties?.leiden) === clusterNum,
+        );
+        this.calculateClusterStats(true);
+        this.updateCoOccurrenceTable(true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      } else {
+        this.selectedCluster = clusterNum;
+        this.clusterCells = (this.features || []).filter(
+          (c) => Number(c.properties?.leiden) === clusterNum,
+        );
+        this.calculateClusterStats(false);
+        this.updateCoOccurrenceTable(false);
+        setTimeout(() => this.updateSubgraphGenie3(false), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      }
     }
   }
 
   public displayClusterDetails(clusterId: number): void {
-    this.selectedCluster = clusterId;
-    this.clusterCells = this.features.filter(
-      (cell) => cell.properties.leiden === clusterId,
-    );
-    this.calculateClusterStats();
-
-    // Initialize co-occurrence table for this cluster
-    this.updateCoOccurrenceTable();
-
-    if (this.clusterCells.length > 0) {
-      this.selectedCell = this.clusterCells[0];
-      // Neighborhood enrichment will render when the Cluster Information tab is viewed
-      // via onTabChange handler
-      setTimeout(() => this.updateSubgraphGenie3(), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-      // setTimeout(() => this.renderFootprintPlots(), 0);
-    }
+    this.selectCluster(clusterId, false);
   }
 
   public selectCluster(clusterId: number, compare: boolean = false): void {
     if (compare) {
+      // 1. Switch colored-by view to Leiden if not already
+      if (this.selectedCompareView !== 'leiden') {
+        this.selectedCompareView = 'leiden';
+        this.onColorbyPropertyChange(true);
+      }
+
+      // 2. Set active cluster state
       this.selectedClusterCompare = clusterId;
-      this.clusterCellsCompare = this.compareFeatures.filter(
-        (cell) => cell.properties.leiden === clusterId,
+      this.compareClusterCells = (this.compareFeatures || []).filter(
+        (cell) => Number(cell.properties?.leiden) === clusterId,
       );
       this.calculateClusterStats(true);
       this.updateCoOccurrenceTable(true);
-      this.compareView?.extendCluster(clusterId, this.compareFeatures);
 
-      if (this.clusterCellsCompare.length > 0) {
-        this.selectedCellCompare = this.clusterCellsCompare[0];
-        setTimeout(() => this.updateSubgraphGenie3(true), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      // 3. Clear single cell selection if it was not in this cluster (no auto-selected cell)
+      if (this.selectedCellCompare && Number(this.selectedCellCompare.properties?.leiden) !== clusterId) {
+        this.selectedCellCompare = null;
       }
+
+      // 4. Highlight the cluster with thin border on the map
+      this.compareView?.extendCluster(clusterId);
+
+      setTimeout(() => this.updateSubgraphGenie3(true), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+        clusterId,
+        this.metaCompare?.['leiden_cluster_annotations'],
+      ), 300);
     } else {
-      this.selectedCluster = clusterId;
-      this.clusterCells = this.features.filter(
-        (cell) => cell.properties.leiden === clusterId,
-      );
-      this.calculateClusterStats();
-      this.updateCoOccurrenceTable();
-      this.mainView?.extendCluster(clusterId, this.features);
-
-      if (this.clusterCells.length > 0) {
-        this.selectedCell = this.clusterCells[0];
-        setTimeout(() => this.updateSubgraphGenie3(false), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      // 1. Switch colored-by view to Leiden if not already
+      if (this.selectedView !== 'leiden') {
+        this.selectedView = 'leiden';
+        this.onColorbyPropertyChange(false);
       }
+
+      // 2. Set active cluster state
+      this.selectedCluster = clusterId;
+      this.clusterCells = (this.features || []).filter(
+        (cell) => Number(cell.properties?.leiden) === clusterId,
+      );
+      this.calculateClusterStats(false);
+      this.updateCoOccurrenceTable(false);
+
+      // 3. Clear single cell selection if it was not in this cluster (no auto-selected cell)
+      if (this.selectedCell && Number(this.selectedCell.properties?.leiden) !== clusterId) {
+        this.selectedCell = null;
+      }
+
+      // 4. Highlight the cluster with thin border on the map
+      this.mainView?.extendCluster(clusterId);
+
+      setTimeout(() => this.updateSubgraphGenie3(false), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+      setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+        clusterId,
+        this.meta?.['leiden_cluster_annotations'],
+      ), 300);
     }
   }
 
@@ -3954,12 +4145,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (viewVariablesToUpdate.getLegendType() === 'continuous') {
       const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
-      const legendX = 0;
-      const legendY = 50;
-      const width = 250;
-      const height = 30;
-      const fontSize = 24;
-      const padding = 15;
+      const legendX = 20;
+      const legendY = 20;
+      const width = 240;
+      const height = 24;
+      const fontSize = 18;
+      const padding = 14;
 
       // Use standard <defs>
       const defs = svg.select('defs').empty()
@@ -3993,14 +4184,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
       const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
       // fallback if translation returns empty
-      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(this.selectedCompareView);
+      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
 
-      // measure sizes using svg_compare
+      // measure sizes
       const tempSvg = svg.append('g').style('opacity', 0);
       const titleWidth =
         tempSvg
           .append('text')
-          .text(titleText)
+          .text(legendTitle)
           .style('font-size', `${fontSize}px`)
           .style('font-weight', 'bold')
           .node()
@@ -4011,7 +4202,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         tempSvg
           .append('text')
           .text(minText)
-          .style('font-size', `${fontSize}px`)
+          .style('font-size', `${fontSize - 2}px`)
           .node()
           ?.getBBox().width || 0;
 
@@ -4020,84 +4211,85 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         tempSvg
           .append('text')
           .text(maxText)
-          .style('font-size', `${fontSize}px`)
+          .style('font-size', `${fontSize - 2}px`)
           .node()
           ?.getBBox().width || 0;
 
       tempSvg.remove();
 
       const textHeight = fontSize * 1.2;
-      const requiredWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
-      const bgWidth = requiredWidth + padding * 2;
-      const bgHeight = height + textHeight * 2 + padding * 3;
+      const contentWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
+      const bgWidth = contentWidth + padding * 2;
+      const bgHeight = padding + textHeight + 6 + height + 4 + textHeight + padding;
 
       legendG
         .append('rect')
-        .attr('x', -padding)
-        .attr('y', -padding - textHeight)
+        .attr('x', 0)
+        .attr('y', 0)
         .attr('width', bgWidth)
         .attr('height', bgHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 5);
+        .style('fill', 'rgba(255, 255, 255, 0.95)')
+        .attr('stroke', '#d0d0d0')
+        .attr('stroke-width', 1.2)
+        .attr('rx', 8)
+        .style('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.08))');
 
+      const titleY = padding + fontSize;
+      legendG
+        .append('text')
+        .attr('x', bgWidth / 2)
+        .attr('y', titleY)
+        .attr('text-anchor', 'middle')
+        .style('font-size', `${fontSize}px`)
+        .style('font-weight', 'bold')
+        .style('fill', '#222')
+        .text(legendTitle);
 
+      const barX = (bgWidth - contentWidth) / 2;
+      const barY = titleY + 8;
       legendG
         .append('rect')
-        .attr('x', (bgWidth - width) / 2 - padding)
-        .attr('y', 0)
-        .attr('width', width)
+        .attr('x', barX)
+        .attr('y', barY)
+        .attr('width', contentWidth)
         .attr('height', height)
         .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
         .attr('stroke', '#ccc')
         .attr('stroke-width', 1)
-        .attr('rx', 3);
+        .attr('rx', 4);
 
+      const labelsY = barY + height + fontSize + 2;
       // Min label
       legendG
         .append('text')
-        .attr('x', (bgWidth - width) / 2 - padding)
-        .attr('y', height + textHeight)
+        .attr('x', barX)
+        .attr('y', labelsY)
         .attr('text-anchor', 'start')
-        .style('font-size', `${fontSize}px`)
-        .style('fill', '#333')
+        .style('font-size', `${fontSize - 2}px`)
+        .style('fill', '#444')
         .text(minText);
 
       // Max label
       legendG
         .append('text')
-        .attr('x', (bgWidth - width) / 2 - padding + width)
-        .attr('y', height + textHeight)
+        .attr('x', barX + contentWidth)
+        .attr('y', labelsY)
         .attr('text-anchor', 'end')
-        .style('font-size', `${fontSize}px`)
-        .style('fill', '#333')
+        .style('font-size', `${fontSize - 2}px`)
+        .style('fill', '#444')
         .text(maxText);
-
-      // Title (compare) — position inside background with padding so it's not clipped
-      const titleY = -padding + Math.round(fontSize / 2);
-      legendG
-        .append('text')
-        .attr('x', bgWidth / 2 - padding)
-        .attr('y', titleY)
-        .attr('text-anchor', 'middle')
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .style('fill', '#333')
-        .text(legendTitle);
 
     } else {
       // Categorical legend
       const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
       categories.sort();
-      const legendX = 0;
-      const legendY = 50;
-      const itemHeight = 40;
-      const rectHeight = 20;
-      const rectWidth = 30;
-      const fontSize = 24;
-      const titlePadding = 15;
-      const padding = 15;
+      const legendX = 20;
+      const legendY = 20;
+      const itemHeight = 32;
+      const rectHeight = 16;
+      const rectWidth = 24;
+      const fontSize = 18;
+      const padding = 14;
 
       // Measure using svg
       const tempSvg = svg.append('g').style('opacity', 0);
@@ -4125,11 +4317,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         : 0;
       tempSvg.remove();
 
-      const itemWidth = Math.max(200, maxTextWidth + rectWidth + 20, titleWidth + 40);
+      const itemWidth = Math.max(160, maxTextWidth + rectWidth + 14, titleWidth);
       const backgroundWidth = itemWidth + padding * 2;
+      const titleHeight = fontSize * 1.3;
       const categoryItemsHeight = categories.length * itemHeight;
-      const titleHeight = fontSize * 1.2 + titlePadding;
-      const backgroundHeight = titleHeight + categoryItemsHeight + padding * 2;
+      const backgroundHeight = padding + titleHeight + 8 + categoryItemsHeight + padding;
 
       const legendG = svg
         .append('g')
@@ -4139,47 +4331,50 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       // Background rectangle for categorical legend
       legendG
         .append('rect')
-        .attr('x', -padding)
-        .attr('y', -padding)
+        .attr('x', 0)
+        .attr('y', 0)
         .attr('width', backgroundWidth)
         .attr('height', backgroundHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.9)')
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 5);
+        .style('fill', 'rgba(255, 255, 255, 0.95)')
+        .attr('stroke', '#d0d0d0')
+        .attr('stroke-width', 1.2)
+        .attr('rx', 8)
+        .style('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.08))');
 
       // Title (categorical)
+      const titleY = padding + fontSize;
       legendG
         .append('text')
-        .attr('x', backgroundWidth / 2 - padding)
-        .attr('y', titlePadding + fontSize / 2)
-        .attr('dy', '0.35em')
+        .attr('x', backgroundWidth / 2)
+        .attr('y', titleY)
         .attr('text-anchor', 'middle')
         .style('font-size', `${fontSize}px`)
         .style('font-weight', 'bold')
-        .style('fill', '#333')
+        .style('fill', '#222')
         .text(legendTitleCat);
 
+      const itemsStartY = padding + titleHeight + 8;
       categories.forEach((cat, i) => {
-        const yPosition = i * itemHeight + titleHeight;
-        const legendItem = legendG.append('g').attr('transform', `translate(0, ${yPosition})`);
+        const yPosition = itemsStartY + i * itemHeight;
+        const legendItem = legendG.append('g').attr('transform', `translate(${padding}, ${yPosition})`);
         const rectY = (itemHeight - rectHeight) / 2;
         legendItem
           .append('rect')
+          .attr('x', 0)
           .attr('y', rectY)
           .attr('width', rectWidth)
           .attr('height', rectHeight)
           .style('fill', viewVariablesToUpdate.ordinal(cat))
           .attr('stroke', '#333')
           .attr('stroke-width', 0.5)
-          .attr('rx', 2);
+          .attr('rx', 3);
         const textY = rectY + rectHeight / 2;
         legendItem
           .append('text')
           .attr('x', rectWidth + 10)
           .attr('y', textY)
           .attr('dy', '0.35em')
-          .style('font-size', `${fontSize}px`)
+          .style('font-size', `${fontSize - 2}px`)
           .style('fill', '#333')
           .text(cat);
         legendItem.append('title').text(cat);

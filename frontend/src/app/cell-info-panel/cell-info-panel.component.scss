@@ -30,6 +30,17 @@
   }
 }
 
+.nan-value {
+  display: inline-block;
+  color: #8c8c8c !important;
+  font-style: italic;
+  font-family: 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  background: #eeeeee;
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
 /* Cell Information tab — overview header card */
 .cell-info-panel {
   display: flex;

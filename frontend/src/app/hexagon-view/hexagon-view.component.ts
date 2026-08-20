@@ -44,6 +44,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   @Input() isCompare = false;
   /** This instance's own currently-selected cell, for the mouseLeave highlight-suppression check. */
   @Input() selectedCell: CellFeature | null = null;
+  @Input() selectedView = '';
   public activeClusterId: number | null = null;
 
   @Output() cellClicked = new EventEmitter<{ event: MouseEvent; cell: CellFeature }>();
@@ -70,7 +71,12 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   private lastRenderCtx: HexagonRenderContext | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedCell']) {
+    if (changes['selectedView']) {
+      if (this.selectedView !== 'leiden') {
+        this.activeClusterId = null;
+      }
+    }
+    if (changes['selectedCell'] || changes['selectedView']) {
       this.updateSelectionHighlight();
     }
   }
@@ -87,7 +93,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   }
 
   public createHexagonPlot(): void {
-    const width = 1200;
+    const width = 1000;
     const height = 1000;
 
     const container = d3.select(this.hexbinContainerRef.nativeElement);
@@ -95,7 +101,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
       .selectAll('svg')
       .data([0])
       .join('svg')
-      .attr('viewBox', [0, 0, 1200, 1000] as [number, number, number, number])
+      .attr('viewBox', [0, 0, 1000, 1000] as [number, number, number, number])
       .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('background-color', 'white')
       .style('overflow', 'hidden')
@@ -141,13 +147,17 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
   public renderHexagons(ctx: HexagonRenderContext): void {
     this.lastRenderCtx = ctx;
-    const width = 1200;
+    const width = 1000;
     const height = 1000;
+    const padding = 20;
 
-    const projection = d3.geoIdentity().fitSize([width, height], {
-      type: 'FeatureCollection',
-      features: ctx.isXenium ? ctx.fullFeatures : ctx.features,
-    });
+    const projection = d3.geoIdentity().fitExtent(
+      [[padding, padding], [width - padding, height - padding]],
+      {
+        type: 'FeatureCollection',
+        features: ctx.isXenium ? ctx.fullFeatures : ctx.features,
+      },
+    );
 
     this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
     const pathGenerator = this.currentPathGenerator;
@@ -201,45 +211,65 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     // setup. The parent redirects that same call sequence to this instance's public methods.
   }
 
-  public extendCluster(selectedCluster: number, features: CellFeature[]): void {
+  public extendCluster(selectedCluster: number, _features?: CellFeature[]): void {
     this.activeClusterId = selectedCluster;
     this.updateSelectionHighlight();
   }
 
-  public resetClusterExtension(features: CellFeature[]): void {
+  public resetClusterExtension(_features?: CellFeature[]): void {
     this.activeClusterId = null;
     this.updateSelectionHighlight();
   }
 
+  public setCurrentView(view: string): void {
+    this.selectedView = view;
+    if (this.lastRenderCtx) {
+      this.lastRenderCtx.selectedView = view;
+    }
+    if (view !== 'leiden') {
+      this.activeClusterId = null;
+    }
+    this.updateSelectionHighlight();
+  }
+
+  private isSameCluster(a: unknown, b: unknown): boolean {
+    if (a === undefined || a === null || b === undefined || b === null) return false;
+    return String(a).trim() === String(b).trim() || Number(a) === Number(b);
+  }
+
   /**
-   * Reapplies highlight borders consistently to all paths based on current selectedCell
-   * and activeClusterId state, clearing any stale hover borders.
+   * Reapplies highlight borders consistently:
+   * - Selected cell: thick black border (3px)
+   * - Cluster members (Leiden view ONLY): thin black border (1.4px)
+   * - Other cells: transparent border (0.6 opacity if Leiden cluster active, 0.8 natural opacity otherwise)
    */
   public updateSelectionHighlight(): void {
     if (!this.g) return;
+    const isLeiden = this.selectedView === 'leiden';
+    const activeCluster = isLeiden ? this.activeClusterId : null;
+
     this.g.selectAll<SVGPathElement, CellFeature>('path')
       .each((d: CellFeature, i, nodes) => {
         if (!d || !d.properties) return;
         const el = d3.select(nodes[i]);
         const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
-        const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
-        const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
+        const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties.leiden, activeCluster);
 
-        if (isSelectedCluster || isLeidenClusterSelected) {
+        if (isSelectedCell) {
           el.interrupt()
             .attr('stroke', '#000')
             .attr('stroke-width', '3px')
             .style('opacity', 1.0);
-        } else if (isSelectedCell) {
+        } else if (isClusterMember) {
           el.interrupt()
             .attr('stroke', '#000')
-            .attr('stroke-width', '2px')
+            .attr('stroke-width', '1.4px')
             .style('opacity', 1.0);
         } else {
           el.interrupt()
             .attr('stroke', 'transparent')
             .attr('stroke-width', '1px')
-            .style('opacity', this.activeClusterId !== null ? 0.6 : 0.8);
+            .style('opacity', activeCluster !== null ? 0.6 : 0.8);
         }
       });
   }
@@ -264,14 +294,16 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     const el = d3.select(targetEl);
     el.interrupt();
 
-    const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
-    const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
-    const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
+    const isLeiden = this.selectedView === 'leiden';
+    const activeCluster = isLeiden ? this.activeClusterId : null;
 
-    const strokeWidth = (isSelectedCluster || isLeidenClusterSelected) ? '3px' : (isSelectedCell ? '2px' : '1px');
+    const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;
+    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.leiden, activeCluster);
 
-    el.style('opacity', 0.8)
-      .attr('stroke', 'black')
+    const strokeWidth = isSelectedCell ? '3px' : (isClusterMember ? '2px' : '1.2px');
+
+    el.style('opacity', 0.9)
+      .attr('stroke', '#000')
       .attr('stroke-width', strokeWidth);
   }
 
@@ -281,22 +313,24 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     const el = d3.select(targetEl);
     el.interrupt();
 
-    const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
-    const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
-    const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
+    const isLeiden = this.selectedView === 'leiden';
+    const activeCluster = isLeiden ? this.activeClusterId : null;
 
-    if (isSelectedCluster || isLeidenClusterSelected) {
+    const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;
+    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.leiden, activeCluster);
+
+    if (isSelectedCell) {
       el.attr('stroke', '#000')
         .attr('stroke-width', '3px')
         .style('opacity', 1.0);
-    } else if (isSelectedCell) {
+    } else if (isClusterMember) {
       el.attr('stroke', '#000')
-        .attr('stroke-width', '2px')
+        .attr('stroke-width', '1.4px')
         .style('opacity', 1.0);
     } else {
       el.attr('stroke', 'transparent')
         .attr('stroke-width', '1px')
-        .style('opacity', this.activeClusterId !== null ? 0.6 : 0.8);
+        .style('opacity', activeCluster !== null ? 0.6 : 0.8);
     }
   }
 
