@@ -22,6 +22,8 @@ import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
 import { InfoService } from '../info.service';
 import { HexagonViewComponent } from '../hexagon-view/hexagon-view.component';
+import { CellInfoPanelComponent } from '../cell-info-panel/cell-info-panel.component';
+import { ClusterInfoPanelComponent } from '../cluster-info-panel/cluster-info-panel.component';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 // Material
@@ -47,7 +49,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -65,6 +67,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
   @ViewChild('mainView') mainView?: HexagonViewComponent;
   @ViewChild('compareView') compareView?: HexagonViewComponent;
+  @ViewChild('mainClusterInfo') mainClusterInfo?: ClusterInfoPanelComponent;
+  @ViewChild('compareClusterInfo') compareClusterInfo?: ClusterInfoPanelComponent;
   private _resizeHandler: any = null;
   // Removed manual subscription tracker - all subscriptions use takeUntil now
   footprintPlotUrls: SafeResourceUrl[] = [];
@@ -212,8 +216,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedDgeaGroup1Compare: string | null = null;
   public selectedDgeaGroup2: string | null = null;
   public selectedDgeaGroup2Compare: string | null = null;
-  // Shown separately in the Cell Information header card, so hidden from the grouped property list.
-  private hiddenPropKeys = new Set<string>(['barcode', 'cell_type', 'leiden', 'centroid', 'color']);
   public dgeaVsAll: boolean = false;
   public dgeaVsAllCompare: boolean = false;
 
@@ -333,9 +335,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.setMapLoading(event.loading, event.isCompare);
   }
 
-  // Returns true if any initial data loading is in progress (ONLY for first time)
+  // Returns true if initial map loading is in progress (ONLY for first time)
   public get isInitializing(): boolean {
-    return this.isAppInitializing && (this.isLoadingHexagons || this.isLoadingGenie3 || this.isLoadingSponge || this.isLoadingRegulatoryScores);
+    return this.isAppInitializing && this.isLoadingHexagons;
   }
 
   // Co-occurrence table
@@ -346,6 +348,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
+  // Leiden cluster ids available for this dataset, for the cluster-select dropdown.
+  public availableClusterIds: number[] = [];
 
   // Compare Co-occurrence table
   public compareCoOccurrenceData: number[] = [];
@@ -353,6 +357,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public compareCoOccurrenceThreshold: number = 0.5;
   public maxIntervalCompare: number = 49;
   public clusterCountCompare: number = 10;
+  public availableClusterIdsCompare: number[] = [];
 
   public currentDataSetSupportsCompare: boolean = true;
   public isXeniumDatasetSelected: boolean = false;
@@ -399,30 +404,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public compareShowMoranI: boolean = true;
   public showChromvarMoranI: boolean = true;
   public compareShowChromvarMoranI: boolean = true;
-  public colorScale = d3
-    .scaleOrdinal<string>()
-    .range([
-      '#ff9800',
-      '#1976d2',
-      '#ff6f00',
-      '#00bcd4',
-      '#ffa726',
-      '#9c27b0',
-      '#ff8a65',
-      '#4caf50',
-    ]);
+  // Categorical scale for cell_type and other non-leiden categorical properties.
+  public colorScale = d3.scaleOrdinal<string>(d3.schemeSet2);
+  // Dedicated leiden-cluster palette, visually distinct from colorScale above so it's clear
+  // at a glance whether the map/legend is showing clusters or another categorical property.
+  // Only ever used for the main view's map fill (see HexagonRenderContext.colorScale doc on
+  // the pre-existing main/compare cross-contamination this deliberately doesn't touch) — the
+  // Cluster Information panel's cell-type swatches keep using colorScale above regardless of
+  // the map's current selectedView, since those are always coloring cell_type values.
+  public leidenColorScale = d3.scaleOrdinal<string>(d3.schemeTableau10);
   private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
-  public colorScaleCompare = d3.scaleOrdinal<string>().range([
-    '#ff9800',
-    '#1976d2',
-    '#ff6f00',
-    '#00bcd4',
-    '#ffa726',
-    '#9c27b0',
-    '#ff8a65',
-    '#4caf50',
-  ]);
+  public colorScaleCompare = d3.scaleOrdinal<string>(d3.schemeSet2);
+  public leidenColorScaleCompare = d3.scaleOrdinal<string>(d3.schemeTableau10);
   // Yellow continuous color palette
   private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
@@ -802,11 +796,38 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
     if (!compare && tabLabel === 'Cluster Information') {
-      setTimeout(() => this.renderNhoodHeatmap(), 300);
+      // Opening this tab cold (no cluster selected yet) defaults to leiden coloring + the
+      // first available cluster, same pattern as the DGEA/GRN Evaluation branches below
+      // (switch view, then trigger the side effects that would normally follow a manual pick).
+      if (this.selectedCluster === null) {
+        this.selectedView = 'leiden';
+        this.onColorbyPropertyChange(false);
+        this.autoSelectDefaultCluster(false);
+      }
+      // The panel only renders its heatmap container while colored by 'leiden' (see
+      // ClusterInfoPanelComponent's isLeidenView-gated template) — skip the call entirely
+      // otherwise, so we don't hit its "container not found" console.error needlessly.
+      if (this.selectedView === 'leiden') {
+        setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+          this.selectedCell?.properties?.leiden,
+          this.meta?.['leiden_cluster_annotations'],
+        ), 300);
+      }
       return;
     }
     if (compare && tabLabel === 'Compare - Cluster Information') {
-      setTimeout(() => this.renderNhoodHeatmap(true), 300);
+      // Same reasoning as the main branch above, for the compare view.
+      if (this.selectedClusterCompare === null) {
+        this.selectedCompareView = 'leiden';
+        this.onColorbyPropertyChange(true);
+        this.autoSelectDefaultCluster(true);
+      }
+      if (this.selectedCompareView === 'leiden') {
+        setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+          this.selectedCellCompare?.properties?.leiden,
+          this.metaCompare?.['leiden_cluster_annotations'],
+        ), 300);
+      }
       return;
     }
 
@@ -1130,6 +1151,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
           this.colorScaleCompare.domain([] as any);
         }
+        if (this.leidenColorScaleCompare && typeof this.leidenColorScaleCompare.domain === 'function') {
+          this.leidenColorScaleCompare.domain([] as any);
+        }
         if (this.continuousColorScaleCompare && typeof this.continuousColorScaleCompare.domain === 'function') {
           this.continuousColorScaleCompare.domain([0, 1]);
         }
@@ -1420,6 +1444,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           throw new Error('Failed to load GeoJSON data');
         }
 
+        // Backend serializes `leiden` as a string (GeoJSON property values round-trip as
+        // strings); normalize to number in place so every `properties.leiden === clusterId`
+        // comparison downstream (selectCluster, displayClusterDetails, extendCluster, ...)
+        // works consistently regardless of whether the caller passes a string or number.
+        for (const feature of data.features) {
+          const leiden = feature.properties?.leiden;
+          if (leiden !== undefined && leiden !== null) {
+            feature.properties.leiden = Number(leiden);
+          }
+        }
+
         compare ? this.geoDataService.setCompareData(data) : this.geoDataService.setData(data);
 
         const datasetId = compare ? this.selectedDatasetCompare?.id : this.selectedDataset?.id;
@@ -1537,10 +1572,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
           const leidenClusterAnnotations = compare ? this.metaCompare?.['leiden_cluster_annotations'] : this.meta?.['leiden_cluster_annotations'];
           if (leidenClusterAnnotations && typeof leidenClusterAnnotations === 'object') {
+            const clusterIds = Object.keys(leidenClusterAnnotations).map(Number).sort((a, b) => a - b);
             if (compare) {
-              this.clusterCountCompare = Object.keys(leidenClusterAnnotations).length;
+              this.clusterCountCompare = clusterIds.length;
+              this.availableClusterIdsCompare = clusterIds;
             } else {
-              this.clusterCount = Object.keys(leidenClusterAnnotations).length;
+              this.clusterCount = clusterIds.length;
+              this.availableClusterIds = clusterIds;
             }
           }
 
@@ -1696,10 +1734,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           : this.colorableProperties.find((p) => this.propertyAvailable(p, 'main'));
 
         if (compare) {
-          if (this.propertyAvailable('regulatory_scores', 'compare')) {
-            this.selectedCompareView = 'regulatory_scores';
-          } else if (this.propertyAvailable('cell_type', 'compare')) {
+          if (this.propertyAvailable('cell_type', 'compare')) {
             this.selectedCompareView = 'cell_type';
+          } else if (this.propertyAvailable('leiden', 'compare')) {
+            this.selectedCompareView = 'leiden';
+          } else if (this.propertyAvailable('regulatory_scores', 'compare')) {
+            this.selectedCompareView = 'regulatory_scores';
           } else if (firstAvailableProperty) {
             this.selectedCompareView = firstAvailableProperty;
           } else {
@@ -1708,11 +1748,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
           this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
         } else {
-
-          if (this.propertyAvailable('regulatory_scores', 'main')) {
-            this.selectedView = 'regulatory_scores';
-          } else if (this.propertyAvailable('cell_type', 'main')) {
+          if (this.propertyAvailable('cell_type', 'main')) {
             this.selectedView = 'cell_type';
+          } else if (this.propertyAvailable('leiden', 'main')) {
+            this.selectedView = 'leiden';
+          } else if (this.propertyAvailable('regulatory_scores', 'main')) {
+            this.selectedView = 'regulatory_scores';
           } else if (firstAvailableProperty) {
             this.selectedView = firstAvailableProperty;
           } else {
@@ -1731,7 +1772,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           selectedView: compare ? this.selectedCompareView : this.selectedView,
           legendType: compare ? this.currentCompareLegendType : this.currentLegendType,
           // Always the main view's ordinal scale — see HexagonRenderContext.colorScale doc.
-          colorScale: this.colorScale,
+          colorScale: this.selectedView === 'leiden' ? this.leidenColorScale : this.colorScale,
           continuousColorScale: compare ? this.continuousColorScaleCompare : this.continuousColorScale,
           leidenClusterAnnotations: (compare ? this.metaCompare : this.meta)?.['leiden_cluster_annotations'],
           leidenCentralityProps: this.leidenCentralityProps,
@@ -2089,7 +2130,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const viewToUpdate = isMainView ? this.selectedView : this.selectedCompareView;
     const featuresToUpdate = isMainView ? this.features : (this.compareFeatures || []);
     const gToUpdate = isMainView ? this.mainView?.g : this.compareView?.g;
-    const ordinalScaleToUpdate = isMainView ? this.colorScale : this.colorScaleCompare;
+    const ordinalScaleToUpdate = viewToUpdate === 'leiden'
+      ? (isMainView ? this.leidenColorScale : this.leidenColorScaleCompare)
+      : (isMainView ? this.colorScale : this.colorScaleCompare);
     const continuousScaleToUpdate = isMainView ? this.continuousColorScale : this.continuousColorScaleCompare;
     // Pass the compare flag to isContinuousScale for correct logic
     const isContinuous = this.isContinuousScale(viewToUpdate, featuresToUpdate, !isMainView);
@@ -3244,17 +3287,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   /**
    * Check if initial app loading is complete.
-   * Sets isAppInitializing to false once all initial data fetches are done.
+   * Sets isAppInitializing to false once map data fetch and render are done.
    */
   private checkInitializationComplete(compare: boolean = false): void {
     if (compare) {
-      if (!this.isLoadingCompare && !this.isLoadingGenie3Compare && !this.isLoadingSpongeCompare && !this.isLoadingRegulatoryScoresCompare) {
+      if (!this.isLoadingCompare) {
         this.isAppInitializing = false;
         console.log('[Init] Compare view initialization complete - hiding loader');
       }
     }
     else {
-      if (!this.isLoadingHexagons && !this.isLoadingGenie3 && !this.isLoadingSponge && !this.isLoadingRegulatoryScores) {
+      if (!this.isLoadingHexagons) {
         this.isAppInitializing = false;
         console.log('[Init] App initialization complete - hiding loader');
       }
@@ -3443,59 +3486,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private renderNhoodHeatmap(compare: boolean = false): void {
-    const cell = compare ? this.selectedCellCompare : this.selectedCell;
-    const leiden = cell?.properties?.leiden;
-    const clusterAnnotation = this.getLeidenClusterAnnotation(leiden, compare);
-    const enrichment = clusterAnnotation?.neighborhood_enrichment;
-    const containerId = compare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';
-
-    if (!enrichment || !Array.isArray(enrichment)) return;
-
-    const n = enrichment.length;
-    const clusterLabels = Array.from({ length: n }, (_, i) => `Cluster ${i}`);
-
-    const minValue = Math.min(...enrichment);
-    const maxValue = Math.max(...enrichment);
-    const normalized = (maxValue > minValue)
-      ? enrichment.map((v: number) => (v - minValue) / (maxValue - minValue))
-      : enrichment.map(() => 0);
-
-    const data: Partial<Plotly.PlotData>[] = [
-      {
-        x: clusterLabels,
-        y: normalized,
-        type: 'bar',
-        marker: { color: 'rgba(55, 128, 191, 0.7)' },
-        name: `Cluster ${leiden} Neighborhood Enrichment`,
-      }
-    ];
-
-    const layout = {
-      margin: { t: 30, l: 60, r: 10, b: 40 },
-      width: 300,
-      height: 170,
-      xaxis: {
-        title: { text: 'Cluster' },
-        automargin: true,
-        tickfont: { size: 10 },
-      },
-      yaxis: {
-        title: { text: 'Enrichment' },
-        automargin: true,
-        tickfont: { size: 10 },
-      },
-    };
-
-    const container = document.getElementById(containerId);
-    if (!container) {
-      console.error(`Container ${containerId} not found for rendering heatmap`);
-      return;
-    }
-
-    Plotly.purge(container);
-    Plotly.newPlot(container, data, layout, { displayModeBar: false });
-  }
 
   public closeSidenav(compare: boolean = false): void {
     if (compare) {
@@ -3864,151 +3854,18 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     return `No ${networkType === 'genie3' ? 'Genie3' : 'Sponge'} global regulatory scores loaded`;
   }
-  private expandedProps = new Set<string>();
-
-  isArray(v: any): v is any[] {
-    return Array.isArray(v);
-  }
-
-  isNestedArray(v: any): v is any[][] {
-    return Array.isArray(v) && v.length > 0 && v.every(row => Array.isArray(row) || this.looksLikeArrayString(row));
-  }
-
-  isNumberLike(v: unknown): v is number | string {
-    return (typeof v === 'number' && Number.isFinite(v)) ||
-      (typeof v === 'string' && v.trim() !== '' && Number.isFinite(+v));
-  }
-
-  toNumberLike(v: number | string): number {
-    return typeof v === 'number' ? v : Number(v);
-  }
-
-  isNumericArray(arr: any): arr is (number | string)[] {
-    return Array.isArray(arr) && arr.length > 0 && arr.every(x => this.isNumberLike(x));
-  }
-
-  isPrimitive(v: unknown): v is string | number | boolean | null {
-    return v === null || ['string', 'number', 'boolean'].includes(typeof v as string);
-  }
-
-  getArrayStats(arr: (number | string)[]) {
-    const nums = arr.map(x => Number(this.toNumberLike(x)));
-    const min = Math.min(...nums);
-    const max = Math.max(...nums);
-    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-    return { min, max, avg };
-  }
-
-  formatValue(v: unknown): string {
-    if (Array.isArray(v)) return v.join(', ');
-    if (v && typeof v === 'object') return JSON.stringify(v, null, 2);
-    return String(v);
-  }
+  // isArray/isNestedArray/isNumberLike/toNumberLike/isNumericArray/isPrimitive/getArrayStats/
+  // formatValue/toggleExpand/isExpanded/trackByIndex/asArrayRow/looksLikeArrayString/
+  // toJsonCompact/shouldShowProperty/groupedCellProperties/computeGroupedProperties/
+  // isPlainObject/objectKeyCount/objectEntries/prettyKey/dictId/expandedProps/hiddenPropKeys all
+  // moved into CellInfoPanelComponent along with the ng-template they backed — see
+  // cell-info-panel/cell-info-panel.component.ts. `label()` below is kept here too (small,
+  // duplicated, pure) since this component's own renderLegend still needs it.
 
   label(key: string): string {
     const translated = this.translationService.translateSync(key);
     if (translated !== key) return translated;
     return key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  toggleExpand(key: string) {
-    if (this.expandedProps.has(key)) this.expandedProps.delete(key);
-    else this.expandedProps.add(key);
-  }
-
-  isExpanded(key: string) {
-    return this.expandedProps.has(key);
-  }
-
-  trackByIndex(index: number) { return index; }
-
-  asArrayRow(row: any): any[] {
-    if (Array.isArray(row)) return row;
-    if (this.looksLikeArrayString(row)) {
-      try {
-        const parsed = JSON.parse(row as string);
-        return Array.isArray(parsed) ? parsed : [row];
-      } catch {
-        return [row];
-      }
-    }
-    return [row];
-  }
-
-  looksLikeArrayString(v: any): v is string {
-    return typeof v === 'string' && /^\s*\[.*\]\s*$/.test(v);
-  }
-
-  toJsonCompact(obj: unknown, max = 120): string {
-    try {
-      const s = JSON.stringify(obj);
-      return s.length > max ? s.slice(0, max) + '…' : s;
-    } catch {
-      return String(obj);
-    }
-  }
-
-
-  shouldShowProperty(key: string): boolean {
-    if (key == null) return true;
-    const k = String(key).toLowerCase();
-    return !this.hiddenPropKeys.has(k);
-  }
-
-  /**
-   * Buckets a cell's raw properties into biologist-facing sections. Not memoized: `fetchAndUpdate`
-   * mutates `cell.properties` in place on the already-selected cell (e.g. when switching the
-   * colored-by gene/score without deselecting the cell), so caching by cell identity would show
-   * stale values for the "Current View Value" section.
-   */
-  groupedCellProperties(cell: CellFeature | null): PropertyGroup[] {
-    if (!cell) return [];
-    return this.computeGroupedProperties(cell);
-  }
-
-  private computeGroupedProperties(cell: CellFeature): PropertyGroup[] {
-    const buckets = new Map<string, PropertyGroupItem[]>();
-    for (const key of Object.keys(cell.properties)) {
-      if (!this.shouldShowProperty(key)) continue;
-      const value = cell.properties[key];
-      const category = this.infoService.getCategoryForKey(key, value);
-      const item: PropertyGroupItem = { key, label: this.label(key), value, info: this.infoService.getFieldInfo(key) };
-      const bucket = buckets.get(category);
-      if (bucket) {
-        bucket.push(item);
-      } else {
-        buckets.set(category, [item]);
-      }
-    }
-
-    return this.infoService.categories
-      .map((def) => ({
-        ...def,
-        items: (buckets.get(def.key) ?? []).sort((a, b) => a.label.localeCompare(b.label, 'de', { sensitivity: 'base' })),
-      }))
-      .filter((group) => group.items.length > 0);
-  }
-
-  // ----- Dict/Object helpers -----
-  isPlainObject(v: any): v is Record<string, any> {
-    return v !== null && typeof v === 'object' && !Array.isArray(v);
-  }
-
-  objectKeyCount(obj: Record<string, any>): number {
-    return Object.keys(obj).length;
-  }
-
-  objectEntries(obj: Record<string, any>): Array<{ key: string; value: any }> {
-    return Object.keys(obj).sort().map(k => ({ key: k, value: obj[k] }));
-  }
-
-  prettyKey(k: string): string {
-    return k.replace(/[_-]+/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-  }
-
-  dictId(propLabel: string): string {
-    return `DICT::${propLabel}`;
   }
 
   public selectViewTutorial(): void {
@@ -5205,24 +5062,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
 
-// CellGeometry/CellProperties/CellFeature moved to hexagon-view/cell-feature.types.ts (imported
-// at the top of this file) so HexagonViewComponent can use the same types without a circular
-// import back to this file.
-
-interface PropertyGroupItem {
-  key: string;
-  label: string;
-  value: unknown;
-  info: string | null;
-}
-
-interface PropertyGroup {
-  key: string;
-  title: string;
-  icon: string;
-  description: string;
-  items: PropertyGroupItem[];
-}
+// CellGeometry/CellProperties/CellFeature/PropertyGroup/PropertyGroupItem moved to
+// hexagon-view/cell-feature.types.ts (imported at the top of this file) so
+// HexagonViewComponent can use the same types without a circular import back to this file.
 
 interface GeoJsonData {
   type: 'FeatureCollection';

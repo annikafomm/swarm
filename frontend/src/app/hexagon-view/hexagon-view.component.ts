@@ -204,32 +204,17 @@ export class HexagonViewComponent implements OnDestroy {
 
     paths
       .transition()
-      .duration(300)
-      .attr('d', (d: CellFeature) => {
-        const projection = d3.geoIdentity().fitSize([1200, 1000], {
-          type: 'FeatureCollection',
-          features: features,
-        });
-        const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
-        return pathGenerator(d) || '';
-      })
+      .duration(200)
       .attr('stroke-width', (d: CellFeature) => (d.properties.leiden === selectedCluster ? '3px' : '1px'))
       .attr('stroke', (d: CellFeature) => (d.properties.leiden === selectedCluster ? '#000' : 'transparent'))
       .style('opacity', (d: CellFeature) => (d.properties.leiden === selectedCluster ? 1.0 : 0.6));
   }
 
   public resetClusterExtension(features: CellFeature[]): void {
-    const projection = d3.geoIdentity().fitSize([1200, 1000], {
-      type: 'FeatureCollection',
-      features: features,
-    });
-    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
-
     this.g
       .selectAll<SVGPathElement, CellFeature>('path')
       .transition()
-      .duration(300)
-      .attr('d', (d: CellFeature) => pathGenerator(d) || '')
+      .duration(200)
       .attr('stroke-width', '1px')
       .attr('stroke', 'transparent')
       .style('opacity', 0.8);

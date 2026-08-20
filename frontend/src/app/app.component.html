@@ -6,8 +6,13 @@
       <button type="button" id="upload-data-btn" (click)="openForm()">Upload data</button>
       <app-download-menu></app-download-menu>
       <span class="spacer"></span>
-      <button type="button" class="info-btn" routerLink="/info">ℹ️ Info</button>
-      <button type="button" class="info-btn" (click)="basicTutorial()">❓ Tutorial</button>
+      <button type="button" class="info-btn" routerLink="/info">
+        <mat-icon>info</mat-icon>
+        Info</button>
+      <button type="button" class="info-btn" (click)="basicTutorial()">
+        <mat-icon>question_mark</mat-icon>
+        Tutorial
+      </button>
     </div>
   </nav>
 

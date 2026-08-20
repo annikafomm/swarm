@@ -19,3 +19,18 @@ export interface CellFeature {
   geometry: CellGeometry;
   properties: CellProperties;
 }
+
+export interface PropertyGroupItem {
+  key: string;
+  label: string;
+  value: unknown;
+  info: string | null;
+}
+
+export interface PropertyGroup {
+  key: string;
+  title: string;
+  icon: string;
+  description: string;
+  items: PropertyGroupItem[];
+}

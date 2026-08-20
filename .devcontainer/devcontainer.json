@@ -7,7 +7,7 @@
   "workspaceFolder": "/workspaces/swarm",
   "remoteUser": "mopitaner",
   "containerEnv": {
-    "ALLOWED_ORIGINS": "http://localhost:4200,http://127.0.0.1:4200",
+    "ALLOWED_ORIGINS": "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:4204,http://127.0.0.1:4204",
     "UVICORN_RELOAD": "true",
     // Keeps .claude.json inside the state dir below, so one volume covers everything.
     "CLAUDE_CONFIG_DIR": "/home/mopitaner/.claude"
@@ -33,7 +33,7 @@
   "forwardPorts": [3000, 4200],
   "portsAttributes": {
     "3000": { "label": "Backend API" },
-    "4200": { "label": "Frontend Development Server" },
+    "4200": { "label": "Frontend Development Server" }
   },
   "postCreateCommand": "cd /workspaces/swarm/frontend && npm install && cd /workspaces/swarm && git config --global --add safe.directory /workspaces/swarm"
 }

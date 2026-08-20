@@ -130,3 +130,6 @@ overlay.img
 backend/calc_multiome_scores/calc_multiome_scores_test.ipynb
 
 .vscode/
+
+# Claude Code state seed (local only, contains credentials)
+.devcontainer/.claude-state-seed/

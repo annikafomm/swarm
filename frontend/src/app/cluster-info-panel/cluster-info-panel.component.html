@@ -1,0 +1,62 @@
+<ng-container *ngIf="clusterId !== null">
+  <div class="cluster-info-container">
+    <div class="cluster-header">
+      <!-- <label [for]="isCompare ? 'cluster-select-compare' : 'cluster-select'">Cluster</label> -->
+      <select [id]="isCompare ? 'cluster-select-compare' : 'cluster-select'" class="cluster-select"
+        [ngModel]="clusterId" (ngModelChange)="clusterSelected.emit($event)">
+        <option *ngFor="let id of availableClusterIds" [ngValue]="id">Cluster {{ id }}</option>
+      </select>
+    </div>
+
+    <div class="cluster-content">
+      <div class="cluster-stats">
+        <h4>Cluster Statistics</h4>
+        <p><strong>Cells in cluster:</strong> {{ clusterCellCount }}</p>
+        <p><strong>Cluster ID:</strong> {{ clusterId }}</p>
+      </div>
+
+      <div class="cell-types">
+        <h4>Cell Type Distribution</h4>
+        <div class="cell-type-item" *ngFor="let cellType of clusterCellTypes">
+          <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
+          <span>{{ cellType.type }}: {{ cellType.count }} ({{
+            cellType.percentage
+            }}%)</span>
+        </div>
+      </div>
+
+      <div class="cluster-centrality">
+        <h4>Leiden Centrality Averages</h4>
+        <ul class="centrality-list">
+          <li>
+            <strong>Degree Centrality:</strong>
+            {{ clusterCentralityAvg.degree_centrality | number: "1.2-2" }}
+          </li>
+          <li>
+            <strong>Average Clustering:</strong>
+            {{ clusterCentralityAvg.average_clustering | number: "1.2-2" }}
+          </li>
+          <li>
+            <strong>Closeness Centrality:</strong>
+            {{ clusterCentralityAvg.closeness_centrality | number: "1.2-2" }}
+          </li>
+        </ul>
+      </div>
+      <div class="cluster-nhood">
+        <h4>Neighborhood Enrichment (Selected Cell)</h4>
+        <div [id]="isCompare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap'"
+          style="width: 300px; height: 220px"></div>
+      </div>
+    </div>
+  </div>
+
+  <ng-template #notLeidenView>
+    <div class="cluster-info-unavailable">
+      <h4>Cluster details unavailable</h4>
+      <p>
+        Cluster details are only available while coloring the map by "leiden". Switch the
+        color-by dropdown to Leiden clusters to see this cluster's statistics.
+      </p>
+    </div>
+  </ng-template>
+</ng-container>

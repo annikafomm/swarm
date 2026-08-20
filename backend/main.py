@@ -45,6 +45,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
@@ -198,7 +199,7 @@ dataset_registry: Optional[DatasetRegistry] = None
 DEFAULT_DATASETS = [
     {
         "id": "builtin_main",
-        "alias": "Default Dataset (Visium, BRCA)",
+        "alias": "BRCA (Visium)",
         "dir": "data/brca_visium",
         "description": "Pre-configured spatial transcriptomics dataset (BRCA Visium)",
     },
@@ -290,8 +291,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# GZip compression for large responses (GeoJSON, tables, csv/json)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Uses UUID
-cookie_params = CookieParameters(secure=True, httponly=True, samesite="lax")
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+cookie_params = CookieParameters(secure=COOKIE_SECURE, httponly=True, samesite="lax")
 
 cookie = SessionCookie(
     cookie_name="cookie",
@@ -313,14 +318,15 @@ verifier = BasicVerifier(
 
 # -----------------------------------------------------------------------------
 # Utility helpers
-# -----------------------------------------------------------------------------
+# In-memory LRU cache for loaded AnnData objects: path -> (mtime, AnnData)
+_ADATA_CACHE: Dict[str, tuple] = {}
+_MAX_ADATA_CACHE_SIZE = 6
 
 def _load_adata_cached(file_path: str) -> sc.AnnData:
-    """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
+    """Load AnnData with in-memory caching to avoid expensive disk re-reads on every request."""
 
     if file_path is None:
         # Fall back to the first available builtin dataset if none is set yet
-        # (e.g. a fresh session that hasn't selected/uploaded anything).
         builtins = dataset_registry.get_all_datasets(as_dict=True).get("builtin", {}) if dataset_registry else {}
         for dataset_dict in builtins.values():
             candidate = dataset_dict.get("adata_path")
@@ -330,7 +336,19 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
         if file_path is None:
             raise ValueError("No adata file has been loaded. Please call /read_adata first.")
 
-    adata = sc.read_h5ad(str(file_path))
+    abs_path = str(Path(file_path).resolve())
+    if not Path(abs_path).exists():
+        raise ValueError(f"AnnData file not found at: {abs_path}")
+
+    mtime = os.path.getmtime(abs_path)
+    if abs_path in _ADATA_CACHE:
+        cached_mtime, cached_adata = _ADATA_CACHE[abs_path]
+        if cached_mtime == mtime:
+            return cached_adata
+
+    print(f"[CACHE MISS] Reading AnnData into memory from: {abs_path}")
+    t0 = time.time()
+    adata = sc.read_h5ad(abs_path)
     reconstruct_obsm_cols = {
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "ligand_receptor_p_value": "ligand_receptor",
@@ -347,6 +365,13 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
                 index=adata.obs_names,
             )
 
+    # Evict oldest entry if cache exceeds limit
+    if len(_ADATA_CACHE) >= _MAX_ADATA_CACHE_SIZE:
+        oldest_key = next(iter(_ADATA_CACHE))
+        del _ADATA_CACHE[oldest_key]
+
+    _ADATA_CACHE[abs_path] = (mtime, adata)
+    print(f"[CACHE LOADED] AnnData loaded in {time.time() - t0:.2f}s (cached in memory)")
     return adata
 
 GRID_PREFIX = "grid_"

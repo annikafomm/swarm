@@ -12,6 +12,7 @@ import { UnregisteredDatasetsDialogComponent } from './unregistered-datasets-dia
 import { Subject, of } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
+import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   selector: 'app-root',
@@ -22,6 +23,7 @@ import Shepherd from 'shepherd.js';
     DownloadMenuComponent,
     RouterOutlet,
     RouterLink,
+    MatIconModule
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
