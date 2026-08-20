@@ -1,6 +1,16 @@
 import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { Observable } from 'rxjs';
 import * as d3 from 'd3';
+import { MatButtonModule } from '@angular/material/button';
+import { MatIconModule } from '@angular/material/icon';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatFormField, MatLabel } from '@angular/material/form-field';
+import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
+import { MatSelect } from '@angular/material/select';
+import { TranslatePipe } from '../translate.pipe';
+import { Dataset } from '../datasets.service';
 import { CellFeature } from './cell-feature.types';
 
 export interface HexagonRenderContext {
@@ -36,7 +46,10 @@ export interface HexagonRenderContext {
 @Component({
   selector: 'app-hexagon-view',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    CommonModule, FormsModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule,
+    MatFormField, MatLabel, MatOptgroup, MatOption, MatSelect, TranslatePipe,
+  ],
   templateUrl: './hexagon-view.component.html',
   styleUrls: ['./hexagon-view.component.scss'],
 })
@@ -46,6 +59,30 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   @Input() selectedCell: CellFeature | null = null;
   @Input() selectedView = '';
   public activeClusterId: number | null = null;
+
+  // ======= Toolbar (color-by / dataset selectors) =======
+  @Input() isInitializing = false;
+  @Input() isLoadingMap = false;
+  @Input() groupedProperties: { key: string; value: string[] }[] | null = null;
+  @Input() selectedDataset: Dataset | null = null;
+  @Input() builtinDatasets$!: Observable<Dataset[]>;
+  @Input() uploadedDatasets$!: Observable<Dataset[]>;
+  @Input() tangramDatasets$!: Observable<Dataset[]>;
+  /** Bound once in the parent (`propertyAvailable.bind(this)`) and shared by both instances;
+   * each instance supplies its own isCompare when calling it — see isPropertyAvailable below. */
+  @Input() propertyAvailableFn!: (prop: string, isCompare: boolean) => boolean;
+
+  @Output() selectedViewChange = new EventEmitter<string>();
+  @Output() colorByChanged = new EventEmitter<void>();
+  @Output() selectedDatasetChange = new EventEmitter<Dataset | null>();
+  @Output() datasetChanged = new EventEmitter<Dataset | null>();
+  @Output() tangramDatasetSelected = new EventEmitter<Dataset>();
+  @Output() viewTutorialClicked = new EventEmitter<void>();
+  @Output() datasetTutorialClicked = new EventEmitter<void>();
+
+  public isPropertyAvailable(prop: string): boolean {
+    return this.propertyAvailableFn(prop, this.isCompare);
+  }
 
   @Output() cellClicked = new EventEmitter<{ event: MouseEvent; cell: CellFeature }>();
   @Output() clusterClicked = new EventEmitter<{ cell: CellFeature; clusterId: number }>();

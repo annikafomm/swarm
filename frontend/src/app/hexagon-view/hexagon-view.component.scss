@@ -1,3 +1,49 @@
+// Lets this component's own top-level elements (map wrapper + toolbar row) lay out as direct
+// flex children of the parent's #comparison-box, exactly as when this markup lived there
+// directly — the host element itself generates no box of its own.
+:host {
+  display: contents;
+}
+
+.map-container-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  margin-right: 1rem;
+  border-radius: 12px;
+}
+
+.map-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.centered-row-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+
+// .row-container (the compare-side toolbar) intentionally has no rule here — it had none in
+// the original either (confirmed via a repo-wide grep), so the compare toolbar's two dropdowns
+// render as unstyled, stacked block elements rather than the main toolbar's flex row. A real
+// main/compare visual inconsistency, but pre-existing — not introduced or fixed by this move.
+
 #hexbin-compare,
 #hexbin {
   background: #fff;

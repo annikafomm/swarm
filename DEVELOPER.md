@@ -202,3 +202,57 @@ its files are untouched on disk. The recovery path:
 **Practical implication**: uploads are never truly lost on backend restart, but they *are*
 tied to whichever session re-registers them — there's no durable, cross-session "my datasets"
 list beyond what's encoded in `backend/uploads/`.
+
+## Frontend Spatial Map, Cell, Cluster, and Tab Synchronization
+
+The spatial visualization ([HexagonPlotComponent](frontend/src/app/hexagon-plot/hexagon-plot.component.ts) and [HexagonViewComponent](frontend/src/app/hexagon-view/hexagon-view.component.ts)) follows strict synchronization rules between the map canvas, color views, sidebar tabs, and cell/cluster selection state:
+
+### 1. Cell Clicking Behavior
+- **When colored by "Leiden" (`selectedView === 'leiden'`)**:
+  - **Cluster selection**: Selects the clicked cell's entire Leiden cluster (`selectedCluster = clusterId`).
+  - **Map borders**: Outlines all cells belonging to that Leiden cluster with a thin black border (`1.4px`), and outlines the clicked cell itself with a thick black border (`3px`).
+  - **Dimming**: Non-cluster cells are dimmed to `0.6` opacity; cluster member cells are rendered at `1.0` opacity.
+  - **Sidebar tab**: Jumps directly to the **"Cluster Information"** tab.
+  - **Background updates**: Updates the Cell Information panel in the background so switching to Cell Info displays the clicked cell's metadata immediately without losing context.
+- **When colored by ANY other view (e.g. `cell_type`, `gene_expression`, `regulatory_scores`, `co_occurrence`, etc.)**:
+  - **Single-cell selection**: Selects only that specific cell (`selectedCell = cell`).
+  - **Map borders**: Outlines *only* the clicked hexagon with a thick black border (`3px`).
+  - **No cluster borders or dimming**: Cluster outlines and background dimming are strictly disabled (`opacity: 0.8` for all unselected cells).
+  - **Sidebar tab**: Jumps directly to the **"Cell Information"** tab.
+  - **Background updates**: Cluster statistics and neighborhood enrichment heatmaps are calculated in the background without switching tabs or applying cluster outlines.
+
+### 2. "Color hexagons by" Dropdown Changes
+- Changing the dropdown property (`onColorbyPropertyChange`) automatically switches the sidebar to the corresponding tab:
+  - `leiden` $\rightarrow$ **Cluster Information**
+  - `cell_type` / numeric metadata $\rightarrow$ **Cell Information**
+  - `gene_expression` $\rightarrow$ **Gene Expression**
+  - `regulatory_scores` (or specific Genie3/SPONGE scores) $\rightarrow$ **Regulatory Scores**
+  - `co_occurrence` $\rightarrow$ **Cluster Information** (Spatial Co-occurrence Matrix)
+  - `ligand_receptor_*` / LIANA+ $\rightarrow$ **Ligand-Receptor Relationships**
+  - `cell_comp_tf_activity_*` $\rightarrow$ **Cell Composition TF Activity**
+  - `tf_activity` $\rightarrow$ **TF Activity**
+  - `pathway_activity` $\rightarrow$ **Pathway Activity**
+  - `dgea` $\rightarrow$ **DGEA**
+  - `chromvar_*` / spatial correlation $\rightarrow$ **ChromVar spatial correlation : Moran's I / Geary's C**
+  - `diff_motif_*` $\rightarrow$ **Differential Motif Activity**
+  - `footprints` $\rightarrow$ **Footprints**
+  - `grn_evaluation` $\rightarrow$ **GRN Evaluation**
+- **Border & Dimming Cleanup**: If the new color view is *not* `leiden`, cluster extension outlines and dimming are cleared immediately (`activeClusterId = null`, standard `0.8` opacity across the canvas).
+
+### 3. Cluster Information Tab & Dropdown
+- **Switching to "Cluster Information" Tab**:
+  - Automatically switches the map color view to `leiden` (`selectedView = 'leiden'`).
+  - Highlights and outlines the active cluster (or auto-selects default cluster 0 if no cluster is active yet).
+  - Keeps `selectedCell = null` if entering cold (displays empty state guide in Cell Info).
+- **Selecting a Cluster in the Cluster Info Dropdown (`selectCluster`)**:
+  - Switches map color view to `leiden`.
+  - Outlines the newly selected cluster on the map.
+  - Resets single-cell thick border (`selectedCell = null`) if the previously selected cell was not part of the new cluster.
+
+### 4. Cell Properties & Missing Values
+- **Dataset-wide empty properties**: Properties that have no non-empty values across any cell in the entire dataset are filtered out completely.
+- **Cell-level missing values**: If a property exists in the dataset but has a null, undefined, empty string, or NaN value for the selected cell, the property key is displayed with a styled `NaN` badge.
+
+### 5. Canvas Aspect Ratio & Legend Bounding
+- **Square Projection**: Canvas uses a `1000x1000` SVG viewBox fitted with `d3.geoIdentity().fitExtent([[20, 20], [980, 980]], featureCollection)` inside a 1:1 aspect ratio container (`#hexbin`), providing equal margin spacing on all four sides.
+- **Floating Legend**: Positioned at `(x: 20, y: 20)` within SVG bounds with positive internal offsets and drop shadow, preventing any clipping at canvas edges.

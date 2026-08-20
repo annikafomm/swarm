@@ -16,8 +16,6 @@ import { DatasetService } from '../datasets.service';
 import { Dataset } from '../datasets.service';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
-import { TranslationService } from '../translation.service';
-import { TranslatePipe } from '../translate.pipe';
 import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
 import { InfoService } from '../info.service';
@@ -49,7 +47,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, TranslatePipe, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -97,6 +95,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   tangram_Datasets$: Observable<Dataset[]>;
   selectedDataset: Dataset | null = null;
   selectedDatasetCompare: Dataset | null = null;
+  /** Stable bound reference passed to both HexagonViewComponent instances as
+   * [propertyAvailableFn], since passing `this.propertyAvailable` directly would lose its
+   * `this` binding once invoked from the child. */
+  public propertyAvailableBound = (prop: string, isCompare: boolean): boolean =>
+    this.propertyAvailable(prop, isCompare);
 
   compareMode: boolean = false;
 
@@ -784,7 +787,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return `${prefix}Regulatory Scores`;
     }
     if (prop === 'co_occurrence') {
-      return `${prefix}Co-occurence`;
+      return `${prefix}Cluster Information`;
     }
     if (prop === 'gene_expression') {
       return `${prefix}Gene Expression`;
@@ -1071,8 +1074,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   /**
    * Check if regulatory scores data is available
    */
-  private hasRegulatoryScoresData(scope: 'main' | 'compare' = 'main'): boolean {
-    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+  private hasRegulatoryScoresData(isCompare = false): boolean {
+    const meta = isCompare ? this.metaCompare : this.meta;
     if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasGenie3 = meta['global_regulatory_scores_genie3'] &&
@@ -1081,14 +1084,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       Object.keys(meta['global_regulatory_scores_sponge']).length > 0;
 
     const hasRegulatoryObsm = (
-      scope === 'compare' ? this.regulatoryObsmKeysCompare : this.regulatoryObsmKeysMain
+      isCompare ? this.regulatoryObsmKeysCompare : this.regulatoryObsmKeysMain
     ).length > 0;
 
     return (hasGenie3 || hasSponge) && hasRegulatoryObsm;
   }
 
-  private hasGeneExpressionData(scope: 'main' | 'compare' = 'main'): boolean {
-    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+  private hasGeneExpressionData(isCompare = false): boolean {
+    const meta = isCompare ? this.metaCompare : this.meta;
     if (!meta || Object.keys(meta).length === 0) return false;
 
     const hasMoranI = meta['moranI'] && Object.keys(meta['moranI']).length > 0;
@@ -1120,13 +1123,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * by the template to disable tabs and dropdown options when information
    * hasn't been computed or loaded yet.
    */
-  public propertyAvailable(prop: string, scope: 'main' | 'compare' = 'main'): boolean {
-    if (prop === 'gene_expression') return this.hasGeneExpressionData(scope)
-    if (prop === 'regulatory_scores') return this.hasRegulatoryScoresData(scope);
-    if (prop === 'co_occurrence') return this.hasCoOccurrenceData(scope);
+  public propertyAvailable(prop: string, isCompare = false): boolean {
+    if (prop === 'gene_expression') return this.hasGeneExpressionData(isCompare)
+    if (prop === 'regulatory_scores') return this.hasRegulatoryScoresData(isCompare);
+    if (prop === 'co_occurrence') return this.hasCoOccurrenceData(isCompare);
 
 
-    const map = scope === 'compare' ? this.propertyAvailabilityCompare : this.propertyAvailability;
+    const map = isCompare ? this.propertyAvailabilityCompare : this.propertyAvailability;
 
     if (map && prop in map) {
       return map[prop];
@@ -1135,8 +1138,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return false;
   }
 
-  private hasCoOccurrenceData(scope: 'main' | 'compare' = 'main'): boolean {
-    const meta = scope === 'compare' ? this.metaCompare : this.meta;
+  private hasCoOccurrenceData(isCompare = false): boolean {
+    const meta = isCompare ? this.metaCompare : this.meta;
 
     if (!meta || Object.keys(meta).length === 0 || !meta['leiden_cluster_annotations']) return false;
 
@@ -1149,94 +1152,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       ann.co_occurrence.length > 0 &&
       Array.isArray(ann.co_occurrence[0]) // verify it's a 2D array
     );
-  }
-
-  private updatePropertyAvailability(scope: 'main' | 'compare' = 'main') {
-    const features = scope === 'main' ? this.features : this.compareFeatures;
-    const map: { [prop: string]: boolean } = {};
-    const currentColorableProps = scope === 'main' ? this.colorableProperties : this.colorablePropertiesCompare;
-    if (features && features.length > 0) {
-      const keys = Object.keys(features[0].properties || {});
-      for (const prop of currentColorableProps) {
-        if (prop === 'regulatory_scores') {
-          map[prop] = this.hasRegulatoryScoresData(scope);
-        }
-        else if (prop === 'gene_expression') {
-          map[prop] = this.hasGeneExpressionData(scope);
-        }
-        else if (prop === 'co_occurrence') {
-          map[prop] = this.hasCoOccurrenceData(scope);
-
-        } else {
-          map[prop] = keys.includes(prop);
-        }
-      }
-      // Add all other keys as available
-      for (const key of keys) {
-        map[key] = true;
-      }
-    }
-    if (scope === 'main') {
-      this.propertyAvailability = map;
-    } else {
-      this.propertyAvailabilityCompare = map;
-    }
-  }
-
-  private buildGroupedPropertiesFromKeys(keys: string[]): { key: string; value: string[] }[] {
-    const scoreKeys = ['leiden', 'regulatory_scores', 'gene_expression'];
-    const lianaKeys = [
-      'ligand_receptor_relationships',
-      'cell_comp_tf_activity_similarity',
-      'tf_activity',
-      'pathway_activity',
-    ];
-    const chromvarKeys = ['chromvar_total_sum'];
-
-    return [
-      { key: 'Scores', value: keys.filter((p) => scoreKeys.includes(p)) },
-      { key: 'LIANA+', value: keys.filter((p) => lianaKeys.includes(p)) },
-      { key: 'ChromVAR', value: keys.filter((p) => chromvarKeys.includes(p)) },
-      {
-        key: 'Other', value: keys.filter(
-          (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
-        )
-      },
-    ];
-  }
-
-  private computePropertyAvailability(
-    features: CellFeature[],
-    candidates: Set<string>,
-    context: 'main' | 'compare'
-  ): { [prop: string]: boolean } {
-    const availability: { [prop: string]: boolean } = {};
-
-    candidates.forEach((prop) => {
-      if (prop === 'regulatory_scores') {
-        const hasFeatureData = features.some((f) => {
-          const val = f?.properties ? f.properties[prop] : undefined;
-          return val !== undefined && val !== null && val !== '';
-        });
-        availability[prop] = context === 'main'
-          ? this.hasRegulatoryScoresData() || hasFeatureData
-          : hasFeatureData;
-      } else if (this.leidenCentralityProps.includes(prop)) {
-        availability[prop] = features.some((f) => {
-          const annotationVal = this.getLeidenClusterAnnotation(f.properties.leiden, context === 'compare' ? true : false)?.centrality?.[prop];
-          const featureVal = f?.properties ? f.properties[prop] : undefined;
-          const val = annotationVal ?? featureVal;
-          return val !== undefined && val !== null && val !== '';
-        });
-      } else {
-        availability[prop] = features.some((f) => {
-          const val = f?.properties ? f.properties[prop] : undefined;
-          return val !== undefined && val !== null && val !== '';
-        });
-      }
-    });
-
-    return availability;
   }
 
   public onCompareMode(): void {
@@ -1605,7 +1520,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
               .attr('d', (d: CellFeature) => pathGenerator(d) || '')
               .attr('fill', (d: CellFeature) => {
                 const value = this.leidenCentralityProps.includes(this.selectedCompareView)
-                  ? this.getLeidenClusterAnnotation(d.properties.leiden)?.centrality?.[this.selectedCompareView]
+                  ? this.getLeidenClusterAnnotation(d.properties.leiden, true)?.centrality?.[this.selectedCompareView]
                   : d.properties?.[this.selectedCompareView];
                 if (this.currentCompareLegendType === 'categorical') {
                   return this.colorScaleCompare(String(value));
@@ -1664,7 +1579,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           if (compare) {
             this.metaCompare = data.meta;
             console.log('Compare meta loaded:', this.metaCompare, data.meta);
-            this.updatePropertyAvailability('compare');
             const availableObsColsCompare = this.getDgeaObsCols(true);
             if (availableObsColsCompare.length && !availableObsColsCompare.includes(this.selectedDgeaObsColCompare)) {
               this.selectedDgeaObsColCompare = availableObsColsCompare[0];
@@ -1676,7 +1590,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
           } else {
             this.meta = data.meta;
-            this.updatePropertyAvailability('main');
             const availableObsCols = this.getDgeaObsCols();
             if (availableObsCols.length && !availableObsCols.includes(this.selectedDgeaObsCol)) {
               this.selectedDgeaObsCol = availableObsCols[0];
@@ -1808,12 +1721,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         candidates.forEach((prop) => {
           if (prop === 'regulatory_scores') {
-            targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare ? 'compare' : 'main');
+            targetAvailabilityMap[prop] = this.hasRegulatoryScoresData(compare);
           } else if (prop === 'gene_expression') {
-            targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare ? 'compare' : 'main');
+            targetAvailabilityMap[prop] = this.hasGeneExpressionData(compare);
           }
           else if (prop === 'co_occurrence') {
-            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare ? 'compare' : 'main');
+            targetAvailabilityMap[prop] = this.hasCoOccurrenceData(compare);
 
           } else if (this.leidenCentralityProps.includes(prop)) {
             targetAvailabilityMap[prop] = (compare ? this.compareFeatures : this.features).some((f) => {
@@ -1837,28 +1750,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
         console.log(`Property availability map (${compare ? 'compare' : 'main'}):`, targetAvailabilityMap);
 
-        // rebuild grouped properties with full property list; template handles disabled state
-        this.groupedProperties = [
-          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
-          {
-            key: 'Other', value: this.colorableProperties.filter(
-              (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
-            ),
-          },
-        ];
-
         const firstAvailableProperty = compare
-          ? this.colorablePropertiesCompare.find((p) => this.propertyAvailable(p, 'compare'))
-          : this.colorableProperties.find((p) => this.propertyAvailable(p, 'main'));
+          ? this.colorablePropertiesCompare.find((p) => this.propertyAvailable(p, true))
+          : this.colorableProperties.find((p) => this.propertyAvailable(p, false));
 
         if (compare) {
-          if (this.propertyAvailable('cell_type', 'compare')) {
+          if (this.propertyAvailable('cell_type', true)) {
             this.selectedCompareView = 'cell_type';
-          } else if (this.propertyAvailable('leiden', 'compare')) {
+          } else if (this.propertyAvailable('leiden', true)) {
             this.selectedCompareView = 'leiden';
-          } else if (this.propertyAvailable('regulatory_scores', 'compare')) {
+          } else if (this.propertyAvailable('regulatory_scores', true)) {
             this.selectedCompareView = 'regulatory_scores';
           } else if (firstAvailableProperty) {
             this.selectedCompareView = firstAvailableProperty;
@@ -1868,11 +1769,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
           this.currentCompareLegendType = this.isContinuousScale(this.selectedCompareView, this.compareFeatures, true) ? 'continuous' : 'categorical';
         } else {
-          if (this.propertyAvailable('cell_type', 'main')) {
+          if (this.propertyAvailable('cell_type', false)) {
             this.selectedView = 'cell_type';
-          } else if (this.propertyAvailable('leiden', 'main')) {
+          } else if (this.propertyAvailable('leiden', false)) {
             this.selectedView = 'leiden';
-          } else if (this.propertyAvailable('regulatory_scores', 'main')) {
+          } else if (this.propertyAvailable('regulatory_scores', false)) {
             this.selectedView = 'regulatory_scores';
           } else if (firstAvailableProperty) {
             this.selectedView = firstAvailableProperty;
@@ -2008,9 +1909,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return data;
   }
 
-  private extractViewValue(feature: CellFeature, view: string, context: 'main' | 'compare' = 'main'): unknown {
+  private extractViewValue(feature: CellFeature, view: string, isCompare = false): unknown {
     if (this.leidenCentralityProps.includes(view)) {
-      return this.getLeidenClusterAnnotation(feature.properties.leiden, context == 'compare' ? true : false)?.centrality?.[view];
+      return this.getLeidenClusterAnnotation(feature.properties.leiden, isCompare)?.centrality?.[view];
     }
     return feature.properties[view];
   }
@@ -2018,10 +1919,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private collectFiniteValuesForView(
     features: CellFeature[],
     view: string,
-    context: 'main' | 'compare' = 'main'
+    isCompare = false
   ): number[] {
     return features
-      .map((f) => this.toNumber(this.extractViewValue(f, view, context)))
+      .map((f) => this.toNumber(this.extractViewValue(f, view, isCompare)))
       .filter((n) => Number.isFinite(n));
   }
 
@@ -2030,7 +1931,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     view: string,
     compare: boolean = false
   ): { min: number; max: number } | null {
-    const values = this.collectFiniteValuesForView(features, view, compare ? 'compare' : 'main');
+    const values = this.collectFiniteValuesForView(features, view, compare);
     if (!values.length) {
       console.log('[domain:getMinMaxForView] no finite values', {
         view,
@@ -2149,12 +2050,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.applySharedDomainAndRepaint({ min, max }, contextKey, token);
   }
 
-  public onGeneExpressionSelected(event: { gene: string; action: string }, panel: 'main' | 'compare'): void {
+  public onGeneExpressionSelected(event: { gene: string; action: string }, isCompare: boolean): void {
     if (event.action !== 'gene_expression') return;
     const selectedGene = String(event.gene ?? '').trim();
     if (!selectedGene) return;
 
-    if (panel === 'main') {
+    if (!isCompare) {
       this.selectedGeneExpressionMain = selectedGene;
     } else {
       this.selectedGeneExpressionCompare = selectedGene;
@@ -2239,7 +2140,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const valuesRaw = sourceFeatures.map((f) => {
       if (this.leidenCentralityProps.includes(property)) {
-        const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden);
+        const clusterAnnotation = this.getLeidenClusterAnnotation(f.properties.leiden, compare);
         return clusterAnnotation?.centrality?.[property];
       }
       return f.properties[property];
@@ -2380,7 +2281,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    valuesRaw = features.map((f) => this.extractViewValue(f, viewToUse));
+    valuesRaw = features.map((f) => this.extractViewValue(f, viewToUse, !isMainView));
     const numericValues = valuesRaw.map((v) => this.toNumber(v));
 
     // Determine if the property is continuous
@@ -2423,7 +2324,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       sel
         .interrupt()
         .attr('fill', (d) => {
-          const raw = this.extractViewValue(d, viewToUse);
+          const raw = this.extractViewValue(d, viewToUse, !isMainView);
           const n = this.toNumber(raw);
           return Number.isFinite(n)
             ? viewVariablesToUpdate.continuous((n - min) / (max - min))
@@ -2440,7 +2341,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       sel
         .interrupt()
         .attr('fill', (d) => {
-          const raw = this.extractViewValue(d, viewToUse);
+          const raw = this.extractViewValue(d, viewToUse, !isMainView);
           return viewVariablesToUpdate.ordinal(String(raw));
         });
     }

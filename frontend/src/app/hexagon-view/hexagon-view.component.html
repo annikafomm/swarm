@@ -1,1 +1,54 @@
-<div #hexbinContainer [id]="isCompare ? 'hexbin-compare' : 'hexbin'"></div>
+<div class="map-container-wrapper" [id]="isCompare ? 'compare-map-container' : 'main-map-container'">
+  <div #hexbinContainer [id]="isCompare ? 'hexbin-compare' : 'hexbin'"></div>
+  <div *ngIf="isLoadingMap" class="map-loading-overlay">
+    <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary"
+      [attr.aria-label]="isCompare ? 'Loading compare hexagon plot' : 'Loading hexagon plot'">
+    </mat-progress-spinner>
+  </div>
+</div>
+
+<div [class]="isCompare ? 'row-container' : 'centered-row-container'" [style.width]="isCompare ? null : '100%'">
+  <mat-form-field appearance="fill" [id]="isCompare ? null : 'color-by-property'">
+    <mat-label>{{ isCompare ? 'Compare hexagons by' : 'Color hexagons by' }}</mat-label>
+    <mat-select [ngModel]="selectedView" (ngModelChange)="selectedViewChange.emit($event)"
+      (selectionChange)="colorByChanged.emit()" [disabled]="isInitializing">
+      <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+        <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!isPropertyAvailable(prop)">
+          {{ prop | translate | async }}
+        </mat-option>
+      </mat-optgroup>
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="viewTutorialClicked.emit()">
+    <mat-icon>help_outline</mat-icon>
+  </button>
+
+  <mat-form-field [id]="isCompare ? null : 'dataset-dropdown-main'" appearance="fill" class="dataset-dropdown">
+    <mat-label>{{ isCompare ? 'Compare with Dataset' : 'Select Dataset' }}</mat-label>
+    <mat-select [ngModel]="selectedDataset" (ngModelChange)="selectedDatasetChange.emit($event)"
+      (selectionChange)="datasetChanged.emit($event.value)" [disabled]="isInitializing">
+      <mat-option *ngIf="isCompare" [value]="null">None</mat-option>
+      <mat-optgroup label="Built-in Datasets">
+        <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+          {{ ds.alias }}
+        </mat-option>
+      </mat-optgroup>
+      <mat-optgroup label="Your Uploads">
+        <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+          {{ ds.alias }}
+        </mat-option>
+      </mat-optgroup>
+      <mat-optgroup label="Tangram" *ngIf="(tangramDatasets$ | async)?.length">
+        <mat-option *ngFor="let ds of (tangramDatasets$ | async)" [value]="ds"
+          (onSelectionChange)="tangramDatasetSelected.emit(ds)">
+          {{ ds.alias }} (Tangram)
+        </mat-option>
+      </mat-optgroup>
+    </mat-select>
+  </mat-form-field>
+
+  <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="datasetTutorialClicked.emit()">
+    <mat-icon>help_outline</mat-icon>
+  </button>
+</div>
