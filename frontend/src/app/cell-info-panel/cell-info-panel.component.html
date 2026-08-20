@@ -104,7 +104,7 @@
   </ng-template>
 </ng-template>
 
-<div class="cell-info-panel" *ngIf="cell as c">
+<div class="cell-info-panel" *ngIf="cell as c; else noCellSelected">
   <div class="cell-overview-card">
     <mat-icon class="cell-overview-icon">fingerprint</mat-icon>
     <div class="cell-overview-main">
@@ -162,3 +162,13 @@
     <p class="no-properties">No additional properties available for this cell.</p>
   </ng-template>
 </div>
+
+<ng-template #noCellSelected>
+  <div class="empty-state-card">
+    <mat-icon class="empty-state-icon">touch_app</mat-icon>
+    <div class="empty-state-title">No Cell Selected</div>
+    <div class="empty-state-message">
+      Click on any cell or spot on the map to view its detailed properties, annotations, quality metrics, and regulatory scores.
+    </div>
+  </div>
+</ng-template>

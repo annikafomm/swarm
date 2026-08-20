@@ -581,7 +581,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.pathsService.paths$
       .pipe(takeUntil(this.destroy$))
       .subscribe(paths => {
-        if (!paths) return;
+        if (!paths || (!paths.hexagonPath && !paths.adataPath)) return;
 
         const hexagonPath = paths.hexagonPath || DEFAULT_PATHS.hexagonPath;
 
@@ -750,14 +750,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    */
   private jumpToTab(group: MatTabGroup | undefined, tab: MatTab | undefined): void {
     if (!group || !tab) return;
-    // Deferred so this runs after Angular has inserted the *ngIf tab into the DOM.
-    setTimeout(() => {
+    const select = () => {
       const tabs: MatTab[] = (group as any)._tabs?.toArray?.() ?? [];
       const index = tabs.indexOf(tab);
       if (index !== -1) {
         group.selectedIndex = index;
       }
-    }, 0);
+    };
+    select();
+    setTimeout(select, 0);
   }
 
 
@@ -1436,6 +1437,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .then(async (data: GeoJsonData) => {
         if (token !== this.requestTokens[tokenType]) {
           console.warn(`[Race condition prevented] Ignoring stale GeoJSON fetch for ${dataPath}`);
+          this.setMapLoading(false, compare);
+          this.checkInitializationComplete(compare);
           return;
         }
         console.log('Data loaded from:', fullUrl, data);
@@ -2361,7 +2364,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       )
       .subscribe({
         next: (res) => {
-          if (token !== this.requestTokens['genie3']) return;
+          if (token !== this.requestTokens['genie3']) {
+            compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+            this.checkInitializationComplete(compare);
+            return;
+          }
           {
             const payload: any = res;
             const data = payload['connections'] as { regulatoryGene: string; targetGene: string; weight: number }[];
@@ -2404,7 +2411,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         },
         error: (err) => {
-          if (token !== this.requestTokens['genie3']) return;
+          if (token !== this.requestTokens['genie3']) {
+            compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
+            this.checkInitializationComplete(compare);
+            return;
+          }
           console.error(
             `[Backend] Failed to load Genie3 Connections for["${geneSet}"]`,
             err,
@@ -2723,7 +2734,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       )
       .subscribe({
         next: (res) => {
-          if (token !== this.requestTokens['sponge']) return;
+          if (token !== this.requestTokens['sponge']) {
+            compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+            this.checkInitializationComplete(compare);
+            return;
+          }
           {
             const payload: any = res;
 
@@ -2773,7 +2788,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           }
         },
         error: (err) => {
-          if (token !== this.requestTokens['sponge']) return;
+          if (token !== this.requestTokens['sponge']) {
+            compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
+            this.checkInitializationComplete(compare);
+            return;
+          }
           console.error(
             `[Backend] Failed to load Sponge Connections for["${geneSet}"]`,
             err,
@@ -3082,9 +3101,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.mainView?.extendCluster(cell.properties.leiden, this.features);
         this.jumpToTab(this.tabGroup, this.clusterInfoTab);
       } else {
-        d3.select(event.target as SVGElement)
-          .transition()
-          .attr('stroke', 'black');
+        this.mainView?.updateSelectionHighlight();
         this.jumpToTab(this.tabGroup, this.cellInfoTab);
       }
 
@@ -3111,6 +3128,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
         this.jumpToTab(this.tabGroupCompare, this.clusterInfoTabCompare);
       } else {
+        this.compareView?.updateSelectionHighlight();
         this.jumpToTab(this.tabGroupCompare, this.cellInfoTabCompare);
       }
     }

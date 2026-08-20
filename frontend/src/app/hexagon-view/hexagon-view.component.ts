@@ -1,4 +1,4 @@
-import { Component, ElementRef, EventEmitter, Input, OnDestroy, Output, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import * as d3 from 'd3';
 import { CellFeature } from './cell-feature.types';
@@ -40,10 +40,11 @@ export interface HexagonRenderContext {
   templateUrl: './hexagon-view.component.html',
   styleUrls: ['./hexagon-view.component.scss'],
 })
-export class HexagonViewComponent implements OnDestroy {
+export class HexagonViewComponent implements OnChanges, OnDestroy {
   @Input() isCompare = false;
   /** This instance's own currently-selected cell, for the mouseLeave highlight-suppression check. */
   @Input() selectedCell: CellFeature | null = null;
+  public activeClusterId: number | null = null;
 
   @Output() cellClicked = new EventEmitter<{ event: MouseEvent; cell: CellFeature }>();
   @Output() clusterClicked = new EventEmitter<{ cell: CellFeature; clusterId: number }>();
@@ -68,6 +69,12 @@ export class HexagonViewComponent implements OnDestroy {
   private keydownHandler: ((event: KeyboardEvent) => void) | null = null;
   private lastRenderCtx: HexagonRenderContext | null = null;
 
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['selectedCell']) {
+      this.updateSelectionHighlight();
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.keydownHandler) {
       window.removeEventListener('keydown', this.keydownHandler);
@@ -80,19 +87,19 @@ export class HexagonViewComponent implements OnDestroy {
   }
 
   public createHexagonPlot(): void {
-    const width = 500;
-    const height = 400;
+    const width = 1200;
+    const height = 1000;
 
     const container = d3.select(this.hexbinContainerRef.nativeElement);
     const svgSel = container
       .selectAll('svg')
       .data([0])
       .join('svg')
-      .attr('width', width)
-      .attr('height', height)
       .attr('viewBox', [0, 0, 1200, 1000] as [number, number, number, number])
+      .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('background-color', 'white')
-      .style('overflow', 'hidden');
+      .style('overflow', 'hidden')
+      .on('mouseleave', () => this.clearUnselectedHoverBorders());
 
     const gSel = svgSel
       .selectAll<SVGGElement, number>('g.root-group')
@@ -195,34 +202,51 @@ export class HexagonViewComponent implements OnDestroy {
   }
 
   public extendCluster(selectedCluster: number, features: CellFeature[]): void {
-    const paths = this.g.selectAll<SVGPathElement, CellFeature>('path');
-
-    // Remove mouseleave event to prevent resetting outline. Must run on the
-    // selection itself, not the transition below — Transition.on() only
-    // accepts 'start'/'end'/'interrupt' and throws on any other event type.
-    paths.on('mouseleave', null);
-
-    paths
-      .transition()
-      .duration(200)
-      .attr('stroke-width', (d: CellFeature) => (d.properties.leiden === selectedCluster ? '3px' : '1px'))
-      .attr('stroke', (d: CellFeature) => (d.properties.leiden === selectedCluster ? '#000' : 'transparent'))
-      .style('opacity', (d: CellFeature) => (d.properties.leiden === selectedCluster ? 1.0 : 0.6));
+    this.activeClusterId = selectedCluster;
+    this.updateSelectionHighlight();
   }
 
   public resetClusterExtension(features: CellFeature[]): void {
-    this.g
-      .selectAll<SVGPathElement, CellFeature>('path')
-      .transition()
-      .duration(200)
-      .attr('stroke-width', '1px')
-      .attr('stroke', 'transparent')
-      .style('opacity', 0.8);
+    this.activeClusterId = null;
+    this.updateSelectionHighlight();
+  }
 
-    // Reinitialize the mouseleave event
-    this.g
-      .selectAll<SVGPathElement, CellFeature>('path')
-      .on('mouseleave', (event, d) => this.mouseLeave(event, d));
+  /**
+   * Reapplies highlight borders consistently to all paths based on current selectedCell
+   * and activeClusterId state, clearing any stale hover borders.
+   */
+  public updateSelectionHighlight(): void {
+    if (!this.g) return;
+    this.g.selectAll<SVGPathElement, CellFeature>('path')
+      .each((d: CellFeature, i, nodes) => {
+        if (!d || !d.properties) return;
+        const el = d3.select(nodes[i]);
+        const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
+        const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
+        const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
+
+        if (isSelectedCluster || isLeidenClusterSelected) {
+          el.interrupt()
+            .attr('stroke', '#000')
+            .attr('stroke-width', '3px')
+            .style('opacity', 1.0);
+        } else if (isSelectedCell) {
+          el.interrupt()
+            .attr('stroke', '#000')
+            .attr('stroke-width', '2px')
+            .style('opacity', 1.0);
+        } else {
+          el.interrupt()
+            .attr('stroke', 'transparent')
+            .attr('stroke-width', '1px')
+            .style('opacity', this.activeClusterId !== null ? 0.6 : 0.8);
+        }
+      });
+  }
+
+  /** Clears any hover outlines that might linger if the mouse exited the canvas rapidly. */
+  public clearUnselectedHoverBorders(): void {
+    this.updateSelectionHighlight();
   }
 
   private toNumber(v: unknown): number {
@@ -234,37 +258,46 @@ export class HexagonViewComponent implements OnDestroy {
     return NaN;
   }
 
-  // Original also did `d3.selectAll('.Country').transition()...` in both handlers below —
-  // no element in this app has ever had class="Country" (confirmed: zero matches repo-wide),
-  // so that half of both handlers was dead code with zero DOM effect. Omitted here, not a
-  // behavior change.
   private mouseOver(event: MouseEvent, d: CellFeature): void {
-    d3.select(event.target as SVGElement)
-      .transition()
-      .duration(200)
-      .style('opacity', 0.8)
-      .attr('stroke', 'black');
+    const targetEl = (event.currentTarget || event.target) as SVGElement;
+    if (!targetEl) return;
+    const el = d3.select(targetEl);
+    el.interrupt();
+
+    const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
+    const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
+    const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
+
+    const strokeWidth = (isSelectedCluster || isLeidenClusterSelected) ? '3px' : (isSelectedCell ? '2px' : '1px');
+
+    el.style('opacity', 0.8)
+      .attr('stroke', 'black')
+      .attr('stroke-width', strokeWidth);
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
-    // Original also suppressed the reset if `d` matched the *other* view's selected cell
-    // (this.selectedCellCompare when called from the main instance, and vice versa) — a
-    // real, if narrow, cross-view check. Simplified to only this instance's own selectedCell
-    // since a per-instance component doesn't have a clean way to see the other instance's
-    // selection without new plumbing; flagged to the user as a deliberate small behavior
-    // change, not an oversight.
-    if (
-      this.selectedCell &&
-      (d.properties.barcode === this.selectedCell.properties.barcode ||
-        (this.lastRenderCtx?.selectedView === 'leiden' &&
-          d.properties.leiden === this.selectedCell.properties.leiden))
-    ) {
-      return;
+    const targetEl = (event.currentTarget || event.target) as SVGElement;
+    if (!targetEl) return;
+    const el = d3.select(targetEl);
+    el.interrupt();
+
+    const isSelectedCluster = this.activeClusterId !== null && d.properties.leiden === this.activeClusterId;
+    const isLeidenClusterSelected = this.lastRenderCtx?.selectedView === 'leiden' && !!this.selectedCell && d.properties.leiden === this.selectedCell.properties.leiden;
+    const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
+
+    if (isSelectedCluster || isLeidenClusterSelected) {
+      el.attr('stroke', '#000')
+        .attr('stroke-width', '3px')
+        .style('opacity', 1.0);
+    } else if (isSelectedCell) {
+      el.attr('stroke', '#000')
+        .attr('stroke-width', '2px')
+        .style('opacity', 1.0);
+    } else {
+      el.attr('stroke', 'transparent')
+        .attr('stroke-width', '1px')
+        .style('opacity', this.activeClusterId !== null ? 0.6 : 0.8);
     }
-    d3.select(event.target as SVGElement)
-      .transition()
-      .duration(200)
-      .attr('stroke', 'transparent');
   }
 
   // ======= Xenium detail window (main view only) =======

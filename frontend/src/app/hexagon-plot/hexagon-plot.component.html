@@ -125,7 +125,7 @@
       <mat-tab-group #mainTabGroup (selectedTabChange)="onTabChange($event)" preserveContent="true"
         dynamicHeight="false" class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
-        <mat-tab label="Cell Information" *ngIf="selectedCell" #cellInfoTab>
+        <mat-tab label="Cell Information" #cellInfoTab>
           <app-cell-info-panel [cell]="selectedCell" [currentView]="selectedView"></app-cell-info-panel>
         </mat-tab>
 
@@ -1127,7 +1127,7 @@
         <mat-tab-group #compareTabGroup (selectedTabChange)="onTabChange($event,true)" preserveContent="true"
           dynamicHeight="false" class="metadata-tables-compare">
 
-          <mat-tab label="Compare - Cell Information" *ngIf="selectedCellCompare" #cellInfoTabCompare>
+          <mat-tab label="Compare - Cell Information" #cellInfoTabCompare>
             <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView"></app-cell-info-panel>
           </mat-tab>
 

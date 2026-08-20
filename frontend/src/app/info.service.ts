@@ -219,8 +219,10 @@ export class InfoService {
     if (k.endsWith('_ontology_term_id')) {
       return 'ontology';
     }
-    const isNumeric = typeof value === 'number' || (typeof value === 'string' && value.trim() !== '' && Number.isFinite(+value));
-    return isNumeric ? 'composition' : 'other';
+    if (/(?:^|_)(x|y)(?:_|$)/i.test(k)) {
+      return 'location';
+    }
+    return 'other';
   }
 
   /** Short help text for a single field, or null if nothing specific is known about it. */
