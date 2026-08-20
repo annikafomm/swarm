@@ -13,6 +13,7 @@ import { Subject, of } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialogModule } from '@angular/material/dialog';
 
 @Component({
   selector: 'app-root',
@@ -23,7 +24,8 @@ import { MatIconModule } from '@angular/material/icon';
     DownloadMenuComponent,
     RouterOutlet,
     RouterLink,
-    MatIconModule
+    MatIconModule,
+    MatDialogModule
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
