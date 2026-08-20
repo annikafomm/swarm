@@ -16,6 +16,7 @@ import { DatasetService } from '../datasets.service';
 import { Dataset } from '../datasets.service';
 import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
+import { TranslationService } from '../translation.service';
 import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
 import { InfoService } from '../info.service';
