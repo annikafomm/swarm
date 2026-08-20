@@ -326,7 +326,8 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
    */
   public updateSelectionHighlight(): void {
     if (!this.g) return;
-    const isLeiden = this.selectedView === 'leiden';
+    const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
+    const isLeiden = currentView === 'leiden';
     const activeCluster = isLeiden ? this.activeClusterId : null;
 
     this.g.selectAll<SVGPathElement, CellFeature>('path')
@@ -397,7 +398,8 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     const el = d3.select(targetEl);
     el.interrupt();
 
-    const isLeiden = this.selectedView === 'leiden';
+    const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
+    const isLeiden = currentView === 'leiden';
     const activeCluster = isLeiden ? this.activeClusterId : null;
 
     const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;
@@ -438,7 +440,8 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     const el = d3.select(targetEl);
     el.interrupt();
 
-    const isLeiden = this.selectedView === 'leiden';
+    const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
+    const isLeiden = currentView === 'leiden';
     const activeCluster = isLeiden ? this.activeClusterId : null;
 
     const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;

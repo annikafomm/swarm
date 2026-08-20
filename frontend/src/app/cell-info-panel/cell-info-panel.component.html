@@ -134,7 +134,7 @@
   <div class="cell-overview-card">
     <mat-icon class="cell-overview-icon">fingerprint</mat-icon>
     <div class="cell-overview-main">
-      <div class="cell-overview-title">{{ c.properties.cell_type || 'Cell' }}</div>
+      <div class="cell-overview-title">{{ c.properties.cell_type || (c.properties.leiden !== undefined && c.properties.leiden !== null ? 'Cluster ' + c.properties.leiden + ' Cell' : 'Cell') }}</div>
       <div class="cell-overview-barcode">{{ c.properties.barcode }}</div>
     </div>
     <div class="cell-overview-chips">
