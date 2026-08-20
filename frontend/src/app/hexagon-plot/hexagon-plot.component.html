@@ -13,7 +13,8 @@
 
     <div id="comparison-box">
       <div class="map-container-wrapper" id="main-map-container">
-        <div id="hexbin"></div>
+        <app-hexagon-view #mainView [isCompare]="false" [selectedCell]="selectedCell"
+          (cellClicked)="displayCellDetails($event.event, $event.cell, false)"></app-hexagon-view>
         <div *ngIf="isLoadingHexagons" class="map-loading-overlay">
           <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading hexagon plot">
           </mat-progress-spinner>
@@ -72,7 +73,8 @@
       </button>
 
       <div class="map-container-wrapper" id="compare-map-container" *ngIf="compareMode">
-        <div id="hexbin-compare"></div>
+        <app-hexagon-view #compareView [isCompare]="true" [selectedCell]="selectedCellCompare"
+          (cellClicked)="displayCellDetails($event.event, $event.cell, true)"></app-hexagon-view>
         <div *ngIf="isLoadingCompare" class="map-loading-overlay">
           <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary" aria-label="Loading compare hexagon plot">
           </mat-progress-spinner>
@@ -118,143 +120,182 @@
     </div>
 
     <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
-      <mat-tab-group (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false"
-        class="metadata-tables" [attr.aria-disabled]="isInitializing">
 
-        <mat-tab label="Cell Information" *ngIf="selectedCell">
-          <div *ngIf="selectedCell && selectedView !== 'leiden'">
-            <h2>Cell Details</h2>
-            <div class="cell-details-container">
-              <div *ngIf="selectedCell as cell">
-                <ng-container *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
-                  <div *ngIf="shouldShowProperty(kv.key)" class="property-item">
-                    <div class="property-label">{{ label(kv.key) }}</div>
-                    <div class="property-content">
+      <!-- Shared renderer for a single property's value: primitives, arrays, nested arrays and dicts. -->
+      <ng-template #propertyValue let-value let-propKey="propKey">
+        <ng-container *ngIf="isArray(value); else notArray">
 
-                      <ng-container *ngIf="isArray(kv.value); else notArray">
+          <ng-container *ngIf="isNestedArray(value); else oneDim">
+            <div class="array-header">
+              <span class="count-badge">{{ value.length }} row{{ value.length === 1 ? '' : 's' }}</span>
+              <button type="button" class="toggle" (click)="toggleExpand(propKey)">
+                {{ isExpanded(propKey) ? 'Show less' : 'Show more' }}
+              </button>
+            </div>
 
+            <ul class="row-list" [class.collapsed]="!isExpanded(propKey)">
+              <li class="row" *ngFor="let row of value; let r = index; trackBy: trackByIndex">
+                <span class="row-badge">Row {{ r + 1 }}</span>
+                <ul class="chip-list inner">
+                  <li class="chip" *ngFor="let x of asArrayRow(row); trackBy: trackByIndex">
+                    <ng-container *ngIf="isPrimitive(x); else nestedObj">
+                      {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                    </ng-container>
+                    <ng-template #nestedObj>
+                      <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                    </ng-template>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </ng-container>
 
-                        <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
-                          <div class="array-header">
-                            <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's'
-                              }}</span>
-                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                            </button>
-                          </div>
+          <ng-template #oneDim>
+            <div class="array-header">
+              <span class="count-badge">{{ value.length }} item{{ value.length === 1 ? '' : 's' }}</span>
+              <button type="button" class="toggle" (click)="toggleExpand(propKey)">
+                {{ isExpanded(propKey) ? 'Show less' : 'Show more' }}
+              </button>
+            </div>
 
-                          <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                            <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
-                              <span class="row-badge">Row {{ r + 1 }}</span>
-                              <ul class="chip-list inner">
-                                <li class="chip"
-                                  *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
-                                  <ng-container *ngIf="isPrimitive(x); else nestedObj">
-                                    {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                  </ng-container>
-                                  <ng-template #nestedObj>
-                                    <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                  </ng-template>
-                                </li>
-                              </ul>
-                            </li>
-                          </ul>
-                        </ng-container>
+            <div class="array-stats" *ngIf="isNumericArray(value)">
+              Min: {{ getArrayStats(value).min | number:'1.0-3' }},
+              Max: {{ getArrayStats(value).max | number:'1.0-3' }},
+              Avg: {{ getArrayStats(value).avg | number:'1.0-3' }}
+            </div>
 
-
-                        <ng-template #oneDim>
-                          <div class="array-header">
-                            <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's'
-                              }}</span>
-                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                            </button>
-                          </div>
-
-                          <div class="array-stats" *ngIf="isNumericArray(kv.value)">
-                            Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
-                            Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
-                            Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
-                          </div>
-
-                          <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                            <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
-                              <ng-container *ngIf="isPrimitive(item); else objectItem">
-                                {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
-                              </ng-container>
-                              <ng-template #objectItem>
-                                <code class="chip-json">{{ toJsonCompact(item) }}</code>
-                              </ng-template>
-                            </li>
-                          </ul>
-                        </ng-template>
-
-                      </ng-container>
-
-
-                      <ng-template #notArray>
-                        <ng-container *ngIf="isPrimitive(kv.value); else complex">
-                          {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
-                        </ng-container>
-
-
-                        <ng-template #complex>
-                          <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
-
-                            <div class="array-header">
-                              <span class="count-badge">{{ objectKeyCount(kv.value) }}
-                                key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
-                              <button type="button" class="toggle" (click)="toggleExpand(dictId(label(kv.key)))">
-                                {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
-                              </button>
-                            </div>
-
-                            <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
-                              <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
-                                <div class="kv-key">{{ prettyKey(e.key) }}</div>
-                                <div class="kv-val">
-                                  <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
-                                    {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
-                                  </ng-container>
-                                  <ng-template #nonPrimitiveVal>
-
-                                    <ng-container *ngIf="isArray(e.value); else fallbackJson">
-                                      <ul class="chip-list small">
-                                        <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
-                                          <ng-container *ngIf="isPrimitive(x); else objInArray">
-                                            {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                          </ng-container>
-                                          <ng-template #objInArray>
-                                            <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                          </ng-template>
-                                        </li>
-                                      </ul>
-                                    </ng-container>
-                                    <ng-template #fallbackJson>
-                                      <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
-                                    </ng-template>
-                                  </ng-template>
-                                </div>
-                              </div>
-                            </div>
-
-                          </ng-container>
-
-
-                          <ng-template #complexPre>
-                            <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
-                          </ng-template>
-                        </ng-template>
-                      </ng-template>
-                    </div>
-                  </div>
+            <ul class="chip-list" [class.collapsed]="!isExpanded(propKey)">
+              <li class="chip" *ngFor="let item of value; trackBy: trackByIndex">
+                <ng-container *ngIf="isPrimitive(item); else objectItem">
+                  {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
                 </ng-container>
+                <ng-template #objectItem>
+                  <code class="chip-json">{{ toJsonCompact(item) }}</code>
+                </ng-template>
+              </li>
+            </ul>
+          </ng-template>
+        </ng-container>
+
+        <ng-template #notArray>
+          <ng-container *ngIf="isPrimitive(value); else complex">
+            {{ isNumberLike(value) ? (toNumberLike(value) | number:'1.0-3') : value }}
+          </ng-container>
+
+          <ng-template #complex>
+            <ng-container *ngIf="isPlainObject(value); else complexPre">
+              <div class="array-header">
+                <span class="count-badge">{{ objectKeyCount(value) }}
+                  key{{ objectKeyCount(value) === 1 ? '' : 's' }}</span>
+                <button type="button" class="toggle" (click)="toggleExpand(dictId(propKey))">
+                  {{ isExpanded(dictId(propKey)) ? 'Show less' : 'Show more' }}
+                </button>
               </div>
+
+              <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(propKey))">
+                <div class="kv-row" *ngFor="let e of objectEntries(value); trackBy: trackByIndex">
+                  <div class="kv-key">{{ prettyKey(e.key) }}</div>
+                  <div class="kv-val">
+                    <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
+                      {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
+                    </ng-container>
+                    <ng-template #nonPrimitiveVal>
+                      <ng-container *ngIf="isArray(e.value); else fallbackJson">
+                        <ul class="chip-list small">
+                          <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
+                            <ng-container *ngIf="isPrimitive(x); else objInArray">
+                              {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                            </ng-container>
+                            <ng-template #objInArray>
+                              <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                            </ng-template>
+                          </li>
+                        </ul>
+                      </ng-container>
+                      <ng-template #fallbackJson>
+                        <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                      </ng-template>
+                    </ng-template>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
+
+            <ng-template #complexPre>
+              <pre class="prop-json">{{ formatValue(value) }}</pre>
+            </ng-template>
+          </ng-template>
+        </ng-template>
+      </ng-template>
+
+      <!-- Shared Cell Information tab body, used for both the main and comparison panels. -->
+      <ng-template #cellInfoContent let-cell="cell" let-currentView="currentView">
+        <div class="cell-info-panel" *ngIf="cell as c">
+          <div class="cell-overview-card">
+            <mat-icon class="cell-overview-icon">fingerprint</mat-icon>
+            <div class="cell-overview-main">
+              <div class="cell-overview-title">{{ c.properties.cell_type || 'Cell' }}</div>
+              <div class="cell-overview-barcode">{{ c.properties.barcode }}</div>
+            </div>
+            <div class="cell-overview-chips">
+              <span class="overview-chip" *ngIf="c.properties.leiden !== undefined && c.properties.leiden !== null">
+                <mat-icon>category</mat-icon>Cluster {{ c.properties.leiden }}
+              </span>
+              <span class="overview-chip" *ngIf="c.properties.centroid?.length === 2">
+                <mat-icon>my_location</mat-icon>{{ c.properties.centroid[0] | number:'1.0-1' }}, {{
+                c.properties.centroid[1] | number:'1.0-1' }}
+              </span>
             </div>
           </div>
+
+          <ng-container *ngIf="groupedCellProperties(c).length > 0; else noProps">
+            <mat-expansion-panel *ngFor="let group of groupedCellProperties(c); let gi = index" [expanded]="gi < 3"
+              class="property-group-panel">
+              <mat-expansion-panel-header>
+                <div class="group-header-row">
+                  <mat-icon class="group-icon">{{ group.icon }}</mat-icon>
+                  <span class="group-title">{{ group.title }}</span>
+                  <span class="group-count-badge">{{ group.items.length }}</span>
+                  <button mat-icon-button type="button" class="info-btn" [matTooltip]="group.description"
+                    matTooltipPosition="above" (click)="$event.stopPropagation()">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </div>
+              </mat-expansion-panel-header>
+
+              <div class="property-item" *ngFor="let kv of group.items"
+                [class.active-live-value]="group.key === 'liveView' && kv.key === currentView">
+                <div class="property-label">
+                  <span>{{ kv.label }}</span>
+                  <span class="active-badge" *ngIf="group.key === 'liveView' && kv.key === currentView">Currently
+                    shown</span>
+                  <button *ngIf="kv.info" mat-icon-button type="button" class="info-btn field-info-btn"
+                    [matTooltip]="kv.info" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </div>
+                <div class="property-content">
+                  <ng-container
+                    *ngTemplateOutlet="propertyValue; context: { $implicit: kv.value, propKey: kv.key }"></ng-container>
+                </div>
+              </div>
+            </mat-expansion-panel>
+          </ng-container>
+          <ng-template #noProps>
+            <p class="no-properties">No additional properties available for this cell.</p>
+          </ng-template>
+        </div>
+      </ng-template>
+
+      <mat-tab-group #mainTabGroup (selectedTabChange)="onTabChange($event)" preserveContent="true"
+        dynamicHeight="false" class="metadata-tables" [attr.aria-disabled]="isInitializing">
+
+        <mat-tab label="Cell Information" *ngIf="selectedCell" #cellInfoTab>
+          <ng-container
+            *ngTemplateOutlet="cellInfoContent; context: { cell: selectedCell, currentView: selectedView }"></ng-container>
         </mat-tab>
 
-        <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null">
+        <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null" #clusterInfoTab>
           <div class="cluster-info-container" *ngIf="selectedView === 'leiden' && selectedCluster !== null">
             <div class="cluster-header">
               <h3>Cluster {{ selectedCluster }}</h3>
@@ -1289,131 +1330,16 @@
       <div *ngIf="compareMode">
         <mat-divider style="margin: 20px 0;"></mat-divider>
         <h3 style="margin: 10px 0;">Comparison View</h3>
-        <mat-tab-group (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false"
-          class="metadata-tables-compare">
+        <mat-tab-group #compareTabGroup (selectedTabChange)="onTabChange($event,true)" preserveContent="true"
+          dynamicHeight="false" class="metadata-tables-compare">
 
-          <mat-tab label="Compare - Cell Information" *ngIf="selectedCellCompare">
-            <div *ngIf="selectedCellCompare && selectedCompareView !== 'leiden'">
-              <h2>Cell Details (Comparison)</h2>
-              <div>
-                <div *ngIf="selectedCellCompare as cell">
-                  <ng-container *ngFor="let kv of cell.properties | keyvalue : keyCompareByLabel">
-                    <p *ngIf="shouldShowProperty(kv.key)">
-                      <strong>{{ label(kv.key) }}:</strong>
-
-                      <ng-container *ngIf="isArray(kv.value); else notArray">
-                        <ng-container *ngIf="isNestedArray(kv.value); else oneDim">
-                          <div class="array-header">
-                            <span class="count-badge">{{ kv.value.length }} row{{ kv.value.length === 1 ? '' : 's'
-                              }}</span>
-                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                            </button>
-                          </div>
-
-                          <ul class="row-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                            <li class="row" *ngFor="let row of kv.value; let r = index; trackBy: trackByIndex">
-                              <span class="row-badge">Row {{ r + 1 }}</span>
-                              <ul class="chip-list inner">
-                                <li class="chip"
-                                  *ngFor="let x of asArrayRow(row); let c = index; trackBy: trackByIndex">
-                                  <ng-container *ngIf="isPrimitive(x); else nestedObj">
-                                    {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                  </ng-container>
-                                  <ng-template #nestedObj>
-                                    <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                  </ng-template>
-                                </li>
-                              </ul>
-                            </li>
-                          </ul>
-                        </ng-container>
-
-                        <ng-template #oneDim>
-                          <div class="array-header">
-                            <span class="count-badge">{{ kv.value.length }} item{{ kv.value.length === 1 ? '' : 's'
-                              }}</span>
-                            <button type="button" class="toggle" (click)="toggleExpand(label(kv.key))">
-                              {{ isExpanded(label(kv.key)) ? 'Show less' : 'Show more' }}
-                            </button>
-                          </div>
-
-                          <div class="array-stats" *ngIf="isNumericArray(kv.value)">
-                            Min: {{ getArrayStats(kv.value).min | number:'1.0-3' }},
-                            Max: {{ getArrayStats(kv.value).max | number:'1.0-3' }},
-                            Avg: {{ getArrayStats(kv.value).avg | number:'1.0-3' }}
-                          </div>
-
-                          <ul class="chip-list" [class.collapsed]="!isExpanded(label(kv.key))">
-                            <li class="chip" *ngFor="let item of kv.value; let i = index; trackBy: trackByIndex">
-                              <ng-container *ngIf="isPrimitive(item); else objectItem">
-                                {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
-                              </ng-container>
-                              <ng-template #objectItem>
-                                <code class="chip-json">{{ toJsonCompact(item) }}</code>
-                              </ng-template>
-                            </li>
-                          </ul>
-                        </ng-template>
-                      </ng-container>
-
-                      <ng-template #notArray>
-                        <ng-container *ngIf="isPrimitive(kv.value); else complex">
-                          {{ isNumberLike(kv.value) ? (toNumberLike(kv.value) | number:'1.0-3') : kv.value }}
-                        </ng-container>
-
-                        <ng-template #complex>
-                          <ng-container *ngIf="isPlainObject(kv.value); else complexPre">
-                            <div class="array-header">
-                              <span class="count-badge">{{ objectKeyCount(kv.value) }}
-                                key{{ objectKeyCount(kv.value) === 1 ? '' : 's' }}</span>
-                              <button type="button" class="toggle" (click)="toggleExpand(dictId(label(kv.key)))">
-                                {{ isExpanded(dictId(label(kv.key))) ? 'Show less' : 'Show more' }}
-                              </button>
-                            </div>
-
-                            <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(label(kv.key)))">
-                              <div class="kv-row" *ngFor="let e of objectEntries(kv.value); trackBy: trackByIndex">
-                                <div class="kv-key">{{ prettyKey(e.key) }}</div>
-                                <div class="kv-val">
-                                  <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
-                                    {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
-                                  </ng-container>
-                                  <ng-template #nonPrimitiveVal>
-                                    <ng-container *ngIf="isArray(e.value); else fallbackJson">
-                                      <ul class="chip-list small">
-                                        <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
-                                          <ng-container *ngIf="isPrimitive(x); else objInArray">
-                                            {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
-                                          </ng-container>
-                                          <ng-template #objInArray>
-                                            <code class="chip-json">{{ toJsonCompact(x) }}</code>
-                                          </ng-template>
-                                        </li>
-                                      </ul>
-                                    </ng-container>
-                                    <ng-template #fallbackJson>
-                                      <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
-                                    </ng-template>
-                                  </ng-template>
-                                </div>
-                              </div>
-                            </div>
-                          </ng-container>
-
-                          <ng-template #complexPre>
-                            <pre class="prop-json">{{ formatValue(kv.value) }}</pre>
-                          </ng-template>
-                        </ng-template>
-                      </ng-template>
-                    </p>
-                  </ng-container>
-                </div>
-              </div>
-            </div>
+          <mat-tab label="Compare - Cell Information" *ngIf="selectedCellCompare" #cellInfoTabCompare>
+            <ng-container
+              *ngTemplateOutlet="cellInfoContent; context: { cell: selectedCellCompare, currentView: selectedCompareView }"></ng-container>
           </mat-tab>
 
-          <mat-tab label="Compare - Cluster Information" *ngIf="selectedClusterCompare !== null">
+          <mat-tab label="Compare - Cluster Information" *ngIf="selectedClusterCompare !== null"
+            #clusterInfoTabCompare>
             <div class="cluster-info-container"
               *ngIf="selectedCompareView === 'leiden' && selectedClusterCompare !== null">
               <div class="cluster-header">
@@ -1658,12 +1584,13 @@
 
 
                 <h3>🦠 Sponge Regulatory Scores (ceRNA-Modules)</h3>
-                <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+                <app-table *ngIf="spongeElementsCompare.length > 0" [data]="spongeRawDataCompare" [features]="compareFeatures"
                   [updateColumn]="'regulatory_scores'" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
                   [actionColumns]="['aucell_scores_sponge', 'viper_scores_sponge', 'spongeffects_ssGSEA_scores_sponge', 'spongeffects_GSVA_scores_sponge']"
                   [isCompare]="true"
                   (loadingChange)="onTableLoadingChange($event)"
-                  (featuresUpdated)="updateHexColors()">
+                  (geneSelectedCompare)="onGeneSelectedFromTable($event, 'sponge', true)"
+                  (featuresUpdated)="repaintBothViews()">
                 </app-table>
 
                 <div *ngIf="genie3ElementsCompare.length === 0 && spongeElementsCompare.length === 0">
@@ -2443,3 +2370,6 @@
         </mat-tab-group>
 
       </div>
+    </div>
+  </div>
+</div>
