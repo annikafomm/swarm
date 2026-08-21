@@ -23,6 +23,24 @@
     </div>
   </main>
 
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <span class="footer-affiliation">
+        <a href="https://www.mls.ls.tum.de/daisybio/startseite/" target="_blank" rel="noopener">Professorship for Data
+          Science in Systems Biology ·
+          Technical University of Munich</a>
+      </span>
+      <div class="footer-links">
+        <a href="https://exbio.wzw.tum.de/impressum#de" target="_blank" rel="noopener">Impressum</a>
+        <span class="footer-separator">/</span>
+        <a href="https://exbio.wzw.tum.de/legal-notice#en" target="_blank" rel="noopener">Legal Notice</a>
+        <span class="footer-separator">/</span>
+        <button type="button" class="footer-privacy-link" (click)="openPrivacyPolicy()">Privacy Policy</button>
+      </div>
+    </div>
+  </footer>
+
   <!-- Upload-Sidepanel -->
   <div class="sidenav" *ngIf="formsOpen">
     <app-form-page (close)="closeSidenavForms()"></app-form-page>

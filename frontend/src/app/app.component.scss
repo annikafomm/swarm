@@ -3,8 +3,9 @@
   font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
   --topbar-h: 100px;
-  min-height: calc(100vh - 100px);
-  display: block;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 :host.modal-open {
@@ -14,7 +15,10 @@
 
 .app-shell {
   position: relative;
-  min-height: 100svh;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .app-shell:has(.sidenav) {
@@ -26,7 +30,8 @@
 .main {
   display: flex;
   justify-content: center;
-  padding: 1rem;
+  padding: 1rem 1rem 2rem 1rem;
+  flex: 1 0 auto;
 }
 
 .app-shell:has(.sidenav) .main {
@@ -196,4 +201,93 @@
   width: auto;
   object-fit: contain;
   cursor: pointer;
+}
+
+/* Site Footer */
+.site-footer {
+  width: 100%;
+  background: linear-gradient(90deg, #fff4b7 0%, #f5d0ad 100%);
+  border-top: 1px solid rgba(245, 208, 173, 0.7);
+  padding: 0.75rem 1.5rem;
+  box-sizing: border-box;
+  margin-top: auto;
+  font-size: 0.85rem;
+  color: #4a5568;
+  z-index: 1000;
+  display: block;
+}
+
+.footer-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.footer-affiliation {
+  font-weight: 500;
+  color: #4a5568;
+
+  a {
+    color: #23272f;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  a {
+    color: #23272f;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+
+  .footer-separator {
+    color: #a0aec0;
+  }
+
+  .footer-privacy-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #23272f;
+    font-weight: 600;
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .footer-container {
+    flex-direction: column;
+    text-align: center;
+    justify-content: center;
+  }
 }

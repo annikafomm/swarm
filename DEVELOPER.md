@@ -73,6 +73,17 @@ Because sessions live only in memory, **restarting the backend logs everyone out
 which uploads belong to whom in RAM — but the files and their `job_*_config.json` metadata are
 still on disk. That gap is what the "unregistered datasets" recovery flow (below) exists for.
 
+## Data Privacy, Legal Compliance & Tracking
+
+SWARM implements the **Reduced Tracking Case** under German and EU data protection law (GDPR / DSGVO, TDDDG, DDG, BayDSG):
+
+- **No Cookie Banner Required**:
+  - **Cookieless Matomo**: Matomo is self-hosted on TUM servers (`exbio.wzw.tum.de`) and operates strictly without cookies (`_paq.push(['disableCookies'])`) and with Do-Not-Track enabled (`_paq.push(['setDoNotTrack', true])`). IP addresses are masked by 3 bytes, visitor profiles/logs are disabled, and data is purged after 180 days.
+  - **Strictly Essential Session Cookie**: The HttpOnly FastAPI session cookie (`cookie`) is strictly technically necessary (§ 25(2) No. 2 TDDDG) to maintain workspace isolation and on-demand calculations. It does not track users across websites.
+- **Legal Footer & Privacy Policy Dialog**:
+  - The application includes a legal footer linking the TUM ExBio Impressum (`/impressum#de`), Legal Notice (`/impressum#en`), and an interactive bilingual Privacy Policy dialog (`PrivacyDialogComponent`).
+  - The Privacy Policy modal includes an interactive **Matomo Opt-Out switch** so users can exercise their Art. 21 GDPR right to object at any time.
+
 ## Data upload flow
 
 1. Frontend posts `multipart/form-data` to `POST /api/upload` with the spatial `.h5ad` plus

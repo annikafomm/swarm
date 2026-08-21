@@ -14,6 +14,7 @@ import { takeUntil } from 'rxjs/operators';
 import Shepherd from 'shepherd.js';
 import { MatIconModule } from '@angular/material/icon';
 import { MatDialogModule } from '@angular/material/dialog';
+import { PrivacyDialogComponent } from './privacy-dialog/privacy-dialog.component';
 
 @Component({
   selector: 'app-root',
@@ -25,7 +26,7 @@ import { MatDialogModule } from '@angular/material/dialog';
     RouterOutlet,
     RouterLink,
     MatIconModule,
-    MatDialogModule
+    MatDialogModule,
   ],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
@@ -341,5 +342,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
 
     tour.start();
+  }
+
+  public openPrivacyPolicy(): void {
+    this.dialog.open(PrivacyDialogComponent, {
+      width: '850px',
+      maxHeight: '90vh',
+      autoFocus: 'first-button',
+      panelClass: 'privacy-dialog-panel',
+    });
   }
 }
