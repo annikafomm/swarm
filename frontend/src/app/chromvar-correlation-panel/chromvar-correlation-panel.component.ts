@@ -18,14 +18,21 @@ type TableData = { [col: string]: { [index: string]: string | number } } | strin
  * independent fields, read nowhere outside this tab's own markup — genuinely self-contained
  * per-instance UI state with nothing left for the parent to orchestrate.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-chromvar-correlation-panel',
   standalone: true,
-  imports: [CommonModule, FilterableTableComponent],
+  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatTooltipModule],
   templateUrl: './chromvar-correlation-panel.component.html',
   styleUrls: ['./chromvar-correlation-panel.component.scss'],
 })
 export class ChromvarCorrelationPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
   /** `meta['chromvar_moranI']` / `metaCompare['chromvar_moranI']`. */
   @Input() moranIData: TableData = [];

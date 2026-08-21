@@ -14,16 +14,27 @@
   </div>
 
   <ng-container *ngIf="hasSecondaryTable; else singleTable">
-    <div class="hx-toolbar" style="display: flex; justify-content: center; margin: 12px 0;">
+    <div class="hx-toolbar" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin: 12px 0;">
       <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
         style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
         [attr.aria-pressed]="showGlobalScores" (click)="toggleScoreView()">
         Show {{ showGlobalScores ? 'NMF factors' : 'global scores' }}
       </button>
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="showGlobalScores ? (infoService.getScoreInfo('ligand_receptor') || '') : (infoService.getScoreInfo('nmf_factors') || '')"
+        matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
     </div>
 
     <ng-container *ngIf="showGlobalScores; else secondaryTableTpl">
-      <h4>{{ primaryHeading }}</h4>
+      <h4 class="hx-title-with-info">
+        {{ primaryHeading }}
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('ligand_receptor') || ''" matTooltipPosition="above">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </h4>
       <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
         [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
         [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
@@ -31,7 +42,13 @@
     </ng-container>
 
     <ng-template #secondaryTableTpl>
-      <h4>{{ secondaryHeading }}</h4>
+      <h4 class="hx-title-with-info">
+        {{ secondaryHeading }}
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('nmf_factors') || ''" matTooltipPosition="above">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </h4>
       <app-table [data]="secondaryData" [actionColumns]="secondaryActionColumns" [features]="features"
         [updateColumn]="updateColumn" [emptyMessage]="secondaryEmptyMessage" [isCompare]="isCompare"
         [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
@@ -40,7 +57,14 @@
   </ng-container>
 
   <ng-template #singleTable>
-    <h4>{{ primaryHeading }}</h4>
+    <h4 class="hx-title-with-info">
+      {{ primaryHeading }}
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="(kind === 'cell_comp_tf_activity' ? infoService.getScoreInfo('cell_comp_tf_activity') : (kind === 'tf_activity' ? infoService.getScoreInfo('tf_activity_ulm') : infoService.getScoreInfo('pathway_activity_mlm'))) || ''"
+        matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
     <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
       [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
       [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"

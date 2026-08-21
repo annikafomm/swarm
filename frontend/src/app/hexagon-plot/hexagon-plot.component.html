@@ -236,6 +236,11 @@
             (registerRequested)="registerOnDemandGrnRun(false)"></app-grn-evaluation-on-demand-panel>
         </mat-tab>
 
+        <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(false)">
+          <app-further-attributes-panel [features]="features" [selectedAttribute]="selectedView" [isCompare]="false"
+            (attributeSelected)="onFurtherAttributeSelected($event, false)"></app-further-attributes-panel>
+        </mat-tab>
+
       </mat-tab-group>
       </div>
     </div>
@@ -259,12 +264,12 @@
         <mat-tab-group #compareTabGroup (selectedTabChange)="onTabChange($event,true)" preserveContent="true"
           dynamicHeight="false" class="metadata-tables-compare">
 
-          <mat-tab label="Compare - Cell Information" #cellInfoTabCompare>
+          <mat-tab label="Cell Information" #cellInfoTabCompare>
             <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView"
               [datasetFeatures]="compareFeatures"></app-cell-info-panel>
           </mat-tab>
 
-          <mat-tab label="Compare - Cluster Information" *ngIf="selectedClusterCompare !== null" #clusterInfoTabCompare>
+          <mat-tab label="Cluster Information" *ngIf="selectedClusterCompare !== null" #clusterInfoTabCompare>
             <app-cluster-info-panel #compareClusterInfo [isCompare]="true"
               [isLeidenView]="selectedCompareView === 'leiden'" [clusterId]="selectedClusterCompare"
               [availableClusterIds]="availableClusterIdsCompare" (clusterSelected)="selectCluster($event, true)"
@@ -281,7 +286,7 @@
           </mat-tab>
 
 
-          <mat-tab label="Compare - Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', true)">
+          <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', true)">
             <app-regulatory-scores-panel *ngIf="selectedCompareView === 'regulatory_scores'" [isCompare]="true"
               [selectedRegulatoryScore]="selectedRegulatoryScoreCompare"
               [regulatoryScoreDisplayMode]="regulatoryScoreDisplayModeCompare"
@@ -313,7 +318,7 @@
               (spongeSliderChanged)="onSliderChangeSponge(true)"></app-regulatory-scores-panel>
           </mat-tab>
 
-          <mat-tab label="Compare - Gene Expression" [disabled]="!propertyAvailable('gene_expression', true)">
+          <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression', true)">
             <div *ngIf="selectedCompareView === 'gene_expression'">
               <div class="selected-gene-info">
                 <h4>Gene Expression Comparison</h4>
@@ -350,7 +355,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Ligand-Receptor Relationships"
+          <mat-tab label="Ligand-Receptor Relationships"
             [disabled]="!propertyAvailable('ligand_receptor_relationships', true)">
             <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
               <app-regulatory-tables-panel kind="ligand_receptor" [isCompare]="true" [meta]="metaCompare"
@@ -364,7 +369,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Cell Composition TF Activity"
+          <mat-tab label="Cell Composition TF Activity"
             [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity', true)">
             <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
               <app-regulatory-tables-panel kind="cell_comp_tf_activity" [isCompare]="true" [meta]="metaCompare"
@@ -376,7 +381,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - TF Activity" *ngIf="selectedCell"
+          <mat-tab label="TF Activity" *ngIf="selectedCell"
             [disabled]="!propertyAvailable('tf_activity', true)">
             <div *ngIf="selectedCompareView === 'tf_activity'">
               <app-regulatory-tables-panel kind="tf_activity" [isCompare]="true" [meta]="metaCompare"
@@ -388,7 +393,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', true)">
+          <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', true)">
             <div *ngIf="selectedCompareView === 'pathway_activity'">
               <app-regulatory-tables-panel kind="pathway_activity" [isCompare]="true" [meta]="metaCompare"
                 [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
@@ -399,7 +404,7 @@
             </div>
           </mat-tab>
 
-          <mat-tab label="Compare - DGEA" [disabled]="!hasDgeaData(true)">
+          <mat-tab label="DGEA" [disabled]="!hasDgeaData(true)">
             <app-dgea-panel #compareDgeaPanel [isCompare]="true" [ready]="dgeaReadyCompare"
               [obsCols]="getDgeaObsCols(true)" [selectedObsCol]="selectedDgeaObsColCompare"
               [levels]="getDgeaLevels(true)" [group1]="selectedDgeaGroup1Compare" [group2]="selectedDgeaGroup2Compare"
@@ -413,7 +418,7 @@
               (geneSelected)="onDgeaGeneSelected($event, true)"></app-dgea-panel>
           </mat-tab>
 
-          <mat-tab label="Compare: ChromVar spatial correlation : Moran's I / Geary's C"
+          <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
             [disabled]="!propertyAvailable('chromvar_total_sum', true)">
             <app-chromvar-correlation-panel [isCompare]="true" [moranIData]="metaCompare['chromvar_moranI']"
               [gearyCData]="metaCompare['chromvar_gearyC']" [features]="compareFeatures"
@@ -438,7 +443,7 @@
           </mat-tab>
 
 
-          <mat-tab label=" Compare - GRN Evaluation" [disabled]="!this.metaCompare['peak_stats']">
+          <mat-tab label="GRN Evaluation" [disabled]="!this.metaCompare['peak_stats']">
             <app-grn-evaluation-panel [isCompare]="true"
               [peakStats]="this.metaCompare['peak_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
               [hasMotifStats]="!!this.metaCompare['motif_stats']"
@@ -465,6 +470,11 @@
               (selectedRunChange)="onSelectGrnRun($event, true)" (refreshRunsRequested)="loadOnDemandGrnRuns(true)"
               (tableLoadingChange)="onTableLoadingChange($event)" (graphFilterChange)="onChangeGrnGraphFilter($event, true)"
               (registerRequested)="registerOnDemandGrnRun(true)"></app-grn-evaluation-on-demand-panel>
+          </mat-tab>
+
+          <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(true)">
+            <app-further-attributes-panel [features]="compareFeatures" [selectedAttribute]="selectedCompareView"
+              [isCompare]="true" (attributeSelected)="onFurtherAttributeSelected($event, true)"></app-further-attributes-panel>
           </mat-tab>
         </mat-tab-group>
       </div>

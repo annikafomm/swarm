@@ -502,3 +502,106 @@ body,
     box-shadow: 0 8px 24px rgba(255, 152, 0, 0.4);
   }
 }
+
+/* Global Info & Help Button Styles */
+.hx-title-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.hx-info-btn {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  line-height: 22px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  border-radius: 50% !important;
+  transition: color 0.15s ease, background-color 0.15s ease !important;
+
+  .mat-mdc-button-touch-target {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  mat-icon {
+    font-size: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+    line-height: 16px !important;
+    color: #94a3b8 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: color 0.15s ease !important;
+  }
+
+  &:hover {
+    background-color: rgba(37, 99, 235, 0.08) !important;
+
+    mat-icon {
+      color: #2563eb !important;
+    }
+  }
+}
+
+.hx-header-info-btn {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  line-height: 26px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  margin-left: 6px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+
+  .mat-mdc-button-touch-target {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  mat-icon {
+    font-size: 18px !important;
+    width: 18px !important;
+    height: 18px !important;
+    line-height: 18px !important;
+    color: #64748b !important;
+  }
+
+  &:hover {
+    background-color: rgba(37, 99, 235, 0.1) !important;
+
+    mat-icon {
+      color: #1d4ed8 !important;
+    }
+  }
+}
+
+/* Material Tooltip Multi-line and Sizing Enhancement */
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  max-width: 320px !important;
+  font-size: 0.78rem !important;
+  line-height: 1.4 !important;
+  padding: 8px 12px !important;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  white-space: normal !important;
+  word-break: normal !important;
+}

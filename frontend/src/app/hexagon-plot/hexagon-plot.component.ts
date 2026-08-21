@@ -31,6 +31,7 @@ import { DgeaPanelComponent } from '../dgea-panel/dgea-panel.component';
 import { RegulatoryScoresPanelComponent } from '../regulatory-scores-panel/regulatory-scores-panel.component';
 import { GrnEvaluationPanelComponent } from '../grn-evaluation-panel/grn-evaluation-panel.component';
 import { GrnEvaluationOnDemandPanelComponent } from '../grn-evaluation-on-demand-panel/grn-evaluation-on-demand-panel.component';
+import { FurtherAttributesPanelComponent } from '../further-attributes-panel/further-attributes-panel.component';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 // Material
@@ -56,7 +57,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -758,11 +759,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public activeTabLabel = 'Cell Information';
-  public activeTabLabelCompare = 'Compare - Cell Information';
+  public activeTabLabelCompare = 'Cell Information';
 
   public isClusterInfoTabActive(compare: boolean = false): boolean {
     const label = compare ? this.activeTabLabelCompare : this.activeTabLabel;
-    return label === 'Cluster Information' || label === 'Compare - Cluster Information';
+    return label === 'Cluster Information';
   }
 
   public syncClusterHighlight(compare: boolean = false): void {
@@ -785,41 +786,40 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public getTabLabelForProperty(property: string, compare: boolean = false): string {
-    const prefix = compare ? 'Compare - ' : '';
     const prop = (property || '').toLowerCase();
 
     if (prop === 'leiden') {
-      return `${prefix}Cluster Information`;
+      return 'Cluster Information';
     }
     if (prop === 'cell_type') {
-      return `${prefix}Cell Information`;
+      return 'Cell Information';
     }
     if (prop === 'regulatory_scores' || prop.includes('regulatory_score') || prop.endsWith('_genie3') || prop.endsWith('_sponge')) {
-      return `${prefix}Regulatory Scores`;
+      return 'Regulatory Scores';
     }
     if (prop === 'co_occurrence') {
-      return `${prefix}Cluster Information`;
+      return 'Cluster Information';
     }
     if (prop === 'gene_expression') {
-      return `${prefix}Gene Expression`;
+      return 'Gene Expression';
     }
     if (prop.includes('ligand_receptor') || prop.startsWith('liana')) {
-      return `${prefix}Ligand-Receptor Relationships`;
+      return 'Ligand-Receptor Relationships';
     }
     if (prop.includes('cell_comp_tf_activity')) {
-      return `${prefix}Cell Composition TF Activity`;
+      return 'Cell Composition TF Activity';
     }
     if (prop === 'tf_activity') {
-      return `${prefix}TF Activity`;
+      return 'TF Activity';
     }
     if (prop === 'pathway_activity') {
-      return `${prefix}Pathway Activity`;
+      return 'Pathway Activity';
     }
     if (prop === 'dgea') {
-      return `${prefix}DGEA`;
+      return 'DGEA';
     }
     if (prop.includes('chromvar') || prop.includes('moran') || prop.includes('geary')) {
-      return compare ? "Compare: ChromVar spatial correlation : Moran's I / Geary's C" : "ChromVar spatial correlation : Moran's I / Geary's C";
+      return "ChromVar spatial correlation : Moran's I / Geary's C";
     }
     if (prop.includes('diff_motif')) {
       return 'Differential Motif Activity';
@@ -828,9 +828,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return 'Footprints';
     }
     if (prop.includes('grn')) {
-      return compare ? " Compare - GRN Evaluation" : "GRN Evaluation";
+      return 'GRN Evaluation';
     }
-    return `${prefix}Cell Information`;
+    return 'Further Attributes';
+  }
+
+  public hasFurtherAttributes(compare: boolean = false): boolean {
+    const f = compare ? this.compareFeatures : this.features;
+    return Array.isArray(f) && f.length > 0;
+  }
+
+  public onFurtherAttributeSelected(attribute: string, compare: boolean = false): void {
+    if (compare) {
+      this.selectedCompareView = attribute;
+    } else {
+      this.selectedView = attribute;
+    }
+    this.onColorbyPropertyChange(compare);
   }
 
   public jumpToTabByLabel(tabLabel: string, compare: boolean = false): void {
@@ -883,7 +897,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     setTimeout(select, 0);
   }
 
-
   private nextRequestToken(graphType: string): number {
     if (!this.requestTokens[graphType]) this.requestTokens[graphType] = 0;
     return ++this.requestTokens[graphType];
@@ -915,7 +928,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public onTabChange(event: MatTabChangeEvent, compare: boolean = false): void {
     let newView: string | null = null;
-    const tabLabel = event.tab.textLabel;
+    const tabLabel = event.tab.textLabel?.trim();
 
     if (compare) {
       this.activeTabLabelCompare = tabLabel;
@@ -924,103 +937,95 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
     this.syncClusterHighlight(compare);
 
-    if (!compare && tabLabel === 'Cluster Information') {
-      if (this.selectedView !== 'leiden') {
-        this.selectedView = 'leiden';
-        this.onColorbyPropertyChange(false);
-      }
-      let cluster = this.selectedCluster;
-      if (cluster === null) {
-        this.autoSelectDefaultCluster(false);
-        cluster = this.selectedCluster;
-      }
-      if (cluster !== null) {
-        this.mainView?.extendCluster(cluster);
-        setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
-          cluster,
-          this.meta?.['leiden_cluster_annotations'],
-        ), 300);
+    if (tabLabel === 'Cluster Information') {
+      if (compare) {
+        if (this.selectedCompareView !== 'leiden') {
+          this.selectedCompareView = 'leiden';
+          this.onColorbyPropertyChange(true);
+        }
+        let cluster = this.selectedClusterCompare;
+        if (cluster === null) {
+          this.autoSelectDefaultCluster(true);
+          cluster = this.selectedClusterCompare;
+        }
+        if (cluster !== null) {
+          this.compareView?.extendCluster(cluster);
+          setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+            cluster,
+            this.metaCompare?.['leiden_cluster_annotations'],
+          ), 300);
+        }
+      } else {
+        if (this.selectedView !== 'leiden') {
+          this.selectedView = 'leiden';
+          this.onColorbyPropertyChange(false);
+        }
+        let cluster = this.selectedCluster;
+        if (cluster === null) {
+          this.autoSelectDefaultCluster(false);
+          cluster = this.selectedCluster;
+        }
+        if (cluster !== null) {
+          this.mainView?.extendCluster(cluster);
+          setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+            cluster,
+            this.meta?.['leiden_cluster_annotations'],
+          ), 300);
+        }
       }
       return;
     }
-    if (compare && tabLabel === 'Compare - Cluster Information') {
-      if (this.selectedCompareView !== 'leiden') {
-        this.selectedCompareView = 'leiden';
-        this.onColorbyPropertyChange(true);
+
+    if (tabLabel === 'DGEA') {
+      if (compare) {
+        this.selectedCompareView = 'gene_expression';
+        this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
+        if (this.dgeaReadyCompare) {
+          this.initDgeaSelection(true);
+          setTimeout(() => this.renderDgeaHeatmap(true), 100);
+        }
+      } else {
+        this.selectedView = 'gene_expression';
+        this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
+        if (this.dgeaReady) {
+          this.initDgeaSelection(false);
+          setTimeout(() => this.renderDgeaHeatmap(false), 100);
+        }
       }
-      let cluster = this.selectedClusterCompare;
-      if (cluster === null) {
-        this.autoSelectDefaultCluster(true);
-        cluster = this.selectedClusterCompare;
-      }
-      if (cluster !== null) {
-        this.compareView?.extendCluster(cluster);
-        setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
-          cluster,
-          this.metaCompare?.['leiden_cluster_annotations'],
-        ), 300);
-      }
-      return;
     }
 
-    if (!compare && tabLabel === 'DGEA') {
-      this.selectedView = 'gene_expression';
-      this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
-      if (this.dgeaReady) {
-        this.initDgeaSelection(compare);
-        setTimeout(() => this.renderDgeaHeatmap(), 100);
+    if (tabLabel === 'GRN Evaluation') {
+      if (compare) {
+        this.selectedGrnViewCompare = 'tf_graph';
+        const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
+          prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
+        );
+        this.selectedCompareView = probPropertyCompare || 'cell_type';
+
+        setTimeout(() => {
+          this.onColorbyPropertyChange(true);
+          this.loadTfGraph(true);
+          this.loadPrecomputedGrnGraph(true);
+          this.loadPrecomputedGrnPlots(true);
+        }, 100);
+      } else {
+        this.selectedGrnView = 'tf_graph';
+        const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
+          prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
+        );
+        this.selectedView = probProperty || 'cell_type';
+
+        setTimeout(() => {
+          this.onColorbyPropertyChange(false);
+          this.loadTfGraph(false);
+          this.loadPrecomputedGrnGraph(false);
+          this.loadPrecomputedGrnPlots(false);
+        }, 300);
       }
-
-    }
-
-    if (compare && tabLabel === 'Compare - DGEA') {
-      this.selectedCompareView = 'gene_expression';
-      this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsColCompare];
-      if (this.dgeaReadyCompare) {
-        this.initDgeaSelection(true);
-        setTimeout(() => this.renderDgeaHeatmap(true), 100);
-      }
-
-    }
-
-    if (!compare && tabLabel === 'GRN Evaluation') {
-      this.selectedGrnView = 'tf_graph';
-
-      // Auto-select first "prob" property or default to cell_type
-      const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
-        prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
-      );
-      this.selectedView = probProperty || 'cell_type';
-
-      setTimeout(() => {
-        this.onColorbyPropertyChange(false);
-        this.loadTfGraph(false);
-        this.loadPrecomputedGrnGraph(false);
-        this.loadPrecomputedGrnPlots(false);
-      }, 300);
-      return;
-    }
-
-    if (compare && tabLabel.includes('Compare - GRN Evaluation')) {
-      this.selectedGrnViewCompare = 'tf_graph';
-
-      // Auto-select first "prob" property or default to cell_type
-      const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
-        prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
-      );
-      this.selectedCompareView = probPropertyCompare || 'cell_type';
-
-      setTimeout(() => {
-        this.onColorbyPropertyChange(true);
-        this.loadTfGraph(true);
-        this.loadPrecomputedGrnGraph(true);
-        this.loadPrecomputedGrnPlots(true);
-      }, 100);
       return;
     }
 
     if (compare && tabLabel === 'GRN Evaluation - On Demand') {
-      // Auto-select first "prob" property or default to cell_type
       const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
         prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
       );
@@ -1032,34 +1037,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-
-
     // Map tab labels to view keys
-    const tabMap: { [label: string]: string } = compare
-      ? {
-        'Compare - Regulatory Scores': 'regulatory_scores',
-        'Compare - Gene Expression': 'gene_expression',
-        'Compare - Ligand-Receptor Relationships': 'ligand_receptor_relationships',
-        'Compare - Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
-        'Compare - TF Activity': 'tf_activity',
-        'Compare - Pathway Activity': 'pathway_activity',
-        'Compare: ChromVar spatial correlation : Moran\'s I / Geary\'s C': 'chromvar_total_sum',
-        'Compare - Differential Motif Activity': 'cell_type',
-        'Compare - Footprints': 'cell_type',
-        'Compare - DGEA': 'gene_expression'
-      }
-      : {
-        'Regulatory Scores': 'regulatory_scores',
-        'Gene Expression': 'gene_expression',
-        'TF Activity': 'tf_activity',
-        'Pathway Activity': 'pathway_activity',
-        'Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
-        'Ligand-Receptor Relationships': 'ligand_receptor_relationships',
-        "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
-        'Differential Motif Activity': 'cell_type',
-        'Footprints': 'cell_type',
-        'DGEA': 'gene_expression'
-      };
+    const tabMap: { [label: string]: string } = {
+      'Cell Information': 'cell_type',
+      'Regulatory Scores': 'regulatory_scores',
+      'Gene Expression': 'gene_expression',
+      'TF Activity': 'tf_activity',
+      'Pathway Activity': 'pathway_activity',
+      'Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
+      'Ligand-Receptor Relationships': 'ligand_receptor_relationships',
+      "ChromVar spatial correlation : Moran's I / Geary's C": 'chromvar_total_sum',
+      'Differential Motif Activity': 'cell_type',
+      'Footprints': 'cell_type',
+      'DGEA': 'gene_expression'
+    };
 
     newView = tabMap[tabLabel] || null;
 
@@ -1666,12 +1657,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
         // Group similar properties together
         const chromvarKeys = ['chromvar_total_sum'];
+        const currentProps = compare ? this.colorablePropertiesCompare : this.colorableProperties;
         const currentgroupedProperties = [
-          { key: 'Scores', value: this.colorableProperties.filter((p) => scoreKeys.includes(p)) },
-          { key: 'LIANA+', value: this.colorableProperties.filter((p) => lianaKeys.includes(p)) },
-          { key: 'ChromVAR', value: this.colorableProperties.filter((p) => chromvarKeys.includes(p)) },
+          { key: 'Scores', value: currentProps.filter((p) => scoreKeys.includes(p)) },
+          { key: 'LIANA+', value: currentProps.filter((p) => lianaKeys.includes(p)) },
+          { key: 'ChromVAR', value: currentProps.filter((p) => chromvarKeys.includes(p)) },
           {
-            key: 'Other', value: this.colorableProperties.filter(
+            key: 'Further Attributes', value: currentProps.filter(
               (p) => !scoreKeys.includes(p) && !lianaKeys.includes(p) && !chromvarKeys.includes(p)
             )
           },

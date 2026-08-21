@@ -29,8 +29,14 @@
 
           <th *ngFor="let col of columns" class="other-col">
             <div class="th-top">
-              <span style="display: inline-block; overflow-wrap: break-word; word-break: normal; hyphens: none;">{{ col
-                | translate | async }}</span>
+              <span class="hx-title-with-info"
+                style="display: inline-flex; overflow-wrap: break-word; word-break: normal; hyphens: none;">
+                {{ col | translate | async }}
+                <button *ngIf="infoService.getColumnInfo(col)" mat-icon-button type="button" class="hx-info-btn"
+                  [matTooltip]="infoService.getColumnInfo(col) || ''" matTooltipPosition="above">
+                  <mat-icon>help_outline</mat-icon>
+                </button>
+              </span>
               <span class="sort-icons">
                 <button class="btn-ghost icon" (click)="setSort(col, true)">
                   ▲

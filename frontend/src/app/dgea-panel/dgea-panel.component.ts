@@ -90,14 +90,32 @@ export interface DgeaComparison {
  *    compare instance CAN supply the correct compare-scoped values; simply wiring this component
  *    in without also passing them will preserve today's cross-contamination.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-dgea-panel',
   standalone: true,
-  imports: [CommonModule, FilterableTableComponent, MatFormField, MatLabel, MatOption, MatSelect, MatCheckboxModule],
+  imports: [
+    CommonModule,
+    FilterableTableComponent,
+    MatFormField,
+    MatLabel,
+    MatOption,
+    MatSelect,
+    MatCheckboxModule,
+    MatIconModule,
+    MatButtonModule,
+    MatTooltipModule,
+  ],
   templateUrl: './dgea-panel.component.html',
   styleUrls: ['./dgea-panel.component.scss'],
 })
 export class DgeaPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
 
   /** dgeaReady / dgeaReadyCompare — whether this side has any DGEA data at all. */

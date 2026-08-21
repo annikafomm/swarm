@@ -1,6 +1,13 @@
 <mat-expansion-panel>
   <mat-expansion-panel-header>
-    Peak-Gene Link Statistics
+    <span class="hx-title-with-info">
+      Peak-Gene Link Statistics
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('peak_gene_links') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
   </mat-expansion-panel-header>
   <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
     <app-table [data]="peakStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
@@ -11,7 +18,14 @@
 
 <mat-expansion-panel *ngIf="hasMotifStats">
   <mat-expansion-panel-header>
-    Motif Statistics
+    <span class="hx-title-with-info">
+      Motif Statistics
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('chromvar_motif_activity') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
   </mat-expansion-panel-header>
   <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
     <app-table [data]="motifStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
@@ -22,12 +36,25 @@
 
 <mat-expansion-panel>
   <mat-expansion-panel-header>
-    TF Gene Network Graph
+    <span class="hx-title-with-info">
+      TF Gene Network Graph
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('grn_filter_mode') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
   </mat-expansion-panel-header>
 
   <!-- Filter Mode Selector -->
   <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
-    <label style="font-weight: 500;">GRN Filter Mode:</label>
+    <label style="font-weight: 500;" class="hx-title-with-info">
+      GRN Filter Mode:
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('grn_filter_mode') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </label>
     <mat-form-field style="min-width: 150px;">
       <mat-label>Select Filter</mat-label>
       <mat-select [value]="grnGraphFilter" (selectionChange)="grnGraphFilterChange.emit($event.value)">

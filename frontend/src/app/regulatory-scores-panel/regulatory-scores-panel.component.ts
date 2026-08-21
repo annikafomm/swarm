@@ -9,6 +9,8 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
 
 type TableData = { [col: string]: { [index: string]: string | number } } | string[];
 
@@ -159,11 +161,14 @@ export interface RegulatorySliderData {
     MatProgressSpinnerModule,
     MatIconModule,
     MatButtonModule,
+    MatTooltipModule,
   ],
   templateUrl: './regulatory-scores-panel.component.html',
   styleUrls: ['./regulatory-scores-panel.component.scss'],
 })
 export class RegulatoryScoresPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
 
   // ---- Current-selection summary (also reused by the graphs section below) ----

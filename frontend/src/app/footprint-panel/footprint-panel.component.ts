@@ -6,6 +6,10 @@ import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
 import { MatSelect, MatSelectTrigger } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
 
 /**
  * Renders the "Footprints" sidebar tab for one side (main or compare) — pre-computed footprint
@@ -58,11 +62,16 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
     MatSelect,
     MatSelectTrigger,
     MatProgressSpinnerModule,
+    MatIconModule,
+    MatButtonModule,
+    MatTooltipModule,
   ],
   templateUrl: './footprint-panel.component.html',
   styleUrls: ['./footprint-panel.component.scss'],
 })
 export class FootprintPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
 
   /** Pre-computed footprint plot URLs (iframe srcs) for this dataset. */

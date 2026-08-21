@@ -2,7 +2,13 @@
 
   <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
   <div class="cluster-plots">
-    <h4>Pre-computed Footprint Plots</h4>
+    <h4 class="hx-title-with-info">
+      Pre-computed Footprint Plots
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
 
     <div *ngIf="footprintPlotUrls.length === 0" class="no-data">
       No pre-computed footprint plots for this dataset.
@@ -15,7 +21,13 @@
 
   <!-- ── Section 2: Compute on demand ───────────────────────────── -->
   <div class="cluster-plots">
-    <h4>Compute New Footprint</h4>
+    <h4 class="hx-title-with-info">
+      Compute New Footprint
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
     <div class="footprint-form">
       <!-- Cluster-by selector -->
       <mat-form-field appearance="fill">
@@ -69,7 +81,13 @@
 
   <!-- ── On-demand results ───────────────────────────── -->
   <div class="cluster-plots" *ngIf="onDemandFootprintUrls.length > 0">
-    <h4>On-Demand Footprint Plots</h4>
+    <h4 class="hx-title-with-info">
+      On-Demand Footprint Plots
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
     <div *ngFor="let url of onDemandFootprintUrls" class="footprint-plot">
       <iframe [src]="url" width="100%" height="500px"></iframe>
     </div>

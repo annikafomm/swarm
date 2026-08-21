@@ -62,11 +62,18 @@ const CATEGORIES: CellPropertyCategory[] = [
       "Local spatial density around this cell — how tightly packed neighboring cells/spots are, either by simple proximity (uniform) or weighted by each neighbor's RNA content.",
   },
   {
+    key: 'sample',
+    title: 'Sample Information',
+    icon: 'biotech',
+    description:
+      'Dataset-wide experimental metadata and biological origin details for this sample (e.g. sample ID, donor ID, treatment, condition, assay, organism, disease, tissue).',
+  },
+  {
     key: 'location',
-    title: 'Location & Sample',
+    title: 'Location & Coordinates',
     icon: 'my_location',
     description:
-      'Spatial position on the capture array and sample/donor identifiers for this cell — useful for distinguishing cells from different biological replicates or tracing a spot back to its slide coordinates.',
+      'Spatial position on the capture array grid (array row/column), pixel coordinates, and in-tissue status for this cell or spot.',
   },
   {
     key: 'other',
@@ -111,18 +118,35 @@ const EXACT_FIELD_CATEGORY: Record<string, string> = {
   ligand_receptor_relationships: 'liveView',
   cell_comp_tf_activity_similarity: 'liveView',
 
+  sample: 'sample',
+  sample_id: 'sample',
+  donor: 'sample',
+  donor_id: 'sample',
+  patient: 'sample',
+  patient_id: 'sample',
+  treatment: 'sample',
+  condition: 'sample',
+  perturbation: 'sample',
+  batch: 'sample',
+  replicate: 'sample',
+  is_primary_data: 'sample',
+  suspension_type: 'sample',
+  tissue_type: 'sample',
+
   assay: 'ontology',
   organism: 'ontology',
   tissue: 'ontology',
   disease: 'ontology',
   sex: 'ontology',
   development_stage: 'ontology',
+  self_reported_ethnicity: 'ontology',
   assay_ontology_term_id: 'ontology',
   organism_ontology_term_id: 'ontology',
   tissue_ontology_term_id: 'ontology',
   cell_type_ontology_term_id: 'ontology',
   disease_ontology_term_id: 'ontology',
   development_stage_ontology_term_id: 'ontology',
+  sex_ontology_term_id: 'ontology',
   self_reported_ethnicity_ontology_term_id: 'ontology',
 
   uniform_density: 'density',
@@ -131,10 +155,7 @@ const EXACT_FIELD_CATEGORY: Record<string, string> = {
   array_row: 'location',
   array_col: 'location',
   in_tissue: 'location',
-  sample: 'location',
-  sample_id: 'location',
-  donor: 'location',
-  donor_id: 'location',
+  observation_joinid: 'location',
 };
 
 const FIELD_INFO: Record<string, string> = {
@@ -203,6 +224,132 @@ const FIELD_INFO: Record<string, string> = {
   centroid: "Pixel coordinates of this cell/spot's centroid in the original spatial image.",
 };
 
+const SCORE_INFO: Record<string, string> = {
+  // Spatial Autocorrelation
+  moranI:
+    "Moran's I measures global spatial autocorrelation (range -1 to +1). Values near +1 indicate strong spatial clustering (neighboring spots have similar values); values near 0 indicate random spatial distribution; values near -1 indicate dispersion (checkerboard pattern).",
+  gearyC:
+    "Geary's C measures local spatial autocorrelation (range 0 to 2). Values < 1 indicate positive spatial clustering (similar neighbors); values = 1 indicate spatial randomness; values > 1 indicate negative autocorrelation (dissimilar neighbors).",
+  pval_norm:
+    'Analytical p-value derived under the null hypothesis of complete spatial randomness based on standard normal approximation.',
+  pval_norm_fdr_bh:
+    'False Discovery Rate (FDR) Benjamini-Hochberg adjusted p-value, accounting for multiple hypothesis testing across all evaluated features.',
+  var_norm:
+    'Theoretical variance of the spatial autocorrelation statistic under the null distribution of spatial randomness.',
+
+  // Gene Regulatory Network Scores
+  aucell:
+    'AUCell evaluates whether a gene set or regulon is actively expressed in an individual spot by calculating the Area Under the Curve across the top-ranked expressed genes.',
+  gsva:
+    'SPONGeffects GSVA (Gene Set Variation Analysis): Computes non-parametric, unsupervised sample-wise gene set enrichment based on kernel estimation of cumulative distribution functions.',
+  ssgsea:
+    'SPONGeffects ssGSEA (single-sample GSEA): Calculates an enrichment score for each spot by integrating the empirical cumulative distribution functions of genes within versus outside the regulon.',
+  viper:
+    'VIPER (Virtual Inference of Protein-activity by Enriched Regulon analysis): Estimates protein/TF activity from the coordinated expression changes of its direct downstream target genes.',
+  genie3_network:
+    'GENIE3 regulatory network: Inferred using tree-based ensemble methods (Random Forest / ExtraTrees). Edge weights quantify the predictive importance of the regulator transcription factor for target gene expression.',
+  sponge_network:
+    'SPONGE ceRNA network: Inferred using multiple sensitivity correlation (mscor) to identify competing endogenous RNA interactions mediated by shared microRNA binding.',
+  genie3_weight_cutoff:
+    'Minimum edge weight threshold for GENIE3 interactions. Higher values filter for high-confidence, strongly predictive regulatory connections.',
+  sponge_pvalue_cutoff:
+    'Maximum adjusted p-value threshold for SPONGE ceRNA interactions. Lower values filter for statistically significant microRNA sponge pairs.',
+  min_edges:
+    'Controls the size of the displayed subgraph by selecting the top N most significant edges first, inferring the participating nodes, and reconstructing their interactions.',
+  gprofiler:
+    'Functional enrichment analysis in g:Profiler: Tests participating network genes against Gene Ontology (GO), KEGG, Reactome, and WikiPathways.',
+
+  // LIANA+ Cellular Communication & Activity
+  ligand_receptor:
+    'LIANA+ bivariate spatial analysis measuring local intercellular communication between ligand- and receptor-expressing spots in the tissue microenvironment.',
+  cosine_similarity:
+    'Local Cosine Similarity: Quantifies directional alignment and co-expression intensity between ligand and receptor in neighboring spatial spots.',
+  lr_p_value:
+    'Spatial permutation p-value assessing whether observed local ligand-receptor co-localization is significantly greater than expected by random chance.',
+  lr_category:
+    'Spatial expression classification quadrant: High-High (both ligand and receptor enriched), High-Low, Low-High, or Low-Low in the local neighborhood.',
+  nmf_factors:
+    'Non-negative Matrix Factorization (NMF): Decomposes spatial cell-cell communication into low-dimensional latent spatial communication programs.',
+  cell_comp_tf_activity:
+    'LIANA+ bivariate similarity evaluating local spatial correlation between predicted cell-type abundance and transcription factor activity.',
+  tf_activity_ulm:
+    'decoupleR Univariate Linear Model (ULM) z-score estimating transcription factor activity from target gene expression weights in DoRothEA regulons.',
+  pathway_activity_mlm:
+    'decoupleR Multivariate Linear Model (MLM) score estimating signaling pathway activation from PROGENy responsive footprint genes.',
+
+  // Leiden Clustering & Spatial Graph Metrics
+  degree_centrality:
+    'Fraction of all spatial Delaunay graph connections linked to spots in this cluster. Measures overall boundary surface and graph connectivity.',
+  average_clustering:
+    'Average clustering coefficient of member spots, indicating how interconnected each spot\'s spatial neighbors are.',
+  closeness_centrality:
+    'Reciprocal sum of shortest spatial graph paths from this cluster to all other spots in the tissue. Higher values indicate a central spatial position.',
+  nhood_enrichment:
+    'Squidpy spatial permutation test assessing whether spots of cluster A neighbor spots of cluster B significantly more (or less) frequently than expected by random chance (z-score).',
+  co_occurrence:
+    'Conditional probability P(j|i) that a cell of cluster j occurs within a given Euclidean distance interval of a cell of cluster i, revealing multi-scale tissue organization.',
+
+  // Multiome, ChromVAR & TF Footprinting
+  chromvar_motif_activity:
+    'Signac/chromVAR motif accessibility deviation z-score across JASPAR transcription factor binding sites, measuring chromatin accessibility enrichment relative to background peaks.',
+  chromvar_moran:
+    'Spatial autocorrelation of chromatin motif accessibility across the tissue using Moran\'s I.',
+  diff_motif_activity:
+    'Differential motif accessibility testing between spatial clusters (avg_diff effect size and FDR-adjusted p-value).',
+  footprinting:
+    'Tn5 transposase insertion bias-corrected chromatin accessibility profile around TF motif centers, showing cleavage protection at the protein binding site flanked by accessible cut sites.',
+  peak_gene_links:
+    'Statistical correlation between distal chromatin accessibility peaks and target gene transcription.',
+  grn_filter_mode:
+    'Filter mode for the tripartite TF-Peak-Gene network: Prior (strict, verified TF-motif-peak connections), Extended (intermediate confidence), or Full (all inferred links).',
+
+  // Spatial Autocorrelation & Statistics
+  getis_ord:
+    'Getis-Ord General G measures global spatial clustering of high vs low values. A positive Z-score indicates spatial clustering of high values (hot spots), while a negative Z-score indicates spatial clustering of low values (cold spots).',
+  moran_i:
+    "Moran's I measures global spatial autocorrelation (range -1 to +1). Values near +1 indicate strong spatial clustering (neighboring spots have similar values); values near 0 indicate random spatial distribution; values near -1 indicate dispersion.",
+  variance:
+    'Sample variance quantifying the dispersion of values across all cells in this dataset.',
+};
+
+const COLUMN_INFO: Record<string, string> = {
+  i: SCORE_INFO['moranI'],
+  moran_i: SCORE_INFO['moran_i'],
+  morani: SCORE_INFO['moran_i'],
+  getis_ord: SCORE_INFO['getis_ord'],
+  getisord: SCORE_INFO['getis_ord'],
+  getis_ord_g: SCORE_INFO['getis_ord'],
+  getis_ord_z: SCORE_INFO['getis_ord'],
+  mean: 'Arithmetic mean across all valid spots.',
+  variance: SCORE_INFO['variance'],
+  var: SCORE_INFO['variance'],
+  min: 'Minimum observed value across all spots.',
+  max: 'Maximum observed value across all spots.',
+  c: SCORE_INFO['gearyC'],
+  pval_norm: SCORE_INFO['pval_norm'],
+  pval_norm_fdr_bh: SCORE_INFO['pval_norm_fdr_bh'],
+  var_norm: SCORE_INFO['var_norm'],
+  logfc: SCORE_INFO['logFC'],
+  p_val: 'Nominal p-value from the statistical significance test.',
+  p_val_adj: 'Benjamini-Hochberg false discovery rate (FDR) adjusted p-value.',
+  'p.adj': 'Benjamini-Hochberg false discovery rate (FDR) adjusted p-value.',
+  'p.val': 'Nominal p-value from the statistical test.',
+  weight: 'Predictive importance weight of the regulatory connection (GENIE3).',
+  mscor: 'Multiple sensitivity correlation quantifying microRNA-mediated sponge interaction strength (SPONGE).',
+  cor: 'Pearson correlation coefficient between expression profiles.',
+  pcor: 'Partial correlation coefficient controlling for third-variable confounding.',
+  degree: 'Number of direct interaction partners in the inferred regulatory network.',
+  eigenvector: 'Eigenvector centrality measuring the influence of a node based on connections to other highly connected nodes.',
+  betweenness: 'Betweenness centrality measuring how often a gene lies on the shortest path between other genes.',
+  page_rank: 'PageRank score measuring network prominence and information flow.',
+  cosine_similarity_mean: 'Mean local cosine similarity across all spatial spots for this interaction.',
+  cosine_similarity_std: 'Standard deviation of local cosine similarity across spatial spots.',
+  ligand_receptor_morans: "Moran's R spatial autocorrelation for this ligand-receptor interaction across the tissue.",
+  avg_diff: 'Average difference in motif accessibility deviation score between the comparison groups.',
+  pct_1: 'Percentage of cells in Group 1 with accessible signal for this feature.',
+  pct_2: 'Percentage of cells in Group 2 with accessible signal for this feature.',
+};
+
 @Injectable({ providedIn: 'root' })
 export class InfoService {
   readonly categories: CellPropertyCategory[] = CATEGORIES;
@@ -237,6 +384,23 @@ export class InfoService {
     if (k.endsWith('_ontology_term_id')) {
       return FIELD_INFO['*_ontology_term_id'];
     }
+    return null;
+  }
+
+  /** Lookup detailed explanation for a score, metric, or analysis type. */
+  getScoreInfo(key: string): string | null {
+    if (!key) return null;
+    const k = key.toLowerCase().replace(/[\s-]+/g, '_');
+    return SCORE_INFO[k] || SCORE_INFO[key] || null;
+  }
+
+  /** Lookup detailed explanation for a table column header. */
+  getColumnInfo(col: string): string | null {
+    if (!col) return null;
+    const clean = col.toLowerCase().trim();
+    if (COLUMN_INFO[clean]) return COLUMN_INFO[clean];
+    const underscored = clean.replace(/[\s.-]+/g, '_');
+    if (COLUMN_INFO[underscored]) return COLUMN_INFO[underscored];
     return null;
   }
 }

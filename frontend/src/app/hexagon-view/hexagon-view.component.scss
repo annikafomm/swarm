@@ -1,10 +1,12 @@
-// Lets this component's own top-level elements (map wrapper + toolbar row) lay out as direct
-// flex children of the parent's #comparison-box, exactly as when this markup lived there
-// directly — the host element itself generates no box of its own.
+// Host element: transparent flex child — map wrapper + toolbar render as direct
+// children of the parent's .map-column.
 :host {
   display: contents;
 }
 
+// ---------------------------------------------------------------------------
+// Map wrapper
+// ---------------------------------------------------------------------------
 .map-container-wrapper {
   position: relative;
   display: inline-flex;
@@ -15,12 +17,12 @@
   border-radius: 12px;
 }
 
+// ---------------------------------------------------------------------------
+// Loading overlay (spinner over the map while data loads)
+// ---------------------------------------------------------------------------
 .map-loading-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(2px);
   border-radius: 12px;
@@ -32,37 +34,64 @@
   pointer-events: auto;
 }
 
+// ---------------------------------------------------------------------------
+// Toolbar row (dropdowns + info buttons below the map)
+// ---------------------------------------------------------------------------
+.row-container,
 .centered-row-container {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+
+  .mat-mdc-form-field {
+    min-width: 140px;
+    max-width: 220px;
+  }
+
+  .info-btn {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: #64748b;
+    }
+  }
 }
 
-// .row-container (the compare-side toolbar) intentionally has no rule here — it had none in
-// the original either (confirmed via a repo-wide grep), so the compare toolbar's two dropdowns
-// render as unstyled, stacked block elements rather than the main toolbar's flex row. A real
-// main/compare visual inconsistency, but pre-existing — not introduced or fixed by this move.
-
-#hexbin-compare,
-#hexbin {
+// ---------------------------------------------------------------------------
+// Hexbin map container (shared between main and compare)
+// ---------------------------------------------------------------------------
+#hexbin,
+#hexbin-compare {
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
   padding: 0.5rem;
   display: flex;
-  margin-bottom: 1rem;
-  margin-right: 1rem;
   align-items: center;
   justify-content: center;
-  height: 480px;
   width: 480px;
+  height: 480px;
   max-width: calc(100vw - 32px);
   aspect-ratio: 1 / 1;
   min-height: 0;
   box-sizing: border-box;
   overflow: hidden;
+  margin-bottom: 0.5rem;
+  margin-right: 1rem;
 
   svg {
     display: block;
@@ -71,19 +100,33 @@
   }
 }
 
+// ---------------------------------------------------------------------------
+// Compare-mode overrides
+// ---------------------------------------------------------------------------
 :host-context(.compare-mode) {
-  #hexbin-compare,
-  #hexbin {
-    height: calc(50vh - 100px);
-    width: calc(50vh - 100px);
-    max-height: calc(50vh - 80px);
-    max-width: calc(50vh - 80px);
-    min-height: 220px;
-    min-width: 220px;
-    margin-bottom: 0.4rem;
+  #hexbin,
+  #hexbin-compare {
+    height: calc(50vh - 125px);
+    max-height: calc(50vh - 125px);
+    min-height: 150px;
+    aspect-ratio: auto;
+    margin-bottom: 0.25rem;
+    margin-right: 0;
   }
 
   .map-container-wrapper {
-    margin-bottom: 0.4rem;
+    margin-bottom: 0.25rem;
+    margin-right: 0;
+  }
+
+  .row-container,
+  .centered-row-container {
+    gap: 4px;
+
+    .mat-mdc-form-field {
+      font-size: 0.82rem;
+      min-width: 120px;
+      max-width: 190px;
+    }
   }
 }

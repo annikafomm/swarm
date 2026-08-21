@@ -5,12 +5,17 @@ import { SessionService } from '../session.service';
 import { HttpClient } from '@angular/common/http';
 import { TranslatePipe } from '../translate.pipe';
 
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-table',
   templateUrl: './filterable-table.component.html',
   styleUrls: ['./filterable-table.component.scss'],
   standalone: true,
-  imports: [FormsModule, CommonModule, TranslatePipe],
+  imports: [FormsModule, CommonModule, TranslatePipe, MatIconModule, MatButtonModule, MatTooltipModule],
 })
 export class FilterableTableComponent implements OnInit, OnChanges {
   /**
@@ -35,6 +40,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     private http: HttpClient,
     private sessionService: SessionService,
     private el: ElementRef,
+    public infoService: InfoService,
   ) { }
 
   columns: string[] = [];

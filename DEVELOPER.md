@@ -237,6 +237,7 @@ The spatial visualization ([HexagonPlotComponent](frontend/src/app/hexagon-plot/
   - `diff_motif_*` $\rightarrow$ **Differential Motif Activity**
   - `footprints` $\rightarrow$ **Footprints**
   - `grn_evaluation` $\rightarrow$ **GRN Evaluation**
+  - Any other dataset attribute $\rightarrow$ **Further Attributes**
 - **Border & Dimming Cleanup**: If the new color view is *not* `leiden`, cluster extension outlines and dimming are cleared immediately (`activeClusterId = null`, standard `0.8` opacity across the canvas).
 
 ### 3. Cluster Information Tab & Dropdown
@@ -249,7 +250,17 @@ The spatial visualization ([HexagonPlotComponent](frontend/src/app/hexagon-plot/
   - Outlines the newly selected cluster on the map.
   - Resets single-cell thick border (`selectedCell = null`) if the previously selected cell was not part of the new cluster.
 
-### 4. Cell Properties & Missing Values
+### 4. Further Attributes Tab & Spatial Metrics Engine
+- **Dynamically Discovered Dataset Attributes**:
+  - Automatically scans any dataset (Visium, Xenium, or custom GeoJSON) for features/properties not mapped to dedicated tabs.
+  - **Unique Cell Identifiers**: Attributes where each cell has a unique ID ($N_{\text{unique}} \approx N$, e.g. `barcode`, `observation_joinid`, `centroid`) are excluded from the visual table and presented in the *Cell Information* tab.
+  - **Dataset-wide Constant Metadata**: Properties with 1 unique value across all spots ($N_{\text{unique}} = 1$, e.g. `Sample_ID`, `treatment`, `assay`, `organism`, `disease`, `tissue`) are categorized under the dedicated **Sample Information** category in *Cell Information*.
+  - **Visualizable Attributes**: Cell composition fractions, region annotations, density scores, and custom numerical/categorical columns appear in the *Further Attributes* table.
+- **On-The-Fly Spatial Statistics**:
+  - Computes **Min**, **Max**, **Mean**, **Variance ($s^2$)**, **Moran's I ($I$)**, and **Getis-Ord General $G$ ($G$ & $Z$-score)** in real-time from the spatial $k=6$ neighbor graph.
+  - Selecting any attribute recolors the hexagons on the spatial map with appropriate continuous or categorical scales.
+
+### 5. Cell Properties & Missing Values
 - **Dataset-wide empty properties**: Properties that have no non-empty values across any cell in the entire dataset are filtered out completely.
 - **Cell-level missing values**: If a property exists in the dataset but has a null, undefined, empty string, or NaN value for the selected cell, the property key is displayed with a styled `NaN` badge.
 

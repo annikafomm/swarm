@@ -1,6 +1,28 @@
 # SWARM Design Decisions & UX Options
 
-## Core Philosophy: Regulatory-First Architecture
+## Overall structure
+
+### Option 1: Big table 
+Idea: aggregate according to features: 
+
+- most tables have gene/gene product as row. We could aggregate them in a huge table --> clean 
+- remaining extra tables: 
+  - ligand receptor relationships: or we put them as a dropdown or sth into the big table
+  - pathway activity: clearly seperate
+  - DGEA: functional 
+  - ChromVar spatial correlation? can't check rn 
+  - Differential motif activity? can't check rn 
+  - Footprints ? can't check rn 
+  - GRN Evaluation & GRN evaluation on demand ? can't check rn 
+
+### Another Layer: Global, local, differential: 
+Most scores would be interesting on all of those layers: 
+- Globally on the whole tissue area (this is what we mostly have currently)
+- Locally subsetted to one cluster (leiden / celltype / etc): e.g. rank by absolute gene expression only whithin this cluster
+- Differential: like the DGEA tab but also compare other scores than gene expression between clusters
+- Spatial autocorrelation scores can also be computed Globally and Locally: locally within once cluster is e.g. interesting with gradients along a neural layer etc. I see it as a metric next to max, mean, var
+
+### Option 2: Regulatory-First Architecture
 
 **Problem**: The tool currently has 14 flat, unstructured tabs. Half of them are disabled or empty on datasets lacking ATAC or SPONGE, and generic features (QC, cell info, single-gene expression) overshadow SWARM's core novelty.
 
@@ -8,7 +30,7 @@
 
 ---
 
-## The 4 Regulatory Pillar Tabs + Context Drawer
+#### The 4 Regulatory Pillar Tabs + Context Drawer
 
 Instead of 14 flat tool tabs, the interface is organized into **4 core regulatory question tabs** with a persistent **Context & Inspector** drawer:
 
@@ -18,7 +40,7 @@ Instead of 14 flat tool tabs, the interface is organized into **4 core regulator
 └────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 🌲 Tab 1: Transcriptional GRNs (GENIE3 & Regulons)
+##### 🌲 Tab 1: Transcriptional GRNs (GENIE3 & Regulons)
 * **Goal**: Explore which transcription factors drive spatial gene programs and discover their downstream targets.
 * **Contents**:
   - **Regulon Leaderboard**: Ranked TFs $\to$ 1-click project AUCell / ULM regulon score onto the spatial map.
@@ -26,7 +48,7 @@ Instead of 14 flat tool tabs, the interface is organized into **4 core regulator
   - **Cell Composition $\times$ TF Activity**: Sender cell type abundance $\to$ receiver TF activation.
 * **Selection & Controls**: Score metric (`AUCell`, `Moran's I`, `Geary's C`, `ULM`), TF search, min regulon size filter, color scale palette & percentile clipping.
 
-### 🧽 Tab 2: Post-Transcriptional ceRNA Networks (SPONGE)
+##### 🧽 Tab 2: Post-Transcriptional ceRNA Networks (SPONGE)
 * **Goal**: Explore microRNA-mediated competitive endogenous RNA crosstalk and post-transcriptional spatial modules.
 * **Contents**:
   - **Spatial ceRNA Module Activity**: spongeffects scores (`AUCell`, `GSVA`, `ssGSEA`) on spatial spots.
@@ -34,14 +56,14 @@ Instead of 14 flat tool tabs, the interface is organized into **4 core regulator
   - **Hub ceRNAs**: Most central sponging RNAs across the tissue.
 * **Selection & Controls**: Scoring algorithm, $mscor$ cutoff slider, FDR $p$-value threshold.
 
-### 🔄 Tab 3: Spatial Signaling & Niches (LIANA+)
+##### 🔄 Tab 3: Spatial Signaling & Niches (LIANA+)
 * **Goal**: Identify intercellular communication that triggers intracellular regulatory programs.
 * **Contents**:
   - **Spatial Ligand-Receptor Table**: Ranked by Cosine Similarity, $p$-value, categories (e.g. *High L - High R*), global LR Moran's I.
   - **Spatial Co-occurrence & Neighborhoods (Squidpy)**: Co-occurrence probability curves over distance radius $r$, neighborhood enrichment heatmap.
 * **Selection & Controls**: Source $\to$ Target cell type filters, category filter, distance scale slider ($r$).
 
-### 🔓 Tab 4: Epigenetic & Benchmark Validation (Multiome ATAC)
+##### 🔓 Tab 4: Epigenetic & Benchmark Validation (Multiome ATAC)
 * **Goal**: Validate whether inferred GRNs reflect real, physical DNA-binding and accessible chromatin.
 * **Contents**:
   - **chromVAR Motif Accessibility**: Spatial deviation z-scores (JASPAR 2024 CORE) + Moran's I / Geary's C.
@@ -52,7 +74,7 @@ Instead of 14 flat tool tabs, the interface is organized into **4 core regulator
 
 ---
 
-## 🪟 Supporting Context: Docked Inspector & Quick-Checker
+#### 🪟 Supporting Context: Docked Inspector & Quick-Checker
 
 To avoid cluttering the regulatory tabs, non-regulatory inspection lives in a persistent, collapsible **Context Drawer**:
 - **Cell Inspector**: Live QC metrics (counts, genes, mt%), cell type / Leiden ID, live view value.
@@ -61,7 +83,7 @@ To avoid cluttering the regulatory tabs, non-regulatory inspection lives in a pe
 
 ---
 
-## 🔗 Cross-Tab Interconnections
+#### 🔗 Cross-Tab Interconnections
 
 1. **Tab 1 $\longleftrightarrow$ Tab 4 (The Validation Loop)**:
    - Inspecting TF *FOXM1* in Tab 1 $\to$ Click *"Validate in ATAC"* $\to$ Opens Tab 4 with *FOXM1* motif accessibility and footprint pre-selected.
@@ -75,7 +97,7 @@ To avoid cluttering the regulatory tabs, non-regulatory inspection lives in a pe
 
 ---
 
-## 🛡️ Modality-Aware Handling (No Ghost Tabs)
+#### 🛡️ Modality-Aware Handling (No Ghost Tabs)
 
 | Modality | When Present | When Absent (e.g. Visium / Xenium without ATAC / SPONGE) |
 | :--- | :--- | :--- |

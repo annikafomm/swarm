@@ -1,6 +1,12 @@
 <div class="co-occurrence-section">
   <div class="co-occurrence-controls">
-    <h3>Cluster {{ selectedClusterId }} Co-occurrence Matrix</h3>
+    <h3 class="hx-title-with-info">
+      Cluster {{ selectedClusterId }} Co-occurrence Matrix
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('co_occurrence') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h3>
     <div class="controls-row">
       <div class="interval-selector">
         <label [attr.for]="isCompare ? 'interval-select-compare' : 'interval-select'">Interval:</label>

@@ -1,7 +1,16 @@
-// Styles duplicated from hexagon-plot.component.scss, whose rules don't cross into this child
-// component's view encapsulation. `.graph-summary`/`.gprofiler-button-container` were each defined
-// twice there (with conflicting values); the rules below use the cascaded (i.e. actually-rendered)
-// result of both definitions, not either one in isolation.
+:host {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.regulatory-scores-panel {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 h3 {
   text-align: center;
   font-size: 1.1rem;

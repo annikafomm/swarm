@@ -28,14 +28,21 @@ export interface ClusterCentralityAvg {
  * to later refactor phases. Only renderNhoodHeatmap (self-contained: reads its inputs, draws
  * into its own DOM id) moves here, called by the parent's onTabChange via @ViewChild.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-cluster-info-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule],
   templateUrl: './cluster-info-panel.component.html',
   styleUrls: ['./cluster-info-panel.component.scss'],
 })
 export class ClusterInfoPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
   /** Mirrors the original's extra `selectedView === 'leiden'` guard on top of "a cluster tab
    * exists at all" — the tab can exist while the map is colored by something else. When false

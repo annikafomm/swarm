@@ -22,14 +22,21 @@ import { FormsModule } from '@angular/forms';
  * Taking a single value per @Input() per instance means the parent must supply the correct
  * per-side value, and both sides now render with the same (corrected) navigation logic.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-co-occurrence-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatButtonModule, MatTooltipModule],
   templateUrl: './co-occurrence-panel.component.html',
   styleUrls: ['./co-occurrence-panel.component.scss'],
 })
 export class CoOccurrencePanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
   /** The cluster whose co-occurrence row this instance displays. */
   @Input() selectedClusterId: number | null = null;

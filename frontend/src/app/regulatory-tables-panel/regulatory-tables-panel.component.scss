@@ -1,9 +1,16 @@
-// Styles duplicated from hexagon-plot.component.scss, whose rules don't cross into this child
-// component's view encapsulation: .selected-gene-info and the tab-body h4 treatment.
+:host {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .regulatory-tables-panel {
   display: flex;
   flex-direction: column;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .selected-gene-info {

@@ -1,5 +1,11 @@
 <ng-container *ngIf="ready; else noDgeaTpl">
-  <h4>DGEA Comparison</h4>
+  <h4 class="hx-title-with-info">
+    DGEA Comparison
+    <button mat-icon-button type="button" class="hx-info-btn"
+      [matTooltip]="infoService.getScoreInfo('dgea') || ''" matTooltipPosition="above">
+      <mat-icon>help_outline</mat-icon>
+    </button>
+  </h4>
 
   <div class="row-container" style="flex-direction: column; gap: 12px; align-items: flex-start;">
 

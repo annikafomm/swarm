@@ -10,13 +10,25 @@
 
     <div class="cluster-content">
       <div class="cluster-stats">
-        <h4>Cluster Statistics</h4>
+        <h4 class="hx-title-with-info">
+          Cluster Statistics
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getFieldInfo('leiden') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
         <p><strong>Cells in cluster:</strong> {{ clusterCellCount }}</p>
         <p><strong>Cluster ID:</strong> {{ clusterId }}</p>
       </div>
 
       <div class="cell-types">
-        <h4>Cell Type Distribution</h4>
+        <h4 class="hx-title-with-info">
+          Cell Type Distribution
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getFieldInfo('cell_type') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
         <div class="cell-type-item" *ngFor="let cellType of clusterCellTypes">
           <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
           <span>{{ cellType.type }}: {{ cellType.count }} ({{
@@ -26,24 +38,48 @@
       </div>
 
       <div class="cluster-centrality">
-        <h4>Leiden Centrality Averages</h4>
+        <h4 class="hx-title-with-info">
+          Leiden Centrality Averages
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('degree_centrality') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
         <ul class="centrality-list">
-          <li>
+          <li class="hx-title-with-info">
             <strong>Degree Centrality:</strong>
             {{ clusterCentralityAvg.degree_centrality | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('degree_centrality') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
           </li>
-          <li>
+          <li class="hx-title-with-info">
             <strong>Average Clustering:</strong>
             {{ clusterCentralityAvg.average_clustering | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('average_clustering') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
           </li>
-          <li>
+          <li class="hx-title-with-info">
             <strong>Closeness Centrality:</strong>
             {{ clusterCentralityAvg.closeness_centrality | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('closeness_centrality') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
           </li>
         </ul>
       </div>
       <div class="cluster-nhood">
-        <h4>Neighborhood Enrichment (Selected Cell)</h4>
+        <h4 class="hx-title-with-info">
+          Neighborhood Enrichment (Selected Cell)
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('nhood_enrichment') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
         <div [id]="isCompare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap'"
           style="width: 300px; height: 220px"></div>
       </div>

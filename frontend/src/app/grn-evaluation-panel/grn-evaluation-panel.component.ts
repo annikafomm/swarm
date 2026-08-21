@@ -103,6 +103,11 @@ export type GrnGraphFilterMode = 'prior' | 'extended' | 'full';
  *    `grnGraphFilterChange` output, once wired to the parent's onChangeGrnGraphFilter(value,
  *    isCompare), inherits this latent gap as-is.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-grn-evaluation-panel',
   standalone: true,
@@ -115,11 +120,16 @@ export type GrnGraphFilterMode = 'prior' | 'extended' | 'full';
     MatOption,
     MatSelect,
     MatProgressSpinnerModule,
+    MatIconModule,
+    MatButtonModule,
+    MatTooltipModule,
   ],
   templateUrl: './grn-evaluation-panel.component.html',
   styleUrls: ['./grn-evaluation-panel.component.scss'],
 })
 export class GrnEvaluationPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input() isCompare = false;
 
   /** meta['peak_stats']?.[selectedDataset?.grn_evaluation_name || 'GRN_Evaluation'] (or

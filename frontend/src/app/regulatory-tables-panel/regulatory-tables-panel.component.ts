@@ -140,14 +140,21 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
  *   `||` (so a selection renders quoted, e.g. `"Slc2a1"`); the other three tabs don't. Preserved
  *   verbatim rather than unified, since changing it would change rendered text.
  */
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { InfoService } from '../info.service';
+
 @Component({
   selector: 'app-regulatory-tables-panel',
   standalone: true,
-  imports: [CommonModule, FilterableTableComponent],
+  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatTooltipModule],
   templateUrl: './regulatory-tables-panel.component.html',
   styleUrls: ['./regulatory-tables-panel.component.scss'],
 })
 export class RegulatoryTablesPanelComponent {
+  constructor(public infoService: InfoService) {}
+
   @Input({ required: true }) kind!: RegulatoryTablesPanelKind;
   @Input() isCompare = false;
 

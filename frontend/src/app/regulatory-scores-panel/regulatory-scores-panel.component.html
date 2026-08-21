@@ -21,7 +21,14 @@
     <mat-expansion-panel [expanded]="true">
       <mat-expansion-panel-header>
         <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-          <span>Global Regulatory Scores</span>
+          <span class="hx-title-with-info">
+            Global Regulatory Scores
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('aucell') || ''" matTooltipPosition="above"
+              (click)="$event.stopPropagation()">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </span>
           <button mat-icon-button class="info-btn" *ngIf="!isCompare"
             (click)="globalScoresTutorialRequested.emit(); $event.stopPropagation()">
             <mat-icon>help_outline</mat-icon>
@@ -29,15 +36,22 @@
         </div>
       </mat-expansion-panel-header>
 
-      <mat-form-field appearance="fill" class="dataset-dropdown">
-        <mat-label>Show Regulatory Statistic</mat-label>
-        <mat-select [value]="regulatoryScoreDisplayMode"
-          (selectionChange)="regulatoryScoreDisplayModeChange.emit($event.value)">
-          <mat-option [value]="'raw'">Raw scores</mat-option>
-          <mat-option [value]="'moranI'">Moran's I</mat-option>
-          <mat-option [value]="'gearyC'">Geary's C</mat-option>
-        </mat-select>
-      </mat-form-field>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <mat-form-field appearance="fill" class="dataset-dropdown" style="flex: 1;">
+          <mat-label>Show Regulatory Statistic</mat-label>
+          <mat-select [value]="regulatoryScoreDisplayMode"
+            (selectionChange)="regulatoryScoreDisplayModeChange.emit($event.value)">
+            <mat-option [value]="'raw'">Raw scores (AUCell / GSVA / ssGSEA / VIPER)</mat-option>
+            <mat-option [value]="'moranI'">Moran's I (Spatial Autocorrelation)</mat-option>
+            <mat-option [value]="'gearyC'">Geary's C (Local Dissimilarity)</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="regulatoryScoreDisplayMode === 'raw' ? (infoService.getScoreInfo('aucell') || '') : (regulatoryScoreDisplayMode === 'moranI' ? (infoService.getScoreInfo('moranI') || '') : (infoService.getScoreInfo('gearyC') || ''))"
+          matTooltipPosition="above">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </div>
 
       <app-table [data]="genie3TableData" [features]="features" [datasetId]="datasetId"
         [actionColumns]="genie3ActionColumns" [updateColumn]="'regulatory_scores'" [emptyMessage]="genie3EmptyMessage"
@@ -54,12 +68,27 @@
     </mat-expansion-panel>
 
     <mat-expansion-panel (opened)="graphsPanelOpened.emit()">
-      <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
+      <mat-expansion-panel-header>
+        <span class="hx-title-with-info">
+          Regulatory Network Graphs
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above"
+            (click)="$event.stopPropagation()">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </span>
+      </mat-expansion-panel-header>
       <ng-template matExpansionPanelContent>
         <div class="gene-set-body">
           <section class="graph-block genie3-block">
             <div class="gene-set-header">
-              <h3>{{ isCompare ? 'Genie3 Network (Comparison)' : 'Genie3 Network' }}</h3>
+              <h3 class="hx-title-with-info">
+                {{ isCompare ? 'Genie3 Network (Comparison)' : 'Genie3 Network' }}
+                <button mat-icon-button type="button" class="hx-info-btn"
+                  [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above">
+                  <mat-icon>help_outline</mat-icon>
+                </button>
+              </h3>
               <mat-form-field appearance="fill" class="gene-selector">
                 <mat-label>Gene Set</mat-label>
                 <mat-select [value]="selectedGeneSetGenie3"
@@ -80,7 +109,13 @@
 
             <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
               <div class="control-row">
-                <label [attr.for]="minWeightSliderId">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+                <label [attr.for]="minWeightSliderId" class="hx-title-with-info">
+                  Minimum Genie3 Weight: {{ genie3WeightCutoff }}
+                  <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('genie3_weight_cutoff') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </label>
                 <input type="range" [id]="minWeightSliderId" class="slider" [min]="genie3SliderData.min_border"
                   [max]="genie3SliderData.max_border" [step]="genie3SliderData.step" [value]="genie3WeightCutoff"
                   (input)="onGenie3WeightCutoffInput($any($event.target).value)" />
@@ -89,7 +124,13 @@
               </div>
 
               <div class="control-row">
-                <label [attr.for]="genie3MaxEdgesSliderId">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                <label [attr.for]="genie3MaxEdgesSliderId" class="hx-title-with-info">
+                  Minimum Edges in Graph: {{ genie3MinEdges }}
+                  <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('min_edges') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </label>
                 <input type="range" [id]="genie3MaxEdgesSliderId" class="slider" min="1" max="50" step="1"
                   [value]="genie3MinEdges" (input)="onGenie3MinEdgesInput($any($event.target).value)" />
                 <div class="helper small">1 ←→ 50</div>
@@ -109,6 +150,10 @@
                 [disabled]="!selectedGeneSetGenie3">
                 🧬 Analyze All Genie3 Genes in gProfiler
               </button>
+              <button mat-icon-button type="button" class="hx-info-btn"
+                [matTooltip]="infoService.getScoreInfo('gprofiler') || ''" matTooltipPosition="above">
+                <mat-icon>help_outline</mat-icon>
+              </button>
             </div>
 
             <div *ngIf="!isLoadingGenie3 && selectedGeneSetGenie3" class="graph-summary">
@@ -118,7 +163,13 @@
 
           <section class="graph-block sponge-block">
             <div class="gene-set-header">
-              <h3>{{ isCompare ? 'Sponge Network (Comparison)' : 'Sponge Network' }}</h3>
+              <h3 class="hx-title-with-info">
+                {{ isCompare ? 'Sponge Network (Comparison)' : 'Sponge Network' }}
+                <button mat-icon-button type="button" class="hx-info-btn"
+                  [matTooltip]="infoService.getScoreInfo('sponge_network') || ''" matTooltipPosition="above">
+                  <mat-icon>help_outline</mat-icon>
+                </button>
+              </h3>
               <mat-form-field appearance="fill" class="gene-selector">
                 <mat-label>Gene Set</mat-label>
                 <mat-select [value]="selectedGeneSetSponge"
@@ -139,7 +190,13 @@
 
             <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
               <div class="control-row">
-                <label [attr.for]="maxPvalueSliderId">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+                <label [attr.for]="maxPvalueSliderId" class="hx-title-with-info">
+                  Max Sponge P-value Cutoff: {{ spongePValueCutoff }}
+                  <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('sponge_pvalue_cutoff') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </label>
                 <input type="range" [id]="maxPvalueSliderId" class="slider" [min]="spongeSliderData.min_border"
                   [max]="spongeSliderData.max_border" [step]="spongeSliderData.step" [value]="spongePValueCutoff"
                   (input)="onSpongePValueCutoffInput($any($event.target).value)" />
@@ -148,7 +205,13 @@
               </div>
 
               <div class="control-row">
-                <label [attr.for]="spongeMaxEdgesSliderId">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+                <label [attr.for]="spongeMaxEdgesSliderId" class="hx-title-with-info">
+                  Minimum Edges in Graph: {{ spongeMinEdges }}
+                  <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('min_edges') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                  </button>
+                </label>
                 <input type="range" [id]="spongeMaxEdgesSliderId" class="slider" min="1" max="50" step="1"
                   [value]="spongeMinEdges" (input)="onSpongeMinEdgesInput($any($event.target).value)" />
                 <div class="helper small">1 ←→ 50</div>
@@ -168,6 +231,10 @@
                 [disabled]="!selectedGeneSetSponge">
                 🧬 Analyze All Sponge Genes in gProfiler
               </button>
+              <button mat-icon-button type="button" class="hx-info-btn"
+                [matTooltip]="infoService.getScoreInfo('gprofiler') || ''" matTooltipPosition="above">
+                <mat-icon>help_outline</mat-icon>
+              </button>
             </div>
 
             <div *ngIf="!isLoadingSponge && selectedGeneSetSponge" class="graph-summary">
@@ -180,13 +247,26 @@
 
     <mat-expansion-panel *ngIf="selectedCell">
       <mat-expansion-panel-header>
-        <h4> Cell Regulatory Scores</h4>
+        <h4 class="hx-title-with-info">
+          Cell Regulatory Scores
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('aucell') || ''" matTooltipPosition="above"
+            (click)="$event.stopPropagation()">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
       </mat-expansion-panel-header>
 
       <div class="cell-reg-scores">
         <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
 
-        <h3>Genie3 Regulatory Scores (TF regulons)</h3>
+        <h3 class="hx-title-with-info">
+          Genie3 Regulatory Scores (TF regulons)
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h3>
         <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
           [updateColumn]="'regulatory_scores'" [actionColumns]="genie3CellActionColumns" [datasetId]="datasetId"
           [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
@@ -195,7 +275,13 @@
           (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })">
         </app-table>
 
-        <h3>Sponge Regulatory Scores (ceRNA modules)</h3>
+        <h3 class="hx-title-with-info">
+          Sponge Regulatory Scores (ceRNA modules)
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('sponge_network') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h3>
         <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
           [updateColumn]="'regulatory_scores'" [actionColumns]="spongeCellActionColumns" [datasetId]="datasetId"
           [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"

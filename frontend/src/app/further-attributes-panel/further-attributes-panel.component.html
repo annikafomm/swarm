@@ -1,0 +1,271 @@
+<div class="further-attributes-panel">
+  <!-- Controls Header -->
+  <div class="panel-header">
+    <div class="header-main">
+      <h3 class="panel-title">
+        Further Attributes
+        <span class="count-badge" *ngIf="attributes.length > 0">{{ filteredAttributes.length }} of {{ attributes.length
+          }}</span>
+      </h3>
+      <p class="panel-subtitle">
+        Spatial properties and annotations discovered in this dataset. Real-time statistics and spatial autocorrelation
+        (Moran's I & Getis-Ord G) computed on the fly.
+      </p>
+    </div>
+
+    <div class="controls-row">
+      <!-- Search Input -->
+      <div class="search-box">
+        <mat-icon class="search-icon">search</mat-icon>
+        <input type="text" class="search-input" placeholder="Search attributes..." [(ngModel)]="searchQuery"
+          (ngModelChange)="applyFilters()" />
+        <button *ngIf="searchQuery" type="button" class="clear-btn" (click)="searchQuery = ''; applyFilters()"
+          title="Clear search">
+          ✕
+        </button>
+      </div>
+
+      <!-- Type Filter Pills -->
+      <div class="type-filter-group">
+        <button type="button" class="filter-pill" [class.active]="typeFilter === 'all'"
+          (click)="typeFilter = 'all'; applyFilters()">
+          All
+        </button>
+        <button type="button" class="filter-pill" [class.active]="typeFilter === 'numeric'"
+          (click)="typeFilter = 'numeric'; applyFilters()">
+          Numeric
+        </button>
+        <button type="button" class="filter-pill" [class.active]="typeFilter === 'categorical'"
+          (click)="typeFilter = 'categorical'; applyFilters()">
+          Categorical
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attributes Table -->
+  <div class="table-container" *ngIf="filteredAttributes.length > 0; else emptyState">
+    <table class="attributes-table">
+      <thead>
+        <tr>
+          <!-- Attribute Name -->
+          <th class="col-attr" (click)="setSort('label')">
+            <div class="th-content">
+              <span>Attribute</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'label'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Type -->
+          <th class="col-type" (click)="setSort('type')">
+            <div class="th-content">
+              <span>Type</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'type'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Min -->
+          <th class="col-num" (click)="setSort('min')">
+            <div class="th-content" [matTooltip]="infoService.getColumnInfo('min') || 'Minimum value'"
+              matTooltipPosition="above">
+              <span>Min</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'min'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Max -->
+          <th class="col-num" (click)="setSort('max')">
+            <div class="th-content" [matTooltip]="infoService.getColumnInfo('max') || 'Maximum value'"
+              matTooltipPosition="above">
+              <span>Max</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'max'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Mean -->
+          <th class="col-num" (click)="setSort('mean')">
+            <div class="th-content" [matTooltip]="infoService.getColumnInfo('mean') || 'Arithmetic mean across spots'"
+              matTooltipPosition="above">
+              <span>Mean</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'mean'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Variance -->
+          <th class="col-num" (click)="setSort('variance')">
+            <div class="th-content" [matTooltip]="infoService.getColumnInfo('variance') || 'Sample variance'"
+              matTooltipPosition="above">
+              <span>Variance</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'variance'">{{ sortAsc ? 'arrow_upward' :
+                'arrow_downward' }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Moran's I -->
+          <th class="col-stat" (click)="setSort('moranI')">
+            <div class="th-content"
+              [matTooltip]="infoService.getColumnInfo('moran_i') || 'Global spatial autocorrelation (-1 to +1)'"
+              matTooltipPosition="above">
+              <span>Moran's I</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'moranI'">{{ sortAsc ? 'arrow_upward' : 'arrow_downward'
+                }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Getis-Ord G -->
+          <th class="col-stat" (click)="setSort('getisOrdG')">
+            <div class="th-content"
+              [matTooltip]="infoService.getColumnInfo('getis_ord') || 'Global Getis-Ord G hotspot statistic'"
+              matTooltipPosition="above">
+              <span>Getis-Ord G</span>
+              <mat-icon class="sort-icon" *ngIf="sortColumn === 'getisOrdG'">{{ sortAsc ? 'arrow_upward' :
+                'arrow_downward' }}</mat-icon>
+            </div>
+          </th>
+
+          <!-- Action -->
+          <th class="col-action">
+            <span>Action</span>
+          </th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <tr *ngFor="let attr of paginatedAttributes" class="attr-row"
+          [class.active-row]="attr.key === selectedAttribute" (click)="selectAttribute(attr)">
+          <!-- Attribute Label & Key -->
+          <td class="col-attr">
+            <div class="attr-identity">
+              <div class="attr-label-row">
+                <span class="attr-label" [title]="attr.key">{{ attr.label }}</span>
+                <span *ngIf="attr.key === selectedAttribute" class="active-badge">Active</span>
+                <button *ngIf="attr.description" mat-icon-button type="button" class="field-help-btn"
+                  [matTooltip]="attr.description" matTooltipPosition="above" (click)="$event.stopPropagation()">
+                  <mat-icon>help_outline</mat-icon>
+                </button>
+              </div>
+              <span class="attr-key-subtext">{{ attr.key }}</span>
+            </div>
+          </td>
+
+          <!-- Type Badge -->
+          <td class="col-type">
+            <span class="type-pill" [class.type-numeric]="attr.type === 'numeric'"
+              [class.type-categorical]="attr.type === 'categorical'">
+              {{ attr.type === 'numeric' ? 'Numeric' : 'Categorical (' + attr.uniqueCount + ')' }}
+            </span>
+          </td>
+
+          <!-- Min -->
+          <td class="col-num">
+            <ng-container *ngIf="attr.min !== null; else naTpl">
+              {{ attr.min | number:'1.2-4' }}
+            </ng-container>
+          </td>
+
+          <!-- Max -->
+          <td class="col-num">
+            <ng-container *ngIf="attr.max !== null; else naTpl">
+              {{ attr.max | number:'1.2-4' }}
+            </ng-container>
+          </td>
+
+          <!-- Mean -->
+          <td class="col-num">
+            <ng-container *ngIf="attr.mean !== null; else naTpl">
+              {{ attr.mean | number:'1.2-4' }}
+            </ng-container>
+          </td>
+
+          <!-- Variance -->
+          <td class="col-num">
+            <ng-container *ngIf="attr.variance !== null; else naTpl">
+              {{ attr.variance | number:'1.2-5' }}
+            </ng-container>
+          </td>
+
+          <!-- Moran's I -->
+          <td class="col-stat">
+            <ng-container *ngIf="attr.moranI !== null; else naTpl">
+              <span class="stat-badge" [class.stat-high]="attr.moranI >= 0.3"
+                [class.stat-medium]="attr.moranI > 0.1 && attr.moranI < 0.3"
+                [class.stat-neutral]="attr.moranI >= -0.1 && attr.moranI <= 0.1" [class.stat-low]="attr.moranI < -0.1"
+                [matTooltip]="'Moran\'s I: ' + (attr.moranI | number:'1.4-4')" matTooltipPosition="above">
+                {{ attr.moranI | number:'1.3-3' }}
+              </span>
+            </ng-container>
+          </td>
+
+          <!-- Getis-Ord G -->
+          <td class="col-stat">
+            <ng-container *ngIf="attr.getisOrdG !== null; else naTpl">
+              <span class="stat-badge getis-badge" [class.stat-hotspot]="attr.getisOrdZ !== null && attr.getisOrdZ > 2"
+                [class.stat-coldspot]="attr.getisOrdZ !== null && attr.getisOrdZ < -2"
+                [matTooltip]="(attr.getisOrdZ !== null ? 'Z-score: ' + (attr.getisOrdZ | number:'1.2-2') + ' | ' : '') + 'Getis-Ord G: ' + (attr.getisOrdG | number:'1.6-6')"
+                matTooltipPosition="above">
+                {{ attr.getisOrdG | number:'1.4-4' }}
+                <span *ngIf="attr.getisOrdZ !== null && attr.getisOrdZ > 2" class="z-indicator">🔥</span>
+              </span>
+            </ng-container>
+          </td>
+
+          <!-- Action Button -->
+          <td class="col-action" (click)="$event.stopPropagation()">
+            <button type="button" class="action-btn" [class.active-btn]="attr.key === selectedAttribute"
+              (click)="selectAttribute(attr)" title="Color hexagons by this attribute">
+              <mat-icon class="action-icon">{{ attr.key === selectedAttribute ? 'check' : 'palette' }}</mat-icon>
+              <span>{{ attr.key === selectedAttribute ? 'Selected' : 'Color Map' }}</span>
+            </button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <ng-template #naTpl>
+      <span class="na-text">—</span>
+    </ng-template>
+  </div>
+
+  <!-- Pagination Footer -->
+  <div class="pagination-bar" *ngIf="filteredAttributes.length > pageSize">
+    <span class="pagination-info">
+      Showing {{ (currentPage - 1) * pageSize + 1 }}–{{ (currentPage * pageSize > filteredAttributes.length ?
+      filteredAttributes.length : currentPage * pageSize) }}
+      of {{ filteredAttributes.length }} attributes
+    </span>
+    <div class="pagination-controls">
+      <button type="button" class="page-btn" [disabled]="currentPage === 1" (click)="prevPage()">
+        <mat-icon>chevron_left</mat-icon>
+        Previous
+      </button>
+      <span class="page-current">Page {{ currentPage }} of {{ totalPages }}</span>
+      <button type="button" class="page-btn" [disabled]="currentPage === totalPages" (click)="nextPage()">
+        Next
+        <mat-icon>chevron_right</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Empty State -->
+  <ng-template #emptyState>
+    <div class="empty-card">
+      <mat-icon class="empty-icon">search_off</mat-icon>
+      <div class="empty-title">
+        {{ attributes.length === 0 ? 'No Further Attributes Available' : 'No Matching Attributes' }}
+      </div>
+      <div class="empty-desc">
+        {{
+        attributes.length === 0
+        ? 'All available properties in this dataset are either unique cell identifiers, dataset-wide constant metadata
+        (available in Cell Information), or selectable on dedicated tabs.'
+        : 'Try adjusting your search query or type filters.'
+        }}
+      </div>
+    </div>
+  </ng-template>
+</div>
