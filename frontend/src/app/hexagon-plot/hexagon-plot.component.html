@@ -49,7 +49,8 @@
             [clusterId]="selectedCluster" [availableClusterIds]="availableClusterIds"
             (clusterSelected)="selectCluster($event, false)" [clusterCellCount]="clusterCells.length"
             [clusterCellTypes]="clusterCellTypes" [clusterCentralityAvg]="clusterCentralityAvg"
-            [colorScale]="colorScale"></app-cluster-info-panel>
+            [colorScale]="colorScale"
+            (metricSelected)="onFurtherAttributeSelected($event, false)"></app-cluster-info-panel>
 
           <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence')" [isCompare]="false"
             [selectedClusterId]="selectedCluster" [coOccurrenceData]="coOccurrenceData" [clusterCount]="clusterCount"
@@ -274,7 +275,8 @@
               [isLeidenView]="selectedCompareView === 'leiden'" [clusterId]="selectedClusterCompare"
               [availableClusterIds]="availableClusterIdsCompare" (clusterSelected)="selectCluster($event, true)"
               [clusterCellCount]="compareClusterCells.length" [clusterCellTypes]="compareClusterCellTypes"
-              [clusterCentralityAvg]="compareClusterCentralityAvg" [colorScale]="colorScale"></app-cluster-info-panel>
+              [clusterCentralityAvg]="compareClusterCentralityAvg" [colorScale]="colorScale"
+              (metricSelected)="onFurtherAttributeSelected($event, true)"></app-cluster-info-panel>
 
             <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence', true)" [isCompare]="true"
               [selectedClusterId]="selectedClusterCompare" [coOccurrenceData]="compareCoOccurrenceData"

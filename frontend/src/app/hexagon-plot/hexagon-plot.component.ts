@@ -797,7 +797,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     if (prop === 'regulatory_scores' || prop.includes('regulatory_score') || prop.endsWith('_genie3') || prop.endsWith('_sponge')) {
       return 'Regulatory Scores';
     }
-    if (prop === 'co_occurrence') {
+    if (prop === 'co_occurrence' || this.leidenCentralityProps.includes(prop)) {
       return 'Cluster Information';
     }
     if (prop === 'gene_expression') {
@@ -1645,9 +1645,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         scoreKeys.forEach((k) => allKeys.add(k));
         lianaKeys.forEach((k) => allKeys.add(k));
 
-
-
-        this.leidenCentralityProps.forEach((k) => allKeys.add(k));
+        // Leiden centrality metrics (degree/closeness centrality, average clustering) are
+        // intentionally excluded from the "Color hexagons by" dropdown — they're only reachable
+        // by clicking the corresponding metric in the Cluster Information tab (see
+        // ClusterInfoPanelComponent.metricSelected / onFurtherAttributeSelected), since they only
+        // make sense in the context of an already-selected cluster.
+        this.leidenCentralityProps.forEach((k) => allKeys.delete(k));
         compare ? this.colorablePropertiesCompare = Array.from(allKeys) : this.colorableProperties = Array.from(allKeys);
         console.log('Initial colourable properties (including potential ones):',
           compare ? this.colorablePropertiesCompare : this.colorableProperties);

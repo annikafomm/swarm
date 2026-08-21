@@ -66,6 +66,12 @@ export class ClusterInfoPanelComponent {
     closeness_centrality: 0,
   };
   /**
+   * Emits when the user clicks one of the centrality metric rows below, so the parent can color
+   * the hexagon map by that property (mirrors onFurtherAttributeSelected's contract) — these
+   * three properties are only reachable this way, not via the "Color hexagons by" dropdown.
+   */
+  @Output() metricSelected = new EventEmitter<string>();
+  /**
    * Pre-existing behavior being preserved, not introduced here: this always uses the *main*
    * view's ordinal color scale, even when rendering the compare instance — the same systemic
    * "categorical fills always use colorScale, never colorScaleCompare" bug already documented
