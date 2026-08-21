@@ -9,40 +9,31 @@
     </div>
   </div>
 
-  <div id="main-visualization" [class.with-sidenav]="selectedCell">
+  <div id="main-visualization" [class.compare-mode]="compareMode" [class.with-sidenav]="selectedCell">
 
-    <div id="comparison-box">
-      <app-hexagon-view #mainView [isCompare]="false" [selectedCell]="selectedCell" [selectedView]="selectedView"
-        [isInitializing]="isInitializing" [isLoadingMap]="isLoadingHexagons" [groupedProperties]="groupedProperties"
-        [selectedDataset]="selectedDataset" [builtinDatasets$]="builtinDatasets$"
-        [uploadedDatasets$]="uploadedDatasets$" [tangramDatasets$]="tangram_Datasets$"
-        [propertyAvailableFn]="propertyAvailableBound"
-        (cellClicked)="displayCellDetails($event.event, $event.cell, false)"
-        (selectedViewChange)="selectedView = $event" (colorByChanged)="onColorbyPropertyChange(false)"
-        (selectedDatasetChange)="selectedDataset = $event" (datasetChanged)="onDatasetSelected($event, false)"
-        (tangramDatasetSelected)="onDatasetTangramSelected($event, false)" (viewTutorialClicked)="selectViewTutorial()"
-        (datasetTutorialClicked)="selectDatasetTutorial()">
-      </app-hexagon-view>
+    <!-- Main Dataset View Box -->
+    <div class="dataset-view-box main-view-box">
+      <div class="map-column">
+        <app-hexagon-view #mainView [isCompare]="false" [selectedCell]="selectedCell" [selectedView]="selectedView"
+          [isInitializing]="isInitializing" [isLoadingMap]="isLoadingHexagons" [groupedProperties]="groupedProperties"
+          [selectedDataset]="selectedDataset" [builtinDatasets$]="builtinDatasets$"
+          [uploadedDatasets$]="uploadedDatasets$" [tangramDatasets$]="tangram_Datasets$"
+          [propertyAvailableFn]="propertyAvailableBound"
+          (cellClicked)="displayCellDetails($event.event, $event.cell, false)"
+          (selectedViewChange)="selectedView = $event" (colorByChanged)="onColorbyPropertyChange(false)"
+          (selectedDatasetChange)="selectedDataset = $event" (datasetChanged)="onDatasetSelected($event, false)"
+          (tangramDatasetSelected)="onDatasetTangramSelected($event, false)" (viewTutorialClicked)="selectViewTutorial()"
+          (datasetTutorialClicked)="selectDatasetTutorial()">
+        </app-hexagon-view>
 
-      <button class="basic-button" id="compare-button" (click)="onCompareMode()"
-        [matTooltip]="isXeniumDatasetSelected ? 'Comparison view not supported for Xenium datasets' : 'Toggle comparison view'"
-        [disabled]="!currentDataSetSupportsCompare || isInitializing || isXeniumDatasetSelected">
-        <mat-icon style="color: black;">compare_arrows</mat-icon>
-      </button>
+        <button class="basic-button" id="compare-button" (click)="onCompareMode()"
+          [matTooltip]="isXeniumDatasetSelected ? 'Comparison view not supported for Xenium datasets' : 'Toggle comparison view'"
+          [disabled]="!currentDataSetSupportsCompare || isInitializing || isXeniumDatasetSelected">
+          <mat-icon style="color: black;">compare_arrows</mat-icon>
+        </button>
+      </div>
 
-      <app-hexagon-view #compareView *ngIf="compareMode" [isCompare]="true" [selectedCell]="selectedCellCompare"
-        [selectedView]="selectedCompareView" [isInitializing]="isInitializing" [isLoadingMap]="isLoadingCompare"
-        [groupedProperties]="groupedPropertiesCompare" [selectedDataset]="selectedDatasetCompare"
-        [builtinDatasets$]="builtinDatasets$" [uploadedDatasets$]="uploadedDatasets$"
-        [tangramDatasets$]="tangram_Datasets$" [propertyAvailableFn]="propertyAvailableBound"
-        (cellClicked)="displayCellDetails($event.event, $event.cell, true)"
-        (selectedViewChange)="selectedCompareView = $event" (colorByChanged)="onColorbyPropertyChange(true)"
-        (selectedDatasetChange)="selectedDatasetCompare = $event" (datasetChanged)="onDatasetSelected($event, true)"
-        (tangramDatasetSelected)="onDatasetTangramSelected($event, true)">
-      </app-hexagon-view>
-    </div>
-
-    <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
+      <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
 
 
       <mat-tab-group #mainTabGroup (selectedTabChange)="onTabChange($event)" preserveContent="true"
@@ -246,12 +237,25 @@
         </mat-tab>
 
       </mat-tab-group>
+      </div>
+    </div>
 
+    <!-- Compare Dataset View Box -->
+    <div class="dataset-view-box compare-view-box" *ngIf="compareMode">
+      <div class="map-column">
+        <app-hexagon-view #compareView [isCompare]="true" [selectedCell]="selectedCellCompare"
+          [selectedView]="selectedCompareView" [isInitializing]="isInitializing" [isLoadingMap]="isLoadingCompare"
+          [groupedProperties]="groupedPropertiesCompare" [selectedDataset]="selectedDatasetCompare"
+          [builtinDatasets$]="builtinDatasets$" [uploadedDatasets$]="uploadedDatasets$"
+          [tangramDatasets$]="tangram_Datasets$" [propertyAvailableFn]="propertyAvailableBound"
+          (cellClicked)="displayCellDetails($event.event, $event.cell, true)"
+          (selectedViewChange)="selectedCompareView = $event" (colorByChanged)="onColorbyPropertyChange(true)"
+          (selectedDatasetChange)="selectedDatasetCompare = $event" (datasetChanged)="onDatasetSelected($event, true)"
+          (tangramDatasetSelected)="onDatasetTangramSelected($event, true)">
+        </app-hexagon-view>
+      </div>
 
-
-      <div *ngIf="compareMode">
-        <mat-divider style="margin: 20px 0;"></mat-divider>
-        <h3 style="margin: 10px 0;">Comparison View</h3>
+      <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
         <mat-tab-group #compareTabGroup (selectedTabChange)="onTabChange($event,true)" preserveContent="true"
           dynamicHeight="false" class="metadata-tables-compare">
 
@@ -463,8 +467,8 @@
               (registerRequested)="registerOnDemandGrnRun(true)"></app-grn-evaluation-on-demand-panel>
           </mat-tab>
         </mat-tab-group>
-
       </div>
     </div>
+
   </div>
 </div>

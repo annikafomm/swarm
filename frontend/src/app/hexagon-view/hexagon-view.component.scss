@@ -70,3 +70,20 @@
     height: 100%;
   }
 }
+
+:host-context(.compare-mode) {
+  #hexbin-compare,
+  #hexbin {
+    height: calc(50vh - 100px);
+    width: calc(50vh - 100px);
+    max-height: calc(50vh - 80px);
+    max-width: calc(50vh - 80px);
+    min-height: 220px;
+    min-width: 220px;
+    margin-bottom: 0.4rem;
+  }
+
+  .map-container-wrapper {
+    margin-bottom: 0.4rem;
+  }
+}
