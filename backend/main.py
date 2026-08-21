@@ -209,6 +209,12 @@ DEFAULT_DATASETS = [
         "dir": "data/visual_cortex",
         "description": "Mouse Visual Cortex spatial transcriptomics dataset",
     },
+    {
+        "id": "builtin_heart_multiome",
+        "alias": "Heart (Multiome)",
+        "dir": "data/heart",
+        "description": "Human Heart Cell Atlas (Multiome)",
+    }
 ]
 
 # Lifespan event handler

@@ -688,6 +688,28 @@ class DatasetRegistry:
         use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
         use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
 
+        # Which multiome analyses this dataset actually carries. These gate frontend tabs
+        # (ChromVar, Differential Motif Activity, Footprints) and the info page, so they
+        # have to be read off the config rather than left at their False defaults.
+        # `scores.chromVar` implies the chromVar Moran's I / Geary's C autocorrelations,
+        # which the pipeline computes unconditionally alongside it (app.py's chromVar case
+        # appends -moranI -gearyC), so accept either source for those two.
+        scores_conf = config.get("scores") or {}
+        chromvar_conf = config.get("chromVar") or {}
+        use_chromvar = bool(scores_conf.get("chromVar", False))
+        multiome_flags = {
+            "use_chromvar": use_chromvar,
+            "use_differential_motif_activity": bool(
+                chromvar_conf.get(
+                    "differential_motif_activity",
+                    scores_conf.get("differential_motif_activity", False),
+                )
+            ),
+            "use_footprinting": bool(scores_conf.get("footprinting", False)),
+            "use_moranI": bool(chromvar_conf.get("moranI", False)) or use_chromvar,
+            "use_gearyC": bool(chromvar_conf.get("gearyC", False)) or use_chromvar,
+        }
+
         dataset_type_lower = dataset_type.lower()
         if "xenium" in dataset_type_lower:
             xenium_grid_adata_path = self._resolve_config_path(output_files.get("xenium_grid_adata_path") or raw_adata_path, base_dir)
@@ -735,6 +757,10 @@ class DatasetRegistry:
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
                 tf_graph_path=tf_graph_path,
                 grn_evaluation_name=output_files.get("grn_evaluation_name"),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                **multiome_flags,
                 description=description,
             )
         else:

@@ -92,6 +92,105 @@ export class FurtherAttributesPanelComponent implements OnChanges {
   }
 
   /**
+   * Identifies keys that represent spatial coordinates, grid indices, or pixel positions
+   * (e.g. _x, _y, x, y, x_original, y_original, spatial_x, spatial_y, array_row, array_col, etc.)
+   * which should be excluded from the Further Attributes table.
+   */
+  private isSpatialCoordinateKey(key: string): boolean {
+    if (!key) return false;
+    const lower = key.toLowerCase().trim();
+
+    // Explicit check for known spatial/grid coordinate identifiers
+    const knownCoordinates = [
+      'barcode',
+      'centroid',
+      'observation_joinid',
+      'cell_id',
+      'id',
+      'guid',
+      'array_row',
+      'array_col',
+      'arrayrow',
+      'arraycol',
+      'array_x',
+      'array_y',
+      'array row',
+      'array col',
+      'spatial_x',
+      'spatial_y',
+      'spatial_row',
+      'spatial_col',
+      'x_original',
+      'y_original',
+      'original_x',
+      'original_y',
+      'orig_x',
+      'orig_y',
+      'x_orig',
+      'y_orig',
+      '_x',
+      '_y',
+      '__x',
+      '__y',
+      'x',
+      'y',
+      'pxl_col_in_fullres',
+      'pxl_row_in_fullres',
+      'pxl_col',
+      'pxl_row',
+      'pixel_x',
+      'pixel_y',
+      'imagecol',
+      'imagerow',
+      'image_col',
+      'image_row',
+      'image_x',
+      'image_y',
+      'x_coord',
+      'y_coord',
+      'coord_x',
+      'coord_y',
+      'coords_x',
+      'coords_y',
+      'center_x',
+      'center_y',
+      'centroid_x',
+      'centroid_y',
+      'x_centroid',
+      'y_centroid',
+      'grid_x',
+      'grid_y',
+      'grid_row',
+      'grid_col',
+      'spot_x',
+      'spot_y',
+      'spot_row',
+      'spot_col',
+    ];
+
+    if (knownCoordinates.includes(lower)) {
+      return true;
+    }
+
+    // Pattern: _x, _y, __x, __y, ^x$, ^y$
+    if (/^_+[xy]$/i.test(lower) || /^[xy]$/i.test(lower)) {
+      return true;
+    }
+
+    // Pattern: spatial coordinate prefixes/suffixes (e.g. spatial_x, array_y, pxl_row, image_col, etc.)
+    if (/^(?:spatial|array|grid|pxl|pixel|image|orig(?:inal)?|center|centroid|spot|coord|pos)_(?:x|y|row|col)$/i.test(lower)) {
+      return true;
+    }
+
+    // Pattern: coordinate axis suffixes (e.g. x_original, y_coord, x_spatial, y_pos, etc.)
+    if (/^(?:x|y)_(?:orig(?:inal)?|coord|centroid|spatial|grid|pixel|pxl|pos|index)$/i.test(lower)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Builds the spatial nearest-neighbor graph ($k=6$) and computes stats for all eligible attributes.
    */
   private computeAttributes(): void {
@@ -134,6 +233,11 @@ export class FurtherAttributesPanelComponent implements OnChanges {
         continue;
       }
 
+      // Skip spatial coordinates and grid positions (array_col, array_row, _x, _y, x_original, spatial_y, etc.)
+      if (this.isSpatialCoordinateKey(key)) {
+        continue;
+      }
+
       // Collect values across all features
       const values: unknown[] = [];
       for (let i = 0; i < n; i++) {
@@ -154,26 +258,32 @@ export class FurtherAttributesPanelComponent implements OnChanges {
       }
       const uniqueCount = uniqueSet.size;
 
-      // Heuristic 1: Constant values (all cells share 1 identical value e.g. patient ID, treatment, assay) -> skip
-      if (uniqueCount <= 1) {
-        continue;
-      }
-
-      // Heuristic 2: Unique cell identifier or coordinate (every cell has unique distinct ID e.g. barcode, cell_id) -> skip
-      if (
-        (uniqueCount === validCount && (typeof values[0] === 'string' || validCount > 20)) ||
-        (validCount > 50 && uniqueCount >= validCount * 0.98 && typeof values[0] === 'string') ||
-        ['barcode', 'centroid', 'observation_joinid', 'cell_id', 'id', 'guid'].includes(lowerKey)
-      ) {
-        continue;
-      }
-
       // Determine if numeric
       const isAllNumeric = values.every((v) => {
         if (typeof v === 'number') return Number.isFinite(v);
         if (typeof v === 'string') return v.trim() !== '' && !Number.isNaN(Number(v));
         return false;
       });
+
+      // Heuristic 1: Constant values (all cells share 1 identical value e.g. patient ID, treatment, assay) -> skip
+      if (uniqueCount <= 1) {
+        continue;
+      }
+
+      // Heuristic 2: Unique string identifier (every cell has unique distinct string ID e.g. barcode, cell_id, observation_joinid) -> skip
+      if (!isAllNumeric) {
+        if (
+          uniqueCount === validCount ||
+          (validCount > 50 && uniqueCount >= validCount * 0.98)
+        ) {
+          continue;
+        }
+      }
+
+      // Skip spatial coordinates and grid positions
+      if (this.isSpatialCoordinateKey(key)) {
+        continue;
+      }
 
       const label = this.formatLabel(key);
       const desc = this.infoService.getFieldInfo(key);
@@ -370,8 +480,14 @@ export class FurtherAttributesPanelComponent implements OnChanges {
     if (props['x'] !== undefined && props['y'] !== undefined) {
       return [Number(props['x']), Number(props['y'])];
     }
+    if (props['_x'] !== undefined && props['_y'] !== undefined) {
+      return [Number(props['_x']), Number(props['_y'])];
+    }
     if (props['spatial_x'] !== undefined && props['spatial_y'] !== undefined) {
       return [Number(props['spatial_x']), Number(props['spatial_y'])];
+    }
+    if (props['x_original'] !== undefined && props['y_original'] !== undefined) {
+      return [Number(props['x_original']), Number(props['y_original'])];
     }
     if (props['array_col'] !== undefined && props['array_row'] !== undefined) {
       return [Number(props['array_col']) * 10, Number(props['array_row']) * 10];

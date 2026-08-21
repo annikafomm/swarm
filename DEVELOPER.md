@@ -203,6 +203,159 @@ its files are untouched on disk. The recovery path:
 tied to whichever session re-registers them — there's no durable, cross-session "my datasets"
 list beyond what's encoded in `backend/uploads/`.
 
+## Which AnnData is "the" AnnData
+
+A processed dataset carries several `.h5ad` files and it is easy to assume one of them is the raw
+upload. None of them is — **the raw upload is never retained as a dataset field**. It lives only in
+the transient `UploadRequest.files.spatial_h5ad` and is not represented on the `Dataset` classes at
+all.
+
+The pipeline calls the same scoring routine twice on two different objects
+([calc_scores.py:154-157](backend/calc_python_scores/calc_scores.py#L154-L157)):
+
+- **`adata_st_scores.h5ad`** — the uploaded spatial object (after optional filtering/normalization)
+  with all scores computed **directly on the spots**.
+- **`adata_tg_scores.h5ad`** — the *Tangram output* object (single-cell reference mapped onto the
+  spatial coordinates) with the same scores computed on **that** instead. Only exists if Tangram
+  ran. Additionally carries `obsm["tangram_ct_pred"]`, which LIANA+ needs and which chromVAR scores
+  are projected through.
+
+**`adata_path` ("primary AnnData") is not a file of its own — it is a pointer** resolved by
+`_determine_adata_path()` ([dataset_management.py:439](backend/dataset_management.py#L439)):
+
+| Dataset | `adata_path` resolves to |
+|---|---|
+| Visium, no Tangram | `adata_st_scores.h5ad` |
+| Visium + Tangram | `adata_tg_scores.h5ad` |
+| Multiome | always `adata_tg_scores.h5ad` |
+| Xenium, no Tangram | `xenium_cells_with_grid_scores.h5ad` |
+| Xenium + Tangram | `adata_tg_scores.h5ad` |
+| fallback | whatever `output_files["adata_path"]` says |
+
+So for a Multiome dataset, `adata_path`, `adata_tg_scores_path` **and** `tangram_adata_path` all
+point at the same file. That is not a bug — `tangram_adata_path` is documented as an *alias* for
+`adata_tg_scores_path` ("ignored if `adata_tg_scores_path` is provided",
+[dataset_structure.py:822](backend/dataset_structure.py#L822)), i.e. it refers to projected
+**output**, not to the single-cell reference input. Do not label it as a "reference" anywhere in the
+UI; that mistake has been made and reverted once already.
+
+## How `cell_type` and `leiden` are decided, and what consumes them
+
+These two are routinely conflated but they are produced by completely different mechanisms, and the
+asymmetry explains several "why is this tab empty" questions.
+
+### `leiden` — machine-decided, and only as a side effect
+
+Preferred path: the upload already has an `obs` column literally named `leiden`.
+
+Fallback: SWARM computes it, but only when **three** conditions hold simultaneously
+([calc_scores.py:91-96](backend/calc_python_scores/calc_scores.py#L91-L96)) — centrality,
+co-occurrence or neighborhood enrichment was requested; **and** `leiden` is not already in `obs`;
+**and** that score's cluster-key argument is still the literal string `"leiden"`. Only then does
+`clustering()` ([preprocessing_functions.py:41](backend/preprocessing/preprocessing_functions.py#L41))
+run `sc.pp.neighbors` → `sc.tl.umap` → `sc.tl.leiden(flavor="igraph", n_iterations=2,
+directed=False)`, at scanpy's default resolution. The in-code comment is explicit that this is a
+*"makeshift solution for when no cluster key is provided"* and deliberately not user-configurable.
+
+Two consequences:
+
+- **Select no squidpy cluster score and no clustering ever happens.** `builtin_heart_multiome` is
+  exactly this case (`scores.squidpy = false` in its config): there is no `leiden` column at all,
+  so `meta.leiden_cluster_annotations` comes out `{}` and Cluster Information / Co-occurrence /
+  Neighborhood Enrichment are legitimately unavailable. That is correct behavior, not breakage.
+- **The per-score cluster-key parameters are a trap.** The upload form exposes `cluster_cs`,
+  `cluster_co` and `cluster_nhood` separately, and squidpy honours them — writing
+  `uns["<yourcolumn>_centrality_scores"]` etc. But
+  [visium_to_geojson.py](backend/visium_to_geojson.py) only ever reads the three hardcoded
+  `leiden_*` names, so anything computed under a different key is silently unreachable from the UI.
+  Labels must additionally cast to `int` (`.astype(int)`), or the whole annotation block empties.
+
+### `cell_type` — biology you have to bring
+
+Supplied path: an `obs` column. Tangram's cluster mode expects it under the name `cell_type`
+(`--cell_label`, default `cell_type`).
+
+Derived path (Tangram), two distinct stages that are easy to conflate:
+
+1. `map_cells_to_space(..., cluster_label=cell_label)` produces the mapping matrix, then
+   `project_cell_annotations` writes **`obsm["tangram_ct_pred"]`** — a *composition*: one
+   continuous score per cell type per spot. Not a label.
+2. `add_dissociated_annotations_to_obs()`
+   ([calc_tangram.py:347](backend/calc_python_scores/calc_tangram.py#L347)) takes
+   `ct_pred.idxmax(axis=1)` → **`obs["cell_type_dissociated"]`**, the argmax winner, plus one
+   `prob_<celltype>_dissociated` column per type and a `uns["dissociated_prob_column_map"]` index.
+
+Mapping mode is `'clusters'` by default and forced to `'cells'` for multiome
+([calc_tangram.py:240-243](backend/calc_python_scores/calc_tangram.py#L240-L243)).
+
+Two non-obvious behaviors:
+
+- **Tangram never overwrites `cell_type`.** It writes `cell_type_dissociated` alongside it, so a
+  Tangram run leaves you with three related things: the original annotation, the composition
+  matrix, and the derived argmax label.
+- **Tangram post-processing *requires* a pre-existing `cell_type` column.** `mask_obs_key` defaults
+  to `'cell_type'` and `add_dissociated_annotations_to_obs` raises `KeyError` if it is absent, so
+  Tangram cannot bootstrap cell types from nothing — it needs a seed annotation on the spatial side.
+
+#### Can Tangram run without any cell-type annotation?
+
+Not as currently wired. Five stages touch `cell_label`; three are avoidable and two are not:
+
+| Stage | Needs an annotation? | Avoidable? |
+|---|---|---|
+| `select_genes` | `ctg` and `spapros` do, `hvg` does not; selecting no mode returns `None` so Tangram uses all overlapping genes | yes |
+| `map_cells_to_space(cluster_label=…)` | only in `mode='clusters'`, which aggregates cells *by* the label | yes — multiome forces `mode='cells'`, where Tangram ignores `cluster_label` |
+| `project_genes` | mirrors the mode above | yes, same way |
+| `project_cell_annotations(annotation=cell_label)` ([calc_tangram.py:283](backend/calc_python_scores/calc_tangram.py#L283)) | yes — called unconditionally, outside any mode check | **no** |
+| `add_dissociated_annotations_to_obs(mask_obs_key="cell_type")` ([calc_tangram.py:469](backend/calc_python_scores/calc_tangram.py#L469)) | yes — raises `KeyError` when the column is missing | **no** |
+
+Two wrinkles in those last two rows:
+
+- They want the annotation on **different objects**. `project_cell_annotations` reads `cell_label`
+  from `ad_map.obs` (the single-cell reference), while `mask_obs_key` is checked against
+  `ad_ge.obs` (the spatial side). A Tangram run therefore needs a cell-type column on *both* inputs.
+- `mask_obs_key` is hardcoded to the string literal `"cell_type"` rather than `args.cell_label`, so
+  even `--cell_label annotation_final` still demands a column named exactly `cell_type`. This looks
+  unintended.
+
+Via the web app it is stricter again: **`cell_label` has no form field**, so it is always
+`cell_type` and cannot be pointed at a differently-named column without invoking the script directly.
+
+Conceptually an annotation-free multiome run *should* be possible: the mapping matrix
+`adata_map` (FoPra's M) is what chromVAR and footprint projection consume, and M does not need cell
+types in `cells` mode — so spatial chromVAR would still work. Only the cell-type composition
+products would be lost (`tangram_ct_pred`, `cell_type_dissociated`, and hence LIANA+
+cell-composition × TF activity). Supporting it would mean guarding `project_cell_annotations` on
+the label being present, making `mask_obs_key` follow `cell_label`, and allowing
+`add_dissociated_annotations_to_obs` to be skipped.
+
+### What consumes which
+
+| Consumer | `leiden` | `cell_type` |
+|---|---|---|
+| Squidpy cluster stats → `meta.leiden_cluster_annotations` | yes | — |
+| Sidebar tabs | Cluster Information, Co-occurrence | Cell Information |
+| Map palette | `leidenColorScale` (Tableau10) | `colorScale` (Set2) |
+| Cluster outlining (`extendCluster`) | leiden view only | — |
+| LIANA+ cell-composition × TF activity | — | `liana.composition_column`, default `tangram_ct_pred` |
+| Differential motif activity | — | grouping column (`spot_groupby`, hardcoded) |
+| Footprints | — | grouping (`cluster_by`, defaults to `cell_type`) |
+| DGEA | selectable grouping | **default** grouping (`selectedDgeaObsCol`) |
+
+`cell_type` is also what the map falls back *to*: the initial view priority is `regulatory_scores`
+→ `cell_type` → first available property, and `getAvailableView()` hardcodes `'cell_type'` as its
+fallback argument.
+
+The two categorical palettes are deliberately different so it is obvious at a glance whether the
+map is showing clusters or cell types — they used to share one ordinal scale.
+
+**Summary of the asymmetry**: `leiden` is structure *discovered from* the data — cheap and
+automatic, but it only materialises if a squidpy score happened to ask for it, and it is only
+readable under one exact name. `cell_type` is biology *brought to* the data — nothing derives it
+from scratch, several downstream analyses hardcode it as their grouping, and it is the map's
+fallback view. This is why a dataset with no clustering at all (heart) still renders sensibly: it
+has `cell_type`, and the ATAC tabs group by `cell_type` rather than `leiden`.
+
 ## Frontend Spatial Map, Cell, Cluster, and Tab Synchronization
 
 The spatial visualization ([HexagonPlotComponent](frontend/src/app/hexagon-plot/hexagon-plot.component.ts) and [HexagonViewComponent](frontend/src/app/hexagon-view/hexagon-view.component.ts)) follows strict synchronization rules between the map canvas, color views, sidebar tabs, and cell/cluster selection state:

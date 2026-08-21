@@ -598,6 +598,12 @@ class MultiomeDataset(Dataset):
         use_moranI: bool = False,
         use_gearyC: bool = False,
         grn_evaluation_on_demand_available: bool = False,
+        # Declared explicitly (rather than falling through **metadata into self.metadata,
+        # where to_dict would never surface them) to match VisiumDataset/XeniumDataset,
+        # which both expose these three to the frontend.
+        dataset_type: str = "Multiome",
+        use_tangram: bool = False,
+        use_multiome: bool = True,
         **metadata
     ):
         """
@@ -658,6 +664,10 @@ class MultiomeDataset(Dataset):
             **metadata
         )
 
+        self.dataset_type = dataset_type
+        self.use_tangram = use_tangram
+        self.use_multiome = use_multiome
+
         # Always-present multiome outputs
         self.adata_st_scores_path = adata_st_scores_path
         self.adata_tg_scores_path = adata_tg_scores_path
@@ -689,6 +699,9 @@ class MultiomeDataset(Dataset):
         """Serialize MultiomeDataset to dictionary."""
         data = super().to_dict()
         data.update({
+            "dataset_type": self.dataset_type,
+            "use_tangram": self.use_tangram,
+            "use_multiome": self.use_multiome,
             "adata_st_scores_path": self.adata_st_scores_path,
             "adata_tg_scores_path": self.adata_tg_scores_path,
             "adata_map_path": self.adata_map_path,

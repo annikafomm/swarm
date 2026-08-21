@@ -546,25 +546,56 @@ if __name__ == "__main__":
                 meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
 
 
-    # Add peak and motif statistics
-    # New structure: uns['peak_stats'][grn_evaluation_name] = {data}
-    # uns['motif_stats'][grn_evaluation_name] = {data}
+    # Add peak and motif statistics.
+    #
+    # The frontend always looks these up as
+    #   meta[stats_key][dataset.grn_evaluation_name || 'GRN_Evaluation']
+    # so meta must be keyed by GRN-evaluation name, never flat. Three shapes occur
+    # in the wild and all have to end up in that one shape:
+    #   1. uns[<grn_name>] = {'peak_stats': {...}, 'motif_stats': {...}}  (per-evaluation
+    #      container; what the TF_GRN_evaluation pipeline writes, and the only shape that
+    #      carries the evaluation's real name)
+    #   2. uns[stats_key] = {<grn_name>: {...}}                            (already keyed)
+    #   3. uns[stats_key] = {<column>: [...]}                              (legacy flat, name lost)
+    # Shape 1 wins when present: a dataset that has it may *also* carry a flat legacy copy
+    # of the same numbers under uns[stats_key], and that copy has no name to key it by.
+    def _is_grn_eval_container(value):
+        return isinstance(value, dict) and (
+            'peak_stats' in value or 'motif_stats' in value
+        )
+
+    grn_eval_names = [
+        key for key, value in spatial_data.uns.items()
+        if _is_grn_eval_container(value)
+    ]
+
     for stats_key in ['peak_stats', 'motif_stats']:
-        if stats_key in spatial_data.uns:
+        per_evaluation = {}
+
+        for grn_name in grn_eval_names:
+            if stats_key in spatial_data.uns[grn_name]:
+                per_evaluation[grn_name] = _make_json_serializable(
+                    spatial_data.uns[grn_name][stats_key]
+                )
+
+        if not per_evaluation and stats_key in spatial_data.uns:
             stats_data = spatial_data.uns[stats_key]
-            # Handle both old and new structure:
-            # If it's a dict of dicts (new structure with grn_evaluation_names as keys):
-            if isinstance(stats_data, dict) and len(stats_data) > 0:
-                first_val = next(iter(stats_data.values()))
-                if isinstance(first_val, dict):
-                    # New structure: stats_data = {grn_name: {data...}, grn_name2: {data...}}
-                    meta_dict[stats_key] = _make_json_serializable(stats_data)
-                else:
-                    # Single dataset case or old structure
-                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+            already_keyed = (
+                isinstance(stats_data, dict)
+                and len(stats_data) > 0
+                and all(isinstance(v, dict) for v in stats_data.values())
+            )
+            if already_keyed:
+                per_evaluation = _make_json_serializable(stats_data)
             else:
-                # Convert to JSON-serializable format (converts numpy arrays to lists)
-                meta_dict[stats_key] = _make_json_serializable(stats_data)
+                # Legacy flat table: no evaluation name survives, so file it under the
+                # same default the frontend falls back to when the dataset has no name.
+                per_evaluation = {
+                    'GRN_Evaluation': _make_json_serializable(stats_data)
+                }
+
+        if per_evaluation:
+            meta_dict[stats_key] = per_evaluation
 
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there

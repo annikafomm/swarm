@@ -20,13 +20,14 @@ type TableData = { [col: string]: { [index: string]: string | number } } | strin
  */
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { InfoService } from '../info.service';
 
 @Component({
   selector: 'app-chromvar-correlation-panel',
   standalone: true,
-  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatTooltipModule],
+  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatButtonToggleModule, MatTooltipModule],
   templateUrl: './chromvar-correlation-panel.component.html',
   styleUrls: ['./chromvar-correlation-panel.component.scss'],
 })
@@ -51,7 +52,12 @@ export class ChromvarCorrelationPanelComponent {
 
   showMoranI = true;
 
-  toggleView(): void {
-    this.showMoranI = !this.showMoranI;
-  }
+  /**
+   * Shared with both <app-table> instances below (moranI/gearyC are shown one at a time via
+   * *ngIf, which destroys and recreates the table component on every toggle) — passed by
+   * reference so a filter/sort made on one side is already in place when the other side's table
+   * is (re)created, instead of resetting every time the user switches views.
+   */
+  sharedFilters: { [col: string]: string } = {};
+  sharedSortState: { column: string | null; asc: boolean } = { column: null, asc: true };
 }

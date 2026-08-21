@@ -19,7 +19,7 @@ import { TranslationService } from '../translation.service';
 import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
 import { InfoService } from '../info.service';
-import { HexagonViewComponent } from '../hexagon-view/hexagon-view.component';
+import { HexagonViewComponent, MapLegendInfo } from '../hexagon-view/hexagon-view.component';
 import { CellInfoPanelComponent } from '../cell-info-panel/cell-info-panel.component';
 import { ClusterInfoPanelComponent } from '../cluster-info-panel/cluster-info-panel.component';
 import { CoOccurrencePanelComponent } from '../co-occurrence-panel/co-occurrence-panel.component';
@@ -53,7 +53,34 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 
-
+export const LEIDEN_CLUSTER_PALETTE: string[] = [
+  '#ff9800', // 0: Orange
+  '#4caf50', // 1: Green
+  '#1976d2', // 2: Blue
+  '#9c27b0', // 3: Purple
+  '#00bcd4', // 4: Cyan
+  '#ff5722', // 5: Deep Coral / Red-Orange
+  '#8bc34a', // 6: Light Lime Green
+  '#e91e63', // 7: Magenta / Pink
+  '#009688', // 8: Teal
+  '#ffa726', // 9: Gold / Amber
+  '#673ab7', // 10: Deep Purple
+  '#039be5', // 11: Sky Blue
+  '#cddc39', // 12: Lime
+  '#d81b60', // 13: Ruby / Dark Pink
+  '#26a69a', // 14: Mint
+  '#f57c00', // 15: Tangerine
+  '#3f51b5', // 16: Indigo
+  '#795548', // 17: Warm Brown
+  '#00acc1', // 18: Dark Turquoise
+  '#607d8b', // 19: Slate Grey
+  '#8e24aa', // 20: Dark Orchid
+  '#43a047', // 21: Forest Green
+  '#ffb300', // 22: Yellow Amber
+  '#5e35b1', // 23: Dark Violet
+  '#8d6e63', // 24: Sienna
+  '#78909c', // 25: Steel Grey
+];
 
 @Component({
   selector: 'app-hexagon-plot',
@@ -415,26 +442,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public compareShowMoranI: boolean = true;
   // Categorical scale for cell_type and other non-leiden categorical properties.
   public colorScale = d3.scaleOrdinal<string>(d3.schemeSet2);
-  // Dedicated leiden-cluster palette, visually distinct from colorScale above so it's clear
-  // at a glance whether the map/legend is showing clusters or another categorical property.
-  // Only ever used for the main view's map fill (see HexagonRenderContext.colorScale doc on
-  // the pre-existing main/compare cross-contamination this deliberately doesn't touch) — the
-  // Cluster Information panel's cell-type swatches keep using colorScale above regardless of
-  // the map's current selectedView, since those are always coloring cell_type values.
-  public leidenColorScale = d3.scaleOrdinal<string>(d3.schemeTableau10);
+  public leidenColorScale = d3.scaleOrdinal<string>(LEIDEN_CLUSTER_PALETTE);
   public continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>(d3.schemeSet2);
-  public leidenColorScaleCompare = d3.scaleOrdinal<string>(d3.schemeTableau10);
+  public leidenColorScaleCompare = d3.scaleOrdinal<string>(LEIDEN_CLUSTER_PALETTE);
   // Yellow continuous color palette
   public continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
+  public mainLegendInfo: MapLegendInfo | null = null;
 
   // Comparison
 
   public currentCompareLegendType: 'continuous' | 'categorical' = 'categorical';
   public currentLegendDomainCompare: any[] = [];
+  public compareLegendInfo: MapLegendInfo | null = null;
 
   public tfGraphLoading: boolean = false;
   public tfGraphLoadingCompare: boolean = false;
@@ -543,7 +566,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedDataset = dataset;
         if (dataset) {
           const dsType = dataset?.dataset_type?.toLowerCase();
-          this.currentDataSetSupportsCompare = !(dsType === 'multiome' || dsType === 'xenium');
+          this.currentDataSetSupportsCompare = dsType !== 'xenium';
 
           // Detect if Xenium dataset is selected
           this.isXeniumDatasetSelected = dsType === 'xenium';
@@ -1181,6 +1204,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       try {
         this.currentLegendDomainCompare = [];
         this.currentCompareLegendType = 'categorical';
+        this.compareLegendInfo = null;
         if (this.colorScaleCompare && typeof this.colorScaleCompare.domain === 'function') {
           this.colorScaleCompare.domain([] as any);
         }
@@ -2293,7 +2317,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         });
     } else {
       // categorical scale
-      const domain = [...new Set(valuesRaw.map((v: any) => String(v)))];
+      const rawDomain = [...new Set(valuesRaw.map((v: any) => String(v)))];
+      const domain = this.sortCategoriesMeaningfully(rawDomain);
 
       viewVariablesToUpdate.ordinal.domain(domain);
       viewVariablesToUpdate.setLegendDomain(domain);
@@ -3966,250 +3991,102 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   private renderLegend(containerName: string): void {
     const viewVariablesToUpdate = this.getViewVariablesToUpdate(containerName);
     const svg = viewVariablesToUpdate.svg;
-    // svg now comes from the mainView/compareView @ViewChild ref (see getViewVariablesToUpdate),
-    // so it's typed as possibly undefined if the child hasn't been created yet — matches the
-    // original code's implicit assumption that it's always set by the time this runs.
-    if (!svg) return;
+    if (svg) {
+      svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
+    }
 
-    svg.selectAll(`.${viewVariablesToUpdate.legendContainerName}`).remove();
+    const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
+    const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
+
+    let legendInfo: MapLegendInfo | null = null;
 
     if (viewVariablesToUpdate.getLegendType() === 'continuous') {
-      const [min, max] = viewVariablesToUpdate.getLegendDomain() as number[] || [0, 1];
-      const legendX = 20;
-      const legendY = 20;
-      const width = 240;
-      const height = 24;
-      const fontSize = 18;
-      const padding = 14;
-
-      // Use standard <defs>
-      const defs = svg.select('defs').empty()
-        ? svg.append('defs')
-        : svg.select('defs');
-
-      defs.select(`#${viewVariablesToUpdate.legendGradientName}`).remove();
-
-      const gradient = defs
-        .append('linearGradient')
-        .attr('id', viewVariablesToUpdate.legendGradientName)
-        .attr('x1', '0%')
-        .attr('x2', '100%')
-        .attr('y1', '0%')
-        .attr('y2', '0%');
-
+      const [min, max] = (viewVariablesToUpdate.getLegendDomain() as number[]) || [0, 1];
       const numStops = 10;
+      const stops: string[] = [];
       for (let i = 0; i <= numStops; i++) {
         const t = i / numStops;
         const value = min + t * (max - min);
-        gradient
-          .append('stop')
-          .attr('offset', `${t * 100}%`)
-          .attr('stop-color', viewVariablesToUpdate.continuous(value));
+        stops.push(`${viewVariablesToUpdate.continuous(value)} ${Math.round(t * 100)}%`);
+      }
+      const gradientStops = `linear-gradient(to right, ${stops.join(', ')})`;
+
+      legendInfo = {
+        title: legendTitle,
+        type: 'continuous',
+        minText: (min ?? 0).toFixed(2),
+        maxText: (max ?? 0).toFixed(2),
+        gradientStops,
+      };
+    } else {
+      const rawCategories = [...((viewVariablesToUpdate.getLegendDomain() as string[]) || [])];
+      const categories = this.sortCategoriesMeaningfully(rawCategories);
+      const items = categories.map((cat) => ({
+        label: String(cat),
+        color: viewVariablesToUpdate.ordinal(String(cat)),
+      }));
+
+      legendInfo = {
+        title: legendTitle,
+        type: 'categorical',
+        items,
+      };
+    }
+
+    if (viewVariablesToUpdate.isMainView) {
+      this.mainLegendInfo = legendInfo;
+    } else {
+      this.compareLegendInfo = legendInfo;
+    }
+  }
+
+  /**
+   * Sorts category labels in a human-meaningful order:
+   * 1. Pure numbers are sorted numerically (0, 1, 2, ... 9, 10, 11).
+   * 2. Alphanumeric strings are sorted with natural collation (e.g. "Cluster 2" before "Cluster 10").
+   * 3. Fallback / missing / other categories ("unknown", "other", "nan", "null", "undefined", "n/a", "none", "unassigned")
+   *    are sorted to the end of the list.
+   */
+  public sortCategoriesMeaningfully(categories: string[]): string[] {
+    const isSpecialFallback = (val: string): boolean => {
+      const s = String(val ?? '').trim().toLowerCase();
+      return (
+        s === '' ||
+        s === 'unknown' ||
+        s === 'other' ||
+        s === 'others' ||
+        s === 'nan' ||
+        s === 'null' ||
+        s === 'undefined' ||
+        s === 'n/a' ||
+        s === 'na' ||
+        s === 'none' ||
+        s === 'unassigned'
+      );
+    };
+
+    return [...categories].sort((a, b) => {
+      const aStr = String(a ?? '').trim();
+      const bStr = String(b ?? '').trim();
+
+      const aFallback = isSpecialFallback(aStr);
+      const bFallback = isSpecialFallback(bStr);
+
+      if (aFallback && !bFallback) return 1;
+      if (!aFallback && bFallback) return -1;
+      if (aFallback && bFallback) return aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' });
+
+      const aNum = Number(aStr);
+      const bNum = Number(bStr);
+      const aIsNum = !isNaN(aNum) && aStr !== '';
+      const bIsNum = !isNaN(bNum) && bStr !== '';
+
+      if (aIsNum && bIsNum) {
+        return aNum - bNum;
       }
 
-      const legendG = svg
-        .append('g')
-        .attr('class', viewVariablesToUpdate.legendContainerName)
-        .attr('transform', `translate(${legendX},${legendY})`);
-
-      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
-      // fallback if translation returns empty
-      const legendTitle = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
-
-      // measure sizes
-      const tempSvg = svg.append('g').style('opacity', 0);
-      const titleWidth =
-        tempSvg
-          .append('text')
-          .text(legendTitle)
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .node()
-          ?.getBBox().width || 0;
-
-      const minText = (min ?? 0).toFixed(2);
-      const minWidth =
-        tempSvg
-          .append('text')
-          .text(minText)
-          .style('font-size', `${fontSize - 2}px`)
-          .node()
-          ?.getBBox().width || 0;
-
-      const maxText = (max ?? 0).toFixed(2);
-      const maxWidth =
-        tempSvg
-          .append('text')
-          .text(maxText)
-          .style('font-size', `${fontSize - 2}px`)
-          .node()
-          ?.getBBox().width || 0;
-
-      tempSvg.remove();
-
-      const textHeight = fontSize * 1.2;
-      const contentWidth = Math.max(width, titleWidth, minWidth + maxWidth + 20);
-      const bgWidth = contentWidth + padding * 2;
-      const bgHeight = padding + textHeight + 6 + height + 4 + textHeight + padding;
-
-      legendG
-        .append('rect')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', bgWidth)
-        .attr('height', bgHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.95)')
-        .attr('stroke', '#d0d0d0')
-        .attr('stroke-width', 1.2)
-        .attr('rx', 8)
-        .style('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.08))');
-
-      const titleY = padding + fontSize;
-      legendG
-        .append('text')
-        .attr('x', bgWidth / 2)
-        .attr('y', titleY)
-        .attr('text-anchor', 'middle')
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .style('fill', '#222')
-        .text(legendTitle);
-
-      const barX = (bgWidth - contentWidth) / 2;
-      const barY = titleY + 8;
-      legendG
-        .append('rect')
-        .attr('x', barX)
-        .attr('y', barY)
-        .attr('width', contentWidth)
-        .attr('height', height)
-        .style('fill', `url(#${viewVariablesToUpdate.legendGradientName})`)
-        .attr('stroke', '#ccc')
-        .attr('stroke-width', 1)
-        .attr('rx', 4);
-
-      const labelsY = barY + height + fontSize + 2;
-      // Min label
-      legendG
-        .append('text')
-        .attr('x', barX)
-        .attr('y', labelsY)
-        .attr('text-anchor', 'start')
-        .style('font-size', `${fontSize - 2}px`)
-        .style('fill', '#444')
-        .text(minText);
-
-      // Max label
-      legendG
-        .append('text')
-        .attr('x', barX + contentWidth)
-        .attr('y', labelsY)
-        .attr('text-anchor', 'end')
-        .style('font-size', `${fontSize - 2}px`)
-        .style('fill', '#444')
-        .text(maxText);
-
-    } else {
-      // Categorical legend
-      const categories = viewVariablesToUpdate.getLegendDomain() as string[] || [];
-      categories.sort();
-      const legendX = 20;
-      const legendY = 20;
-      const itemHeight = 32;
-      const rectHeight = 16;
-      const rectWidth = 24;
-      const fontSize = 18;
-      const padding = 14;
-
-      // Measure using svg
-      const tempSvg = svg.append('g').style('opacity', 0);
-      const titleText = this.translationService.translateSync(viewVariablesToUpdate.view);
-      const legendTitleCat = titleText && String(titleText).trim() ? titleText : this.label(viewVariablesToUpdate.view);
-      const titleWidth =
-        tempSvg
-          .append('text')
-          .text(legendTitleCat)
-          .style('font-size', `${fontSize}px`)
-          .style('font-weight', 'bold')
-          .node()
-          ?.getBBox().width || 0;
-
-      const textNodes = tempSvg
-        .selectAll('text')
-        .data(categories)
-        .enter()
-        .append('text')
-        .text((d) => d)
-        .style('font-size', `${fontSize}px`);
-
-      const maxTextWidth = categories.length
-        ? Math.max(...textNodes.nodes().map((node) => (node as SVGGraphicsElement).getBBox().width))
-        : 0;
-      tempSvg.remove();
-
-      const itemWidth = Math.max(160, maxTextWidth + rectWidth + 14, titleWidth);
-      const backgroundWidth = itemWidth + padding * 2;
-      const titleHeight = fontSize * 1.3;
-      const categoryItemsHeight = categories.length * itemHeight;
-      const backgroundHeight = padding + titleHeight + 8 + categoryItemsHeight + padding;
-
-      const legendG = svg
-        .append('g')
-        .attr('class', viewVariablesToUpdate.legendContainerName)
-        .attr('transform', `translate(${legendX},${legendY})`);
-
-      // Background rectangle for categorical legend
-      legendG
-        .append('rect')
-        .attr('x', 0)
-        .attr('y', 0)
-        .attr('width', backgroundWidth)
-        .attr('height', backgroundHeight)
-        .style('fill', 'rgba(255, 255, 255, 0.95)')
-        .attr('stroke', '#d0d0d0')
-        .attr('stroke-width', 1.2)
-        .attr('rx', 8)
-        .style('filter', 'drop-shadow(0 2px 6px rgba(0,0,0,0.08))');
-
-      // Title (categorical)
-      const titleY = padding + fontSize;
-      legendG
-        .append('text')
-        .attr('x', backgroundWidth / 2)
-        .attr('y', titleY)
-        .attr('text-anchor', 'middle')
-        .style('font-size', `${fontSize}px`)
-        .style('font-weight', 'bold')
-        .style('fill', '#222')
-        .text(legendTitleCat);
-
-      const itemsStartY = padding + titleHeight + 8;
-      categories.forEach((cat, i) => {
-        const yPosition = itemsStartY + i * itemHeight;
-        const legendItem = legendG.append('g').attr('transform', `translate(${padding}, ${yPosition})`);
-        const rectY = (itemHeight - rectHeight) / 2;
-        legendItem
-          .append('rect')
-          .attr('x', 0)
-          .attr('y', rectY)
-          .attr('width', rectWidth)
-          .attr('height', rectHeight)
-          .style('fill', viewVariablesToUpdate.ordinal(cat))
-          .attr('stroke', '#333')
-          .attr('stroke-width', 0.5)
-          .attr('rx', 3);
-        const textY = rectY + rectHeight / 2;
-        legendItem
-          .append('text')
-          .attr('x', rectWidth + 10)
-          .attr('y', textY)
-          .attr('dy', '0.35em')
-          .style('font-size', `${fontSize - 2}px`)
-          .style('fill', '#333')
-          .text(cat);
-        legendItem.append('title').text(cat);
-      });
-    }
+      return aStr.localeCompare(bStr, undefined, { numeric: true, sensitivity: 'base' });
+    });
   }
 
   /**

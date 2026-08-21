@@ -8,7 +8,7 @@
     <table class="ftable">
       <thead>
         <tr>
-          <th class="index-col">
+          <th class="index-col" *ngIf="showIndexColumn">
             <div class="th-top">
               <div style="display: flex; align-items: center; flex-direction: column; gap: 2px;">
                 <span
@@ -45,7 +45,7 @@
                   ▼
                 </button>
               </span>
-              <input *ngIf="rows.length && typeof rows[0][col] === 'string'" class="input" [(ngModel)]="filters[col]"
+              <input *ngIf="isSearchableColumn(col)" class="input" [(ngModel)]="filters[col]"
                 placeholder="Type to filter..." />
             </div>
           </th>
@@ -85,7 +85,7 @@
       </tbody> -->
       <tbody>
         <tr *ngFor="let row of pagedRows">
-          <td class="index-col">{{ truncateMiddle(row.index) }}</td>
+          <td class="index-col" *ngIf="showIndexColumn">{{ truncateMiddle(row.index) }}</td>
 
           <td *ngFor="let col of columns" class="other-col">
             {{ displayNumeric(row[col]) }}

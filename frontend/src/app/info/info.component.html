@@ -11,7 +11,7 @@
 
   <!-- Dataset Information Panel -->
   <section *ngIf="selectedDataset" class="card dataset-info">
-    <h2>📊 Current Dataset</h2>
+    <h2>Current Dataset</h2>
     <div class="dataset-details">
       <div class="detail-row">
         <strong>Name:</strong>
@@ -20,6 +20,10 @@
       <div class="detail-row">
         <strong>Type:</strong>
         <span>{{ selectedDataset.dataset_type || 'Visium' }}</span>
+      </div>
+      <div class="detail-row">
+        <strong>Origin:</strong>
+        <span>{{ selectedDataset.type === 'builtin' ? 'Built-in demo dataset' : 'Uploaded' }}</span>
       </div>
       <div class="detail-row">
         <strong>Owner:</strong>
@@ -33,67 +37,124 @@
         <strong>ID:</strong>
         <span class="monospace">{{ selectedDataset.id }}</span>
       </div>
+      <div class="detail-row" *ngIf="selectedDataset.grn_evaluation_name">
+        <strong>GRN Evaluation:</strong>
+        <span>{{ selectedDataset.grn_evaluation_name }}</span>
+      </div>
     </div>
 
-    <!-- Multiome Features -->
-    <div *ngIf="hasMultiomeFeatures()" class="multiome-features">
-      <h3>✨ Multiome Features Available</h3>
-      <ul class="feature-list">
-        <li *ngIf="selectedDataset.use_chromvar" class="feature-item">
-          <span class="badge">✓</span> ChromVAR Motif Activity Analysis
-        </li>
-        <li *ngIf="selectedDataset.use_differential_motif_activity" class="feature-item">
-          <span class="badge">✓</span> Differential Motif Activity
-        </li>
-        <li *ngIf="selectedDataset.use_footprinting" class="feature-item">
-          <span class="badge">✓</span> Footprint Analysis
-        </li>
-        <li *ngIf="selectedDataset.use_moranI" class="feature-item">
-          <span class="badge">✓</span> Moran's I Spatial Autocorrelation
-        </li>
-        <li *ngIf="selectedDataset.use_gearyC" class="feature-item">
-          <span class="badge">✓</span> Geary's C Spatial Autocorrelation
-        </li>
-      </ul>
+    <!-- Full inventory: every analysis and file slot, present or not -->
+    <div class="inventory-controls">
+      <button mat-stroked-button type="button" class="inventory-toggle" (click)="toggleDetails()"
+        [attr.aria-expanded]="detailsExpanded">
+        <mat-icon>{{ detailsExpanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+        {{ detailsExpanded ? 'Hide analyses and files' : 'Show analyses and files' }}
+      </button>
+      <label class="inventory-filter" *ngIf="detailsExpanded">
+        <input type="checkbox" [checked]="hideUnavailable" (change)="toggleHideUnavailable()" />
+        Only show what this dataset has
+      </label>
     </div>
 
-    <!-- Data Files -->
-    <div *ngIf="getMultiomeFiles().length > 0" class="data-files">
-      <h3>📁 Available Data Files</h3>
-      <ul class="file-list">
-        <li *ngFor="let file of getMultiomeFiles()" class="file-item">
-          <button class="link-btn" (click)="downloadFile(file.path)">
-            📥 {{ file.name }}
-          </button>
-          <span class="file-label">{{ file.label }}</span>
-        </li>
-      </ul>
-    </div>
+    <div *ngIf="detailsExpanded" class="inventory">
+      <div class="inventory-section">
+        <h3>Analyses</h3>
+        <ul class="status-list">
+          <li *ngFor="let analysis of getAnalyses()" class="status-row"
+            [class.is-present]="analysis.enabled" [class.is-absent]="!analysis.enabled">
+            <mat-icon class="status-icon">{{ analysis.enabled ? 'check_circle' : 'remove_circle_outline' }}</mat-icon>
+            <span class="status-name">
+              <span class="status-label">{{ analysis.name }}</span>
+              <span class="req-chip" [ngClass]="'req-' + analysis.requirement">{{ analysis.requirement }}</span>
+              <span class="status-note">{{ analysis.note }}</span>
+            </span>
+            <span class="status-value">{{ analysis.enabled ? 'enabled' : 'not run' }}</span>
+          </li>
+        </ul>
+      </div>
 
-    <!-- Differential Motif Activity Files -->
-    <div *ngIf="getDifferentialMotifActivityFiles().length > 0" class="diff-motif-files">
-      <h3>🔍 Differential Motif Activity Results</h3>
-      <ul class="file-list">
-        <li *ngFor="let file of getDifferentialMotifActivityFiles()" class="file-item">
-          <a [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">
-            📥 {{ file.comparison }}
-          </a>
-          <span class="file-label">Comparison results</span>
-        </li>
-      </ul>
-    </div>
+      <div class="inventory-section" *ngFor="let group of getFileGroups()">
+        <h3>{{ group.group }}</h3>
+        <ul class="status-list">
+          <li *ngFor="let file of group.files" class="status-row"
+            [class.is-present]="file.path" [class.is-absent]="!file.path">
+            <mat-icon class="status-icon">{{ file.path ? 'check_circle' : 'remove_circle_outline' }}</mat-icon>
+            <span class="status-name">
+              <span class="status-label">{{ file.name }}</span>
+              <code class="status-key">{{ file.key }}</code>
+              <span class="req-chip" [ngClass]="'req-' + file.requirement">{{ file.requirement }}</span>
+              <span class="status-note">{{ file.note }}</span>
+            </span>
+            <button *ngIf="file.downloadable" class="link-btn" type="button"
+              (click)="downloadFile(file.path!)">Download</button>
+            <span *ngIf="file.path && !file.downloadable" class="status-value">served via API</span>
+            <span *ngIf="!file.path" class="status-value">missing</span>
+          </li>
+        </ul>
+      </div>
 
-    <!-- Footprint PDFs -->
-    <div *ngIf="getFootprintPDFs().length > 0" class="footprint-files">
-      <h3>📊 Footprint Profiles</h3>
-      <ul class="file-list">
-        <li *ngFor="let file of getFootprintPDFs()" class="file-item">
-          <a [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">
-            📄 {{ file.motifId }}
-          </a>
-          <span class="file-label">Footprint PDF</span>
-        </li>
-      </ul>
+      <div class="inventory-section inventory-spec" *ngFor="let group of getAnnDataSpec()">
+        <h3>AnnData &mdash; {{ group.group }}</h3>
+        <ul class="status-list">
+          <li *ngFor="let entry of group.entries" class="status-row is-spec">
+            <mat-icon class="status-icon">data_object</mat-icon>
+            <span class="status-name">
+              <code class="status-key">{{ entry.key }}</code>
+              <span class="req-chip" [ngClass]="'req-' + entry.requirement">{{ entry.requirement }}</span>
+              <span class="status-note">{{ entry.note }}</span>
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="inventory-section inventory-spec" *ngFor="let group of getGeoJsonSpec()">
+        <h3>GeoJSON &mdash; {{ group.group }}</h3>
+        <ul class="status-list">
+          <li *ngFor="let entry of group.entries" class="status-row"
+            [class.is-present]="entry.present === true" [class.is-absent]="entry.present === false"
+            [class.is-spec]="entry.present === null">
+            <mat-icon class="status-icon">{{
+              entry.present === true ? 'check_circle' :
+              entry.present === false ? 'remove_circle_outline' : 'data_object'
+            }}</mat-icon>
+            <span class="status-name">
+              <code class="status-key">{{ entry.key }}</code>
+              <span class="req-chip" [ngClass]="'req-' + entry.requirement">{{ entry.requirement }}</span>
+              <span class="status-note">{{ entry.note }}</span>
+            </span>
+            <span class="status-value" *ngIf="entry.present === false">absent</span>
+            <span class="status-value" *ngIf="entry.present === null">load the map to check</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="inventory-section">
+        <h3>Differential motif activity results</h3>
+        <ul class="status-list" *ngIf="getDifferentialMotifActivityFiles().length > 0; else noDiffMotif">
+          <li *ngFor="let file of getDifferentialMotifActivityFiles()" class="status-row is-present">
+            <mat-icon class="status-icon">check_circle</mat-icon>
+            <span class="status-name">{{ file.comparison }}</span>
+            <a class="link-btn" [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">Download</a>
+          </li>
+        </ul>
+        <ng-template #noDiffMotif>
+          <p class="status-empty">No comparisons available for this dataset.</p>
+        </ng-template>
+      </div>
+
+      <div class="inventory-section">
+        <h3>Footprint profiles</h3>
+        <ul class="status-list" *ngIf="getFootprintPDFs().length > 0; else noFootprints">
+          <li *ngFor="let file of getFootprintPDFs()" class="status-row is-present">
+            <mat-icon class="status-icon">check_circle</mat-icon>
+            <span class="status-name">{{ file.motifId }}</span>
+            <a class="link-btn" [href]="getDownloadLink(file.path)" target="_blank" rel="noopener">Download</a>
+          </li>
+        </ul>
+        <ng-template #noFootprints>
+          <p class="status-empty">No footprint profiles available for this dataset.</p>
+        </ng-template>
+      </div>
     </div>
   </section>
 
@@ -164,7 +225,14 @@
     </ul>
 
     <h3>Cluster relationship scores</h3>
-    <p>'cluster' is the column in <code>anndata.obs</code> choosen as cluster to calculate the score</p>
+    <p>
+      'cluster' is the column in <code>anndata.obs</code> chosen as cluster to calculate the score.
+      Note that although these scores can be <em>computed</em> under any cluster column, only
+      <code>leiden</code> is ever <em>read back</em> — the GeoJSON converter looks up
+      <code>leiden_centrality_scores</code>, <code>leiden_co_occurrence</code> and
+      <code>leiden_nhood_enrichment</code> by those exact names, so results stored under a different
+      cluster key will not appear in the app. Leiden labels must also be castable to integers.
+    </p>
     <ul>
       <li><strong>Centrality scores</strong>: stored in <code>anndata.uns["'cluster'_centrality_scores"]</code> as
         DataFrame with columns:
@@ -177,7 +245,8 @@
       <li><strong>Co-occurrence probability</strong>: stored in <code>anndata.uns["'cluster'_co_occurrence"]</code> as
         dictionary with entries:
         <ul>
-          <li><code>intervals</code>: interval boundaries, array of shape <code>(n_intervals - 1,)</code></li>
+          <li><code>interval</code> (singular): interval boundaries, array of shape
+            <code>(n_intervals - 1,)</code></li>
           <li><code>occ</code>: 3D array of shape <code>(n_clusters, n_clusters, n_intervals)</code> (Make sure to
             select the right <em>num_intervals</em> in Upload form)</li>
         </ul>
@@ -185,8 +254,10 @@
       <li><strong>Neighborhood enrichment</strong>: stored in <code>anndata.uns["'cluster'_nhood_enrichment"]</code>
         as dictionary with entries:
         <ul>
-          <li><code>counts</code>: array of shape <code>(n_clust, n_clust)</code></li>
-          <li><code>zscore</code>: array of shape <code>(n_clust, nclust)</code></li>
+          <li><code>count</code> (singular): array of shape <code>(n_clust, n_clust)</code>. Stored by Squidpy
+            but not read by the app.</li>
+          <li><code>zscore</code>: array of shape <code>(n_clust, n_clust)</code>. This is the entry the
+            Cluster Information panel plots.</li>
         </ul>
       </li>
     </ul>
@@ -198,6 +269,9 @@
         <ul>
           <li><code>regulator</code>: <code>[gene1, gene2, ..., geneN]</code></li>
         </ul>
+        The two do not use the same identifier type for the regulator keys: GENIE3 gene sets are
+        keyed by gene symbol (e.g. <code>CEBPA</code>), whereas SPONGE gene sets are keyed by
+        Ensembl gene ID (e.g. <code>ENSG00000034239</code>).
       </li>
       <li><strong>AUCell</strong>: stored in <code>anndata.obsm["aucell_scores_sponge|genie3"]</code> as DataFrames with
         regulators as columns.</li>

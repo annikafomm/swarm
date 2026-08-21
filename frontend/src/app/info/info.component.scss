@@ -326,3 +326,183 @@ code {
     margin: 0;
   }
 }
+
+/* --- Per-dataset inventory (analyses + file slots, present or missing) --- */
+.inventory-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.inventory-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #644d1e !important;
+  border-color: #e0d4b8 !important;
+  background: #fff !important;
+}
+
+.inventory-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #644d1e;
+  cursor: pointer;
+}
+
+.inventory {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inventory-section {
+  background: #fff;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #f0e6d2;
+
+  h3 {
+    margin: 0 0 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #644d1e;
+  }
+}
+
+.status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 4px;
+  border-bottom: 1px solid #f7f2e7;
+  font-size: 0.9rem;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  .status-icon {
+    flex: 0 0 auto;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
+
+  .status-name {
+    flex: 1 1 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    color: #2c3e50;
+  }
+
+  .status-key {
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 0.72rem;
+    color: #8a7a5c;
+    background: #fffaee;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .status-value {
+    flex: 0 0 auto;
+    font-size: 0.8rem;
+    color: #8a7a5c;
+  }
+
+  /* Present vs missing is carried by icon colour as well as the trailing label,
+     so the distinction does not rely on colour alone. */
+  &.is-present .status-icon {
+    color: #4caf50;
+  }
+
+  &.is-absent {
+    .status-icon,
+    .status-name {
+      color: #b0a894;
+    }
+  }
+}
+
+.status-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #8a7a5c;
+}
+
+/* Requirement level chips + per-row explanatory notes */
+.status-row {
+  align-items: flex-start;
+
+  .status-name {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .status-label {
+    font-weight: 500;
+  }
+
+  .status-note {
+    flex: 1 1 100%;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: #8a7a5c;
+  }
+
+  &.is-spec .status-icon {
+    color: #b9a97f;
+  }
+}
+
+.req-chip {
+  display: inline-block;
+  font-size: 0.66rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+
+  &.req-required {
+    color: #8a4b16;
+    background: #fdece0;
+    border-color: #f3cdb4;
+  }
+
+  &.req-conditional {
+    color: #6b5a1e;
+    background: #fdf6dc;
+    border-color: #ecdca6;
+  }
+
+  &.req-optional {
+    color: #5a6472;
+    background: #f2f4f7;
+    border-color: #dde1e7;
+  }
+}
+
+/* The AnnData/GeoJSON spec blocks are reference material rather than this dataset's
+   own inventory, so they sit slightly recessed from the file/analysis cards above. */
+.inventory-spec {
+  background: #fffdf8;
+}

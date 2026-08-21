@@ -1,9 +1,56 @@
 <div class="map-container-wrapper" [id]="isCompare ? 'compare-map-container' : 'main-map-container'">
   <div #hexbinContainer [id]="isCompare ? 'hexbin-compare' : 'hexbin'"></div>
+
+  <!-- HTML Draggable, Resizable & Collapsible Legend Overlay -->
+  <div *ngIf="legendInfo" class="map-legend-overlay" [class.compare-legend]="isCompare"
+    [class.collapsed]="isLegendCollapsed" cdkDrag cdkDragBoundary=".map-container-wrapper"
+    (wheel)="$event.stopPropagation()" (mousedown)="$event.stopPropagation()">
+    <div class="legend-header" cdkDragHandle (dblclick)="toggleLegendCollapse($event)">
+      <mat-icon class="drag-handle-icon" matTooltip="Drag to move">drag_indicator</mat-icon>
+      <span class="legend-title" [title]="legendInfo.title">{{ legendInfo.title }}</span>
+      <button type="button" class="legend-toggle-btn" (click)="toggleLegendCollapse($event)"
+        [matTooltip]="isLegendCollapsed ? 'Expand legend' : 'Collapse legend'">
+        <mat-icon>{{ isLegendCollapsed ? 'expand_more' : 'expand_less' }}</mat-icon>
+      </button>
+    </div>
+
+    <!-- Legend Body (collapsed on toggle) -->
+    <div class="legend-body" *ngIf="!isLegendCollapsed">
+      <!-- Continuous Scale -->
+      <div *ngIf="legendInfo.type === 'continuous'" class="legend-continuous-container">
+        <div class="gradient-bar" [style.background]="legendInfo.gradientStops"></div>
+        <div class="gradient-labels">
+          <span>{{ legendInfo.minText }}</span>
+          <span>{{ legendInfo.maxText }}</span>
+        </div>
+      </div>
+
+      <!-- Categorical Scale (Scrollable & Resizable) -->
+      <div *ngIf="legendInfo.type === 'categorical'" class="legend-categorical-container">
+        <div *ngFor="let item of legendInfo.items" class="legend-category-item" [title]="item.label">
+          <span class="category-color-swatch" [style.background-color]="item.color"></span>
+          <span class="category-label">{{ item.label }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div *ngIf="isLoadingMap" class="map-loading-overlay">
     <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary"
       [attr.aria-label]="isCompare ? 'Loading compare hexagon plot' : 'Loading hexagon plot'">
     </mat-progress-spinner>
+  </div>
+
+  <!-- Hover Value Tooltip Overlay -->
+  <div *ngIf="hoveredHexInfo" class="map-hover-tooltip"
+    [style.left.px]="hoverTooltipPos.x" [style.top.px]="hoverTooltipPos.y">
+    <div class="tooltip-main-row">
+      <span class="tooltip-prop">{{ hoveredHexInfo.propertyName }}:</span>
+      <span class="tooltip-val">{{ hoveredHexInfo.value }}</span>
+    </div>
+    <div class="tooltip-sub-row" *ngIf="hoveredHexInfo.cluster !== undefined && selectedView !== 'leiden'">
+      <span class="tooltip-sub">Cluster {{ hoveredHexInfo.cluster }}</span>
+    </div>
   </div>
 </div>
 

@@ -154,12 +154,24 @@ const EXACT_FIELD_CATEGORY: Record<string, string> = {
 
   array_row: 'location',
   array_col: 'location',
+  spatial_x: 'location',
+  spatial_y: 'location',
+  x_original: 'location',
+  y_original: 'location',
+  _x: 'location',
+  _y: 'location',
+  x: 'location',
+  y: 'location',
   in_tissue: 'location',
   observation_joinid: 'location',
 };
 
 const FIELD_INFO: Record<string, string> = {
   leiden: 'Cluster ID assigned by the Leiden community-detection algorithm on the cell/spot neighborhood graph. Cells in the same cluster share similar expression profiles.',
+  leiden_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Spatial graph network centrality metrics (degree, closeness, and clustering coefficient) evaluating the spatial organization and connectivity of Leiden clusters.',
+  degree_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Fraction of spatial neighborhood connections linked to cells in this cluster. Measures overall boundary surface and spatial graph connectivity.',
+  average_clustering: 'Computed with Squidpy (sq.gr.centrality_scores): Average clustering coefficient of member cells, indicating how interconnected each cell\'s spatial neighbors are.',
+  closeness_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Reciprocal of shortest spatial graph paths from this cluster to all other spots in the tissue. Higher values indicate a central spatial position.',
   cell_type: "This cell's type label — either predicted computationally or taken from the dataset's existing annotation.",
   annotation_jc: 'A curated cell-type/cluster annotation supplied with this dataset.',
   annotation_final: 'The final, curated cell-type annotation for this cell after review.',
@@ -214,6 +226,14 @@ const FIELD_INFO: Record<string, string> = {
 
   array_row: 'Row coordinate of this spot on the spatial capture array grid (e.g. a Visium slide), distinct from its physical pixel position.',
   array_col: 'Column coordinate of this spot on the spatial capture array grid (e.g. a Visium slide), distinct from its physical pixel position.',
+  spatial_x: 'Spatial X coordinate of this cell/spot in the tissue coordinate frame.',
+  spatial_y: 'Spatial Y coordinate of this cell/spot in the tissue coordinate frame.',
+  x_original: 'Original spatial X coordinate before registration or transformation.',
+  y_original: 'Original spatial Y coordinate before registration or transformation.',
+  _x: 'X coordinate or grid position of this cell/spot.',
+  _y: 'Y coordinate or grid position of this cell/spot.',
+  x: 'X coordinate of this cell/spot.',
+  y: 'Y coordinate of this cell/spot.',
   in_tissue: 'Whether this spot was annotated as lying within the tissue section (1) or in background/off-tissue area (0).',
   sample: 'Identifier for the tissue sample this cell was collected from.',
   sample_id: 'Identifier for the tissue sample this cell was collected from.',
@@ -277,13 +297,15 @@ const SCORE_INFO: Record<string, string> = {
   pathway_activity_mlm:
     'decoupleR Multivariate Linear Model (MLM) score estimating signaling pathway activation from PROGENy responsive footprint genes.',
 
-  // Leiden Clustering & Spatial Graph Metrics
+  // Leiden Clustering & Spatial Graph Metrics (Squidpy)
   degree_centrality:
-    'Fraction of all spatial Delaunay graph connections linked to spots in this cluster. Measures overall boundary surface and graph connectivity.',
+    'Computed with Squidpy (sq.gr.centrality_scores): Fraction of all spatial neighborhood connections linked to spots in this cluster. Measures overall boundary surface and spatial graph connectivity.',
   average_clustering:
-    'Average clustering coefficient of member spots, indicating how interconnected each spot\'s spatial neighbors are.',
+    'Computed with Squidpy (sq.gr.centrality_scores): Average clustering coefficient of member spots, indicating how interconnected each spot\'s spatial neighbors are in the neighborhood graph.',
   closeness_centrality:
-    'Reciprocal sum of shortest spatial graph paths from this cluster to all other spots in the tissue. Higher values indicate a central spatial position.',
+    'Computed with Squidpy (sq.gr.centrality_scores): Reciprocal sum of shortest spatial graph paths from this cluster to all other spots in the tissue. Higher values indicate a central spatial position.',
+  leiden_centrality:
+    'Computed with Squidpy (sq.gr.centrality_scores): Graph-theoretic network centrality metrics (degree, closeness, and clustering coefficient) computed on the spatial neighborhood graph for each Leiden cluster.',
   nhood_enrichment:
     'Squidpy spatial permutation test assessing whether spots of cluster A neighbor spots of cluster B significantly more (or less) frequently than expected by random chance (z-score).',
   co_occurrence:
@@ -339,6 +361,10 @@ const COLUMN_INFO: Record<string, string> = {
   cor: 'Pearson correlation coefficient between expression profiles.',
   pcor: 'Partial correlation coefficient controlling for third-variable confounding.',
   degree: 'Number of direct interaction partners in the inferred regulatory network.',
+  degree_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Fraction of spatial neighborhood connections linked to spots in this cluster.',
+  average_clustering: 'Computed with Squidpy (sq.gr.centrality_scores): Average clustering coefficient of member spots in the spatial graph.',
+  closeness_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Reciprocal sum of shortest spatial graph paths from this cluster to all other spots.',
+  leiden_centrality: 'Computed with Squidpy (sq.gr.centrality_scores): Spatial graph network centrality metrics for Leiden clusters.',
   eigenvector: 'Eigenvector centrality measuring the influence of a node based on connections to other highly connected nodes.',
   betweenness: 'Betweenness centrality measuring how often a gene lies on the shortest path between other genes.',
   page_rank: 'PageRank score measuring network prominence and information flow.',

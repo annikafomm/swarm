@@ -9,9 +9,32 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormField, MatLabel } from '@angular/material/form-field';
 import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
 import { MatSelect } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { TranslatePipe } from '../translate.pipe';
 import { Dataset } from '../datasets.service';
 import { CellFeature } from './cell-feature.types';
+
+export interface HexHoverInfo {
+  barcode: string;
+  propertyName: string;
+  value: string;
+  cluster?: string | number;
+}
+
+export interface LegendCategoryItem {
+  label: string;
+  color: string;
+}
+
+export interface MapLegendInfo {
+  title: string;
+  type: 'continuous' | 'categorical';
+  minText?: string;
+  maxText?: string;
+  gradientStops?: string;
+  items?: LegendCategoryItem[];
+}
 
 export interface HexagonRenderContext {
   features: CellFeature[];
@@ -48,7 +71,7 @@ export interface HexagonRenderContext {
   standalone: true,
   imports: [
     CommonModule, FormsModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule,
-    MatFormField, MatLabel, MatOptgroup, MatOption, MatSelect, TranslatePipe,
+    MatFormField, MatLabel, MatOptgroup, MatOption, MatSelect, MatTooltipModule, DragDropModule, TranslatePipe,
   ],
   templateUrl: './hexagon-view.component.html',
   styleUrls: ['./hexagon-view.component.scss'],
@@ -58,7 +81,18 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   /** This instance's own currently-selected cell, for the mouseLeave highlight-suppression check. */
   @Input() selectedCell: CellFeature | null = null;
   @Input() selectedView = '';
+  @Input() legendInfo: MapLegendInfo | null = null;
+  public isLegendCollapsed = false;
   public activeClusterId: number | null = null;
+  public hoveredHexInfo: HexHoverInfo | null = null;
+  public hoverTooltipPos = { x: 0, y: 0 };
+
+  public toggleLegendCollapse(event?: MouseEvent): void {
+    if (event) {
+      event.stopPropagation();
+    }
+    this.isLegendCollapsed = !this.isLegendCollapsed;
+  }
 
   // ======= Toolbar (color-by / dataset selectors) =======
   @Input() isInitializing = false;
@@ -174,6 +208,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
         [0, 0],
         [width, height],
       ])
+      .filter((event) => {
+        // Standard D3 zoom filter: allow wheel and primary mouse button drags
+        return (!event.ctrlKey || event.type === 'wheel') && !event.button;
+      })
       .on('zoom', (event) => {
         this.g.attr('transform', event.transform.toString());
         this.currentTransform = event.transform;
@@ -240,6 +278,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
         .attr('fill', getFill)
         .style('opacity', 0.8)
         .on('mouseover', (event, d) => this.mouseOver(event, d))
+        .on('mousemove', (event) => this.mouseMove(event))
         .on('mouseleave', (event, d) => this.mouseLeave(event, d))
         .on('click', (event, d) => this.cellClicked.emit({ event, cell: d }));
     }
@@ -278,7 +317,8 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
    * Reapplies highlight borders consistently:
    * - Selected cell: thick black border (3px)
    * - Cluster members (Leiden view ONLY): thin black border (1.4px)
-   * - Other cells: transparent border (0.6 opacity if Leiden cluster active, 0.8 natural opacity otherwise)
+   * - Other cells: transparent border
+   * Highlighting is purely border-based without dimming cell colors.
    */
   public updateSelectionHighlight(): void {
     if (!this.g) return;
@@ -296,17 +336,17 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
           el.interrupt()
             .attr('stroke', '#000')
             .attr('stroke-width', '3px')
-            .style('opacity', 1.0);
+            .style('opacity', 0.85);
         } else if (isClusterMember) {
           el.interrupt()
             .attr('stroke', '#000')
             .attr('stroke-width', '1.4px')
-            .style('opacity', 1.0);
+            .style('opacity', 0.8);
         } else {
           el.interrupt()
             .attr('stroke', 'transparent')
             .attr('stroke-width', '1px')
-            .style('opacity', activeCluster !== null ? 0.6 : 0.8);
+            .style('opacity', 0.8);
         }
       });
   }
@@ -325,6 +365,28 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     return NaN;
   }
 
+  private formatHoverValue(v: unknown): string {
+    if (v === null || v === undefined || v === '') return 'N/A';
+    if (typeof v === 'number') {
+      return Number.isInteger(v) ? String(v) : v.toFixed(3);
+    }
+    const str = String(v).trim();
+    const num = parseFloat(str);
+    if (!isNaN(num) && str === String(num)) {
+      return Number.isInteger(num) ? String(num) : num.toFixed(3);
+    }
+    return str;
+  }
+
+  private updateTooltipPos(event: MouseEvent): void {
+    if (!this.hexbinContainerRef?.nativeElement) return;
+    const rect = this.hexbinContainerRef.nativeElement.getBoundingClientRect();
+    this.hoverTooltipPos = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top - 12,
+    };
+  }
+
   private mouseOver(event: MouseEvent, d: CellFeature): void {
     const targetEl = (event.currentTarget || event.target) as SVGElement;
     if (!targetEl) return;
@@ -339,12 +401,34 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
     const strokeWidth = isSelectedCell ? '3px' : (isClusterMember ? '2px' : '1.2px');
 
-    el.style('opacity', 0.9)
+    el.style('opacity', 0.95)
       .attr('stroke', '#000')
       .attr('stroke-width', strokeWidth);
+
+    const rawValue = this.lastRenderCtx?.leidenCentralityProps.includes(this.selectedView)
+      ? this.lastRenderCtx.leidenClusterAnnotations?.[String(d.properties?.leiden)]?.centrality?.[this.selectedView]
+      : d.properties?.[this.selectedView];
+
+    const propLabel = this.legendInfo?.title || this.selectedView || 'Value';
+
+    this.hoveredHexInfo = {
+      barcode: d.properties?.barcode || '',
+      propertyName: propLabel,
+      value: this.formatHoverValue(rawValue),
+      cluster: d.properties?.leiden !== undefined ? d.properties.leiden : undefined,
+    };
+
+    this.updateTooltipPos(event);
+  }
+
+  private mouseMove(event: MouseEvent): void {
+    if (this.hoveredHexInfo) {
+      this.updateTooltipPos(event);
+    }
   }
 
   private mouseLeave(event: MouseEvent, d: CellFeature): void {
+    this.hoveredHexInfo = null;
     const targetEl = (event.currentTarget || event.target) as SVGElement;
     if (!targetEl) return;
     const el = d3.select(targetEl);
@@ -359,15 +443,15 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     if (isSelectedCell) {
       el.attr('stroke', '#000')
         .attr('stroke-width', '3px')
-        .style('opacity', 1.0);
+        .style('opacity', 0.85);
     } else if (isClusterMember) {
       el.attr('stroke', '#000')
         .attr('stroke-width', '1.4px')
-        .style('opacity', 1.0);
+        .style('opacity', 0.8);
     } else {
       el.attr('stroke', 'transparent')
         .attr('stroke-width', '1px')
-        .style('opacity', activeCluster !== null ? 0.6 : 0.8);
+        .style('opacity', 0.8);
     }
   }
 
@@ -546,6 +630,9 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
       .attr('stroke', '#fff')
       .attr('stroke-width', 0.4)
       .style('opacity', 1)
+      .on('mouseover', (event, d) => this.mouseOver(event, d))
+      .on('mousemove', (event) => this.mouseMove(event))
+      .on('mouseleave', (event, d) => this.mouseLeave(event, d))
       .on('click', (event, d) => this.cellClicked.emit({ event, cell: d }));
   }
 }

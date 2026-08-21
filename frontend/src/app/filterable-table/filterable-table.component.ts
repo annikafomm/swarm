@@ -32,6 +32,24 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   @Input() isLoading: boolean = false;
   @Input() emptyMessage: string = '';
   @Input() isCompare: boolean = false;
+  /** Hides the auto-generated "Index" column/filter — for tables where the row index is a
+   * meaningless post-merge row number rather than a searchable identifier (e.g. the ChromVAR
+   * correlation tables, which already expose TF/motif_id as their own filterable columns). */
+  @Input() showIndexColumn: boolean = true;
+  /**
+   * Filter/sort state, as plain objects rather than primitives specifically so two tables that
+   * want to stay in sync (e.g. the ChromVAR Moran's I / Geary's C toggle, which swaps which
+   * table is in the DOM via *ngIf rather than keeping both alive) can be handed the *same*
+   * object reference from their parent — mutations from either table are then visible to both,
+   * with no @Output()/two-way-binding plumbing needed. Tables that don't bind these get their
+   * own private, independent object per the field initializer below (unchanged default behavior).
+   */
+  @Input() filters: { [col: string]: string } = {};
+  @Input() sortState: { column: string | null; asc: boolean } = { column: null, asc: true };
+  /** False for tables sharing state across a data swap that's really "the same rows, viewed
+   * differently" (see above) — everyone else keeps the default (reset filters/sort whenever a
+   * genuinely new dataset arrives). */
+  @Input() resetStateOnDataChange: boolean = true;
   @Output() featuresUpdated = new EventEmitter<void>();
   @Output() geneSelected = new EventEmitter<{ gene: string; action: string }>();
   @Output() geneSelectedCompare = new EventEmitter<{ gene: string; action: string }>();
@@ -45,9 +63,6 @@ export class FilterableTableComponent implements OnInit, OnChanges {
 
   columns: string[] = [];
   rows: any[] = [];
-  filters: { [col: string]: string } = {};
-  sortColumn: string | null = null;
-  sortAsc: boolean = true;
   availableActionColumns: string[] = [];
   private readonly virtualActionColumns = new Set<string>([
     'gene_expression',
@@ -79,9 +94,11 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     // Rebuild table whenever the provided data or features change
     if (changes['data'] || changes['features']) {
       this.currentPage = 1;
-      this.sortColumn = null;
-      this.sortAsc = true;
-      this.filters = {};
+      if (this.resetStateOnDataChange) {
+        this.sortState.column = null;
+        this.sortState.asc = true;
+        this.filters = {};
+      }
       this.prepareTable();
     }
   }
@@ -178,6 +195,15 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     });
   }
 
+  /**
+   * Whether `col` should get a text-filter input. Checks every row, not just the first — a
+   * column that's a string everywhere except a null/undefined value in row 0 (e.g. an
+   * unannotated first entry) would otherwise silently lose its search box for all rows.
+   */
+  isSearchableColumn(col: string): boolean {
+    return this.rows.some((row) => typeof row[col] === 'string');
+  }
+
   hasData(): boolean {
     return this.rows && this.rows.length > 0;
   }
@@ -194,6 +220,9 @@ export class FilterableTableComponent implements OnInit, OnChanges {
 
   displayNumeric(value: any): string {
     if (typeof value === 'number') {
+      if (Number.isNaN(value)) {
+        return 'N/A';
+      }
       if (value === 0) {
         return '0.0';
       }
@@ -249,16 +278,17 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     }
 
     // sorting
-    if (this.sortColumn) {
-      const sortKey = this.sortColumn as string;
+    if (this.sortState.column) {
+      const sortKey = this.sortState.column;
+      const asc = this.sortState.asc;
       result.sort((a, b) => {
         const valA = a[sortKey];
         const valB = b[sortKey];
 
         if (typeof valA === 'number' && typeof valB === 'number') {
-          return this.sortAsc ? valA - valB : valB - valA;
+          return asc ? valA - valB : valB - valA;
         }
-        return this.sortAsc
+        return asc
           ? String(valA).localeCompare(String(valB))
           : String(valB).localeCompare(String(valA));
       });
@@ -284,17 +314,17 @@ export class FilterableTableComponent implements OnInit, OnChanges {
   }
 
   toggleSort(col: string) {
-    if (this.sortColumn === col) {
-      this.sortAsc = !this.sortAsc;
+    if (this.sortState.column === col) {
+      this.sortState.asc = !this.sortState.asc;
     } else {
-      this.sortColumn = col;
-      this.sortAsc = true;
+      this.sortState.column = col;
+      this.sortState.asc = true;
     }
   }
 
   setSort(col: string, ascending: boolean) {
-    this.sortColumn = col;
-    this.sortAsc = ascending;
+    this.sortState.column = col;
+    this.sortState.asc = ascending;
   }
 
   // async fetchAndUpdate(columnName: string, index: string) {
