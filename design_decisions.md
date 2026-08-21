@@ -1,5 +1,90 @@
 # SWARM Design Decisions & UX Options
 
+## Core Philosophy: Regulatory-First Architecture
+
+**Problem**: The tool currently has 14 flat, unstructured tabs. Half of them are disabled or empty on datasets lacking ATAC or SPONGE, and generic features (QC, cell info, single-gene expression) overshadow SWARM's core novelty.
+
+**Guiding Principle**: SWARM's primary scientific novelty is **mapping, scoring, and validating inferred gene regulatory networks (GENIE3), ceRNA crosstalk (SPONGE), and chromatin states (ATAC) on spatial coordinates**. Standard spatial tasks (cell typing, QC, single-gene inspection) serve as **supporting context**, not the hero experience.
+
+---
+
+## The 4 Regulatory Pillar Tabs + Context Drawer
+
+Instead of 14 flat tool tabs, the interface is organized into **4 core regulatory question tabs** with a persistent **Context & Inspector** drawer:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│  [ 🌲 1. Transcriptional GRNs ]  [ 🧽 2. ceRNA Networks ]  [ 🔄 3. Niche & Signaling ]  [ 🔓 4. Epigenetic Validation ]  │
+└────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 🌲 Tab 1: Transcriptional GRNs (GENIE3 & Regulons)
+* **Goal**: Explore which transcription factors drive spatial gene programs and discover their downstream targets.
+* **Contents**:
+  - **Regulon Leaderboard**: Ranked TFs $\to$ 1-click project AUCell / ULM regulon score onto the spatial map.
+  - **Target Gene Explorer**: Edge-weighted target gene list ($w_{ij}$) for the active TF.
+  - **Cell Composition $\times$ TF Activity**: Sender cell type abundance $\to$ receiver TF activation.
+* **Selection & Controls**: Score metric (`AUCell`, `Moran's I`, `Geary's C`, `ULM`), TF search, min regulon size filter, color scale palette & percentile clipping.
+
+### 🧽 Tab 2: Post-Transcriptional ceRNA Networks (SPONGE)
+* **Goal**: Explore microRNA-mediated competitive endogenous RNA crosstalk and post-transcriptional spatial modules.
+* **Contents**:
+  - **Spatial ceRNA Module Activity**: spongeffects scores (`AUCell`, `GSVA`, `ssGSEA`) on spatial spots.
+  - **ceRNA Interaction Matrix**: Significant gene-gene pairs ($mscor$, partial correlation, $p$-adj).
+  - **Hub ceRNAs**: Most central sponging RNAs across the tissue.
+* **Selection & Controls**: Scoring algorithm, $mscor$ cutoff slider, FDR $p$-value threshold.
+
+### 🔄 Tab 3: Spatial Signaling & Niches (LIANA+)
+* **Goal**: Identify intercellular communication that triggers intracellular regulatory programs.
+* **Contents**:
+  - **Spatial Ligand-Receptor Table**: Ranked by Cosine Similarity, $p$-value, categories (e.g. *High L - High R*), global LR Moran's I.
+  - **Spatial Co-occurrence & Neighborhoods (Squidpy)**: Co-occurrence probability curves over distance radius $r$, neighborhood enrichment heatmap.
+* **Selection & Controls**: Source $\to$ Target cell type filters, category filter, distance scale slider ($r$).
+
+### 🔓 Tab 4: Epigenetic & Benchmark Validation (Multiome ATAC)
+* **Goal**: Validate whether inferred GRNs reflect real, physical DNA-binding and accessible chromatin.
+* **Contents**:
+  - **chromVAR Motif Accessibility**: Spatial deviation z-scores (JASPAR 2024 CORE) + Moran's I / Geary's C.
+  - **Differential Motif Activity**: Cluster-specific enriched motifs ($\Delta\text{accessibility}$, FDR).
+  - **Genomic Footprinting**: Interactive Tn5 transposase cleavage profile curves showing TF binding protection.
+  - **GRN Benchmark & Evaluation**: Precision-Recall curves & confusion matrix evaluating inferred GENIE3 edges vs ATAC peak intersections (with On-Demand evaluation trigger).
+* **Selection & Controls**: TF / Motif search, cluster comparison dropdown, promoter window ($\pm 2\,\text{kb}, \pm 10\,\text{kb}$).
+
+---
+
+## 🪟 Supporting Context: Docked Inspector & Quick-Checker
+
+To avoid cluttering the regulatory tabs, non-regulatory inspection lives in a persistent, collapsible **Context Drawer**:
+- **Cell Inspector**: Live QC metrics (counts, genes, mt%), cell type / Leiden ID, live view value.
+- **Cluster Inspector**: Cell type composition (Tangram deconvolution), cluster marker preview, centrality scores.
+- **Gene Expression & DGEA Quick-Checker**: Instant single-gene search & differential expression table/volcano plot without losing the active regulatory tab.
+
+---
+
+## 🔗 Cross-Tab Interconnections
+
+1. **Tab 1 $\longleftrightarrow$ Tab 4 (The Validation Loop)**:
+   - Inspecting TF *FOXM1* in Tab 1 $\to$ Click *"Validate in ATAC"* $\to$ Opens Tab 4 with *FOXM1* motif accessibility and footprint pre-selected.
+   - Dual-map view: **Chromatin Accessibility** (chromVAR) vs. **Transcriptional Activity** (AUCell) side-by-side.
+2. **Tab 1 $\longleftrightarrow$ Context Drawer (Target Validation)**:
+   - Clicking any target gene in a regulon instantly previews its spatial expression in the quick-checker.
+3. **Tab 3 $\longrightarrow$ Tab 1 (Signaling to TF Activation)**:
+   - Selecting a Ligand-Receptor axis in Tab 3 $\to$ Click *"Show Activated TFs"* filters Tab 1 to downstream transcription factors.
+4. **Tab 2 $\longleftrightarrow$ Tab 1 (ceRNA vs. Transcription)**:
+   - Clicking a ceRNA hub in Tab 2 cross-checks if it is regulated by a TF in Tab 1.
+
+---
+
+## 🛡️ Modality-Aware Handling (No Ghost Tabs)
+
+| Modality | When Present | When Absent (e.g. Visium / Xenium without ATAC / SPONGE) |
+| :--- | :--- | :--- |
+| **GENIE3 (Tab 1)** | Fully active with TF leaderboard, targets, and AUCell maps. | Informative card: *"No GENIE3 GRN in dataset. Upload network to enable."* |
+| **SPONGE (Tab 2)** | Fully active with ceRNA modules & $mscor$ matrix. | Informative card: *"ceRNA network not present. Upload SPONGE network to enable."* |
+| **LIANA+ (Tab 3)** | Spatial LR pairs, cosine similarities, and co-occurrence. | Spatial neighbor statistics (Squidpy co-occurrence) remain active. |
+| **ATAC (Tab 4)** | chromVAR, Differential Motifs, Footprints, GRN Evaluation. | Clean banner: *"Epigenetic validation requires Multiome (paired RNA+ATAC). Connect Multiome data to unlock."* |
+
+
 ## Color by UX Decision 
 
 Currently, the hexmap coloring can be invoked either by with the dropdown or with a tab. This is redundant. The only thing currently only in the dropdown are the "other" obs columns, which could easily be added in the Cell Information tab. 

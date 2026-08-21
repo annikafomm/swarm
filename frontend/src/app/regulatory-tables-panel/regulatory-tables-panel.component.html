@@ -1,0 +1,49 @@
+<div class="regulatory-tables-panel">
+  <div class="selected-gene-info">
+    <strong>{{ selectionLabel }}</strong><br>
+
+    <ng-container *ngIf="kind === 'ligand_receptor'; else singleScoreLine">
+      Score view: {{ scoreLine }}<br>
+      {{ selectedIndexLabel }}: {{ (primarySelectedItem | json) || (secondarySelectedItem | json) || 'None' }}
+    </ng-container>
+
+    <ng-template #singleScoreLine>
+      Score: {{ scoreLine }}<br>
+      Selected index: {{ primarySelectedItem || 'None' }}
+    </ng-template>
+  </div>
+
+  <ng-container *ngIf="hasSecondaryTable; else singleTable">
+    <div class="hx-toolbar" style="display: flex; justify-content: center; margin: 12px 0;">
+      <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
+        style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+        [attr.aria-pressed]="showGlobalScores" (click)="toggleScoreView()">
+        Show {{ showGlobalScores ? 'NMF factors' : 'global scores' }}
+      </button>
+    </div>
+
+    <ng-container *ngIf="showGlobalScores; else secondaryTableTpl">
+      <h4>{{ primaryHeading }}</h4>
+      <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
+        [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
+        [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+        (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onPrimarySelected($event)"></app-table>
+    </ng-container>
+
+    <ng-template #secondaryTableTpl>
+      <h4>{{ secondaryHeading }}</h4>
+      <app-table [data]="secondaryData" [actionColumns]="secondaryActionColumns" [features]="features"
+        [updateColumn]="updateColumn" [emptyMessage]="secondaryEmptyMessage" [isCompare]="isCompare"
+        [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+        (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onSecondarySelected($event)"></app-table>
+    </ng-template>
+  </ng-container>
+
+  <ng-template #singleTable>
+    <h4>{{ primaryHeading }}</h4>
+    <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
+      [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
+      [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+      (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onPrimarySelected($event)"></app-table>
+  </ng-template>
+</div>

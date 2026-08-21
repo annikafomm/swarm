@@ -1,0 +1,187 @@
+<div class="grn-ondemand-container" style="padding: 15px;">
+
+  <!-- Compute Form -->
+  <mat-expansion-panel class="grn-ondemand-form" [expanded]="true">
+    <mat-expansion-panel-header>
+      <mat-panel-title>{{ computeFormTitle }}</mat-panel-title>
+    </mat-expansion-panel-header>
+
+    <!-- Obs Key -->
+    <mat-form-field appearance="fill" style="margin-right: 15px;">
+      <mat-label>Observation Key</mat-label>
+      <mat-select [value]="obsKey" (selectionChange)="obsKeyChange.emit($event.value)">
+        <mat-option value="cell_type">Cell Type</mat-option>
+        <mat-option value="leiden">Leiden</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <!-- Cluster -->
+    <mat-form-field appearance="fill" style="margin-right: 15px;">
+      <mat-label>Cluster</mat-label>
+      <input matInput [value]="cluster" (input)="clusterChange.emit($any($event.target).value)" placeholder="0">
+    </mat-form-field>
+
+    <br style="margin: 10px 0;">
+
+    <!-- Name -->
+    <mat-form-field appearance="fill" style="margin-right: 15px;">
+      <mat-label>GRN Evaluation Name</mat-label>
+      <input matInput [value]="name" (input)="nameChange.emit($any($event.target).value)"
+        placeholder="GRN_Evaluation">
+    </mat-form-field>
+
+    <!-- Gene Set -->
+    <mat-form-field appearance="fill">
+      <mat-label>Gene Set</mat-label>
+      <input matInput [value]="geneSet" (input)="geneSetChange.emit($any($event.target).value)"
+        placeholder="comma-separated or GO ID">
+    </mat-form-field>
+
+    <br style="margin: 10px 0;">
+
+    <!-- Use Prior GRN -->
+    <mat-checkbox [checked]="usePriorGrn" (change)="usePriorGrnChange.emit($event.checked)"
+      style="margin-right: 20px;">
+      Use Prior GRN
+    </mat-checkbox>
+
+    <!-- Compute Button -->
+    <button class="hx-btn hx-btn-upload" [disabled]="isComputingOnDemandGrn" (click)="computeRequested.emit()">
+      <mat-icon *ngIf="!isComputingOnDemandGrn">play_arrow</mat-icon>
+      <span *ngIf="!isComputingOnDemandGrn">Compute GRN Evaluation</span>
+      <span *ngIf="isComputingOnDemandGrn">
+        <mat-spinner diameter="20"></mat-spinner> Computing...
+      </span>
+    </button>
+
+    <!-- Error Message -->
+    <div *ngIf="computeError" class="error-msg" style="color: red; margin-top: 10px;">
+      {{ computeError }}
+    </div>
+
+    <!-- Result -->
+    <div *ngIf="outputPath" class="success-msg" style="color: green; margin-top: 10px;">
+      ✓ Output path: {{ outputPath }}
+    </div>
+  </mat-expansion-panel>
+
+  <!-- Run Selection -->
+  <div style="margin-top: 20px; margin-bottom: 15px;">
+    <h4>Load Existing GRN Evaluation Results</h4>
+
+    <mat-form-field appearance="fill" style="width: 300px;">
+      <mat-label>Select GRN Evaluation Run</mat-label>
+      <mat-select [value]="selectedRun" (selectionChange)="selectedRunChange.emit($event.value)">
+        <mat-option *ngFor="let run of availableRuns" [value]="run">
+          {{ run }}
+        </mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <button mat-raised-button color="primary" (click)="refreshRunsRequested.emit()" style="margin-left: 10px;">
+      <mat-icon>refresh</mat-icon>
+      Refresh Runs
+    </button>
+  </div>
+
+  <!-- Error Message -->
+  <div *ngIf="tabError" class="error-msg" style="color: red; margin-bottom: 15px;">
+    {{ tabError }}
+  </div>
+
+  <!-- Results Section -->
+  <div *ngIf="selectedRun" class="grn-results">
+
+    <!-- Peak & Motif Stats Tables -->
+    <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Statistics</mat-panel-title>
+      </mat-expansion-panel-header>
+
+      <div *ngIf="isLoadingStats" class="loading-container">
+        <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+      </div>
+
+      <div *ngIf="peakStats && !isLoadingStats">
+        <h5>Peak Statistics</h5>
+        <app-table [data]="peakStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
+          (loadingChange)="tableLoadingChange.emit($event)">
+        </app-table>
+      </div>
+
+      <div *ngIf="motifStats && !isLoadingStats" style="margin-top: 20px;">
+        <h5>Motif Statistics</h5>
+        <app-table [data]="motifStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
+          (loadingChange)="tableLoadingChange.emit($event)">
+        </app-table>
+      </div>
+    </mat-expansion-panel>
+
+    <!-- Graph Section -->
+    <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+      <mat-expansion-panel-header>
+        <mat-panel-title>GRN Graph</mat-panel-title>
+      </mat-expansion-panel-header>
+
+      <div style="margin-bottom: 15px;">
+        <mat-form-field appearance="fill">
+          <mat-label>Graph Filter</mat-label>
+          <mat-select [value]="graphFilter" (selectionChange)="graphFilterChange.emit($event.value)">
+            <mat-option value="prior">Prior GRN (priorTF nodes only)</mat-option>
+            <mat-option value="extended">Prior GRN Extended (exclude red/yellow edges)</mat-option>
+            <mat-option value="full">Full Network (no filters)</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <div *ngIf="isLoadingGraph" class="loading-container">
+        <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+      </div>
+
+      <div [id]="graphContainerId" [style.display]="isLoadingGraph ? 'none' : 'block'">
+      </div>
+    </mat-expansion-panel>
+
+    <!-- Plots Section -->
+    <mat-expansion-panel [expanded]="true" style="margin-bottom: 20px;">
+      <mat-expansion-panel-header>
+        <mat-panel-title>Plots</mat-panel-title>
+      </mat-expansion-panel-header>
+
+      <div *ngIf="isLoadingPlots" class="loading-container">
+        <mat-progress-spinner mode="indeterminate" [diameter]="44"></mat-progress-spinner>
+      </div>
+
+      <!-- Peak Plots -->
+      <div *ngIf="plots['peak_plots'] && !isLoadingPlots">
+        <h5>Peak Plots</h5>
+        <div class="plots-grid"
+          style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+          <img *ngFor="let plotName of plots['peak_plots']" [src]="getImageUrl(plotName)" [title]="plotName"
+            style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+        </div>
+      </div>
+
+      <!-- Motif Plots -->
+      <div *ngIf="plots['motif_plots'] && !isLoadingPlots" style="margin-top: 20px;">
+        <h5>Motif Plots</h5>
+        <div class="plots-grid"
+          style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+          <img *ngFor="let plotName of plots['motif_plots']" [src]="getImageUrl(plotName)" [title]="plotName"
+            style="max-width: 100%; border: 1px solid #ddd; padding: 5px;">
+        </div>
+      </div>
+
+      <p *ngIf="!plots['peak_plots'] && !plots['motif_plots'] && !isLoadingPlots">
+        No plots available
+      </p>
+    </mat-expansion-panel>
+
+    <!-- Register Button -->
+    <button mat-raised-button color="accent" (click)="registerRequested.emit()" style="margin-top: 15px;">
+      <mat-icon>check_circle</mat-icon>
+      Register Run to Dataset
+    </button>
+  </div>
+
+</div>

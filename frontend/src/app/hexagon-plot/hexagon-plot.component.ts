@@ -7,7 +7,6 @@ import { firstValueFrom, map, Observable, Subject, Subscription, takeUntil } fro
 
 // Visualizations
 import * as d3 from 'd3';
-import * as Plotly from 'plotly.js-dist-min';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
 import Shepherd from 'shepherd.js';
 
@@ -23,6 +22,15 @@ import { InfoService } from '../info.service';
 import { HexagonViewComponent } from '../hexagon-view/hexagon-view.component';
 import { CellInfoPanelComponent } from '../cell-info-panel/cell-info-panel.component';
 import { ClusterInfoPanelComponent } from '../cluster-info-panel/cluster-info-panel.component';
+import { CoOccurrencePanelComponent } from '../co-occurrence-panel/co-occurrence-panel.component';
+import { RegulatoryTablesPanelComponent } from '../regulatory-tables-panel/regulatory-tables-panel.component';
+import { ChromvarCorrelationPanelComponent } from '../chromvar-correlation-panel/chromvar-correlation-panel.component';
+import { DifferentialMotifActivityPanelComponent } from '../differential-motif-activity-panel/differential-motif-activity-panel.component';
+import { FootprintPanelComponent } from '../footprint-panel/footprint-panel.component';
+import { DgeaPanelComponent } from '../dgea-panel/dgea-panel.component';
+import { RegulatoryScoresPanelComponent } from '../regulatory-scores-panel/regulatory-scores-panel.component';
+import { GrnEvaluationPanelComponent } from '../grn-evaluation-panel/grn-evaluation-panel.component';
+import { GrnEvaluationOnDemandPanelComponent } from '../grn-evaluation-on-demand-panel/grn-evaluation-on-demand-panel.component';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 // Material
@@ -32,9 +40,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormField } from '@angular/material/form-field';
-import { MatOptgroup, MatOption } from '@angular/material/autocomplete';
+import { MatOption } from '@angular/material/autocomplete';
 import { MatLabel } from '@angular/material/form-field';
-import { MatSelect, MatSelectTrigger } from '@angular/material/select';
+import { MatSelect } from '@angular/material/select';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
@@ -48,22 +56,20 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatOptgroup, MatFormField, MatLabel, MatOption, MatSelect, MatSelectTrigger, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
 })
 export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
-  @ViewChild('aucell_graph_genie3', { static: false }) aucellGraphGenie3Element?: ElementRef<HTMLElement>;
-  @ViewChild('aucell_graph_sponge', { static: false }) aucellGraphSpongeElement?: ElementRef<HTMLElement>;
   @ViewChild('mainTabGroup', { static: false }) tabGroup?: MatTabGroup;
   @ViewChild('compareTabGroup', { static: false }) tabGroupCompare?: MatTabGroup;
   @ViewChild('cellInfoTab', { static: false, read: MatTab }) cellInfoTab?: MatTab;
   @ViewChild('clusterInfoTab', { static: false, read: MatTab }) clusterInfoTab?: MatTab;
   @ViewChild('cellInfoTabCompare', { static: false, read: MatTab }) cellInfoTabCompare?: MatTab;
   @ViewChild('clusterInfoTabCompare', { static: false, read: MatTab }) clusterInfoTabCompare?: MatTab;
-  @ViewChild('dgeaHeatmap', { static: false }) dgeaHeatmapElement!: ElementRef<HTMLElement>;
-  @ViewChild('dgeaHeatmapCompare', { static: false }) dgeaHeatmapCompareElement!: ElementRef<HTMLElement>;
+  @ViewChild('mainDgeaPanel') mainDgeaPanel?: DgeaPanelComponent;
+  @ViewChild('compareDgeaPanel') compareDgeaPanel?: DgeaPanelComponent;
   @ViewChild('mainView') mainView?: HexagonViewComponent;
   @ViewChild('compareView') compareView?: HexagonViewComponent;
   @ViewChild('mainClusterInfo') mainClusterInfo?: ClusterInfoPanelComponent;
@@ -75,21 +81,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   onDemandFootprintUrls: SafeResourceUrl[] = [];
   onDemandFootprintUrlsCompare: SafeResourceUrl[] = [];
   availableMotifs: string[] = [];
+  availableMotifsCompare: string[] = [];
   availableCellTypes: string[] = [];
+  availableCellTypesCompare: string[] = [];
   footprintMotifs: string[] = [];
   footprintMotifsCompare: string[] = [];
   motifSearchQuery: string = '';
+  motifSearchQueryCompare: string = '';
   footprintClusterBy: string = 'cell_type';
   footPrintClusterByCompare: string = 'cell_type';
   isComputingFootprint: boolean = false;
   isComputingFootprintCompare: boolean = false;
   footprintComputeError: string = '';
   footprintComputeErrorCompare: string = '';
-
-  get filteredMotifs(): string[] {
-    const q = this.motifSearchQuery.trim().toLowerCase();
-    return q ? this.availableMotifs.filter(m => m.toLowerCase().includes(q)) : this.availableMotifs;
-  }
 
   builtinDatasets$: Observable<Dataset[]>;
   uploadedDatasets$: Observable<Dataset[]>;
@@ -101,6 +105,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * `this` binding once invoked from the child. */
   public propertyAvailableBound = (prop: string, isCompare: boolean): boolean =>
     this.propertyAvailable(prop, isCompare);
+  /** Same reasoning as propertyAvailableBound, one per side since GrnEvaluationPanelComponent/
+   * GrnEvaluationOnDemandPanelComponent's getImageUrl @Input() takes only imageName, not compare. */
+  public grnImageUrlBound = (imageName: string): string => this.getGrnImageUrl(imageName, false);
+  public grnImageUrlBoundCompare = (imageName: string): string => this.getGrnImageUrl(imageName, true);
 
   compareMode: boolean = false;
 
@@ -285,7 +293,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public geneSetsSponge: { [regulator: string]: string[] } = {};
 
   public genie3Width: number = 600;
+  public genie3WidthCompare: number = 600;
   public spongeWidth: number = 600;
+  public spongeWidthCompare: number = 600;
 
   // Slider params
   public genie3WeightCutoff: number = 0.5;
@@ -346,10 +356,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Co-occurrence table
   public coOccurrenceData: number[] = [];
-  public coOccurrenceDataCompare: number[] = [];
-  public coOccurrenceColumns: string[] = [];
   public coOccurrenceThreshold: number = 0.5;
-  public coOccurrenceThresholdCompare: number = 0.5;
   public maxInterval: number = 49;
   public clusterCount: number = 10;
   // Leiden cluster ids available for this dataset, for the cluster-select dropdown.
@@ -357,7 +364,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   // Compare Co-occurrence table
   public compareCoOccurrenceData: number[] = [];
-  public compareCoOccurrenceColumns: string[] = [];
   public compareCoOccurrenceThreshold: number = 0.5;
   public maxIntervalCompare: number = 49;
   public clusterCountCompare: number = 10;
@@ -406,8 +412,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public compareShowGlobalLigandReceptorScores: boolean = true;
   public showMoranI: boolean = true;
   public compareShowMoranI: boolean = true;
-  public showChromvarMoranI: boolean = true;
-  public compareShowChromvarMoranI: boolean = true;
   // Categorical scale for cell_type and other non-leiden categorical properties.
   public colorScale = d3.scaleOrdinal<string>(d3.schemeSet2);
   // Dedicated leiden-cluster palette, visually distinct from colorScale above so it's clear
@@ -417,12 +421,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Cluster Information panel's cell-type swatches keep using colorScale above regardless of
   // the map's current selectedView, since those are always coloring cell_type values.
   public leidenColorScale = d3.scaleOrdinal<string>(d3.schemeTableau10);
-  private continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
+  public continuousColorScale = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   // Separate scales for the compare view to avoid cross-contamination
   public colorScaleCompare = d3.scaleOrdinal<string>(d3.schemeSet2);
   public leidenColorScaleCompare = d3.scaleOrdinal<string>(d3.schemeTableau10);
   // Yellow continuous color palette
-  private continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
+  public continuousColorScaleCompare = d3.scaleSequential(d3.interpolateYlOrRd).clamp(true);
   public currentLegendDomain: any[] = [];
   public currentLegendType: 'continuous' | 'categorical' = 'categorical';
 
@@ -447,8 +451,17 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     geneSet: '',
     usePriorGrn: false,
   };
+  public onDemandGrnParamsCompare = {
+    obsKey: 'cell_type',
+    cluster: '0',
+    name: 'GRN_Evaluation',
+    geneSet: '',
+    usePriorGrn: false,
+  };
   public isComputingOnDemandGrn = false;
+  public isComputingOnDemandGrnCompare = false;
   public onDemandGrnError = '';
+  public onDemandGrnErrorCompare = '';
 
   public onDemandOutputPath: string | null = null;
   public onDemandOutputPathCompare: string | null = null;
@@ -641,29 +654,34 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  private updateGraphWidths(): void {
-    const genie3El = this.aucellGraphGenie3Element?.nativeElement;
-    const spongeEl = this.aucellGraphSpongeElement?.nativeElement;
+  // Looked up by id (stable regardless of which component renders the div) rather than
+  // @ViewChild, since these containers now live inside RegulatoryScoresPanelComponent's own
+  // template — a parent's @ViewChild cannot reach into a child component's template.
+  private updateGraphWidths(compare: boolean = false): void {
+    const genie3El = document.getElementById(compare ? 'aucell_graph_genie3_compare' : 'aucell_graph_genie3');
+    const spongeEl = document.getElementById(compare ? 'aucell_graph_sponge_compare' : 'aucell_graph_sponge');
 
     if (genie3El) {
-      this.genie3Width = genie3El.clientWidth || 600;
+      if (compare) this.genie3WidthCompare = genie3El.clientWidth || 600;
+      else this.genie3Width = genie3El.clientWidth || 600;
     }
     if (spongeEl) {
-      this.spongeWidth = spongeEl.clientWidth || 600;
+      if (compare) this.spongeWidthCompare = spongeEl.clientWidth || 600;
+      else this.spongeWidth = spongeEl.clientWidth || 600;
     }
   }
 
-  public onRegulatoryGraphsPanelOpened(): void {
+  public onRegulatoryGraphsPanelOpened(compare: boolean = false): void {
     // Wait for lazy expansion-panel content to be attached to the DOM.
     setTimeout(() => {
-      this.updateGraphWidths();
+      this.updateGraphWidths(compare);
 
-      if (this.selectedGeneSetGenie3) {
-        this.updateSubgraphGenie3();
+      if (compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3) {
+        this.updateSubgraphGenie3(compare);
       }
 
-      if (this.selectedGeneSetSponge) {
-        this.updateSubgraphSponge();
+      if (compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge) {
+        this.updateSubgraphSponge(compare);
       }
     }, 0);
   }
@@ -725,14 +743,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       hexagonPath: dataset.geojson_path,
     }, isCompare);
   }
-
-  // allow nested tables like for differential motif activity view
-  public asTableData(value: unknown): {
-    [col: string]: { [index: string]: string | number }
-  } | string[] {
-    return value as { [col: string]: { [index: string]: string | number } } | string[];
-  }
-
 
   // Track Tab pagination state to change to view accordingly
   private updateTabPagination(): void {
@@ -1028,7 +1038,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const tabMap: { [label: string]: string } = compare
       ? {
         'Compare - Regulatory Scores': 'regulatory_scores',
-        'Compare - Co-occurence': 'leiden',
         'Compare - Gene Expression': 'gene_expression',
         'Compare - Ligand-Receptor Relationships': 'ligand_receptor_relationships',
         'Compare - Cell Composition TF Activity': 'cell_comp_tf_activity_similarity',
@@ -1041,7 +1050,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
       : {
         'Regulatory Scores': 'regulatory_scores',
-        'Co-occurence': 'leiden',
         'Gene Expression': 'gene_expression',
         'TF Activity': 'tf_activity',
         'Pathway Activity': 'pathway_activity',
@@ -1211,13 +1219,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   // Returns all available cell type levels for the dropdown selectors
   getDgeaLevels(compare: boolean = false): string[] {
     const meta = compare ? this.metaCompare : this.meta;
-    return meta?.['dgea']?.[this.selectedDgeaObsCol]?.['levels'] ?? [];
+    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
+    return meta?.['dgea']?.[obsCol]?.['levels'] ?? [];
   }
 
   // Returns the map of all DGEA comparisons
   getDgeaComparisonMap(compare: boolean = false): { [key: string]: any } {
     const meta = compare ? this.metaCompare : this.meta;
-    return meta?.['dgea']?.[this.selectedDgeaObsCol]?.['comparisons'] ?? {};
+    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
+    return meta?.['dgea']?.[obsCol]?.['comparisons'] ?? {};
   }
 
   // Re-render the DGEA heatmap when the user changes the group selections
@@ -1234,9 +1244,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     compare ? this.selectedDgeaGroup1Compare = null : this.selectedDgeaGroup1 = null;
     compare ? this.selectedDgeaGroup2Compare = null : this.selectedDgeaGroup2 = null;
     compare ? this.dgeaVsAllCompare = false : this.dgeaVsAll = false;
-    compare ? this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[this.selectedDgeaObsCol] : this.dgeaReady = !!this.meta?.['dgea']?.[this.selectedDgeaObsCol];
+    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
+    compare
+      ? this.dgeaReadyCompare = !!this.metaCompare?.['dgea']?.[obsCol]
+      : this.dgeaReady = !!this.meta?.['dgea']?.[obsCol];
     this.initDgeaSelection(compare);
-    setTimeout(() => this.renderDgeaHeatmap(), 0);
+    setTimeout(() => this.renderDgeaHeatmap(compare), 0);
   }
 
   getDgeaObsColLabel(col: string): string {
@@ -1280,63 +1293,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  // Render the context heatmap
+  // Delegates to the DgeaPanelComponent instance for this side, imperatively, matching the
+  // ClusterInfoPanelComponent/renderNhoodHeatmap pattern (called right after mutating DGEA
+  // selection state, in the same tick change detection hasn't refreshed @Input()s yet).
   private renderDgeaHeatmap(compare: boolean = false): void {
-    const container = compare ? this.dgeaHeatmapCompareElement?.nativeElement : this.dgeaHeatmapElement?.nativeElement;
-    if (!container) return;
-
-    const hm = this.getSelectedDgeaHeatmap(compare);
-
-    if (!hm || !hm.groups || !hm.rows || !hm.rows.length) {
-      Plotly.purge(container);
-      return;
-    }
-
-    const x = (hm.groups as any[]).map(g => String(g));
-    const y = hm.rows.map((r: any) => r.gene);
-    const z = hm.rows.map((r: any) => r.scaled);
-    const raw = hm.rows.map((r: any) => r.raw);
-
-    const data: Partial<Plotly.PlotData>[] = [
-      {
-        type: 'heatmap',
-        x,
-        y,
-        z,
-        customdata: raw,
-        colorscale: 'RdBu',
-        reversescale: true,
-        hovertemplate:
-          'Gene: %{y}<br>' +
-          'Group: %{x}<br>' +
-          'Scaled expression: %{z:.2f}<br>' +
-          'Mean expression: %{customdata:.2f}<extra></extra>',
-      }
-    ];
-
-    const xAxisTitle = this.getDgeaObsColLabel(compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol);
-
-    const layout: Partial<Plotly.Layout> = {
-      margin: { t: 30, l: 140, r: 20, b: 100 },
-      height: Math.max(420, y.length * 22),
-      xaxis: {
-        title: { text: xAxisTitle },
-        tickangle: -45,
-        automargin: true,
-        type: 'category'
-      },
-      yaxis: {
-        title: { text: 'Genes' },
-        automargin: true,
-        autorange: 'reversed'
-      }
-    };
-
-    Plotly.purge(container);
-    Plotly.newPlot(container, data, layout, {
-      responsive: true,
-      displayModeBar: false
-    });
+    const panel = compare ? this.compareDgeaPanel : this.mainDgeaPanel;
+    const obsCol = compare ? this.selectedDgeaObsColCompare : this.selectedDgeaObsCol;
+    panel?.renderDgeaHeatmap(this.getSelectedDgeaHeatmap(compare), this.getDgeaObsColLabel(obsCol));
   }
 
   public onDgeaVsAllChange(compare: boolean = false): void {
@@ -1399,9 +1362,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         groups: Array.isArray(cmp.heatmap_context.groups)
           ? [
             compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1,
-            this.selectedDgeaGroup2,
+            compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2,
             ...cmp.heatmap_context.groups.filter(
-              (g: string) => g !== this.selectedDgeaGroup1 && g !== this.selectedDgeaGroup2
+              (g: string) => {
+                const group1 = compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1;
+                const group2 = compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2;
+                return g !== group1 && g !== group2;
+              }
             )
           ]
           : cmp.heatmap_context.groups
@@ -1425,7 +1392,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const levels = this.getDgeaLevels(compare);
     if (!levels.length) return;
 
-    if (!this.selectedDgeaGroup1) {
+    const group1 = compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1;
+    if (!group1) {
       compare ? this.selectedDgeaGroup1Compare = levels[0] : this.selectedDgeaGroup1 = levels[0];
     }
 
@@ -1434,14 +1402,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       return;
     }
 
-    if (this.dgeaVsAll) {
-      this.selectedDgeaGroup2 = null;
-      return;
-    }
-
-    if (!this.selectedDgeaGroup2) {
-      const firstDifferent = levels.find(x => x !== this.selectedDgeaGroup1);
-      this.selectedDgeaGroup2 = firstDifferent ?? null;
+    const group2 = compare ? this.selectedDgeaGroup2Compare : this.selectedDgeaGroup2;
+    if (!group2) {
+      const resolvedGroup1 = compare ? this.selectedDgeaGroup1Compare : this.selectedDgeaGroup1;
+      const firstDifferent = levels.find(x => x !== resolvedGroup1);
+      compare ? this.selectedDgeaGroup2Compare = firstDifferent ?? null : this.selectedDgeaGroup2 = firstDifferent ?? null;
     }
   }
 
@@ -2541,7 +2506,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }));
     }
     candidateEdges.sort((a, b) => b.weight - a.weight);
-    slicedEdges = candidateEdges.slice(0, this.genie3MinEdges);
+    slicedEdges = candidateEdges.slice(0, compare ? this.genie3MinEdgesCompare : this.genie3MinEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2591,7 +2556,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     console.log(graph)
 
     // Create the graph visualization
-    const width = this.genie3Width;
+    const width = compare ? this.genie3WidthCompare : this.genie3Width;
     const height = 300;
 
     const svg = d3
@@ -2718,7 +2683,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       labels.attr('x', (d: any) => d.x).attr('y', (d: any) => d.y);
     });
 
-    setTimeout(() => this.updateGraphWidths(), 50);
+    setTimeout(() => this.updateGraphWidths(compare), 50);
 
     compare ? this.isLoadingGenie3Compare = false : this.isLoadingGenie3 = false;
     this.checkInitializationComplete(compare);
@@ -2835,7 +2800,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     let regulator = geneSet ?? '';
-    let targets = this.geneSetsGenie3[regulator] || [];
+    let targets = this.geneSetsSponge[regulator] || [];
 
 
     let nodes: { id: string; x?: number; y?: number; group: number }[] = [];
@@ -2845,7 +2810,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     let slicedEdges: { source: string; target: string; p_adjusted: number }[] = [];
 
     if (compare) {
-      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoff).map((e) => ({
+      candidateEdges = this.spongeNetworkCompare.filter((edge) => edge.p_adjusted < this.spongePValueCutoffCompare).map((e) => ({
         source: String(e.source),
         target: String(e.target),
         p_adjusted: e.p_adjusted,
@@ -2860,7 +2825,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     candidateEdges.sort((a, b) => a.p_adjusted - b.p_adjusted);
-    slicedEdges = candidateEdges.slice(0, this.spongeMinEdges);
+    slicedEdges = candidateEdges.slice(0, compare ? this.spongeMinEdgesCompare : this.spongeMinEdges);
 
     // Infer nodes from edges
     const nodeSet = new Set<string>();
@@ -2907,7 +2872,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     };
 
     // Create the graph visualization
-    const width = this.spongeWidth;
+    const width = compare ? this.spongeWidthCompare : this.spongeWidth;
     const height = 300;
 
     const svg = d3
@@ -3037,39 +3002,42 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     compare ? this.isLoadingSpongeCompare = false : this.isLoadingSponge = false;
     this.checkInitializationComplete(compare);
 
-    setTimeout(() => this.updateGraphWidths(), 50);
+    setTimeout(() => this.updateGraphWidths(compare), 50);
 
     console.log('Network visualization complete');
   }
 
 
-  public onSliderChangeSponge(): void {
-    if (this.selectedGeneSetSponge) {
-      this.isLoadingSponge = true;
-      setTimeout(() => this.visualizeSpongeSubgraph(), 50);
+  public onSliderChangeSponge(compare: boolean = false): void {
+    if (compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge) {
+      compare ? this.isLoadingSpongeCompare = true : this.isLoadingSponge = true;
+      setTimeout(() => this.visualizeSpongeSubgraph(compare), 50);
     }
   }
 
 
-  public onSliderChangeGenie3(): void {
-    if (this.selectedGeneSetGenie3) {
-      this.isLoadingGenie3 = true;
-      setTimeout(() => this.visualizeGenie3Subgraph(), 50);
+  public onSliderChangeGenie3(compare: boolean = false): void {
+    if (compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3) {
+      compare ? this.isLoadingGenie3Compare = true : this.isLoadingGenie3 = true;
+      setTimeout(() => this.visualizeGenie3Subgraph(compare), 50);
     }
   }
 
-  public analyzeGeneSetInGProfiler(): void {
-    if (!this.selectedGeneSetGenie3 || !this.geneSetsGenie3) {
-      console.warn('No Genie3 gene set selected');
+  public analyzeGeneSetInGProfiler(networkType: 'genie3' | 'sponge' = 'genie3'): void {
+    const geneSets = networkType === 'sponge' ? this.geneSetsSponge : this.geneSetsGenie3;
+    const selectedGeneSet = networkType === 'sponge' ? this.selectedGeneSetSponge : this.selectedGeneSetGenie3;
+
+    if (!selectedGeneSet || !geneSets) {
+      console.warn(`No ${networkType} gene set selected`);
       return;
     }
 
-    const regulator = this.selectedGeneSetGenie3;
-    const targets = this.geneSetsGenie3[regulator] || [];
+    const regulator = selectedGeneSet;
+    const targets = geneSets[regulator] || [];
 
     const allGenes = [regulator, ...targets];
 
-    console.log('Analyzing all Genie3 genes in gProfiler:', allGenes);
+    console.log(`Analyzing all ${networkType} genes in gProfiler:`, allGenes);
 
     const gProfilerUrl = this.generateGProfilerUrl(allGenes);
 
@@ -3078,8 +3046,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       window.open(gProfilerUrl, '_blank');
     } else {
       console.warn(
-        'Could not generate gProfiler URL for Genie3 gene set:',
-        this.selectedGeneSetGenie3,
+        `Could not generate gProfiler URL for ${networkType} gene set:`,
+        selectedGeneSet,
       );
     }
   }
@@ -3165,7 +3133,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.calculateClusterStats(true);
         this.updateCoOccurrenceTable(true);
         setTimeout(() => this.updateSubgraphGenie3(true), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
         setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
           clusterId,
           this.metaCompare?.['leiden_cluster_annotations'],
@@ -3218,7 +3186,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.calculateClusterStats(true);
         this.updateCoOccurrenceTable(true);
         setTimeout(() => this.updateSubgraphGenie3(true), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
       } else {
         this.selectedCluster = clusterNum;
         this.clusterCells = (this.features || []).filter(
@@ -3261,7 +3229,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.compareView?.extendCluster(clusterId);
 
       setTimeout(() => this.updateSubgraphGenie3(true), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare), 100);
+      setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
       setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
         clusterId,
         this.metaCompare?.['leiden_cluster_annotations'],
@@ -3491,7 +3459,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  private renderFootprintPlots(dataset: Dataset | null): void {
+  private renderFootprintPlots(dataset: Dataset | null, compare: boolean = false): void {
     const raw = dataset?.footprint_pdf_paths;
 
     const precomputedPaths =
@@ -3501,11 +3469,16 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           ? Object.values(raw)
           : (dataset?.footprint_list ?? []);
 
-    this.footprintPlotUrls = precomputedPaths.map(path =>
+    const urls = precomputedPaths.map(path =>
       this.sanitizer.bypassSecurityTrustResourceUrl(
         `${this.sessionService.apiUrl}/api/download/${path}`
       )
     );
+    if (compare) {
+      this.footprintPlotUrlsCompare = urls;
+    } else {
+      this.footprintPlotUrls = urls;
+    }
 
     if (dataset) {
       const params = dataset.id ? `?dataset_id=${encodeURIComponent(dataset.id)}` : '';
@@ -3513,17 +3486,28 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         `${this.sessionService.apiUrl}/api/motifs${params}`,
         { withCredentials: true }
       ).subscribe({
-        next: resp => { this.availableMotifs = resp.motifs ?? []; },
-        error: () => { this.availableMotifs = []; }
+        next: resp => {
+          compare
+            ? this.availableMotifsCompare = resp.motifs ?? []
+            : this.availableMotifs = resp.motifs ?? [];
+        },
+        error: () => { compare ? this.availableMotifsCompare = [] : this.availableMotifs = []; }
       });
 
       this.http.get<{ cell_types: string[] }>(
         `${this.sessionService.apiUrl}/api/cell_types${params}`,
         { withCredentials: true }
       ).subscribe({
-        next: resp => { this.availableCellTypes = resp.cell_types ?? []; },
-        error: () => { this.availableCellTypes = []; }
+        next: resp => {
+          compare
+            ? this.availableCellTypesCompare = resp.cell_types ?? []
+            : this.availableCellTypes = resp.cell_types ?? [];
+        },
+        error: () => { compare ? this.availableCellTypesCompare = [] : this.availableCellTypes = []; }
       });
+    } else if (compare) {
+      this.availableMotifsCompare = [];
+      this.availableCellTypesCompare = [];
     } else {
       this.availableMotifs = [];
       this.availableCellTypes = [];
@@ -3679,62 +3663,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
   }
 
-  public getCoOccurrenceColor(value: number, compare: boolean = false): string {
-    if (value === 0) return '#f8f9fa';
-
-    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
-    const selectedCluster = compare ? this.selectedClusterCompare : this.selectedCluster;
-    const colorScale = compare ? this.continuousColorScaleCompare : this.continuousColorScale;
-
-    const coOccurrenceWithoutSameCluster = data.filter(
-      (_, index) => index !== selectedCluster,
-    );
-    const maxValue = Math.max(...coOccurrenceWithoutSameCluster);
-    const intensity = Math.min(value / maxValue, 1);
-    return colorScale(intensity);
-  }
-
-  public getIntervalStats(compare: boolean = false): { min: number; max: number; avg: number } {
-    const data = compare ? this.compareCoOccurrenceData : this.coOccurrenceData;
-    const allValues = data.flat().filter((val) => val > 0);
-    if (allValues.length === 0) return { min: 0, max: 0, avg: 0 };
-
-    const min = Math.min(...allValues);
-    const max = Math.max(...allValues);
-    const avg = allValues.reduce((sum, val) => sum + val, 0) / allValues.length;
-
-    return { min, max, avg: Math.round(avg * 100) / 100 };
-  }
-
   public getIntervalBoundaries(compare: boolean = false): number[] {
     const raw = compare ? this.metaCompare?.['interval'] : this.meta?.['interval'];
     return Array.isArray(raw)
       ? raw.map((v: any) => Number(v)).filter((v: number) => Number.isFinite(v))
       : [];
-  }
-
-  public getActualIntervalRange(
-    index: number,
-    compare: boolean = false
-  ): { start: number; end: number } | null {
-    const intervals = this.getIntervalBoundaries(compare);
-    if (!intervals.length || index < 0 || index >= intervals.length) return null;
-
-    return {
-      start: index === 0 ? 0 : intervals[index - 1],
-      end: intervals[index],
-    };
-  }
-
-  public formatActualIntervalRange(
-    index: number,
-    compare: boolean = false,
-    digits: number = 1
-  ): string {
-    const range = this.getActualIntervalRange(index, compare);
-    if (!range) return '';
-
-    return `(${range.start.toFixed(digits)}–${range.end.toFixed(digits)})`;
   }
 
   async getRegulatoryScoresforSpots(barcode: string, datasetId?: string, compare: boolean = false) {
@@ -4660,25 +4593,26 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   computeOnDemandGrnEvaluation(compare: boolean = false): void {
     const dataset = compare ? this.selectedDatasetCompare : this.selectedDataset;
     if (!dataset) {
-      this.onDemandGrnError = 'No dataset selected';
+      compare ? this.onDemandGrnErrorCompare = 'No dataset selected' : this.onDemandGrnError = 'No dataset selected';
       return;
     }
 
-    this.isComputingOnDemandGrn = true;
-    this.onDemandGrnError = '';
+    const params = compare ? this.onDemandGrnParamsCompare : this.onDemandGrnParams;
+    compare ? this.isComputingOnDemandGrnCompare = true : this.isComputingOnDemandGrn = true;
+    compare ? this.onDemandGrnErrorCompare = '' : this.onDemandGrnError = '';
 
     const payload = {
       dataset_id: dataset.id,
-      grn_evaluation_obs_key: this.onDemandGrnParams.obsKey,
-      grn_evaluation_cluster: this.onDemandGrnParams.cluster,
-      grn_evaluation_name: this.onDemandGrnParams.name,
-      grn_evaluation_gene_set: this.onDemandGrnParams.geneSet,
-      grn_evaluation_use_prior_grn: this.onDemandGrnParams.usePriorGrn,
+      grn_evaluation_obs_key: params.obsKey,
+      grn_evaluation_cluster: params.cluster,
+      grn_evaluation_name: params.name,
+      grn_evaluation_gene_set: params.geneSet,
+      grn_evaluation_use_prior_grn: params.usePriorGrn,
     };
 
     this.http.post('/api/on_demand_grn_evaluation', payload).subscribe({
       next: (response: any) => {
-        this.isComputingOnDemandGrn = false;
+        compare ? this.isComputingOnDemandGrnCompare = false : this.isComputingOnDemandGrn = false;
         alert('GRN Evaluation computed successfully');
         if (compare) {
           this.onDemandOutputPathCompare = response.output_path;
@@ -4688,8 +4622,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
       },
       error: (err) => {
-        this.isComputingOnDemandGrn = false;
-        this.onDemandGrnError = err?.error?.detail || err.message || 'Error computing GRN Evaluation';
+        const message = err?.error?.detail || err.message || 'Error computing GRN Evaluation';
+        if (compare) {
+          this.isComputingOnDemandGrnCompare = false;
+          this.onDemandGrnErrorCompare = message;
+        } else {
+          this.isComputingOnDemandGrn = false;
+          this.onDemandGrnError = message;
+        }
       }
     });
   }

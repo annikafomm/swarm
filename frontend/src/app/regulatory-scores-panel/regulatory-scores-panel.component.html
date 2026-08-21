@@ -1,0 +1,213 @@
+<div class="regulatory-scores-panel">
+  <h4 *ngIf="isCompare">Aggregated Regulatory Scores</h4>
+
+  <div class="selected-gene-info">
+    <strong>{{ selectionLabel }}</strong><br>
+    Score: {{ selectedRegulatoryScore || 'None' }}<br>
+    <ng-container *ngIf="selectedRegulatoryScore?.endsWith('genie3'); else spongeSelectionTpl">
+      Gene set (Genie3): {{ selectedGeneSetGenie3 || 'None' }}
+    </ng-container>
+    <ng-template #spongeSelectionTpl>
+      <ng-container *ngIf="selectedRegulatoryScore?.endsWith('sponge'); else noNetworkSelectionTpl">
+        Gene set (Sponge): {{ selectedGeneSetSponge || 'None' }}
+      </ng-container>
+      <ng-template #noNetworkSelectionTpl>
+        Gene set: None
+      </ng-template>
+    </ng-template>
+  </div>
+
+  <mat-accordion>
+    <mat-expansion-panel [expanded]="true">
+      <mat-expansion-panel-header>
+        <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+          <span>Global Regulatory Scores</span>
+          <button mat-icon-button class="info-btn" *ngIf="!isCompare"
+            (click)="globalScoresTutorialRequested.emit(); $event.stopPropagation()">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </div>
+      </mat-expansion-panel-header>
+
+      <mat-form-field appearance="fill" class="dataset-dropdown">
+        <mat-label>Show Regulatory Statistic</mat-label>
+        <mat-select [value]="regulatoryScoreDisplayMode"
+          (selectionChange)="regulatoryScoreDisplayModeChange.emit($event.value)">
+          <mat-option [value]="'raw'">Raw scores</mat-option>
+          <mat-option [value]="'moranI'">Moran's I</mat-option>
+          <mat-option [value]="'gearyC'">Geary's C</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <app-table [data]="genie3TableData" [features]="features" [datasetId]="datasetId"
+        [actionColumns]="genie3ActionColumns" [updateColumn]="'regulatory_scores'" [emptyMessage]="genie3EmptyMessage"
+        [isCompare]="isCompare" (loadingChange)="tableLoadingChange.emit($event)"
+        (featuresUpdated)="globalFeaturesUpdated.emit()"
+        (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
+        (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"></app-table>
+      <app-table [data]="spongeTableData" [features]="features" [datasetId]="datasetId"
+        [updateColumn]="'regulatory_scores'" [actionColumns]="spongeActionColumns" [emptyMessage]="spongeEmptyMessage"
+        [isCompare]="isCompare" (featuresUpdated)="globalFeaturesUpdated.emit()"
+        (loadingChange)="tableLoadingChange.emit($event)"
+        (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
+        (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"></app-table>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel (opened)="graphsPanelOpened.emit()">
+      <mat-expansion-panel-header> Regulatory Network Graphs </mat-expansion-panel-header>
+      <ng-template matExpansionPanelContent>
+        <div class="gene-set-body">
+          <section class="graph-block genie3-block">
+            <div class="gene-set-header">
+              <h3>{{ isCompare ? 'Genie3 Network (Comparison)' : 'Genie3 Network' }}</h3>
+              <mat-form-field appearance="fill" class="gene-selector">
+                <mat-label>Gene Set</mat-label>
+                <mat-select [value]="selectedGeneSetGenie3"
+                  (selectionChange)="selectedGeneSetGenie3Change.emit($event.value)">
+                  <mat-option [value]="null">None</mat-option>
+                  <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
+                    {{ gene }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
+              Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
+            </div>
+            <div *ngIf="!selectedGeneSetGenie3" class="network-message">
+              No Genie3 network selected
+            </div>
+
+            <div *ngIf="selectedGeneSetGenie3 && genie3SliderData" class="genie3-controls">
+              <div class="control-row">
+                <label [attr.for]="minWeightSliderId">Minimum Genie3 Weight: {{ genie3WeightCutoff }}</label>
+                <input type="range" [id]="minWeightSliderId" class="slider" [min]="genie3SliderData.min_border"
+                  [max]="genie3SliderData.max_border" [step]="genie3SliderData.step" [value]="genie3WeightCutoff"
+                  (input)="onGenie3WeightCutoffInput($any($event.target).value)" />
+                <div class="helper small">{{ genie3SliderData.min_border }} ← → {{ genie3SliderData.max_border }}
+                </div>
+              </div>
+
+              <div class="control-row">
+                <label [attr.for]="genie3MaxEdgesSliderId">Minimum Edges in Graph: {{ genie3MinEdges }}</label>
+                <input type="range" [id]="genie3MaxEdgesSliderId" class="slider" min="1" max="50" step="1"
+                  [value]="genie3MinEdges" (input)="onGenie3MinEdgesInput($any($event.target).value)" />
+                <div class="helper small">1 ←→ 50</div>
+              </div>
+            </div>
+
+            <div *ngIf="isLoadingGenie3" class="loading-container graph-loading-container">
+              <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                aria-label="Loading Genie3 network">
+              </mat-progress-spinner>
+            </div>
+
+            <div [id]="genie3GraphContainerId" [style.display]="isLoadingGenie3 ? 'none' : 'block'"></div>
+
+            <div class="gprofiler-button-container" *ngIf="!isLoadingGenie3 && !isCompare">
+              <button class="gprofiler-btn" (click)="analyzeInGProfilerRequested.emit('genie3')"
+                [disabled]="!selectedGeneSetGenie3">
+                🧬 Analyze All Genie3 Genes in gProfiler
+              </button>
+            </div>
+
+            <div *ngIf="!isLoadingGenie3 && selectedGeneSetGenie3" class="graph-summary">
+              Genie3 Weight Cutoff: {{ genie3WeightCutoff | number: '1.2-5' }} · Number of edges: {{ genie3MinEdges }}
+            </div>
+          </section>
+
+          <section class="graph-block sponge-block">
+            <div class="gene-set-header">
+              <h3>{{ isCompare ? 'Sponge Network (Comparison)' : 'Sponge Network' }}</h3>
+              <mat-form-field appearance="fill" class="gene-selector">
+                <mat-label>Gene Set</mat-label>
+                <mat-select [value]="selectedGeneSetSponge"
+                  (selectionChange)="selectedGeneSetSpongeChange.emit($event.value)">
+                  <mat-option [value]="null">None</mat-option>
+                  <mat-option *ngFor="let gene of spongeElements" [value]="gene">
+                    {{ gene }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <div *ngIf="selectedGeneSetSponge" class="selected-gene-info">
+              Selected: <strong>{{ selectedGeneSetSponge }}</strong>
+            </div>
+            <div *ngIf="!selectedGeneSetSponge" class="network-message">
+              No Sponge network selected
+            </div>
+
+            <div *ngIf="selectedGeneSetSponge && spongeSliderData" class="sponge-controls">
+              <div class="control-row">
+                <label [attr.for]="maxPvalueSliderId">Max Sponge P-value Cutoff: {{ spongePValueCutoff }}</label>
+                <input type="range" [id]="maxPvalueSliderId" class="slider" [min]="spongeSliderData.min_border"
+                  [max]="spongeSliderData.max_border" [step]="spongeSliderData.step" [value]="spongePValueCutoff"
+                  (input)="onSpongePValueCutoffInput($any($event.target).value)" />
+                <div class="helper small">{{ spongeSliderData.min_border }} ← → {{ spongeSliderData.max_border }}
+                </div>
+              </div>
+
+              <div class="control-row">
+                <label [attr.for]="spongeMaxEdgesSliderId">Minimum Edges in Graph: {{ spongeMinEdges }}</label>
+                <input type="range" [id]="spongeMaxEdgesSliderId" class="slider" min="1" max="50" step="1"
+                  [value]="spongeMinEdges" (input)="onSpongeMinEdgesInput($any($event.target).value)" />
+                <div class="helper small">1 ←→ 50</div>
+              </div>
+            </div>
+
+            <div *ngIf="isLoadingSponge" class="loading-container graph-loading-container">
+              <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+                aria-label="Loading Sponge network">
+              </mat-progress-spinner>
+            </div>
+
+            <div [id]="spongeGraphContainerId" [style.display]="isLoadingSponge ? 'none' : 'block'"></div>
+
+            <div class="gprofiler-button-container" *ngIf="!isLoadingSponge && !isCompare">
+              <button class="gprofiler-btn" (click)="analyzeInGProfilerRequested.emit('sponge')"
+                [disabled]="!selectedGeneSetSponge">
+                🧬 Analyze All Sponge Genes in gProfiler
+              </button>
+            </div>
+
+            <div *ngIf="!isLoadingSponge && selectedGeneSetSponge" class="graph-summary">
+              P-value cutoff: {{ spongePValueCutoff | number: '1.2-4' }} · Number of edges: {{ spongeMinEdges }}
+            </div>
+          </section>
+        </div>
+      </ng-template>
+    </mat-expansion-panel>
+
+    <mat-expansion-panel *ngIf="selectedCell">
+      <mat-expansion-panel-header>
+        <h4> Cell Regulatory Scores</h4>
+      </mat-expansion-panel-header>
+
+      <div class="cell-reg-scores">
+        <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
+
+        <h3>Genie3 Regulatory Scores (TF regulons)</h3>
+        <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
+          [updateColumn]="'regulatory_scores'" [actionColumns]="genie3CellActionColumns" [datasetId]="datasetId"
+          [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+          (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
+          (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
+          (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })">
+        </app-table>
+
+        <h3>Sponge Regulatory Scores (ceRNA modules)</h3>
+        <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+          [updateColumn]="'regulatory_scores'" [actionColumns]="spongeCellActionColumns" [datasetId]="datasetId"
+          [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+          (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
+          (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
+          (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })">
+        </app-table>
+
+        <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
+          No regulatory scores available or still loading.
+        </div>
+      </div>
+    </mat-expansion-panel>
+  </mat-accordion>
+</div>

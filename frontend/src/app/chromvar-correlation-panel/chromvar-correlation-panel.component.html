@@ -1,0 +1,30 @@
+<div class="chromvar-correlation-panel">
+  <div class="selected-gene-info">
+    <strong>Current selection</strong><br>
+    Score: {{ showMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
+  </div>
+  <div class="moran-geary-toggle"
+    style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+    <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
+      style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
+      (click)="toggleView()">
+      Show {{ showMoranI ? "Geary's C" : "Moran's I" }}
+    </button>
+  </div>
+
+  <ng-container *ngIf="showMoranI; else gearyCTpl">
+    <h4>ChromVAR Moran's I</h4>
+    <app-table [data]="moranIData" [actionColumns]="['chromvar_spot_scores']" [features]="features"
+      [updateColumn]="'chromvar_total_sum'" [datasetId]="datasetId" [isCompare]="isCompare"
+      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </ng-container>
+
+  <ng-template #gearyCTpl>
+    <h4>ChromVAR Geary's C</h4>
+    <app-table [data]="gearyCData" [actionColumns]="['chromvar_spot_scores']" [features]="features"
+      [updateColumn]="'chromvar_total_sum'" [datasetId]="datasetId" [isCompare]="isCompare"
+      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </ng-template>
+</div>
