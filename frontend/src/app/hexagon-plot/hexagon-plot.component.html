@@ -116,7 +116,9 @@
               <h4>Moran's I</h4>
               <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
-                [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
+                [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
                 (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
             </ng-template>
@@ -125,19 +127,20 @@
               <h4>Geary's C</h4>
               <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
                 [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
-                [datasetId]="selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
+                [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
                 (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
             </ng-template>
 
             <div class="moran-geary-toggle"
               style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-              <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
-                (click)="showMoranI = !showMoranI"
-                style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;">
-                Show
-                {{ showMoranI ? "Geary's C" : "Moran's I" }}
-              </button>
+              <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                (change)="showMoranI = $event.value === 'moranI'">
+                <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+              </mat-button-toggle-group>
             </div>
           </div>
         </mat-tab>
@@ -332,7 +335,10 @@
                 <h4>Moran's I</h4>
                 <app-table [data]="this.metaCompare['moranI']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                  [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
+                  [resetStateOnDataChange]="false"
+                  (featuresUpdated)="repaintBothViews()"
                   (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
                   [emptyMessage]="'No Moran\'s I scores loaded'"></app-table>
               </ng-template>
@@ -341,19 +347,21 @@
                 <h4>Geary's C</h4>
                 <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
                   [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" (featuresUpdated)="repaintBothViews()"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                  [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
+                  [resetStateOnDataChange]="false"
+                  (featuresUpdated)="repaintBothViews()"
                   (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
 
               <div class="moran-geary-toggle"
                 style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-                <button type="button" class="hx-btn hx-btn-pill hx-btn-upload" [attr.aria-pressed]="showMoranI"
-                  (click)="showMoranI = !showMoranI"
-                  style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;">
-                  Show
-                  {{ showMoranI ? "Geary's C" : "Moran's I" }}
-                </button>
+                <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                  (change)="showMoranI = $event.value === 'moranI'">
+                  <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                  <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+                </mat-button-toggle-group>
               </div>
             </div>
           </mat-tab>

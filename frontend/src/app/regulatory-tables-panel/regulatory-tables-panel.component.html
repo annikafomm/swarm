@@ -37,7 +37,7 @@
       </h4>
       <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
         [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
-        [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+        [datasetId]="datasetId" [indexColumnLabel]="primaryIndexLabel" (loadingChange)="tableLoadingChange.emit($event)"
         (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onPrimarySelected($event)"></app-table>
     </ng-container>
 
@@ -51,7 +51,7 @@
       </h4>
       <app-table [data]="secondaryData" [actionColumns]="secondaryActionColumns" [features]="features"
         [updateColumn]="updateColumn" [emptyMessage]="secondaryEmptyMessage" [isCompare]="isCompare"
-        [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+        [datasetId]="datasetId" [indexColumnLabel]="secondaryIndexLabel" (loadingChange)="tableLoadingChange.emit($event)"
         (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onSecondarySelected($event)"></app-table>
     </ng-template>
   </ng-container>
@@ -67,7 +67,7 @@
     </h4>
     <app-table [data]="primaryData" [actionColumns]="primaryActionColumns" [features]="features"
       [updateColumn]="updateColumn" [emptyMessage]="primaryEmptyMessage" [isCompare]="isCompare"
-      [datasetId]="datasetId" (loadingChange)="tableLoadingChange.emit($event)"
+      [datasetId]="datasetId" [indexColumnLabel]="primaryIndexLabel" (loadingChange)="tableLoadingChange.emit($event)"
       (featuresUpdated)="featuresUpdated.emit()" (geneSelected)="onPrimarySelected($event)"></app-table>
   </ng-template>
 </div>

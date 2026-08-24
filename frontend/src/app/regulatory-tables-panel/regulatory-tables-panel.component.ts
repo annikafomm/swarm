@@ -21,6 +21,9 @@ interface RegulatoryTableConfig {
    * forwarded on `itemSelected` — independent of `metaKey` and `updateColumn` (e.g. the TF
    * Activity table reads from meta['tf_names'] but reports/selects under view 'tf_activity'). */
   view: string;
+  /** What the table's row index actually identifies — passed to <app-table>'s indexColumnLabel
+   * instead of the generic "Index". */
+  indexLabel: string;
 }
 
 interface RegulatoryTablesPanelConfig {
@@ -48,6 +51,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       emptyMessage: 'No ligand-receptor global scores loaded',
       heading: 'Ligand–Receptor Global Scores',
       view: 'ligand_receptor_global_scores',
+      indexLabel: 'Ligand–Receptor Pair',
     },
     secondary: {
       metaKey: 'nmf_factors',
@@ -55,6 +59,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       emptyMessage: 'No ligand-receptor NMF factors loaded',
       heading: 'Ligand-Receptor NMF Scores',
       view: 'ligand_receptor_NMF_factors',
+      indexLabel: 'NMF Factor',
     },
     appendComparisonSuffix: false,
   },
@@ -66,6 +71,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       emptyMessage: 'No cell composition TF activity scores loaded',
       heading: 'Cell Composition TF Activity Global Scores',
       view: 'cell_comp_tf_activity_global_scores',
+      indexLabel: 'TF',
     },
     scoreLabel: 'Cell composition TF activity similarity',
     appendComparisonSuffix: false,
@@ -78,6 +84,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       emptyMessage: 'No TF activity scores loaded',
       heading: 'TF Activity',
       view: 'tf_activity',
+      indexLabel: 'TF',
     },
     scoreLabel: 'TF activity (ULM)',
     appendComparisonSuffix: true,
@@ -93,6 +100,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       emptyMessage: 'No pathway activity scores loaded',
       heading: 'Pathway Activity',
       view: 'pathway_activity',
+      indexLabel: 'Pathway',
     },
     scoreLabel: 'Pathway activity (MLM)',
     appendComparisonSuffix: true,
@@ -221,6 +229,10 @@ export class RegulatoryTablesPanelComponent {
     return this.headingFor(this.activeConfig.primary);
   }
 
+  get primaryIndexLabel(): string {
+    return this.activeConfig.primary.indexLabel;
+  }
+
   get primarySelectedItem(): string | null {
     return this.selectedItemMap[this.activeConfig.primary.view];
   }
@@ -241,6 +253,10 @@ export class RegulatoryTablesPanelComponent {
   get secondaryHeading(): string {
     const secondary = this.activeConfig.secondary;
     return secondary ? this.headingFor(secondary) : '';
+  }
+
+  get secondaryIndexLabel(): string {
+    return this.activeConfig.secondary?.indexLabel ?? 'Index';
   }
 
   get secondarySelectedItem(): string | null {

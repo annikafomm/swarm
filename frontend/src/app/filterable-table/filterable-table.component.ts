@@ -36,6 +36,9 @@ export class FilterableTableComponent implements OnInit, OnChanges {
    * meaningless post-merge row number rather than a searchable identifier (e.g. the ChromVAR
    * correlation tables, which already expose TF/motif_id as their own filterable columns). */
   @Input() showIndexColumn: boolean = true;
+  /** Header text for the index column — defaults to the generic "Index" but should be set to
+   * whatever the row index actually identifies for a given table (e.g. "Gene", "TF"). */
+  @Input() indexColumnLabel: string = 'Index';
   /**
    * Filter/sort state, as plain objects rather than primitives specifically so two tables that
    * want to stay in sync (e.g. the ChromVAR Moran's I / Geary's C toggle, which swaps which

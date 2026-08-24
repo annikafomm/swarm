@@ -105,14 +105,14 @@
       <div *ngIf="peakStats && !isLoadingStats">
         <h5>Peak Statistics</h5>
         <app-table [data]="peakStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
-          (loadingChange)="tableLoadingChange.emit($event)">
+          [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)">
         </app-table>
       </div>
 
       <div *ngIf="motifStats && !isLoadingStats" style="margin-top: 20px;">
         <h5>Motif Statistics</h5>
         <app-table [data]="motifStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
-          (loadingChange)="tableLoadingChange.emit($event)">
+          [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)">
         </app-table>
       </div>
     </mat-expansion-panel>

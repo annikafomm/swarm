@@ -63,7 +63,7 @@
     </div>
 
     <app-table *ngIf="!cmp.skipped" [data]="cmp.table" [actionColumns]="['show_on_plot']" [features]="features"
-      [updateColumn]="'dgea'" [datasetId]="datasetId" [isCompare]="isCompare"
+      [updateColumn]="'dgea'" [datasetId]="datasetId" [isCompare]="isCompare" [indexColumnLabel]="'Gene'"
       (loadingChange)="tableLoadingChange.emit($event)" (geneSelected)="geneSelected.emit($event)"
       (geneSelectedCompare)="geneSelected.emit($event)">
     </app-table>

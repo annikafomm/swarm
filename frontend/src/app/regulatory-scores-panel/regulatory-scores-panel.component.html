@@ -55,13 +55,13 @@
 
       <app-table [data]="genie3TableData" [features]="features" [datasetId]="datasetId"
         [actionColumns]="genie3ActionColumns" [updateColumn]="'regulatory_scores'" [emptyMessage]="genie3EmptyMessage"
-        [isCompare]="isCompare" (loadingChange)="tableLoadingChange.emit($event)"
+        [isCompare]="isCompare" [indexColumnLabel]="'Gene'" (loadingChange)="tableLoadingChange.emit($event)"
         (featuresUpdated)="globalFeaturesUpdated.emit()"
         (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
         (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"></app-table>
       <app-table [data]="spongeTableData" [features]="features" [datasetId]="datasetId"
         [updateColumn]="'regulatory_scores'" [actionColumns]="spongeActionColumns" [emptyMessage]="spongeEmptyMessage"
-        [isCompare]="isCompare" (featuresUpdated)="globalFeaturesUpdated.emit()"
+        [isCompare]="isCompare" [indexColumnLabel]="'Gene'" (featuresUpdated)="globalFeaturesUpdated.emit()"
         (loadingChange)="tableLoadingChange.emit($event)"
         (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
         (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"></app-table>
@@ -269,7 +269,7 @@
         </h3>
         <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
           [updateColumn]="'regulatory_scores'" [actionColumns]="genie3CellActionColumns" [datasetId]="datasetId"
-          [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+          [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
           (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
           (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
           (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })">
@@ -284,7 +284,7 @@
         </h3>
         <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
           [updateColumn]="'regulatory_scores'" [actionColumns]="spongeCellActionColumns" [datasetId]="datasetId"
-          [isCompare]="isCompare" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+          [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
           (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
           (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
           (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })">

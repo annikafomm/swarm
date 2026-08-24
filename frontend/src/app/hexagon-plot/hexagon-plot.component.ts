@@ -36,6 +36,7 @@ import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 // Material
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialogModule } from '@angular/material/dialog';
@@ -84,7 +85,7 @@ export const LEIDEN_CLUSTER_PALETTE: string[] = [
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -440,6 +441,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public compareShowGlobalLigandReceptorScores: boolean = true;
   public showMoranI: boolean = true;
   public compareShowMoranI: boolean = true;
+  /** Shared by reference with both the Moran's I and Geary's C <app-table>s in the Gene
+   * Expression tab (see ChromvarCorrelationPanelComponent for the same pattern) so filtering/
+   * sorting survives the showMoranI toggle instead of resetting when the table is swapped. */
+  public geneExpressionSharedFilters: { [col: string]: string } = {};
+  public geneExpressionSharedSortState: { column: string | null; asc: boolean } = { column: null, asc: true };
+  public geneExpressionSharedFiltersCompare: { [col: string]: string } = {};
+  public geneExpressionSharedSortStateCompare: { column: string | null; asc: boolean } = { column: null, asc: true };
   // Categorical scale for cell_type and other non-leiden categorical properties.
   public colorScale = d3.scaleOrdinal<string>(d3.schemeSet2);
   public leidenColorScale = d3.scaleOrdinal<string>(LEIDEN_CLUSTER_PALETTE);

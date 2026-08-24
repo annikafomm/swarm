@@ -11,7 +11,7 @@
   </mat-expansion-panel-header>
   <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
     <app-table [data]="peakStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
-      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+      [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
     </app-table>
   </div>
 </mat-expansion-panel>
@@ -29,7 +29,7 @@
   </mat-expansion-panel-header>
   <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
     <app-table [data]="motifStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
-      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+      [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
     </app-table>
   </div>
 </mat-expansion-panel>
