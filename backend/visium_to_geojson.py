@@ -117,9 +117,12 @@ class Hexagons:
         return properties_dict
 
     def hexagon_points(self, x, y, radius):
-        # Scale centers
+        # Scale centers and radius together -- leaving radius unscaled meant every hexagon
+        # kept the same absolute size regardless of `scale`, while its center moved, silently
+        # changing the hexagon-size-to-spacing ratio whenever scale != 1.
         x = x * self.scale
         y = y * self.scale
+        radius = radius * self.scale
         return [
             (
                 x + radius * np.cos(np.pi / 3 * i),
