@@ -641,6 +641,19 @@ if __name__ == "__main__":
             "interval"
         ].tolist()
 
+    # Optional human-readable names for the leiden ids.
+    #
+    # `obs["leiden"]` has to be integer-castable — the cluster-annotation block above does
+    # `.astype(int)` — so a dataset clustered by a named annotation (an expert niche column,
+    # say) necessarily loses those names on the way in. When the producer recorded the
+    # code -> name mapping, carry it through so the numbers stay interpretable; the frontend
+    # currently renders "Cluster 3" but the mapping is at least available to anyone reading
+    # the GeoJSON, and to a future UI that wants to label them.
+    if "leiden_cluster_names" in spatial_data.uns:
+        meta_dict["leiden_cluster_names"] = _make_json_serializable(
+            spatial_data.uns["leiden_cluster_names"]
+        )
+
     meta_dict["data_type"] = args.data_type
     # Add differential motif activity top-motif tables
     if "diff_motif_activity_top_motifs" in spatial_data.uns:
