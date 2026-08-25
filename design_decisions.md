@@ -187,3 +187,99 @@ Currently, clicking behavior is modal (dependent on `selectedView`):
 3. **Cell Overview Card**:
    - Title defaults to `cell_type` if available, otherwise `Cluster <leiden_id>` or `Cell <barcode_short>`.
    - Cluster chip is always rendered whenever `leiden` is defined.
+
+---
+
+## Which AnnData should scores be computed on? (Tangram `if`/`else`)
+
+**Status: open — needs a decision.** Documented behaviour and evidence in
+[DEVELOPER.md](DEVELOPER.md) under *"Tangram runs score the projected object, not the measured
+one"*. This entry is only the decision itself.
+
+### The current behaviour
+
+[calc_scores.py:371-456](backend/calc_python_scores/calc_scores.py#L371-L456) scores exactly one
+object, chosen by an `if`/`else`:
+
+```python
+if args.tangram:
+    ... compute_spatial_scores(adata_tangram, "tg", ...)   # Tangram-projected
+else:
+    compute_spatial_scores(adata_work, "st", ...)          # measured spatial
+```
+
+Multiome forces `use_tangram = True`, so **every multiome dataset is scored only on projected
+expression**. This is intended, not a slip — FoPra p.38 states it explicitly: *"If Tangram was
+enabled, these scores were calculated on the Tangram-derived AnnData object. Otherwise, they
+were calculated directly on the [spatial] object."*
+
+### Why it needs revisiting
+
+1. **The data model asks for a file the design never produces.**
+   `MultiomeDataset.validate_paths()` lists `adata_st_scores` as `always_required`, but multiome
+   implies Tangram, so `"st"` is never computed. On the heart builtin this was "resolved" by
+   hand-copying the projected object to `adata_st_scores.h5ad` — byte-identical, verified by
+   md5. Anything reading that filename believed it had measured data.
+
+2. **Two resolution functions disagree about which file to use.**
+
+   | Function | Used for | Multiome picks |
+   |---|---|---|
+   | `_determine_adata_path` (dataset_management.py) | registration, GeoJSON source | `adata_tg_scores_path` |
+   | `_resolve_adata_path` (main.py) | live API fetches (`/api/obsm_tables`, gene values) | `adata_st_scores_path` |
+
+   So the map's embedded properties and the live-fetched values can come from *different files*.
+   The byte-identical copy hid this; making the two files honest surfaced it immediately as
+   "Regulatory Scores greyed out". Whatever is decided below, **these two must agree.**
+
+3. **The projected object is not preprocessed for clustering or autocorrelation.**
+   `project_genes` is never followed by re-normalisation: `expm1(X)` row sums have CV 12.9
+   (measured spatial: exactly 10000, CV 0.0000), there is no `log1p` record and no `counts`
+   layer, and values reach 28.97 so `expm1` ≈ 3.8e12 — not log-scale. Library size therefore
+   re-enters as a leading PCA component. Separately, projection is spatial smoothing, which
+   systematically **inflates** Moran's I / Geary's C, so autocorrelation on projected values is
+   not comparable to autocorrelation on measurements.
+
+4. **It is not user-visible.** Nothing in the UI says the Gene Expression tab is showing imputed
+   rather than measured values.
+
+### Options
+
+**A. Score both objects (drop the `else`).** One-line change; `validate_paths()` becomes
+honest; enables a real measured-vs-projected comparison. Costs roughly double the score runtime
+for Tangram runs and doubles output size. Still needs a decision on which one the UI defaults
+to, and the two resolution functions must be aligned.
+
+**B. Keep scoring only one, but make it explicit and consistent.** Align
+`_resolve_adata_path` with `_determine_adata_path`, drop `adata_st_scores` from
+`always_required` for multiome, and label the source in the UI (e.g. "values are
+Tangram-imputed"). Cheapest option; keeps the current science, fixes the incoherence and the
+mislabelling.
+
+**C. Score the measured object and project only what needs projecting.** chromVAR genuinely
+requires the mapping (it is single-cell ATAC → spots). Expression-derived scores do not — they
+could run on measurements, with Tangram used solely for cell-type composition and chromatin
+projection. Most defensible scientifically; largest change.
+
+**D. Let the user choose per upload.** A "compute scores on: measured / Tangram-projected /
+both" option. Most flexible, most surface area, and multiplies the support burden.
+
+### Notes for whoever picks
+
+- The "Tangram mapped datasets" dropdown category exists but is currently a **no-op**: it swaps
+  `adata_path` for `tangram_adata_path`, which are the same file for multiome. It also cannot
+  work as-is, because `geojson_path` is spread through unchanged (one GeoJSON per dataset id)
+  and the backend resolves paths from the registered dataset by `dataset_id`, ignoring the
+  frontend's swapped field. A genuine toggle needs the two variants registered as separate
+  dataset ids.
+- Option A or C would make that dropdown meaningful for the first time.
+
+### Correction to "Dataset Generalization Rules" above
+
+That section states Leiden is *"always computed during preprocessing / upload for all
+datasets"*. It is not. `clustering()` runs only when a Squidpy score that needs a cluster key
+was requested **and** `leiden` is absent **and** the relevant cluster-key argument is literally
+`"leiden"` ([calc_scores.py:91-96](backend/calc_python_scores/calc_scores.py#L91-L96)). The
+heart builtin shipped with `scores.squidpy = false` and therefore had no `leiden` at all, which
+is why its Cluster Information and Co-occurrence tabs were empty. Any UI logic that assumes
+`leiden` is always present needs a fallback.
