@@ -27,7 +27,10 @@
 
       <!-- Categorical Scale (Scrollable & Resizable) -->
       <div *ngIf="legendInfo.type === 'categorical'" class="legend-categorical-container">
-        <div *ngFor="let item of legendInfo.items" class="legend-category-item" [title]="item.label">
+        <div *ngFor="let item of legendInfo.items" class="legend-category-item" role="button" tabindex="0"
+          [title]="'Select a cell in ' + item.label" (click)="legendCategoryClicked.emit(item.label)"
+          (keydown.enter)="legendCategoryClicked.emit(item.label)"
+          (keydown.space)="$event.preventDefault(); legendCategoryClicked.emit(item.label)">
           <span class="category-color-swatch" [style.background-color]="item.color"></span>
           <span class="category-label">{{ item.label }}</span>
         </div>
