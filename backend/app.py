@@ -21,6 +21,7 @@ def dict2params(param_dict):
                         match skey:
                             case "normalization":
                                 python_params.append("-normalize_st")
+                                network_params.append("--normalized_st")
                             case "filtering":
                                 python_params.append("-filter_st")
             case "files":
@@ -72,6 +73,7 @@ def dict2params(param_dict):
                                     python_params.append("-filter_sc")
                                 case "normalization":
                                     python_params.append("-normalize_sc")
+                                    network_params.append("--normalized_sc")
                                 case "gene_selection_mode":
                                     value = param_dict.get(key).get(tkey)
 

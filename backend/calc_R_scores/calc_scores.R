@@ -40,6 +40,11 @@ compute_network_scores <- function(description, args, logfile) {
     log_message("Preparing score calculation for the Spatial data ...", logfile)
   }
 
+  # GSVA kernel matching this description's actual upstream normalization state -- see the
+  # --normalized_st/--normalized_sc option help and calc_spongeffects_gsva's kcdf doc.
+  is_normalized <- if (description == "tg") isTRUE(args$normalized_sc) else isTRUE(args$normalized_st)
+  gsva_kcdf <- if (is_normalized) "Gaussian" else "Poisson"
+
   # expression matrix
   log_message("Loading expression matrix (and additional files) ...", logfile, 2)
   t0 <- Sys.time()
@@ -132,7 +137,7 @@ compute_network_scores <- function(description, args, logfile) {
 
           if (args$gsva) {
             t0 <- Sys.time()
-            gsva_scores <- calc_spongeffects_gsva(expr_sp, sponge_modules, n_cores=args$n_cores)
+            gsva_scores <- calc_spongeffects_gsva(expr_sp, sponge_modules, n_cores=args$n_cores, kcdf=gsva_kcdf)
             log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 4)
 
             t0 <- Sys.time()
@@ -208,7 +213,7 @@ compute_network_scores <- function(description, args, logfile) {
 
         if (args$gsva) {
           t0 <- Sys.time()
-          gsva_scores <- calc_spongeffects_gsva(expr, regulons, n_cores=args$n_cores)
+          gsva_scores <- calc_spongeffects_gsva(expr, regulons, n_cores=args$n_cores, kcdf=gsva_kcdf)
           log_message(sprintf("SPONGeffects-GSVA scores computed in %s", format_runtime(t0)), logfile, 4)
 
           t0 <- Sys.time()
@@ -261,6 +266,14 @@ main <- function() {
     make_option("--log", type="character", help="Path to the log file", metavar="file"),
 
     make_option("--tangram", action="store_true", default=FALSE, help="Was tangram used?"),
+
+    # Whether the upstream Python step already normalized expr.mtx for each description --
+    # determines the GSVA kernel (kcdf): "Gaussian" for normalized/continuous data, "Poisson"
+    # for raw counts. Must match whatever -normalize_st/-normalize_sc was passed to
+    # calc_python_scores/calc_scores.py for the same run, or GSVA scores end up dominated by
+    # per-cell sequencing depth instead of gene-set-specific signal.
+    make_option("--normalized_st", action="store_true", default=FALSE, help="Was expr_info_st normalized upstream?"),
+    make_option("--normalized_sc", action="store_true", default=FALSE, help="Was expr_info_tg (tangram/sc) normalized upstream?"),
 
     # network files
     make_option("--sponge_network", type="character", help="Path to Sponge interactionNetwork file", metavar="file"),
