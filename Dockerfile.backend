@@ -41,7 +41,18 @@ ENV PATH="/opt/conda/bin:$PATH" \
     CONDA_PYTHON_EXE="/opt/conda/bin/python" \
     # Redirect caches to /tmp so mopitaner can always write them
     MPLCONFIGDIR="/tmp/matplotlib" \
-    NUMBA_CACHE_DIR="/tmp/numba_cache"
+    NUMBA_CACHE_DIR="/tmp/numba_cache" \
+    # Pin BLAS/OpenMP thread pools to 1. R and numpy/scipy both do their heavy lifting in
+    # BLAS, which otherwise sizes its pool to the whole host *per process* — and the pipeline
+    # is a chain of subprocesses with several uploads possibly in flight, so the thread count
+    # multiplies into the thousands and the host thrashes instead of computing. The pipeline
+    # gets its speed from job-level parallelism, not BLAS threading. Set here as well as in
+    # docker-compose.yml so the protection survives running the image directly; compose can
+    # still override per-deployment. See the longer note in docker-compose.yml.
+    OMP_NUM_THREADS="1" \
+    OPENBLAS_NUM_THREADS="1" \
+    MKL_NUM_THREADS="1" \
+    NUMEXPR_NUM_THREADS="1"
 
 # ── Copy backend source & set ownership ─────────────────────────────────────
 WORKDIR /app

@@ -112,6 +112,41 @@ ALLOWED_ORIGINS = [
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
 MAX_FILE_MB: Optional[int] = 5000
 
+# How many analysis pipelines may run at once.
+#
+# Without a cap, every concurrent upload starts its own chain of Python/R subprocesses
+# immediately. `asyncio.to_thread` uses the default executor, which allows up to
+# min(32, cpu_count + 4) threads, so ~32 pipelines could be in flight — each spawning
+# subprocesses that, before the thread pinning added in Dockerfile.backend, each sized their
+# BLAS pool to the whole host. Even with BLAS pinned, the memory cost alone is prohibitive:
+# each stage holds a full AnnData in memory (a multiome adata here is ~1.5 GB), so a handful
+# of simultaneous multiome uploads can exhaust RAM and get something OOM-killed — and the
+# OOM killer picks by size, so it tends to kill a legitimate large job rather than the
+# request that caused the pile-up.
+#
+# The FastAPI event loop shares the machine with these subprocesses, so an unbounded pile-up
+# does not just slow uploads down: /api/datasets, /api/geojson and session creation become
+# unresponsive for users who are not running anything at all. Bounding concurrency converts
+# "the whole site degrades" into "your job waits its turn", which is both fairer and far
+# easier to explain to a user.
+#
+# 2 is deliberately conservative: pipeline stages are already internally parallel, so a
+# couple of concurrent jobs is usually enough to keep the machine busy. Raise it via
+# SWARM_MAX_CONCURRENT_PIPELINES once you know your host's RAM headroom.
+MAX_CONCURRENT_PIPELINES = max(1, int(os.getenv("SWARM_MAX_CONCURRENT_PIPELINES", "2")))
+
+# Created lazily: instantiating an asyncio primitive at import time can bind it to the wrong
+# event loop (uvicorn creates its own), which would make it silently ineffective.
+_pipeline_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def get_pipeline_semaphore() -> asyncio.Semaphore:
+    """Return the process-wide pipeline gate, creating it on first use."""
+    global _pipeline_semaphore
+    if _pipeline_semaphore is None:
+        _pipeline_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PIPELINES)
+    return _pipeline_semaphore
+
 # TTL cache for per-(dataset,gene) expression min/max stats.
 # Key: (dataset_id, normalized_gene)
 # Value: {"min": float, "max": float, "expires_at": datetime}
@@ -415,6 +450,22 @@ def _normalize_gene_key(gene: str) -> str:
     return gene.strip().lower()
 
 
+def _resolve_gene_name(adata: sc.AnnData, gene: str) -> Optional[str]:
+    """
+    Case-insensitive lookup of `gene` against adata.var_names.
+    Returns the actual var_names entry (matching the dataset's own casing convention,
+    e.g. human symbols are conventionally uppercase) so callers can index with it directly,
+    or None if no gene matches regardless of case.
+    """
+    if gene in adata.var_names:
+        return gene
+    lowered = gene.strip().lower()
+    for name in adata.var_names:
+        if name.lower() == lowered:
+            return name
+    return None
+
+
 def _get_visible_dataset_paths(session_data: SessionData) -> Dict[str, str]:
     """
     Return dataset_id -> adata_path for datasets visible to this user.
@@ -568,10 +619,11 @@ def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, fl
     Return min/max for one gene from an AnnData object.
     Returns None if gene is not found.
     """
-    if gene not in adata.var_names:
+    resolved_gene = _resolve_gene_name(adata, gene)
+    if resolved_gene is None:
         return None
 
-    vector = adata[:, gene].X
+    vector = adata[:, resolved_gene].X
     if sparse.issparse(vector):
         min_val = float(vector.min())
         max_val = float(vector.max())
@@ -1233,8 +1285,22 @@ async def upload(
     # 4) Convert UploadRequest to dict for pipeline processing
     payload = upload_request.model_dump(exclude_none=False)
 
-    # 5) Run analysis pipeline
-    out_dir = await calculate_scores_helper(job_dir, payload)
+    # 5) Run analysis pipeline, bounded by MAX_CONCURRENT_PIPELINES so concurrent uploads
+    #    queue instead of all piling onto the machine at once (see the constant's note).
+    semaphore = get_pipeline_semaphore()
+    if semaphore.locked():
+        print(
+            f"⏳ Pipeline slots full ({MAX_CONCURRENT_PIPELINES} running) — "
+            f"queueing job {os.path.basename(job_dir)}",
+            flush=True,
+        )
+    queued_at = datetime.now()
+    async with semaphore:
+        waited = (datetime.now() - queued_at).total_seconds()
+        if waited > 1:
+            print(f"▶ Starting queued job {os.path.basename(job_dir)} after {waited:.0f}s wait",
+                  flush=True)
+        out_dir = await calculate_scores_helper(job_dir, payload)
 
     print(f"\n=== DEBUG upload() ===")
     print(f"dataset: {dataset}")
@@ -2528,7 +2594,10 @@ async def get_X_by_gene(
     """
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
-    expressions = adata[:, gene].X.toarray().flatten().tolist()
+    resolved_gene = _resolve_gene_name(adata, gene)
+    if resolved_gene is None:
+        raise HTTPException(status_code=404, detail=f"Gene '{gene}' not found")
+    expressions = adata[:, resolved_gene].X.toarray().flatten().tolist()
     barcodes = adata.obs.index
     return {
         barcode: expression
