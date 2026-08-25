@@ -15,11 +15,11 @@
 
   <ng-container *ngIf="hasSecondaryTable; else singleTable">
     <div class="hx-toolbar" style="display: flex; justify-content: center; align-items: center; gap: 8px; margin: 12px 0;">
-      <button type="button" class="hx-btn hx-btn-pill hx-btn-upload"
-        style="background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%); color: white; font-weight: 500; padding: 10px 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); border: none;"
-        [attr.aria-pressed]="showGlobalScores" (click)="toggleScoreView()">
-        Show {{ showGlobalScores ? 'NMF factors' : 'global scores' }}
-      </button>
+      <mat-button-toggle-group [value]="showGlobalScores ? 'global' : 'nmf'"
+        (change)="showGlobalScoresChange.emit($event.value === 'global')">
+        <mat-button-toggle value="global">Global Scores</mat-button-toggle>
+        <mat-button-toggle value="nmf">NMF Factors</mat-button-toggle>
+      </mat-button-toggle-group>
       <button mat-icon-button type="button" class="hx-info-btn"
         [matTooltip]="showGlobalScores ? (infoService.getScoreInfo('ligand_receptor') || '') : (infoService.getScoreInfo('nmf_factors') || '')"
         matTooltipPosition="above">

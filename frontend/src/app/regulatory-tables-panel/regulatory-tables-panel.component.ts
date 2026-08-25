@@ -150,13 +150,14 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
  */
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { InfoService } from '../info.service';
 
 @Component({
   selector: 'app-regulatory-tables-panel',
   standalone: true,
-  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatTooltipModule],
+  imports: [CommonModule, FilterableTableComponent, MatIconModule, MatButtonModule, MatButtonToggleModule, MatTooltipModule],
   templateUrl: './regulatory-tables-panel.component.html',
   styleUrls: ['./regulatory-tables-panel.component.scss'],
 })
@@ -268,10 +269,6 @@ export class RegulatoryTablesPanelComponent {
     return this.isCompare && this.activeConfig.appendComparisonSuffix
       ? `${table.heading} Comparison`
       : table.heading;
-  }
-
-  toggleScoreView(): void {
-    this.showGlobalScoresChange.emit(!this.showGlobalScores);
   }
 
   onPrimarySelected(event: { gene: string; action: string }): void {
