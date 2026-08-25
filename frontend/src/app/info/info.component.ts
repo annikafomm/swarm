@@ -10,11 +10,13 @@ import { SessionService } from '../session.service';
 import { GeoDataService } from '../geo-data.service';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { PrivacyDialogComponent } from '../privacy-dialog/privacy-dialog.component';
 
 @Component({
   selector: 'app-info',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatIconModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule, MatDialogModule],
   templateUrl: './info.component.html',
   styleUrl: './info.component.scss'
 })
@@ -33,7 +35,8 @@ export class InfoComponent implements OnDestroy {
     private datasetService: DatasetService,
     private http: HttpClient,
     private sessionService: SessionService,
-    private geoDataService: GeoDataService
+    private geoDataService: GeoDataService,
+    private dialog: MatDialog
   ) {
     // Subscribe to dataset selection changes
     this.datasetService.selectedDataset$
@@ -51,6 +54,15 @@ export class InfoComponent implements OnDestroy {
 
   goBack() {
     this.location.back();
+  }
+
+  openPrivacyPolicy(): void {
+    this.dialog.open(PrivacyDialogComponent, {
+      width: '850px',
+      maxHeight: '90vh',
+      autoFocus: 'first-button',
+      panelClass: 'privacy-dialog-panel',
+    });
   }
 
   /**

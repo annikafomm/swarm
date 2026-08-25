@@ -44,6 +44,17 @@ bash launch.sh
 docker compose up --build
 ```
 
+## Data Privacy, Legal Compliance & Tracking
+
+SWARM implements the **Reduced Tracking Case** under German and EU data protection law (GDPR / DSGVO, TDDDG, DDG, BayDSG):
+
+- **No Cookie Banner Required**:
+  - **Cookieless Matomo**: Matomo is self-hosted on TUM servers (`exbio.wzw.tum.de`) and operates strictly without cookies (`_paq.push(['disableCookies'])`) and with Do-Not-Track enabled (`_paq.push(['setDoNotTrack', true])`). IP addresses are masked by 3 bytes, visitor profiles/logs are disabled, and data is purged after 180 days.
+  - **Strictly Essential Session Cookie**: The HttpOnly FastAPI session cookie (`cookie`) is strictly technically necessary (§ 25(2) No. 2 TDDDG) to maintain workspace isolation and on-demand calculations. It does not track users across websites.
+- **Legal Footer & Privacy Policy Dialog**:
+  - The application includes a legal footer linking the TUM ExBio Impressum (`/impressum#de`), Legal Notice (`/impressum#en`), and an interactive bilingual Privacy Policy dialog (`PrivacyDialogComponent`).
+  - The Privacy Policy modal includes an interactive **Matomo Opt-Out switch** so users can exercise their Art. 21 GDPR right to object at any time.
+
 ### Devcontainer
 * Devcontainer (`.devcontainer/Dockerfile.backend`) builds the full Conda + R environment.
 * Only rebuild the container when dependency manifests (`docker_environment.yml`, `tangram.yml`) change.
