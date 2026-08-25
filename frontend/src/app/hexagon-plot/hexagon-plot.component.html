@@ -19,7 +19,8 @@
           [groupedProperties]="groupedProperties" [selectedDataset]="selectedDataset"
           [builtinDatasets$]="builtinDatasets$" [uploadedDatasets$]="uploadedDatasets$"
           [tangramDatasets$]="tangram_Datasets$" [propertyAvailableFn]="propertyAvailableBound"
-          (cellClicked)="displayCellDetails($event.event, $event.cell, false)"
+          (cellClicked)="displayCellDetails($event.cell, false)"
+          (legendCategoryClicked)="onLegendCategoryClicked($event, false)"
           (selectedViewChange)="selectedView = $event" (colorByChanged)="onColorbyPropertyChange(false)"
           (selectedDatasetChange)="selectedDataset = $event" (datasetChanged)="onDatasetSelected($event, false)"
           (tangramDatasetSelected)="onDatasetTangramSelected($event, false)" (viewTutorialClicked)="selectViewTutorial()"
@@ -111,6 +112,15 @@
               Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || 'None' }}
             </div>
 
+            <div class="moran-geary-toggle"
+              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+              <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                (change)="showMoranI = $event.value === 'moranI'">
+                <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+              </mat-button-toggle-group>
+            </div>
+
             <div *ngIf="showMoranI; then moranI; else gearyC"></div>
             <ng-template #moranI>
               <h4>Moran's I</h4>
@@ -133,15 +143,6 @@
                 (loadingChange)="onTableLoadingChange($event)"
                 (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
             </ng-template>
-
-            <div class="moran-geary-toggle"
-              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-              <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
-                (change)="showMoranI = $event.value === 'moranI'">
-                <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
-                <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
-              </mat-button-toggle-group>
-            </div>
           </div>
         </mat-tab>
 
@@ -258,7 +259,8 @@
           [selectedDataset]="selectedDatasetCompare" [builtinDatasets$]="builtinDatasets$"
           [uploadedDatasets$]="uploadedDatasets$" [tangramDatasets$]="tangram_Datasets$"
           [propertyAvailableFn]="propertyAvailableBound"
-          (cellClicked)="displayCellDetails($event.event, $event.cell, true)"
+          (cellClicked)="displayCellDetails($event.cell, true)"
+          (legendCategoryClicked)="onLegendCategoryClicked($event, true)"
           (selectedViewChange)="selectedCompareView = $event" (colorByChanged)="onColorbyPropertyChange(true)"
           (selectedDatasetChange)="selectedDatasetCompare = $event" (datasetChanged)="onDatasetSelected($event, true)"
           (tangramDatasetSelected)="onDatasetTangramSelected($event, true)">
@@ -329,6 +331,16 @@
               <div class="selected-gene-info">
                 <h4>Gene Expression Comparison</h4>
               </div>
+
+              <div class="moran-geary-toggle"
+                style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+                <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                  (change)="showMoranI = $event.value === 'moranI'">
+                  <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                  <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+                </mat-button-toggle-group>
+              </div>
+
               <div *ngIf="showMoranI; then moranI; else gearyC"></div>
 
               <ng-template #moranI>
@@ -354,15 +366,6 @@
                   (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
                   [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
               </ng-template>
-
-              <div class="moran-geary-toggle"
-                style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-                <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
-                  (change)="showMoranI = $event.value === 'moranI'">
-                  <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
-                  <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
-                </mat-button-toggle-group>
-              </div>
             </div>
           </mat-tab>
 

@@ -120,6 +120,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
   @Output() cellClicked = new EventEmitter<{ event: MouseEvent; cell: CellFeature }>();
   @Output() clusterClicked = new EventEmitter<{ cell: CellFeature; clusterId: number }>();
+  /** Emits the raw category value (matching the legend item's label) when a categorical legend
+   * entry is clicked, so the parent can select a representative cell as if it had been clicked
+   * directly on the map. */
+  @Output() legendCategoryClicked = new EventEmitter<string>();
 
   @ViewChild('hexbinContainer', { static: true }) private hexbinContainerRef!: ElementRef<HTMLDivElement>;
 

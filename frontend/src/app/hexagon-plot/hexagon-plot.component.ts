@@ -85,7 +85,7 @@ export const LEIDEN_CLUSTER_PALETTE: string[] = [
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -939,18 +939,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.router.navigate(['/info'], fragmentId ? { fragment: fragmentId } : {});
   }
 
+  /**
+   * Called only from onTabChange's tabMap dispatch, i.e. only when the user just clicked a
+   * sidebar tab — the map's color-by is updated to match, but the tab itself must not move
+   * again as a side effect (see onColorbyPropertyChange's skipTabJump doc).
+   */
   public onTabColorChange(newView: string, compare: boolean = false): void {
     if (compare) {
       if (this.selectedCompareView !== newView) {
         this.selectedCompareView = newView;
-        this.onColorbyPropertyChange(true);
+        this.onColorbyPropertyChange(true, true);
       } else {
         this.updateHexColors('#hexbin-compare');
       }
     } else {
       if (this.selectedView !== newView) {
         this.selectedView = newView;
-        this.onColorbyPropertyChange(false);
+        this.onColorbyPropertyChange(false, true);
       } else {
         this.updateHexColors();
       }
@@ -1034,7 +1039,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedCompareView = probPropertyCompare || 'cell_type';
 
         setTimeout(() => {
-          this.onColorbyPropertyChange(true);
+          this.onColorbyPropertyChange(true, true);
           this.loadTfGraph(true);
           this.loadPrecomputedGrnGraph(true);
           this.loadPrecomputedGrnPlots(true);
@@ -1047,7 +1052,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.selectedView = probProperty || 'cell_type';
 
         setTimeout(() => {
-          this.onColorbyPropertyChange(false);
+          this.onColorbyPropertyChange(false, true);
           this.loadTfGraph(false);
           this.loadPrecomputedGrnGraph(false);
           this.loadPrecomputedGrnPlots(false);
@@ -1063,7 +1068,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.selectedCompareView = probPropertyCompare || 'cell_type';
 
       setTimeout(() => {
-        this.onColorbyPropertyChange(true);
+        this.onColorbyPropertyChange(true, true);
       }, 100);
       return;
     }
@@ -2063,14 +2068,25 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.fetchAndUpdate(event.action, event.gene, compare, view);
   }
 
-  public onColorbyPropertyChange(compare: boolean = false): void {
+  /**
+   * skipTabJump: true when this was triggered by the user clicking a sidebar tab (via
+   * onTabColorChange) rather than the "Color hexagons by" dropdown — the tab is already the one
+   * the user wants to be on, so re-deriving a tab from colorProp and jumping to it is not just
+   * redundant but actively wrong whenever colorProp's own tab differs from the tab that was
+   * clicked (e.g. "Differential Motif Activity"/"Footprints" fall back to the 'cell_type' color
+   * property, which getTabLabelForProperty maps to 'Cell Information' — without this guard,
+   * clicking either tab immediately bounced back to Cell Information).
+   */
+  public onColorbyPropertyChange(compare: boolean = false, skipTabJump: boolean = false): void {
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
     const targetView = compare ? this.compareView : this.mainView;
     targetView?.setCurrentView(colorProp);
 
     // Automatically jump sidebar to matching tab for the selected property
-    const matchingTabLabel = this.getTabLabelForProperty(colorProp, compare);
-    this.jumpToTabByLabel(matchingTabLabel, compare);
+    if (!skipTabJump) {
+      const matchingTabLabel = this.getTabLabelForProperty(colorProp, compare);
+      this.jumpToTabByLabel(matchingTabLabel, compare);
+    }
 
     const regulatoryScore = compare ? this.selectedRegulatoryScoreCompare : this.selectedRegulatoryScore;
     const geneSetGenie3 = compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
@@ -3102,7 +3118,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
 
-  public displayCellDetails(event: MouseEvent, cell: CellFeature, compare: boolean = false): void {
+  public displayCellDetails(cell: CellFeature, compare: boolean = false): void {
     if (!compare) {
       // 1. Always select the clicked cell
       this.selectedCell = cell;
@@ -3188,6 +3204,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         this.jumpToTab(this.tabGroupCompare, this.cellInfoTabCompare);
       }
     }
+  }
+
+  /**
+   * Handles a click on a categorical legend entry: picks one cell currently colored with that
+   * category and runs it through the exact same selection path as clicking that cell's hexagon
+   * directly on the map.
+   */
+  public onLegendCategoryClicked(category: string, compare: boolean = false): void {
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    const features = compare ? (this.compareFeatures || []) : this.features;
+    const representativeCell = features.find((f) => String(f.properties?.[view]) === category);
+    if (!representativeCell) return;
+    this.displayCellDetails(representativeCell, compare);
   }
 
   /**
