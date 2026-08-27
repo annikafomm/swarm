@@ -19,19 +19,31 @@
           [groupedProperties]="groupedProperties" [selectedDataset]="selectedDataset"
           [builtinDatasets$]="builtinDatasets$" [uploadedDatasets$]="uploadedDatasets$"
           [tangramDatasets$]="tangram_Datasets$" [propertyAvailableFn]="propertyAvailableBound"
+          [compareMode]="compareMode" [currentDataSetSupportsCompare]="currentDataSetSupportsCompare"
+          [isXeniumDatasetSelected]="isXeniumDatasetSelected" [isLiveDrawerOpen]="isLiveDrawerOpen"
           (cellClicked)="displayCellDetails($event.cell, false)"
           (legendCategoryClicked)="onLegendCategoryClicked($event, false)"
           (selectedViewChange)="selectedView = $event" (colorByChanged)="onColorbyPropertyChange(false)"
           (selectedDatasetChange)="selectedDataset = $event" (datasetChanged)="onDatasetSelected($event, false)"
           (tangramDatasetSelected)="onDatasetTangramSelected($event, false)" (viewTutorialClicked)="selectViewTutorial()"
-          (datasetTutorialClicked)="selectDatasetTutorial()">
+          (datasetTutorialClicked)="selectDatasetTutorial()" (compareModeToggled)="onCompareMode()"
+          (liveDrawerToggled)="toggleLiveDrawer()">
         </app-hexagon-view>
 
-        <button class="basic-button" id="compare-button" (click)="onCompareMode()"
-          [matTooltip]="isXeniumDatasetSelected ? 'Comparison view not supported for Xenium datasets' : 'Toggle comparison view'"
-          [disabled]="!currentDataSetSupportsCompare || isInitializing || isXeniumDatasetSelected">
-          <mat-icon style="color: black;">compare_arrows</mat-icon>
-        </button>
+        <!-- Compare / Live Correlation Buttons – always in map-column -->
+        <div class="compare-mode-toggles-divider">
+          <button class="basic-button" id="compare-button" (click)="onCompareMode()"
+            [matTooltip]="isXeniumDatasetSelected ? 'Comparison view not supported for Xenium datasets' : 'Toggle comparison view'"
+            [disabled]="!currentDataSetSupportsCompare || isInitializing || isXeniumDatasetSelected">
+            <mat-icon style="color: black;">compare_arrows</mat-icon>
+          </button>
+
+          <button *ngIf="compareMode" class="basic-button" id="live-corr-button" (click)="toggleLiveDrawer()"
+            [class.active]="isLiveDrawerOpen" matTooltip="Toggle Live Correlation Side Drawer">
+            <mat-icon style="color: black;">insights</mat-icon>
+            <span style="color: black; font-weight: 700; margin-left: 4px;">Live Correlation</span>
+          </button>
+        </div>
       </div>
 
       <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
@@ -46,15 +58,24 @@
         </mat-tab>
 
         <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null" #clusterInfoTab>
+          <mat-form-field appearance="fill" class="cluster-property-select">
+            <mat-label>Cluster by</mat-label>
+            <mat-select [ngModel]="selectedView" (selectionChange)="onClusterPropertySelected($event.value, false)">
+              <mat-option *ngFor="let prop of categoricalProperties(false)" [value]="prop">
+                {{ prop | translate | async }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
           <app-cluster-info-panel #mainClusterInfo [isCompare]="false" [isLeidenView]="selectedView === 'leiden'"
-            [clusterId]="selectedCluster" [availableClusterIds]="availableClusterIds"
+            [clusterId]="selectedCluster" [availableClusterIds]="activeClusterValues(false)"
             (clusterSelected)="selectCluster($event, false)" [clusterCellCount]="clusterCells.length"
             [clusterCellTypes]="clusterCellTypes" [clusterCentralityAvg]="clusterCentralityAvg"
             [colorScale]="colorScale"
             (metricSelected)="onFurtherAttributeSelected($event, false)"></app-cluster-info-panel>
 
-          <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence')" [isCompare]="false"
-            [selectedClusterId]="selectedCluster" [coOccurrenceData]="coOccurrenceData" [clusterCount]="clusterCount"
+          <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence') && selectedView === 'leiden'" [isCompare]="false"
+            [selectedClusterId]="$any(selectedCluster)" [coOccurrenceData]="coOccurrenceData" [clusterCount]="clusterCount"
             [threshold]="coOccurrenceThreshold" [maxInterval]="maxInterval" [selectedInterval]="selectedInterval"
             [intervalBoundaries]="getIntervalBoundaries()" [continuousColorScale]="continuousColorScale"
             (intervalChanged)="selectedInterval = $event; updateCoOccurrenceTable()"
@@ -191,6 +212,14 @@
             (geneSelected)="onDgeaGeneSelected($event, false)"></app-dgea-panel>
         </mat-tab>
 
+        <mat-tab label="Spatial Correlation">
+          <app-spatial-correlation-panel [isCompare]="false" [datasetId]="selectedDataset?.id"
+            [isBivariateActive]="isBivariateActive"
+            (syncCompareRequested)="onSyncSpatialCompare($any($event), false)"
+            (applyBivariateColorRequested)="onApplyBivariateColor($any($event), false)"
+            (cellSelected)="onSpatialCellSelected($event, false)"></app-spatial-correlation-panel>
+        </mat-tab>
+
         <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
           [disabled]="!propertyAvailable('chromvar_total_sum')">
           <app-chromvar-correlation-panel [isCompare]="false" [moranIData]="meta['chromvar_moranI']"
@@ -265,6 +294,17 @@
           (selectedDatasetChange)="selectedDatasetCompare = $event" (datasetChanged)="onDatasetSelected($event, true)"
           (tangramDatasetSelected)="onDatasetTangramSelected($event, true)">
         </app-hexagon-view>
+
+        <app-live-correlation-drawer
+          [datasetId]="selectedDataset?.id"
+          [featureA]="getActiveFeatureId(false)"
+          [featureB]="getActiveFeatureId(true)"
+          [isVisible]="compareMode && isLiveDrawerOpen"
+          [isBivariateActive]="isBivariateActive"
+          (cellSelected)="onSpatialCellSelected($event, false)"
+          (applyBivariateColorRequested)="onApplyBivariateColor($event, false)"
+          (drawerClosed)="toggleLiveDrawer()">
+        </app-live-correlation-drawer>
       </div>
 
       <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
@@ -277,15 +317,24 @@
           </mat-tab>
 
           <mat-tab label="Cluster Information" *ngIf="selectedClusterCompare !== null" #clusterInfoTabCompare>
+            <mat-form-field appearance="fill" class="cluster-property-select">
+              <mat-label>Cluster by</mat-label>
+              <mat-select [ngModel]="selectedCompareView" (selectionChange)="onClusterPropertySelected($event.value, true)">
+                <mat-option *ngFor="let prop of categoricalProperties(true)" [value]="prop">
+                  {{ prop | translate | async }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
             <app-cluster-info-panel #compareClusterInfo [isCompare]="true"
               [isLeidenView]="selectedCompareView === 'leiden'" [clusterId]="selectedClusterCompare"
-              [availableClusterIds]="availableClusterIdsCompare" (clusterSelected)="selectCluster($event, true)"
+              [availableClusterIds]="activeClusterValues(true)" (clusterSelected)="selectCluster($event, true)"
               [clusterCellCount]="compareClusterCells.length" [clusterCellTypes]="compareClusterCellTypes"
               [clusterCentralityAvg]="compareClusterCentralityAvg" [colorScale]="colorScale"
               (metricSelected)="onFurtherAttributeSelected($event, true)"></app-cluster-info-panel>
 
-            <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence', true)" [isCompare]="true"
-              [selectedClusterId]="selectedClusterCompare" [coOccurrenceData]="compareCoOccurrenceData"
+            <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence', true) && selectedCompareView === 'leiden'" [isCompare]="true"
+              [selectedClusterId]="$any(selectedClusterCompare)" [coOccurrenceData]="compareCoOccurrenceData"
               [clusterCount]="clusterCountCompare" [threshold]="compareCoOccurrenceThreshold"
               [maxInterval]="maxIntervalCompare" [selectedInterval]="selectedIntervalCompare"
               [intervalBoundaries]="getIntervalBoundaries(true)" [continuousColorScale]="continuousColorScaleCompare"
@@ -430,6 +479,13 @@
               (vsAllChange)="dgeaVsAllCompare = $event; onDgeaVsAllChange(true)"
               (tableLoadingChange)="onTableLoadingChange($event)"
               (geneSelected)="onDgeaGeneSelected($event, true)"></app-dgea-panel>
+          </mat-tab>
+
+          <mat-tab label="Spatial Correlation">
+            <app-spatial-correlation-panel [isCompare]="true" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+              (syncCompareRequested)="onSyncSpatialCompare($any($event), true)"
+              (applyBivariateColorRequested)="onApplyBivariateColor($any($event), true)"
+              (cellSelected)="onSpatialCellSelected($event, true)"></app-spatial-correlation-panel>
           </mat-tab>
 
           <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"

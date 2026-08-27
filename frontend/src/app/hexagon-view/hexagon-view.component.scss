@@ -111,6 +111,23 @@
     cursor: grabbing !important;
   }
 
+  // `resize: both` above lets the user drag the panel larger, and the browser does that by
+  // writing an inline `height` on this element. The categorical list, however, carries its own
+  // default `max-height` (260px here, a vh-based value in the narrow-screen media query below)
+  // so that a legend with many categories -- heart has 65 cell types -- does not cover the map
+  // on first render. That cap also clamps the scroll viewport, so dragging the panel taller grew
+  // the box while the list stayed clipped at its default height, leaving blank space below it.
+  //
+  // Pure CSS cannot tell "user resized" from "default", because a stylesheet `max-height` always
+  // clamps an inline `height`. So the cap is dropped once the component detects the inline height
+  // the native resize writes (see isLegendUserResized). Three classes here, versus two for the
+  // media-query rule, so this wins at any viewport without !important.
+  &.user-resized {
+    .legend-categorical-container {
+      max-height: none;
+    }
+  }
+
   &.collapsed {
     resize: none !important;
     height: auto !important;
@@ -279,11 +296,145 @@
       }
     }
   }
+
+  // Bivariate 2D Scale
+  .legend-bivariate-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 4px 2px 4px;
+    gap: 4px;
+
+    .bivariate-legend-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+
+      .bivariate-y-axis {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        text-align: center;
+
+        .y-axis-label {
+          font-size: 10px;
+          font-weight: 600;
+          color: #c026d3; // Magenta for Feature B (Y)
+          white-space: nowrap;
+          max-width: 75px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: inline-block;
+        }
+      }
+
+      .bivariate-square-box {
+        width: 76px;
+        height: 76px;
+        border: 1px solid rgba(0, 0, 0, 0.25);
+        border-radius: 4px;
+        overflow: hidden;
+        box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.15);
+
+        .bivariate-gradient-square {
+          width: 100%;
+          height: 100%;
+          background:
+            linear-gradient(to top, rgba(0, 255, 0, 0.7), rgba(255, 0, 0, 0.9)),
+            linear-gradient(to right, transparent, rgba(0, 0, 255, 0.9));
+          background-blend-mode: screen;
+        }
+      }
+    }
+
+    .bivariate-x-axis {
+      text-align: center;
+      width: 100%;
+
+      .x-axis-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: #0284c7; // Cyan for Feature A (X)
+        white-space: nowrap;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: inline-block;
+      }
+    }
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Toolbar row (dropdowns + info buttons below the map)
-// ---------------------------------------------------------------------------
+.view-controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  gap: 4px;
+  margin-top: 4px;
+  position: relative;
+
+  .toggles-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 4px;
+    z-index: 100;
+
+    .compare-header-btn,
+    .live-corr-header-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+
+      .btn-label {
+        font-weight: 600;
+      }
+    }
+
+    .compare-header-btn {
+      background-color: #fabc36;
+      color: #000;
+      border: none;
+      box-shadow: 0 2px 6px rgba(250, 188, 54, 0.3);
+
+      &:hover {
+        background-color: #f5b025;
+        box-shadow: 0 4px 10px rgba(250, 188, 54, 0.45);
+      }
+
+      &[disabled] {
+        background-color: #f0f0f0;
+        color: #999;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+    }
+
+    .live-corr-header-btn {
+      background: #ffffff;
+      border: 1px solid #ff9800;
+      color: #1e293b;
+      box-shadow: 0 2px 6px rgba(255, 152, 0, 0.18);
+
+      &:hover, &.active {
+        background: #fff8eb;
+        border-color: #f59e0b;
+        color: #d97706;
+        box-shadow: 0 4px 10px rgba(255, 152, 0, 0.35);
+      }
+    }
+  }
+}
+
 .row-container,
 .centered-row-container {
   display: flex;
@@ -295,8 +446,25 @@
   box-sizing: border-box;
 
   .mat-mdc-form-field {
-    min-width: 140px;
-    max-width: 220px;
+    min-width: 90px;
+    max-width: 140px;
+
+    // Compact height — default filled container is 56px, reduce to ~44px
+    --mat-form-field-container-height: 44px;
+    --mat-form-field-filled-with-label-container-padding-top: 14px;
+    --mat-form-field-filled-with-label-container-padding-bottom: 4px;
+
+    .mdc-text-field--filled {
+      height: 44px;
+    }
+
+    .mat-mdc-floating-label {
+      font-size: 0.7rem !important;
+    }
+
+    .mat-mdc-select-value-text, .mat-mdc-select-placeholder {
+      font-size: 0.82rem;
+    }
   }
 
   .info-btn {

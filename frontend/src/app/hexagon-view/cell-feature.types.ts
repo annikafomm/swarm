@@ -16,6 +16,7 @@ export interface CellProperties {
 
 export interface CellFeature {
   type: 'Feature';
+  id?: string | number;
   geometry: CellGeometry;
   properties: CellProperties;
 }
@@ -34,3 +35,4 @@ export interface PropertyGroup {
   description: string;
   items: PropertyGroupItem[];
 }
+

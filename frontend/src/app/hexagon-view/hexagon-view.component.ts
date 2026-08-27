@@ -29,11 +29,17 @@ export interface LegendCategoryItem {
 
 export interface MapLegendInfo {
   title: string;
-  type: 'continuous' | 'categorical';
+  type: 'continuous' | 'categorical' | 'bivariate';
   minText?: string;
   maxText?: string;
   gradientStops?: string;
   items?: LegendCategoryItem[];
+  bivariateInfo?: {
+    labelA: string;
+    labelB: string;
+    colorA: string;
+    colorB: string;
+  };
 }
 
 export interface HexagonRenderContext {
@@ -83,9 +89,56 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   @Input() selectedView = '';
   @Input() legendInfo: MapLegendInfo | null = null;
   public isLegendCollapsed = false;
-  public activeClusterId: number | null = null;
+  /**
+   * True once the user has dragged the legend's native resize corner. The categorical list has a
+   * default `max-height` so a 65-category legend does not cover the map on first render, but that
+   * cap also clamps the scroll viewport — so resizing the panel taller used to leave the list
+   * clipped at its default height with blank space below. This flag adds `.user-resized`, which
+   * drops the cap.
+   *
+   * CSS alone cannot express this: a stylesheet `max-height` always clamps an inline `height`, and
+   * the inline height is exactly what `resize: both` writes. So we detect that written height.
+   */
+  public isLegendUserResized = false;
+  private legendResizeObserver?: ResizeObserver;
+
+  /**
+   * Setter rather than a plain @ViewChild because the legend sits behind `*ngIf="legendInfo"`, so
+   * the element is created and destroyed as views change and a one-shot AfterViewInit read would
+   * miss it.
+   */
+  @ViewChild('legendOverlay')
+  set legendOverlay(ref: ElementRef<HTMLElement> | undefined) {
+    this.legendResizeObserver?.disconnect();
+    this.legendResizeObserver = undefined;
+    const el = ref?.nativeElement;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    // Any inline height on this element can only have come from the native resize handle —
+    // nothing in the template or this class sets one, and `.collapsed`'s `height: auto` is a
+    // stylesheet rule, not an inline style.
+    this.legendResizeObserver = new ResizeObserver(() => {
+      if (!this.isLegendUserResized && el.style.height) {
+        this.isLegendUserResized = true;
+      }
+    });
+    this.legendResizeObserver.observe(el);
+  }
+  /** The active cluster value for whichever categorical property is currently colored-by — a
+   * Leiden cluster id, or any other categorical property's raw value. */
+  public activeClusterValue: string | number | null = null;
   public hoveredHexInfo: HexHoverInfo | null = null;
   public hoverTooltipPos = { x: 0, y: 0 };
+  /**
+   * Whether the currently-active view should drive cluster-highlight behavior (click/hover
+   * outlining a whole group of same-valued cells) — true for 'leiden' and any other categorical
+   * property. Kept in sync two ways: via ngOnChanges (Angular-CD-driven, both @Input()s update
+   * together so it's timing-safe there) and via setCurrentView's second param (the imperative
+   * @ViewChild path, called ahead of Angular's own change detection — see the class doc above
+   * for why render-time state is passed explicitly rather than read from @Input() in that path).
+   */
+  private isActiveViewCategorical = false;
 
   public toggleLegendCollapse(event?: MouseEvent): void {
     if (event) {
@@ -97,6 +150,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   // ======= Toolbar (color-by / dataset selectors) =======
   @Input() isInitializing = false;
   @Input() isLoadingMap = false;
+  @Input() compareMode = false;
+  @Input() currentDataSetSupportsCompare = true;
+  @Input() isXeniumDatasetSelected = false;
+  @Input() isLiveDrawerOpen = false;
   @Input() groupedProperties: { key: string; value: string[] }[] | null = null;
   @Input() selectedDataset: Dataset | null = null;
   @Input() builtinDatasets$!: Observable<Dataset[]>;
@@ -113,6 +170,8 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   @Output() tangramDatasetSelected = new EventEmitter<Dataset>();
   @Output() viewTutorialClicked = new EventEmitter<void>();
   @Output() datasetTutorialClicked = new EventEmitter<void>();
+  @Output() compareModeToggled = new EventEmitter<void>();
+  @Output() liveDrawerToggled = new EventEmitter<void>();
 
   public isPropertyAvailable(prop: string): boolean {
     return this.propertyAvailableFn(prop, this.isCompare);
@@ -138,6 +197,19 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
   private currentTransform = d3.zoomIdentity;
 
+  /**
+   * Min/max zoom scale for the map.
+   *
+   * The floor was previously 1, which is the *initial fitted* scale — so there was nothing below
+   * the starting view to reach and zoom-out was silently impossible, while zoom-in worked. 0.35
+   * gives roughly a third-size overview, enough to pull back and see a whole section in context.
+   *
+   * Safe to go below 1 here: the only clipped layer, `.detail-layer` (`url(#detail-clip)`), is a
+   * child of the <svg> rather than of the zoomed <g>, so it is a fixed inset and is unaffected by
+   * this transform.
+   */
+  private static readonly ZOOM_SCALE_EXTENT: [number, number] = [0.35, 5];
+
   // ======= Xenium detail-window state =======
   private readonly detailSize = 80;
   private detailVisible = false;
@@ -146,9 +218,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   private lastRenderCtx: HexagonRenderContext | null = null;
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selectedView']) {
-      if (this.selectedView !== 'leiden') {
-        this.activeClusterId = null;
+    if (changes['selectedView'] || changes['legendInfo']) {
+      this.isActiveViewCategorical = this.legendInfo?.type === 'categorical';
+      if (changes['selectedView'] && !this.isActiveViewCategorical) {
+        this.activeClusterValue = null;
       }
     }
     if (changes['selectedCell'] || changes['selectedView']) {
@@ -160,6 +233,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     if (this.keydownHandler) {
       window.removeEventListener('keydown', this.keydownHandler);
     }
+    this.legendResizeObserver?.disconnect();
   }
 
   /** Removes any existing SVG in this instance's container before a fresh createHexagonPlot(). */
@@ -207,7 +281,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
     const zoomBehavior = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 5])
+      .scaleExtent(HexagonViewComponent.ZOOM_SCALE_EXTENT)
       .extent([
         [0, 0],
         [width, height],
@@ -222,6 +296,13 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
       });
 
     (svgSel as any).call(zoomBehavior);
+    // createHexagonPlot() reuses the existing <svg> via .join() rather than always creating a
+    // fresh one (see clearSvg()'s doc comment, which this method's own comment promises but
+    // doesn't itself guarantee) -- without this, any prior zoom/pan (D3's internal state lives
+    // on the DOM node) silently carries over to whatever dataset/view is rendered next, so a
+    // freshly-fitted projection for the new dataset gets viewed through a stale camera position.
+    (svgSel as any).call(zoomBehavior.transform, d3.zoomIdentity);
+    this.currentTransform = d3.zoomIdentity;
   }
 
   public renderHexagons(ctx: HexagonRenderContext): void {
@@ -240,6 +321,17 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
     this.currentPathGenerator = d3.geoPath<CellFeature>().projection(projection);
     const pathGenerator = this.currentPathGenerator;
+
+    if (ctx.features.length) {
+      const sample = ctx.features[0];
+      const bounds = pathGenerator.bounds(sample as any);
+      console.log(
+        '[DEBUG renderHexagons] n=', ctx.features.length,
+        'isXenium=', ctx.isXenium,
+        'sample screen-space bbox=', bounds,
+        'sample screen-space width/height=', bounds[1][0] - bounds[0][0], bounds[1][1] - bounds[0][1],
+      );
+    }
 
     if (ctx.isXenium) {
       ctx.fullFeatures.forEach((f) => {
@@ -291,23 +383,30 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     // setup. The parent redirects that same call sequence to this instance's public methods.
   }
 
-  public extendCluster(selectedCluster: number, _features?: CellFeature[]): void {
-    this.activeClusterId = selectedCluster;
+  public extendCluster(selectedCluster: string | number, _features?: CellFeature[]): void {
+    this.activeClusterValue = selectedCluster;
     this.updateSelectionHighlight();
   }
 
   public resetClusterExtension(_features?: CellFeature[]): void {
-    this.activeClusterId = null;
+    this.activeClusterValue = null;
     this.updateSelectionHighlight();
   }
 
-  public setCurrentView(view: string): void {
+  /**
+   * isCategorical: the parent computes this (isActiveCategorical) and passes it explicitly
+   * rather than this method reading @Input() legendInfo — called imperatively via @ViewChild
+   * ahead of Angular's own change detection, so legendInfo could still hold the previous view's
+   * stale value at this point (see the class doc above).
+   */
+  public setCurrentView(view: string, isCategorical: boolean): void {
     this.selectedView = view;
     if (this.lastRenderCtx) {
       this.lastRenderCtx.selectedView = view;
     }
-    if (view !== 'leiden') {
-      this.activeClusterId = null;
+    this.isActiveViewCategorical = isCategorical;
+    if (!isCategorical) {
+      this.activeClusterValue = null;
     }
     this.updateSelectionHighlight();
   }
@@ -320,22 +419,21 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   /**
    * Reapplies highlight borders consistently:
    * - Selected cell: thick black border (3px)
-   * - Cluster members (Leiden view ONLY): thin black border (1.4px)
+   * - Cluster members (categorical view ONLY): thin black border (1.4px)
    * - Other cells: transparent border
    * Highlighting is purely border-based without dimming cell colors.
    */
   public updateSelectionHighlight(): void {
     if (!this.g) return;
     const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
-    const isLeiden = currentView === 'leiden';
-    const activeCluster = isLeiden ? this.activeClusterId : null;
+    const activeCluster = this.isActiveViewCategorical ? this.activeClusterValue : null;
 
     this.g.selectAll<SVGPathElement, CellFeature>('path')
       .each((d: CellFeature, i, nodes) => {
         if (!d || !d.properties) return;
         const el = d3.select(nodes[i]);
         const isSelectedCell = !!this.selectedCell && d.properties.barcode === this.selectedCell.properties.barcode;
-        const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties.leiden, activeCluster);
+        const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties[currentView], activeCluster);
 
         if (isSelectedCell) {
           el.interrupt()
@@ -399,11 +497,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     el.interrupt();
 
     const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
-    const isLeiden = currentView === 'leiden';
-    const activeCluster = isLeiden ? this.activeClusterId : null;
+    const activeCluster = this.isActiveViewCategorical ? this.activeClusterValue : null;
 
     const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;
-    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.leiden, activeCluster);
+    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.[currentView], activeCluster);
 
     const strokeWidth = isSelectedCell ? '3px' : (isClusterMember ? '2px' : '1.2px');
 
@@ -421,7 +518,7 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
       barcode: d.properties?.barcode || '',
       propertyName: propLabel,
       value: this.formatHoverValue(rawValue),
-      cluster: d.properties?.leiden !== undefined ? d.properties.leiden : undefined,
+      cluster: this.isActiveViewCategorical ? (d.properties?.[currentView] as string | number | undefined) : undefined,
     };
 
     this.updateTooltipPos(event);
@@ -441,11 +538,10 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
     el.interrupt();
 
     const currentView = this.selectedView || this.lastRenderCtx?.selectedView || '';
-    const isLeiden = currentView === 'leiden';
-    const activeCluster = isLeiden ? this.activeClusterId : null;
+    const activeCluster = this.isActiveViewCategorical ? this.activeClusterValue : null;
 
     const isSelectedCell = !!this.selectedCell && d.properties?.barcode === this.selectedCell.properties?.barcode;
-    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.leiden, activeCluster);
+    const isClusterMember = activeCluster !== null && this.isSameCluster(d.properties?.[currentView], activeCluster);
 
     if (isSelectedCell) {
       el.attr('stroke', '#000')

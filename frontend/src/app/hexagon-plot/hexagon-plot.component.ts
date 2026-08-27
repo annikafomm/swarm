@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -19,6 +19,7 @@ import { TranslationService } from '../translation.service';
 import { PathsService } from '../paths.service';
 import { DEFAULT_PATHS } from '../constants';
 import { InfoService } from '../info.service';
+import { GeneSymbolService } from '../gene-symbol.service';
 import { HexagonViewComponent, MapLegendInfo } from '../hexagon-view/hexagon-view.component';
 import { CellInfoPanelComponent } from '../cell-info-panel/cell-info-panel.component';
 import { ClusterInfoPanelComponent } from '../cluster-info-panel/cluster-info-panel.component';
@@ -32,7 +33,10 @@ import { RegulatoryScoresPanelComponent } from '../regulatory-scores-panel/regul
 import { GrnEvaluationPanelComponent } from '../grn-evaluation-panel/grn-evaluation-panel.component';
 import { GrnEvaluationOnDemandPanelComponent } from '../grn-evaluation-on-demand-panel/grn-evaluation-on-demand-panel.component';
 import { FurtherAttributesPanelComponent } from '../further-attributes-panel/further-attributes-panel.component';
+import { SpatialCorrelationPanelComponent } from '../spatial-correlation-panel/spatial-correlation-panel.component';
+import { LiveCorrelationDrawerComponent } from '../live-correlation-drawer/live-correlation-drawer.component';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
+import { isSpatialOrIdentifierKey, isUninformativeAttribute } from '../attribute-filters';
 
 // Material
 import { MatButtonModule } from '@angular/material/button';
@@ -45,6 +49,7 @@ import { MatFormField } from '@angular/material/form-field';
 import { MatOption } from '@angular/material/autocomplete';
 import { MatLabel } from '@angular/material/form-field';
 import { MatSelect } from '@angular/material/select';
+import { TranslatePipe } from '../translate.pipe';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatTableModule } from '@angular/material/table';
 import { MatDividerModule } from '@angular/material/divider';
@@ -85,7 +90,7 @@ export const LEIDEN_CLUSTER_PALETTE: string[] = [
 
 @Component({
   selector: 'app-hexagon-plot',
-  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
+  imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, SpatialCorrelationPanelComponent, LiveCorrelationDrawerComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, TranslatePipe, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
   standalone: true,
   templateUrl: './hexagon-plot.component.html',
   styleUrls: ['./hexagon-plot.component.scss'],
@@ -140,6 +145,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public grnImageUrlBoundCompare = (imageName: string): string => this.getGrnImageUrl(imageName, true);
 
   compareMode: boolean = false;
+  isLiveDrawerOpen: boolean = true;
+
+  public toggleLiveDrawer(): void {
+    this.isLiveDrawerOpen = !this.isLiveDrawerOpen;
+  }
 
   // Track component destruction to avoid setting state on an unmounted component
   private destroy$ = new Subject<void>();
@@ -154,6 +164,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     private pathsService: PathsService,
     private sanitizer: DomSanitizer,
     public infoService: InfoService,
+    private geneSymbolService: GeneSymbolService,
+    private cdr: ChangeDetectorRef,
   ) {
 
     // Setup dataset observables
@@ -192,8 +204,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public selectedCell: CellFeature | null = null;
   public selectedCellCompare: CellFeature | null = null;
-  public selectedCluster: number | null = null;
-  public selectedClusterCompare: number | null = null;
+  /** The active "cluster" value for whichever categorical property is currently colored-by —
+   * a Leiden cluster id (number) when selectedView === 'leiden', or any other categorical
+   * property's raw value (e.g. a cell_type string) otherwise. */
+  public selectedCluster: string | number | null = null;
+  public selectedClusterCompare: string | number | null = null;
 
   public selectedView = 'regulatory_scores';
   public selectedCompareView: string = 'regulatory_scores';
@@ -212,6 +227,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedRegulatoryScoreCompare: string | null = null;
   public selectedGeneExpressionMain: string | null = null;
   public selectedGeneExpressionCompare: string | null = null;
+  public isBivariateActive: boolean = false;
+  private lastActiveFeatureMain: { id: string; name: string } | null = null;
+  private lastActiveFeatureCompare: { id: string; name: string } | null = null;
   private regulatoryObsmKeysMain: string[] = [];
   private regulatoryObsmKeysCompare: string[] = [];
 
@@ -550,6 +568,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
 
   ngOnInit(): void {
+    // The regulatory network graphs are drawn imperatively with d3, so they keep whatever
+    // labels were resolvable at draw time. The symbol map is fetched asynchronously when a
+    // dataset is selected and can land after a graph has already been drawn from Ensembl ids
+    // — redraw when it does, or the graph stays unreadable until the next interaction.
+    this.geneSymbolService.changed$
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        try {
+          this.resortGeneSetElements();
+          this.redrawRegulatoryGraphs();
+        } catch (err) {
+          console.warn('[GeneSymbols] relabel pass failed; leaving current labels in place', err);
+        }
+      });
+
     // Initialize with default builtin dataset if no dataset is selected
     this.datasetService.availableDatasets$
       .pipe(
@@ -799,10 +832,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public syncClusterHighlight(compare: boolean = false): void {
     const isComp = compare;
-    const currentView = isComp ? this.selectedCompareView : this.selectedView;
     const targetView = isComp ? this.compareView : this.mainView;
 
-    if (currentView === 'leiden') {
+    if (this.isActiveCategorical(isComp)) {
       let clusterId = isComp ? this.selectedClusterCompare : this.selectedCluster;
       if (clusterId === null) {
         this.autoSelectDefaultCluster(isComp);
@@ -878,7 +910,54 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.onColorbyPropertyChange(compare);
   }
 
+  /**
+   * Global choke point for suppressing tab-jumps. Both jump primitives (jumpToTabByLabel,
+   * jumpToTab) check this flag before moving the sidebar, so any control that lives inside a tab
+   * and triggers a property/color change that would otherwise re-derive and jump to a (possibly
+   * different) tab can wrap its call in withoutTabJump(...) — no need to thread a skipTabJump
+   * parameter through every intermediate method between the trigger and the jump call, which is
+   * what onColorbyPropertyChange's own skipTabJump had to do. Add future "stay on this tab"
+   * exceptions here rather than growing more one-off boolean parameters.
+   */
+  private suppressTabJump = false;
+
+  private withoutTabJump(fn: () => void): void {
+    const previous = this.suppressTabJump;
+    this.suppressTabJump = true;
+    try {
+      fn();
+    } finally {
+      this.suppressTabJump = previous;
+    }
+  }
+
+  /** Handles the "Cluster by" dropdown atop the Cluster Information tab: the user is already
+   * explicitly on this tab, so switching the active cluster property must never jump away from
+   * it (unlike picking a property from the main "Color hexagons by" dropdown). */
+  public onClusterPropertySelected(attribute: string, compare: boolean = false): void {
+    this.withoutTabJump(() => {
+      this.onFurtherAttributeSelected(attribute, compare);
+      this.selectClusterForActiveProperty(compare);
+    });
+  }
+
+  /** After switching the active clustering property, re-derives which cluster is selected: the
+   * currently selected cell's value under the new property (keeps map/tab in sync with the
+   * selection the user already made), or the same default-cluster logic used on initial load if
+   * no cell is selected. */
+  private selectClusterForActiveProperty(compare: boolean = false): void {
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    const selectedCell = compare ? this.selectedCellCompare : this.selectedCell;
+    const cellValue = selectedCell?.properties?.[view] as string | number | undefined;
+    if (cellValue !== undefined && cellValue !== null && cellValue !== '') {
+      this.selectCluster(cellValue, compare);
+    } else {
+      this.autoSelectDefaultCluster(compare);
+    }
+  }
+
   public jumpToTabByLabel(tabLabel: string, compare: boolean = false): void {
+    if (this.suppressTabJump) return;
     const group = compare ? this.tabGroupCompare : this.tabGroup;
     if (!group) return;
 
@@ -909,6 +988,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * shifts every other tab's numeric index whenever they appear or disappear.
    */
   private jumpToTab(group: MatTabGroup | undefined, tab: MatTab | undefined): void {
+    if (this.suppressTabJump) return;
     if (!group || !tab) return;
     const select = () => {
       const tabs: MatTab[] = (group as any)._tabs?.toArray?.() ?? [];
@@ -975,38 +1055,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (tabLabel === 'Cluster Information') {
       if (compare) {
-        if (this.selectedCompareView !== 'leiden') {
+        // Only fall back to Leiden if nothing categorical is already selected — don't clobber
+        // the user's own choice of a different categorical property.
+        if (!this.isActiveCategorical(true)) {
           this.selectedCompareView = 'leiden';
           this.onColorbyPropertyChange(true);
         }
-        let cluster = this.selectedClusterCompare;
-        if (cluster === null) {
-          this.autoSelectDefaultCluster(true);
-          cluster = this.selectedClusterCompare;
+        // Re-derive the selected cluster from the selected cell whenever one exists (e.g. this
+        // tab was just jumped to from a cell click — see displayCellDetails) rather than only
+        // on a null cluster, otherwise a stale cluster from before the cell was selected lingers
+        // until the user manually touches the "Cluster by" dropdown.
+        if (this.selectedCellCompare || this.selectedClusterCompare === null) {
+          this.selectClusterForActiveProperty(true);
         }
+        const cluster = this.selectedClusterCompare;
         if (cluster !== null) {
           this.compareView?.extendCluster(cluster);
-          setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
-            cluster,
-            this.metaCompare?.['leiden_cluster_annotations'],
-          ), 300);
+          if (this.selectedCompareView === 'leiden') {
+            setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+              cluster,
+              this.metaCompare?.['leiden_cluster_annotations'],
+            ), 300);
+          }
         }
       } else {
-        if (this.selectedView !== 'leiden') {
+        if (!this.isActiveCategorical(false)) {
           this.selectedView = 'leiden';
           this.onColorbyPropertyChange(false);
         }
-        let cluster = this.selectedCluster;
-        if (cluster === null) {
-          this.autoSelectDefaultCluster(false);
-          cluster = this.selectedCluster;
+        if (this.selectedCell || this.selectedCluster === null) {
+          this.selectClusterForActiveProperty(false);
         }
+        const cluster = this.selectedCluster;
         if (cluster !== null) {
           this.mainView?.extendCluster(cluster);
-          setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
-            cluster,
-            this.meta?.['leiden_cluster_annotations'],
-          ), 300);
+          if (this.selectedView === 'leiden') {
+            setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+              cluster,
+              this.meta?.['leiden_cluster_annotations'],
+            ), 300);
+          }
         }
       }
       return;
@@ -1452,8 +1540,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log('[DEBUG] Loading GeoJSON from:', fullUrl, 'compare=', compare);
 
-    // Use fetch instead of d3.json to handle credentials properly
-    fetch(fullUrl, { credentials: 'include' })
+    // Use fetch instead of d3.json to handle credentials properly.
+    // cache: 'no-store' -- the geojson endpoint serves a FileResponse with no explicit
+    // Cache-Control header, so a plain reload can silently reuse a stale cached response
+    // (e.g. after the backend regenerates hexagons.geojson with new geometry) without any
+    // network request ever showing the change. Force a real fetch every time.
+    fetch(fullUrl, { credentials: 'include', cache: 'no-store' })
       .then(response => {
         if (!response.ok) {
           throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
@@ -1630,8 +1722,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.geneSetsSponge = this.meta['sponge_genesets'] || {};
           }
           // Populate dropdown options from gene set keys
-          this.genie3Elements = Object.keys(this.geneSetsGenie3);
-          this.spongeElements = Object.keys(this.geneSetsSponge);
+          this.genie3Elements = this.sortedByGeneLabel(Object.keys(this.geneSetsGenie3));
+          this.spongeElements = this.sortedByGeneLabel(Object.keys(this.geneSetsSponge));
           this.selectedGeneSetGenie3 =
             Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
           this.selectedGeneSetSponge =
@@ -2080,7 +2172,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public onColorbyPropertyChange(compare: boolean = false, skipTabJump: boolean = false): void {
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
     const targetView = compare ? this.compareView : this.mainView;
-    targetView?.setCurrentView(colorProp);
+    targetView?.setCurrentView(colorProp, this.isActiveCategorical(compare));
 
     // Automatically jump sidebar to matching tab for the selected property
     if (!skipTabJump) {
@@ -2168,6 +2260,46 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const shouldTreatAsCategorical = allIntegers && uniqueIntegerCount <= 20;
 
     return allNumbers && !shouldTreatAsCategorical && numericValues.length > 0;
+  }
+
+  /** Whether the currently colored-by property should drive cluster-highlighting behavior —
+   * true for 'leiden' and any other categorical property (per isContinuousScale), false for
+   * continuous ones (gene_expression, regulatory_scores, ...). */
+  public isActiveCategorical(compare: boolean = false): boolean {
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    return !!view && !this.isContinuousScale(view, undefined, compare);
+  }
+
+  /** Categorical properties eligible to drive the Cluster Information tab (the dropdown at its
+   * top) — any colorable property whose values aren't a continuous scale, excluding the same
+   * "silly" attributes (spatial coordinates, IDs, constant columns) hidden in Further Attributes. */
+  public categoricalProperties(compare: boolean = false): string[] {
+    const props = compare ? this.colorablePropertiesCompare : this.colorableProperties;
+    const features = compare ? this.compareFeatures : this.features;
+    return props.filter(
+      (p) =>
+        !this.isContinuousScale(p, undefined, compare) &&
+        !isSpatialOrIdentifierKey(p) &&
+        !isUninformativeAttribute(p, features),
+    );
+  }
+
+  /** Distinct values of the currently active categorical property, for the "cluster" select
+   * dropdown in the Cluster Information tab. For 'leiden' this reuses availableClusterIds
+   * (populated once from leiden_cluster_annotations when data loads); for any other categorical
+   * property, computed from the actual distinct values present on the features. */
+  public activeClusterValues(compare: boolean = false): (string | number)[] {
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    if (view === 'leiden') {
+      return compare ? this.availableClusterIdsCompare : this.availableClusterIds;
+    }
+    const features = (compare ? this.compareFeatures : this.features) || [];
+    const values = new Set<string | number>();
+    features.forEach((f) => {
+      const raw = f.properties?.[view] as string | number | undefined;
+      if (raw !== undefined && raw !== null && raw !== '') values.add(raw);
+    });
+    return Array.from(values).sort((a, b) => String(a).localeCompare(String(b)));
   }
 
 
@@ -2266,7 +2398,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     }
 
     const targetView = isMainView ? this.mainView : this.compareView;
-    targetView?.setCurrentView(viewToUse);
+    targetView?.setCurrentView(viewToUse, !this.isContinuousScale(viewToUse, features, !isMainView));
 
     const layerToColor = (
       (containerName === '#hexbin' && this.isXenium)
@@ -2666,6 +2798,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
+    // Hover text carries the full identifier, so a truncated or symbol-substituted label
+    // never hides which gene a node actually is.
+    node.append('title').text((d: any) => this.geneNodeTooltip(d.id));
+
     // Add labels
     const labels = svg
       .append('g')
@@ -2680,9 +2816,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         d.group === 0 ? 'bold' : 'normal',
       )
       .style('fill', '#333')
-      .text((d: any) =>
-        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-      );
+      .text((d: any) => this.geneNodeLabel(d.id));
 
     // Initialize simulation with stronger forces
     const simulation = d3
@@ -2827,6 +2961,75 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           this.checkInitializationComplete(compare);
         },
       });
+  }
+
+  /**
+   * Gene-set ids ordered by the label the user actually sees. SPONGE's modules are Ensembl ids,
+   * whose numeric order is unrelated to the gene symbols they display as — leaving them in id
+   * order would make the dropdown look randomly shuffled.
+   */
+  private sortedByGeneLabel(ids: string[]): string[] {
+    // Never allowed to throw. This runs inside the GeoJSON-load callback, upstream of the
+    // regulatory score/gene-set wiring — a failure here would silently skip all of it and
+    // present as "the regulatory scores are broken", which is a wildly disproportionate
+    // outcome for a cosmetic sort.
+    try {
+      return [...ids].sort((a, b) =>
+        this.geneSymbolService.label(a).localeCompare(this.geneSymbolService.label(b)),
+      );
+    } catch (err) {
+      console.warn('[GeneSymbols] could not sort gene sets by label; keeping source order', err);
+      return ids;
+    }
+  }
+
+  /** Re-order the gene-set dropdowns once symbols are known (see sortedByGeneLabel). */
+  private resortGeneSetElements(): void {
+    this.genie3Elements = this.sortedByGeneLabel(this.genie3Elements);
+    this.spongeElements = this.sortedByGeneLabel(this.spongeElements);
+    this.genie3ElementsCompare = this.sortedByGeneLabel(this.genie3ElementsCompare);
+    this.spongeElementsCompare = this.sortedByGeneLabel(this.spongeElementsCompare);
+  }
+
+  /**
+   * Re-render whichever regulatory network graphs are currently on screen.
+   *
+   * Only graphs that already have their edges are redrawn: one whose connections are still in
+   * flight would just be cleared and re-drawn a moment later by the request itself, and the
+   * blank frame in between is worse than a graph that briefly shows ids.
+   */
+  private redrawRegulatoryGraphs(): void {
+    for (const compare of [false, true]) {
+      if (compare && !this.compareMode) continue;
+      const genie3Edges = compare ? this.genie3NetworkCompare : this.genie3Network;
+      const spongeEdges = compare ? this.spongeNetworkCompare : this.spongeNetwork;
+      if ((compare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3) && genie3Edges?.length) {
+        this.visualizeGenie3Subgraph(compare);
+      }
+      if ((compare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge) && spongeEdges?.length) {
+        this.visualizeSpongeSubgraph(compare);
+      }
+    }
+  }
+
+  /**
+   * Node label for the regulatory network graphs.
+   *
+   * SPONGE's ceRNA network is keyed by Ensembl id throughout, so a node that used to read
+   * `ENSG0000...` (an eight-character prefix shared by most of the genome, and therefore
+   * indistinguishable from its neighbours) now reads its gene symbol. Ids with no symbol in
+   * the dataset, and the symbol-keyed GENIE3/TF networks, are unchanged apart from the
+   * slightly longer truncation budget symbols can afford.
+   */
+  private geneNodeLabel(id: string, maxLength = 10): string {
+    const label = this.geneSymbolService.label(id);
+    return label.length > maxLength ? label.substring(0, maxLength) + '...' : label;
+  }
+
+  /** Hover text for a graph node: the symbol, plus the raw id it stands in for. */
+  private geneNodeTooltip(id: string): string {
+    const ensemblId = this.geneSymbolService.idFor(id);
+    return ensemblId ? `${this.geneSymbolService.label(id)} (${ensemblId})` : String(id ?? '');
   }
 
   public visualizeSpongeSubgraph(compare: boolean = false): void {
@@ -2982,6 +3185,10 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         }
       });
 
+    // Hover text carries the full identifier, so a truncated or symbol-substituted label
+    // never hides which gene a node actually is.
+    node.append('title').text((d: any) => this.geneNodeTooltip(d.id));
+
     // Add labels
     const labels = svg
       .append('g')
@@ -2996,9 +3203,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         d.group === 0 ? 'bold' : 'normal',
       )
       .style('fill', '#333')
-      .text((d: any) =>
-        d.id.length > 8 ? d.id.substring(0, 8) + '...' : d.id,
-      );
+      .text((d: any) => this.geneNodeLabel(d.id));
 
     // Initialize simulation with stronger forces
     const simulation = d3
@@ -3123,25 +3328,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       // 1. Always select the clicked cell
       this.selectedCell = cell;
 
-      // 2. Always update cluster information in the background if leiden is present
-      const rawLeiden = cell.properties?.leiden;
-      const clusterId = rawLeiden !== undefined && rawLeiden !== null && !isNaN(Number(rawLeiden))
-        ? Number(rawLeiden)
-        : null;
+      // 2. If the map is colored by a categorical property (leiden or otherwise), update
+      // cluster information in the background for whatever value this cell has there.
+      const isCategorical = this.isActiveCategorical(false);
+      const rawValue = isCategorical ? (cell.properties?.[this.selectedView] as string | number | undefined) : undefined;
+      const clusterValue = rawValue !== undefined && rawValue !== null && rawValue !== '' ? rawValue : null;
 
-      if (clusterId !== null) {
-        this.selectedCluster = clusterId;
+      if (clusterValue !== null) {
+        this.selectedCluster = clusterValue;
         this.clusterCells = (this.features || []).filter(
-          (c) => Number(c.properties?.leiden) === clusterId,
+          (c) => String(c.properties?.[this.selectedView]).trim() === String(clusterValue).trim(),
         );
         this.calculateClusterStats(false);
-        this.updateCoOccurrenceTable(false);
-        setTimeout(() => this.updateSubgraphGenie3(false), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-        setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
-          clusterId,
-          this.meta?.['leiden_cluster_annotations'],
-        ), 300);
+        if (this.selectedView === 'leiden') {
+          this.updateCoOccurrenceTable(false);
+          setTimeout(() => this.updateSubgraphGenie3(false), 100);
+          setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+          setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+            clusterValue,
+            this.meta?.['leiden_cluster_annotations'],
+          ), 300);
+        }
       }
 
       // 3. Fetch regulatory scores if in that view
@@ -3150,9 +3357,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       // 4. View-dependent highlighting & tab navigation
-      if (this.selectedView === 'leiden' && clusterId !== null) {
+      if (isCategorical && clusterValue !== null) {
         // Outline entire cluster (thin) + clicked cell (thick)
-        this.mainView?.extendCluster(clusterId);
+        this.mainView?.extendCluster(clusterValue);
         this.jumpToTab(this.tabGroup, this.clusterInfoTab);
       } else {
         // Outline only clicked cell (thick)
@@ -3163,25 +3370,27 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       // 1. Always select the clicked cell in compare view
       this.selectedCellCompare = cell;
 
-      // 2. Always update compare cluster information in the background if leiden is present
-      const rawLeiden = cell.properties?.leiden;
-      const clusterId = rawLeiden !== undefined && rawLeiden !== null && !isNaN(Number(rawLeiden))
-        ? Number(rawLeiden)
-        : null;
+      // 2. If the map is colored by a categorical property (leiden or otherwise), update
+      // compare cluster information in the background for whatever value this cell has there.
+      const isCategorical = this.isActiveCategorical(true);
+      const rawValue = isCategorical ? (cell.properties?.[this.selectedCompareView] as string | number | undefined) : undefined;
+      const clusterValue = rawValue !== undefined && rawValue !== null && rawValue !== '' ? rawValue : null;
 
-      if (clusterId !== null) {
-        this.selectedClusterCompare = clusterId;
+      if (clusterValue !== null) {
+        this.selectedClusterCompare = clusterValue;
         this.compareClusterCells = (this.compareFeatures || []).filter(
-          (c) => Number(c.properties?.leiden) === clusterId,
+          (c) => String(c.properties?.[this.selectedCompareView]).trim() === String(clusterValue).trim(),
         );
         this.calculateClusterStats(true);
-        this.updateCoOccurrenceTable(true);
-        setTimeout(() => this.updateSubgraphGenie3(true), 100);
-        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
-        setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
-          clusterId,
-          this.metaCompare?.['leiden_cluster_annotations'],
-        ), 300);
+        if (this.selectedCompareView === 'leiden') {
+          this.updateCoOccurrenceTable(true);
+          setTimeout(() => this.updateSubgraphGenie3(true), 100);
+          setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
+          setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+            clusterValue,
+            this.metaCompare?.['leiden_cluster_annotations'],
+          ), 300);
+        }
       }
 
       // 3. Fetch regulatory scores if in that view
@@ -3194,9 +3403,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
 
       // 4. View-dependent highlighting & tab navigation
-      if (this.selectedCompareView === 'leiden' && clusterId !== null) {
+      if (isCategorical && clusterValue !== null) {
         // Outline entire cluster (thin) + clicked cell (thick)
-        this.compareView?.extendCluster(clusterId);
+        this.compareView?.extendCluster(clusterValue);
         this.jumpToTab(this.tabGroupCompare, this.clusterInfoTabCompare);
       } else {
         // Outline only clicked cell (thick)
@@ -3220,21 +3429,28 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   /**
-   * Auto-selects the first cluster that has co-occurrence data in the background,
-   * without applying map selection borders or selecting an individual cell.
+   * Auto-selects a default cluster in the background, without applying map selection borders
+   * or selecting an individual cell. For Leiden, prefers a cluster that has co-occurrence data
+   * (richest thing to show); for any other categorical property there's no such "richest data"
+   * concept (that data doesn't exist for non-Leiden properties), so it defaults to the most
+   * populous value instead.
    */
   private autoSelectDefaultCluster(compare: boolean = false): void {
-    const meta = compare ? this.metaCompare : this.meta;
-    const annotations = meta?.['leiden_cluster_annotations'] as Record<string, any> | undefined;
-    if (!annotations) return;
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    if (!this.isActiveCategorical(compare)) return;
 
-    const defaultClusterId = Object.keys(annotations).find((id) => {
-      const co_occurrence = annotations[id]?.co_occurrence;
-      return Array.isArray(co_occurrence) && co_occurrence.length > 0 && Array.isArray(co_occurrence[0]);
-    });
+    if (view === 'leiden') {
+      const meta = compare ? this.metaCompare : this.meta;
+      const annotations = meta?.['leiden_cluster_annotations'] as Record<string, any> | undefined;
+      if (!annotations) return;
 
-    if (defaultClusterId !== undefined) {
+      const defaultClusterId = Object.keys(annotations).find((id) => {
+        const co_occurrence = annotations[id]?.co_occurrence;
+        return Array.isArray(co_occurrence) && co_occurrence.length > 0 && Array.isArray(co_occurrence[0]);
+      });
+      if (defaultClusterId === undefined) return;
       const clusterNum = Number(defaultClusterId);
+
       if (compare) {
         this.selectedClusterCompare = clusterNum;
         this.compareClusterCells = (this.compareFeatures || []).filter(
@@ -3254,6 +3470,41 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         setTimeout(() => this.updateSubgraphGenie3(false), 100);
         setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
       }
+      return;
+    }
+
+    const features = (compare ? this.compareFeatures : this.features) || [];
+    const counts = new Map<string, { value: string | number; count: number }>();
+    features.forEach((f) => {
+      const raw = f.properties?.[view] as string | number | undefined;
+      if (raw === undefined || raw === null || raw === '') return;
+      const key = String(raw);
+      const entry = counts.get(key);
+      if (entry) entry.count++;
+      else counts.set(key, { value: raw, count: 1 });
+    });
+    let defaultValue: string | number | null = null;
+    let bestCount = -1;
+    counts.forEach((entry) => {
+      if (entry.count > bestCount) {
+        bestCount = entry.count;
+        defaultValue = entry.value;
+      }
+    });
+    if (defaultValue === null) return;
+
+    if (compare) {
+      this.selectedClusterCompare = defaultValue;
+      this.compareClusterCells = features.filter(
+        (c) => String(c.properties?.[view]).trim() === String(defaultValue).trim(),
+      );
+      this.calculateClusterStats(true);
+    } else {
+      this.selectedCluster = defaultValue;
+      this.clusterCells = features.filter(
+        (c) => String(c.properties?.[view]).trim() === String(defaultValue).trim(),
+      );
+      this.calculateClusterStats(false);
     }
   }
 
@@ -3261,65 +3512,73 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.selectCluster(clusterId, false);
   }
 
-  public selectCluster(clusterId: number, compare: boolean = false): void {
+  public selectCluster(clusterId: string | number, compare: boolean = false): void {
     if (compare) {
-      // 1. Switch colored-by view to Leiden if not already
-      if (this.selectedCompareView !== 'leiden') {
+      // 1. If nothing categorical is active yet, fall back to Leiden — but don't clobber the
+      // user's own choice of a different categorical property.
+      if (!this.isActiveCategorical(true)) {
         this.selectedCompareView = 'leiden';
         this.onColorbyPropertyChange(true);
       }
+      const view = this.selectedCompareView;
 
       // 2. Set active cluster state
       this.selectedClusterCompare = clusterId;
       this.compareClusterCells = (this.compareFeatures || []).filter(
-        (cell) => Number(cell.properties?.leiden) === clusterId,
+        (cell) => String(cell.properties?.[view]).trim() === String(clusterId).trim(),
       );
       this.calculateClusterStats(true);
-      this.updateCoOccurrenceTable(true);
 
       // 3. Clear single cell selection if it was not in this cluster (no auto-selected cell)
-      if (this.selectedCellCompare && Number(this.selectedCellCompare.properties?.leiden) !== clusterId) {
+      if (this.selectedCellCompare && String(this.selectedCellCompare.properties?.[view]).trim() !== String(clusterId).trim()) {
         this.selectedCellCompare = null;
       }
 
       // 4. Highlight the cluster with thin border on the map
       this.compareView?.extendCluster(clusterId);
 
-      setTimeout(() => this.updateSubgraphGenie3(true), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
-      setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
-        clusterId,
-        this.metaCompare?.['leiden_cluster_annotations'],
-      ), 300);
+      if (view === 'leiden') {
+        this.updateCoOccurrenceTable(true);
+        setTimeout(() => this.updateSubgraphGenie3(true), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDatasetCompare, true), 100);
+        setTimeout(() => this.compareClusterInfo?.renderNhoodHeatmap(
+          clusterId,
+          this.metaCompare?.['leiden_cluster_annotations'],
+        ), 300);
+      }
     } else {
-      // 1. Switch colored-by view to Leiden if not already
-      if (this.selectedView !== 'leiden') {
+      // 1. If nothing categorical is active yet, fall back to Leiden — but don't clobber the
+      // user's own choice of a different categorical property.
+      if (!this.isActiveCategorical(false)) {
         this.selectedView = 'leiden';
         this.onColorbyPropertyChange(false);
       }
+      const view = this.selectedView;
 
       // 2. Set active cluster state
       this.selectedCluster = clusterId;
       this.clusterCells = (this.features || []).filter(
-        (cell) => Number(cell.properties?.leiden) === clusterId,
+        (cell) => String(cell.properties?.[view]).trim() === String(clusterId).trim(),
       );
       this.calculateClusterStats(false);
-      this.updateCoOccurrenceTable(false);
 
       // 3. Clear single cell selection if it was not in this cluster (no auto-selected cell)
-      if (this.selectedCell && Number(this.selectedCell.properties?.leiden) !== clusterId) {
+      if (this.selectedCell && String(this.selectedCell.properties?.[view]).trim() !== String(clusterId).trim()) {
         this.selectedCell = null;
       }
 
       // 4. Highlight the cluster with thin border on the map
       this.mainView?.extendCluster(clusterId);
 
-      setTimeout(() => this.updateSubgraphGenie3(false), 100);
-      setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
-      setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
-        clusterId,
-        this.meta?.['leiden_cluster_annotations'],
-      ), 300);
+      if (view === 'leiden') {
+        this.updateCoOccurrenceTable(false);
+        setTimeout(() => this.updateSubgraphGenie3(false), 100);
+        setTimeout(() => this.renderFootprintPlots(this.selectedDataset), 100);
+        setTimeout(() => this.mainClusterInfo?.renderNhoodHeatmap(
+          clusterId,
+          this.meta?.['leiden_cluster_annotations'],
+        ), 300);
+      }
     }
   }
 
@@ -3496,12 +3755,15 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       this.clusterCellTypes = clusterCellTypes;
     }
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(
-      compare ? this.selectedClusterCompare! : this.selectedCluster!,
-      compare
-    );
+    // Centrality averages only exist for Leiden clusters — the backend never computes them for
+    // any other categorical property.
+    const view = compare ? this.selectedCompareView : this.selectedView;
+    if (view === 'leiden') {
+      const clusterAnnotation = this.getLeidenClusterAnnotation(
+        Number(compare ? this.selectedClusterCompare! : this.selectedCluster!),
+        compare
+      );
 
-    if (clusterCells.length > 0) {
       const centralityAvg = {
         degree_centrality: clusterAnnotation?.centrality?.['degree_centrality'] ?? 0,
         average_clustering: clusterAnnotation?.centrality?.['average_clustering'] ?? 0,
@@ -3660,7 +3922,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (selectedCluster === null || selectedCluster === undefined) return;
 
-    const clusterAnnotation = this.getLeidenClusterAnnotation(selectedCluster, compare);
+    // Only ever called while colored-by leiden (co-occurrence data doesn't exist for any other
+    // categorical property), so selectedCluster is always a genuine Leiden cluster id here.
+    const clusterAnnotation = this.getLeidenClusterAnnotation(Number(selectedCluster), compare);
 
     // 2. Validate the 2D array exists for this specific cluster
     if (!clusterAnnotation || !Array.isArray(clusterAnnotation.co_occurrence)) {
@@ -3755,13 +4019,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         if (compare) {
           this.genie3RawDataCompare = genie3Data;
           this.spongeRawDataCompare = spongeData;
-          this.genie3ElementsCompare = Array.from(genie3ElementsSet);
-          this.spongeElementsCompare = Array.from(spongeElementsSet);
+          this.genie3ElementsCompare = this.sortedByGeneLabel(Array.from(genie3ElementsSet));
+          this.spongeElementsCompare = this.sortedByGeneLabel(Array.from(spongeElementsSet));
         } else {
           this.genie3RawData = genie3Data;
           this.spongeRawData = spongeData;
-          this.genie3Elements = Array.from(genie3ElementsSet);
-          this.spongeElements = Array.from(spongeElementsSet);
+          this.genie3Elements = this.sortedByGeneLabel(Array.from(genie3ElementsSet));
+          this.spongeElements = this.sortedByGeneLabel(Array.from(spongeElementsSet));
         }
       },
       error: (err) => {
@@ -3794,6 +4058,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // If view is provided, use it; otherwise default to 'regulatory_scores' for backward compatibility
     const propertyToUpdate =
       view || (isGeneExpression ? 'gene_expression' : 'regulatory_scores');
+
+    const featId = isGeneExpression ? `gene_expression::${index}` : `obsm::${columnName}::${index}`;
+    const featName = isGeneExpression ? `Gene: ${index}` : `${index}`;
+    if (compare) {
+      this.lastActiveFeatureCompare = { id: featId, name: featName };
+    } else {
+      this.lastActiveFeatureMain = { id: featId, name: featName };
+    }
 
     const baseRequest = isGeneExpression
       ? `${this.sessionService.apiUrl}/X/${safeIndex}`
@@ -4300,10 +4572,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .attr('font-weight', (d: any) => d.priorTF ? 'bold' : 'normal')
       .attr('fill', '#333')
       .attr('pointer-events', 'none')
-      .text((d: any) => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name);
+      .text((d: any) => this.geneNodeLabel(d.name));
 
     // Add tooltips on hover
-    node.append('title').text((d: any) => `${d.name}${d.priorTF ? ' (Prior TF)' : ''}`);
+    node.append('title').text(
+      (d: any) => `${this.geneNodeTooltip(d.name)}${d.priorTF ? ' (Prior TF)' : ''}`,
+    );
 
     // Update positions on simulation tick
     simulation.on('tick', () => {
@@ -4954,10 +5228,12 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       .attr('font-weight', (d: any) => d.priorTF ? 'bold' : 'normal')
       .attr('fill', '#333')
       .attr('pointer-events', 'none')
-      .text((d: any) => d.name.length > 10 ? d.name.substring(0, 10) + '...' : d.name);
+      .text((d: any) => this.geneNodeLabel(d.name));
 
     // Add tooltips
-    node.append('title').text((d: any) => `${d.name}${d.priorTF ? ' (Prior TF)' : ''}`);
+    node.append('title').text(
+      (d: any) => `${this.geneNodeTooltip(d.name)}${d.priorTF ? ' (Prior TF)' : ''}`,
+    );
 
     // Update positions on tick
     simulation.on('tick', () => {
@@ -5019,9 +5295,224 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  // =========================================================================
-  // GRN Evaluation Methods
-  // =========================================================================
+  public mapSpatialFeatureToViewProp(feat: { category: string; id: string; name: string }): string {
+    if (!feat) return 'leiden';
+    if (feat.category === 'tf_activity') return 'tf_activity';
+    if (feat.category === 'chromvar') return 'chromvar_total_sum';
+    if (feat.category === 'gene_expression') return 'gene_expression';
+    if (feat.category === 'pathway') return 'pathway_activity';
+    if (feat.category === 'obs_metadata' || feat.category === 'obs') {
+      const parts = feat.id.split('::');
+      const prop = parts[1] || parts[0] || 'leiden';
+      const allProps = (this.groupedProperties || []).flatMap(g => g.value);
+      if (allProps.includes(prop) || prop === 'cell_type' || prop === 'leiden') {
+        return prop;
+      }
+      return 'cell_type';
+    }
+    return 'leiden';
+  }
+
+  public getActiveFeatureId(isCompare: boolean): { id: string; name: string } {
+    const lastFeat = isCompare ? this.lastActiveFeatureCompare : this.lastActiveFeatureMain;
+    if (lastFeat && lastFeat.id) {
+      return lastFeat;
+    }
+
+    const view = isCompare ? this.selectedCompareView : this.selectedView;
+    const gene = isCompare ? this.selectedGeneExpressionCompare : this.selectedGeneExpressionMain;
+    const genie3Tf = isCompare ? this.selectedGeneSetGenie3Compare : this.selectedGeneSetGenie3;
+    const spongeTf = isCompare ? this.selectedGeneSetSpongeCompare : this.selectedGeneSetSponge;
+    const tf = genie3Tf || spongeTf;
+
+    if (view === 'gene_expression' && gene) {
+      return { id: `gene_expression::${gene}`, name: `Gene: ${gene}` };
+    }
+    if ((view === 'tf_activity' || view === 'aucell_genie3' || view === 'aucell_sponge' || view === 'regulatory_scores') && tf) {
+      return { id: `tf_activity::${tf}`, name: `TF: ${tf}` };
+    }
+    if (view && view !== 'leiden' && view !== 'cell_type') {
+      return { id: `obs::${view}`, name: `View: ${view.replace(/_/g, ' ').toUpperCase()}` };
+    }
+    return { id: `obs::${view || 'leiden'}`, name: `Cluster: ${(view || 'leiden').toUpperCase()}` };
+  }
+
+  public onSyncSpatialCompare(event: { featA: any; featB: any }, isCompare: boolean = false): void {
+    if (!this.compareMode) {
+      this.onCompareMode();
+    }
+
+    if (event.featA) {
+      this.lastActiveFeatureMain = { id: event.featA.id, name: event.featA.name };
+    }
+    if (event.featB) {
+      this.lastActiveFeatureCompare = { id: event.featB.id, name: event.featB.name };
+    }
+
+    const setFeatureProps = (feat: any, isCompareTarget: boolean) => {
+      if (!feat) return;
+      const cat = feat.category;
+      const sym = feat.symbol || (feat.id ? feat.id.split('::')[1] : null);
+
+      if (cat === 'gene_expression' && sym) {
+        if (isCompareTarget) {
+          this.selectedGeneExpressionCompare = sym;
+          this.selectedCompareView = 'gene_expression';
+        } else {
+          this.selectedGeneExpressionMain = sym;
+          this.selectedView = 'gene_expression';
+        }
+      } else if (cat === 'tf_activity' && sym) {
+        if (isCompareTarget) {
+          this.selectedGeneSetGenie3Compare = sym;
+          this.selectedCompareView = 'tf_activity';
+        } else {
+          this.selectedGeneSetGenie3 = sym;
+          this.selectedView = 'tf_activity';
+        }
+      } else {
+        const prop = this.mapSpatialFeatureToViewProp(feat);
+        if (isCompareTarget) {
+          this.selectedCompareView = prop;
+        } else {
+          this.selectedView = prop;
+        }
+      }
+    };
+
+    setFeatureProps(event.featA, false);
+    setFeatureProps(event.featB, true);
+
+    // Open drawer AFTER features are set so the first API call uses the correct feature IDs.
+    // If opened before setFeatureProps, getActiveFeatureId() still returns the previous view
+    // (e.g. leiden) which the backend returns as 0 correlation for categorical data.
+    this.isLiveDrawerOpen = true;
+    this.cdr.detectChanges();
+
+    // skipTabJump=true: we're coming from the Spatial Correlation tab and must not navigate away
+    setTimeout(() => {
+      this.onColorbyPropertyChange(false, /* skipTabJump */ true);
+      this.onColorbyPropertyChange(true, /* skipTabJump */ true);
+    }, 50);
+  }
+
+  public onApplyBivariateColor(event: { featA: any; featB: any; enabled?: boolean }, isCompare: boolean = false): void {
+    if (event.enabled === false) {
+      this.isBivariateActive = false;
+      this.onColorbyPropertyChange(false, true);
+      if (this.compareMode) {
+        this.onColorbyPropertyChange(true, true);
+      }
+      return;
+    }
+
+    this.isBivariateActive = true;
+    const dataset = isCompare ? this.selectedDatasetCompare : this.selectedDataset;
+    if (!dataset) return;
+
+    const url = `/api/datasets/${encodeURIComponent(dataset.id)}/spatial_correlation_pair?feature_id_a=${encodeURIComponent(event.featA.id)}&feature_id_b=${encodeURIComponent(event.featB.id)}`;
+
+    this.http.get<any>(url, { withCredentials: true }).subscribe({
+      next: (res) => {
+        const pointsMap = new Map<string, { x: number; y: number }>();
+        if (res.bivariate_coords && res.bivariate_coords.cell_ids) {
+          const ids = res.bivariate_coords.cell_ids;
+          const xs = res.bivariate_coords.x;
+          const ys = res.bivariate_coords.y;
+          for (let i = 0; i < ids.length; i++) {
+            pointsMap.set(String(ids[i]), { x: xs[i], y: ys[i] });
+          }
+        } else if (res.points) {
+          res.points.forEach((p: any) => pointsMap.set(String(p.cell_id), { x: p.x, y: p.y }));
+        }
+
+        const allX: number[] = res.bivariate_coords?.x || (res.points || []).map((p: any) => p.x);
+        const allY: number[] = res.bivariate_coords?.y || (res.points || []).map((p: any) => p.y);
+        if (allX.length === 0 || allY.length === 0) return;
+
+        const minX = Math.min(...allX), maxX = Math.max(...allX);
+        const minY = Math.min(...allY), maxY = Math.max(...allY);
+
+        const colorizeMap = (targetView: any, containerName: string, isComp: boolean) => {
+          targetView?.resetClusterExtension();
+          targetView?.setCurrentView('bivariate_overlay', false);
+          const bivariateLegend: MapLegendInfo = {
+            title: `Bivariate: ${event.featA.name} vs ${event.featB.name}`,
+            type: 'bivariate',
+            bivariateInfo: {
+              labelA: event.featA.name,
+              labelB: event.featB.name,
+              colorA: '#0284c7',
+              colorB: '#c026d3'
+            }
+          };
+
+          if (isComp) {
+            this.selectedClusterCompare = null;
+            this.selectedCompareView = 'bivariate_overlay';
+            this.compareLegendInfo = bivariateLegend;
+          } else {
+            this.selectedCluster = null;
+            this.selectedView = 'bivariate_overlay';
+            this.mainLegendInfo = bivariateLegend;
+          }
+
+          const sel = targetView?.g ? targetView.g.selectAll('path') : d3.select(containerName).selectAll('path');
+          sel.interrupt()
+            .style('stroke', 'transparent')
+            .style('stroke-width', '1px')
+            .attr('fill', (d: any) => {
+              const cellId = String(d?.properties?.barcode || d?.properties?.['cell_id'] || d?.properties?.['id'] || d?.id || '');
+              const pt = pointsMap.get(cellId);
+              if (!pt) return '#ccc';
+
+              const u = maxX > minX ? (pt.x - minX) / (maxX - minX) : 0.5;
+              const v = maxY > minY ? (pt.y - minY) / (maxY - minY) : 0.5;
+
+              const r = Math.round(255 * v);
+              const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
+              const b = Math.round(255 * u);
+              return `rgb(${r},${g},${b})`;
+            })
+            .style('opacity', 0.85);
+        };
+
+        colorizeMap(this.mainView, '#hexbin', false);
+        if (this.compareMode && this.compareView) {
+          colorizeMap(this.compareView, '#hexbin-compare', true);
+        }
+      },
+      error: (err) => console.error('Failed to fetch bivariate colors:', err)
+    });
+  }
+
+  public onSpatialCellSelected(cellId: string, isCompare: boolean = false): void {
+    const featList = isCompare ? this.compareFeatures : this.features;
+    const targetCell = (featList || []).find((f: any) => {
+      const props = f?.properties;
+      return (
+        String(f?.id) === String(cellId) ||
+        String(props?.['cell_id']) === String(cellId) ||
+        String(props?.['id']) === String(cellId) ||
+        String(props?.barcode) === String(cellId)
+      );
+    });
+    if (targetCell) {
+      this.displayCellDetails(targetCell, isCompare);
+
+      const containerName = isCompare ? '#hexbin-compare' : '#hexbin';
+      const targetView = isCompare ? this.compareView : this.mainView;
+      const sel = targetView?.g ? targetView.g.selectAll('path') : d3.select(containerName).selectAll('path');
+      sel.style('stroke', (d: any) => {
+        const cid = d?.id || d?.properties?.['cell_id'] || d?.properties?.['id'] || d?.properties?.barcode;
+        return String(cid) === String(cellId) ? '#000000' : 'none';
+      })
+      .style('stroke-width', (d: any) => {
+        const cid = d?.id || d?.properties?.['cell_id'] || d?.properties?.['id'] || d?.properties?.barcode;
+        return String(cid) === String(cellId) ? '3px' : '0px';
+      });
+    }
+  }
 }
 
 
