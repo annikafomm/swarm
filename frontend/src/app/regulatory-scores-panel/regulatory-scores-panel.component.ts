@@ -11,6 +11,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { InfoService } from '../info.service';
+import { GeneSymbolService } from '../gene-symbol.service';
+import { GeneSymbolPipe } from '../gene-symbol.pipe';
 
 type TableData = { [col: string]: { [index: string]: string | number } } | string[];
 
@@ -162,12 +164,20 @@ export interface RegulatorySliderData {
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
+    GeneSymbolPipe,
   ],
   templateUrl: './regulatory-scores-panel.component.html',
   styleUrls: ['./regulatory-scores-panel.component.scss'],
 })
 export class RegulatoryScoresPanelComponent {
-  constructor(public infoService: InfoService) {}
+  constructor(
+    public infoService: InfoService,
+    /**
+     * Public for the template: the SPONGE gene sets are Ensembl ids, and the dropdowns/summary
+     * lines show the symbol with the id kept alongside it rather than replaced by it.
+     */
+    public geneSymbols: GeneSymbolService,
+  ) {}
 
   @Input() isCompare = false;
 

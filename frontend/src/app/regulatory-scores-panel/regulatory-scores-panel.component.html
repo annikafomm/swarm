@@ -5,11 +5,11 @@
     <strong>{{ selectionLabel }}</strong><br>
     Score: {{ selectedRegulatoryScore || 'None' }}<br>
     <ng-container *ngIf="selectedRegulatoryScore?.endsWith('genie3'); else spongeSelectionTpl">
-      Gene set (Genie3): {{ selectedGeneSetGenie3 || 'None' }}
+      Gene set (Genie3): {{ selectedGeneSetGenie3 ? (selectedGeneSetGenie3 | geneSymbol) : 'None' }}
     </ng-container>
     <ng-template #spongeSelectionTpl>
       <ng-container *ngIf="selectedRegulatoryScore?.endsWith('sponge'); else noNetworkSelectionTpl">
-        Gene set (Sponge): {{ selectedGeneSetSponge || 'None' }}
+        Gene set (Sponge): {{ selectedGeneSetSponge ? (selectedGeneSetSponge | geneSymbol) : 'None' }}
       </ng-container>
       <ng-template #noNetworkSelectionTpl>
         Gene set: None
@@ -95,13 +95,15 @@
                   (selectionChange)="selectedGeneSetGenie3Change.emit($event.value)">
                   <mat-option [value]="null">None</mat-option>
                   <mat-option *ngFor="let gene of genie3Elements" [value]="gene">
-                    {{ gene }}
+                    {{ gene | geneSymbol }}
+                    <span class="gene-option-id" *ngIf="geneSymbols.idFor(gene) as ensemblId">{{ ensemblId }}</span>
                   </mat-option>
                 </mat-select>
               </mat-form-field>
             </div>
             <div *ngIf="selectedGeneSetGenie3" class="selected-gene-info">
-              Selected: <strong>{{ selectedGeneSetGenie3 }}</strong>
+              Selected: <strong>{{ selectedGeneSetGenie3 | geneSymbol }}</strong>
+              <span class="gene-id-hint" *ngIf="geneSymbols.idFor(selectedGeneSetGenie3) as ensemblId">{{ ensemblId }}</span>
             </div>
             <div *ngIf="!selectedGeneSetGenie3" class="network-message">
               No Genie3 network selected
@@ -176,13 +178,15 @@
                   (selectionChange)="selectedGeneSetSpongeChange.emit($event.value)">
                   <mat-option [value]="null">None</mat-option>
                   <mat-option *ngFor="let gene of spongeElements" [value]="gene">
-                    {{ gene }}
+                    {{ gene | geneSymbol }}
+                    <span class="gene-option-id" *ngIf="geneSymbols.idFor(gene) as ensemblId">{{ ensemblId }}</span>
                   </mat-option>
                 </mat-select>
               </mat-form-field>
             </div>
             <div *ngIf="selectedGeneSetSponge" class="selected-gene-info">
-              Selected: <strong>{{ selectedGeneSetSponge }}</strong>
+              Selected: <strong>{{ selectedGeneSetSponge | geneSymbol }}</strong>
+              <span class="gene-id-hint" *ngIf="geneSymbols.idFor(selectedGeneSetSponge) as ensemblId">{{ ensemblId }}</span>
             </div>
             <div *ngIf="!selectedGeneSetSponge" class="network-message">
               No Sponge network selected

@@ -42,6 +42,24 @@ h4 {
   }
 }
 
+/* SPONGE gene sets are Ensembl ids rendered as gene symbols. The id itself stays on screen,
+   set back as a secondary line, so the label can be matched against the source data. */
+.gene-id-hint {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #8a8a8a;
+}
+
+.gene-option-id {
+  display: block;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #8a8a8a;
+}
+
 .gene-set-body {
   width: 100%;
   min-width: 0;

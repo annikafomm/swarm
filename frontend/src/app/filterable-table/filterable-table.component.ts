@@ -9,6 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { InfoService } from '../info.service';
+import { GeneSymbolService } from '../gene-symbol.service';
 
 @Component({
   selector: 'app-table',
@@ -62,6 +63,7 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     private sessionService: SessionService,
     private el: ElementRef,
     public infoService: InfoService,
+    private geneSymbols: GeneSymbolService,
   ) { }
 
   columns: string[] = [];
@@ -221,6 +223,29 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     return text.slice(0, front) + '…' + text.slice(text.length - back);
   }
 
+  /**
+   * Label for the row-index column.
+   *
+   * SPONGE keys every table it produces by Ensembl id, so this resolves ids to gene symbols
+   * before falling back to the elided `ENSG…78531.1` form for the ones the dataset has no
+   * symbol for. Non-gene indexes (motif ids, cluster names) are untouched — see
+   * GeneSymbolService.
+   */
+  displayIndex(value: any): string {
+    if (typeof value !== 'string') return value;
+    return this.geneSymbols.symbolFor(value) ?? this.truncateMiddle(value);
+  }
+
+  /**
+   * The raw identifier, shown on hover. Both halves of a translated label stay reachable: the
+   * symbol is what's readable, the id is what the underlying data is keyed by.
+   */
+  indexTitle(value: any): string {
+    if (typeof value !== 'string') return String(value ?? '');
+    const symbol = this.geneSymbols.symbolFor(value);
+    return symbol ? `${symbol} — ${value}` : value;
+  }
+
   displayNumeric(value: any): string {
     if (typeof value === 'number') {
       if (Number.isNaN(value)) {
@@ -272,11 +297,16 @@ export class FilterableTableComponent implements OnInit, OnChanges {
     // filtering (strings only)
     for (const col of ['index', ...this.columns]) {
       if (this.filters[col]) {
-        result = result.filter(
-          (row) =>
-            typeof row[col] === 'string' &&
-            row[col].toLowerCase().includes(this.filters[col].toLowerCase()),
-        );
+        // The index column is filtered on what the user can actually see as well as on the raw
+        // value: typing "TP53" has to find a row rendered as TP53 even though it is stored (and
+        // still matchable) as ENSG00000141510.
+        const matchesQuery =
+          col === 'index'
+            ? (row: any) => this.geneSymbols.matches(row[col], this.filters[col])
+            : (row: any) =>
+              typeof row[col] === 'string' &&
+              row[col].toLowerCase().includes(this.filters[col].toLowerCase());
+        result = result.filter(matchesQuery);
       }
     }
 
