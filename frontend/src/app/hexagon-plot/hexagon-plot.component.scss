@@ -141,8 +141,15 @@
     box-sizing: border-box;
 
     &.main-view-box {
+      // This line divides the main view from the compare view below it. It used to inherit the
+      // box's own border-radius: 8px, which curved its two ends to follow the (invisible, since
+      // only the bottom border is set) rounded corner -- squaring off just the bottom corners
+      // here keeps the divider a plain straight line while the box stays rounded everywhere else.
       border-bottom: 2px solid #cbd5e1;
-      padding-bottom: 4px;
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      padding-bottom: 24px;
+      margin-bottom: 6px;
       position: relative;
     }
 
@@ -155,7 +162,12 @@
 
       .compare-mode-toggles-divider {
         position: absolute;
-        bottom: -26px;
+        // Centers these buttons (height: 30px, see #compare-button/#live-corr-button) on the
+        // divider line below .map-column: the line sits padding-bottom(14px) + border-bottom(2px)
+        // = 16px below .map-column's own bottom edge (height:100% stops at the content box, before
+        // .main-view-box's padding/border), so bottom = -(16 + 30/2) puts the line through the
+        // middle of the buttons instead of above them.
+        bottom: -48px;
         left: 240px;
         transform: translateX(-50%);
         z-index: 100;

@@ -3,6 +3,12 @@
 html,
 body {
   height: 100%;
+  /* The actual browser scrollbar lives here, not on any Angular component -- app-root's own
+     height:100vh + overflow:hidden (app.component.scss) only stops IT from growing past the
+     viewport, it can't do anything about html/body's own default overflow:visible one level up.
+     Without this, the page could still scroll even though every component inside is correctly
+     viewport-locked. */
+  overflow: hidden;
 }
 
 body {
@@ -182,6 +188,59 @@ svg.mat-accent {
 /* Menu panel background */
 .mat-mdc-menu-panel {
   background-color: white !important;
+}
+
+/* Dropdowns (mat-select inside mat-form-field, appearance="fill") - softer, rounded, on-theme
+   redesign applied globally so every dropdown in the app picks it up without per-component CSS. */
+.mat-mdc-form-field.mat-form-field-appearance-fill {
+  .mat-mdc-text-field-wrapper {
+    // Rounded on all four corners (not just the top) - a lopsided radius looks fine when the
+    // options panel opens below, but visibly mismatched when there's no room and it opens above.
+    border-radius: 10px !important;
+    overflow: hidden;
+    background-color: #fdf6ec !important;
+    transition: background-color 0.15s ease;
+  }
+
+  &:hover .mat-mdc-text-field-wrapper {
+    background-color: #fbeed9 !important;
+  }
+
+  .mdc-text-field__input,
+  .mat-mdc-select-value {
+    color: #1a1a1a !important;
+  }
+
+  .mdc-line-ripple::before {
+    border-bottom-color: rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .mat-mdc-select-arrow {
+    color: #ff9800 !important;
+  }
+}
+
+.mat-mdc-select-panel {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+  padding: 4px !important;
+  // Cap the options panel so it can't balloon far past its trigger field on long option labels.
+  max-width: 320px !important;
+}
+
+.mat-mdc-option {
+  border-radius: 6px !important;
+  margin: 2px 4px !important;
+  width: calc(100% - 8px) !important;
+}
+
+.mat-mdc-option.mat-mdc-option-active,
+.mat-mdc-option:hover:not(.mdc-list-item--disabled) {
+  background-color: rgba(255, 152, 0, 0.1) !important;
+}
+
+.mat-mdc-option.mdc-list-item--selected:not(.mdc-list-item--disabled) {
+  background-color: rgba(255, 152, 0, 0.16) !important;
 }
 
 /* Expansion panel styles */
