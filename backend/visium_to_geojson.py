@@ -123,13 +123,15 @@ class Hexagons:
         x = x * self.scale
         y = y * self.scale
         radius = radius * self.scale
+        # +pi/2 turns the hexagon 90 degrees from the previous flat-top orientation.
+        angle_offset = np.pi / 2
         return [
             (
-                x + radius * np.cos(np.pi / 3 * i),
-                y + radius * np.sin(np.pi / 3 * i),
+                x + radius * np.cos(np.pi / 3 * i + angle_offset),
+                y + radius * np.sin(np.pi / 3 * i + angle_offset),
             )
             for i in range(6)
-        ] + [(x + radius * np.cos(0), y + radius * np.sin(0))]
+        ] + [(x + radius * np.cos(angle_offset), y + radius * np.sin(angle_offset))]
 
     def parse_coordinates(self):
         anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
