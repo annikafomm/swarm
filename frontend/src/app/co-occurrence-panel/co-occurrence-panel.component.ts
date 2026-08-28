@@ -39,7 +39,7 @@ export class CoOccurrencePanelComponent {
 
   @Input() isCompare = false;
   /** The cluster whose co-occurrence row this instance displays. */
-  @Input() selectedClusterId: number | null = null;
+  @Input() selectedClusterId: string | number | null = null;
   /** Co-occurrence value of `selectedClusterId` against each target cluster, at `selectedInterval`. */
   @Input() coOccurrenceData: number[] = [];
   /** Number of target-cluster columns to render in the table header. */

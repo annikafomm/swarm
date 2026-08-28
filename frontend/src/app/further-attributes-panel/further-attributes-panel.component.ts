@@ -7,6 +7,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
 import { InfoService } from '../info.service';
 import { TranslationService } from '../translation.service';
+import { isSpatialOrIdentifierKey } from '../attribute-filters';
 
 export interface AttributeStats {
   key: string;
@@ -94,100 +95,11 @@ export class FurtherAttributesPanelComponent implements OnChanges {
   /**
    * Identifies keys that represent spatial coordinates, grid indices, or pixel positions
    * (e.g. _x, _y, x, y, x_original, y_original, spatial_x, spatial_y, array_row, array_col, etc.)
-   * which should be excluded from the Further Attributes table.
+   * which should be excluded from the Further Attributes table. Shared with any other UI that
+   * lists dataset attributes — see attribute-filters.ts.
    */
   private isSpatialCoordinateKey(key: string): boolean {
-    if (!key) return false;
-    const lower = key.toLowerCase().trim();
-
-    // Explicit check for known spatial/grid coordinate identifiers
-    const knownCoordinates = [
-      'barcode',
-      'centroid',
-      'observation_joinid',
-      'cell_id',
-      'id',
-      'guid',
-      'array_row',
-      'array_col',
-      'arrayrow',
-      'arraycol',
-      'array_x',
-      'array_y',
-      'array row',
-      'array col',
-      'spatial_x',
-      'spatial_y',
-      'spatial_row',
-      'spatial_col',
-      'x_original',
-      'y_original',
-      'original_x',
-      'original_y',
-      'orig_x',
-      'orig_y',
-      'x_orig',
-      'y_orig',
-      '_x',
-      '_y',
-      '__x',
-      '__y',
-      'x',
-      'y',
-      'pxl_col_in_fullres',
-      'pxl_row_in_fullres',
-      'pxl_col',
-      'pxl_row',
-      'pixel_x',
-      'pixel_y',
-      'imagecol',
-      'imagerow',
-      'image_col',
-      'image_row',
-      'image_x',
-      'image_y',
-      'x_coord',
-      'y_coord',
-      'coord_x',
-      'coord_y',
-      'coords_x',
-      'coords_y',
-      'center_x',
-      'center_y',
-      'centroid_x',
-      'centroid_y',
-      'x_centroid',
-      'y_centroid',
-      'grid_x',
-      'grid_y',
-      'grid_row',
-      'grid_col',
-      'spot_x',
-      'spot_y',
-      'spot_row',
-      'spot_col',
-    ];
-
-    if (knownCoordinates.includes(lower)) {
-      return true;
-    }
-
-    // Pattern: _x, _y, __x, __y, ^x$, ^y$
-    if (/^_+[xy]$/i.test(lower) || /^[xy]$/i.test(lower)) {
-      return true;
-    }
-
-    // Pattern: spatial coordinate prefixes/suffixes (e.g. spatial_x, array_y, pxl_row, image_col, etc.)
-    if (/^(?:spatial|array|grid|pxl|pixel|image|orig(?:inal)?|center|centroid|spot|coord|pos)_(?:x|y|row|col)$/i.test(lower)) {
-      return true;
-    }
-
-    // Pattern: coordinate axis suffixes (e.g. x_original, y_coord, x_spatial, y_pos, etc.)
-    if (/^(?:x|y)_(?:orig(?:inal)?|coord|centroid|spatial|grid|pixel|pxl|pos|index)$/i.test(lower)) {
-      return true;
-    }
-
-    return false;
+    return isSpatialOrIdentifierKey(key);
   }
 
   /**

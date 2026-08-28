@@ -37,7 +37,7 @@
         </div>
       </div>
 
-      <div class="cluster-centrality">
+      <div class="cluster-centrality" *ngIf="isLeidenView">
         <h4 class="hx-title-with-info">
           Leiden Centrality Averages
           <button mat-icon-button type="button" class="hx-info-btn"
@@ -81,7 +81,7 @@
           </li>
         </ul>
       </div>
-      <div class="cluster-nhood">
+      <div class="cluster-nhood" *ngIf="isLeidenView">
         <h4 class="hx-title-with-info">
           Neighborhood Enrichment (Selected Cell)
           <button mat-icon-button type="button" class="hx-info-btn"
@@ -94,14 +94,4 @@
       </div>
     </div>
   </div>
-
-  <ng-template #notLeidenView>
-    <div class="cluster-info-unavailable">
-      <h4>Cluster details unavailable</h4>
-      <p>
-        Cluster details are only available while coloring the map by "leiden". Switch the
-        color-by dropdown to Leiden clusters to see this cluster's statistics.
-      </p>
-    </div>
-  </ng-template>
 </ng-container>

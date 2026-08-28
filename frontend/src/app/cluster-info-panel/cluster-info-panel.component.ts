@@ -44,20 +44,21 @@ export class ClusterInfoPanelComponent {
   constructor(public infoService: InfoService) {}
 
   @Input() isCompare = false;
-  /** Mirrors the original's extra `selectedView === 'leiden'` guard on top of "a cluster tab
-   * exists at all" — the tab can exist while the map is colored by something else. When false
-   * (and a cluster is selected), the template shows an explanatory message instead of the full
-   * stats, since none of the stats below apply outside the leiden coloring. */
+  /** True only when the active clustering property is 'leiden' — gates the centrality-averages
+   * and neighborhood-enrichment sections below, since the backend never computes that data for
+   * any other categorical property. Cell Type Distribution stays visible regardless, since it's
+   * meaningful for any categorical clustering property. */
   @Input() isLeidenView = false;
-  @Input() clusterId: number | null = null;
-  /** All leiden cluster ids for this dataset, to populate the cluster-select dropdown. */
-  @Input() availableClusterIds: number[] = [];
+  @Input() clusterId: string | number | null = null;
+  /** Distinct values of the active clustering property, to populate the cluster-select dropdown
+   * — Leiden cluster ids, or any other categorical property's raw values. */
+  @Input() availableClusterIds: (string | number)[] = [];
   /**
    * Emits when the user picks a different cluster from the dropdown. The parent is expected to
    * call its own selectCluster(id, isCompare) in response — not just reassign clusterId — since
    * that also updates clusterCells/co-occurrence/map highlight; this component stays passive.
    */
-  @Output() clusterSelected = new EventEmitter<number>();
+  @Output() clusterSelected = new EventEmitter<string | number>();
   @Input() clusterCellCount = 0;
   @Input() clusterCellTypes: ClusterCellTypeCount[] = [];
   @Input() clusterCentralityAvg: ClusterCentralityAvg = {
@@ -87,7 +88,7 @@ export class ClusterInfoPanelComponent {
    * parameters rather than @Input()s, since it's invoked imperatively right after the parent
    * mutates its own state, in the same tick Angular's own change-detection hasn't run yet.
    */
-  public renderNhoodHeatmap(leiden: number | null | undefined, leidenClusterAnnotations: Record<string, any> | undefined): void {
+  public renderNhoodHeatmap(leiden: string | number | null | undefined, leidenClusterAnnotations: Record<string, any> | undefined): void {
     const clusterAnnotation = leiden === null || leiden === undefined ? null : leidenClusterAnnotations?.[String(leiden)];
     const enrichment = clusterAnnotation?.neighborhood_enrichment;
     const containerId = this.isCompare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap';

@@ -36,6 +36,7 @@ python backend/main.py
 
 # Start frontend
 cd frontend && npm start
+when error with file watcher: WATCHPACK_POLLING=true npm start
 
 # Start both
 bash launch.sh
@@ -193,19 +194,22 @@ To prevent worker exhaustion during heavy R/Python computations:
 ### Map Selection & Tab Synchronization Rules
 1. **Selection is Purely Border-Based (No Dimming)**:
    * Cell fills are never dimmed when selecting cells or clusters; highlighting is achieved entirely through SVG stroke width and color.
-2. **Leiden View (`selectedView === 'leiden'`)**:
-   * Clicking a spot selects its parent cluster (`activeClusterId = clusterId`).
+2. **Categorical Views** (any property where `isContinuousScale()` is false — Leiden clusters, `cell_type`, or any other categorical `obs` column; integer values with ≤20 uniques, or non-numeric strings, count as categorical):
+   * Clicking a spot selects its parent cluster under the *currently active* property (`activeClusterValue` in `HexagonViewComponent`).
    * Cluster member spots receive a **thin black border (`1.4px`)**.
    * The clicked spot receives a **thick black border (`3px`)**.
    * Non-member spots have a **transparent border (`1px`)**.
-   * Navigates directly to the **Cluster Information** tab.
-3. **Feature / Continuous Views (`cell_type`, `gene_expression`, `regulatory_scores`, etc.)**:
+   * Navigates directly to the **Cluster Information** tab, which shows a **"Cluster by" dropdown** (`HexagonPlotComponent.categoricalProperties()`) to switch which categorical attribute drives clustering. Options exclude the same "silly" attributes (spatial/grid coordinates, IDs, constant columns) that `FurtherAttributesPanelComponent` hides, via the shared `attribute-filters.ts` (`isSpatialOrIdentifierKey`, `isUninformativeAttribute`) — both surfaces stay in sync from one heuristic instead of two.
+   * Leiden-only "heavy" data (centrality averages, co-occurrence, neighborhood enrichment — computed only under `leiden_*` uns keys) is hidden by `ClusterInfoPanelComponent`'s `isLeidenView` input, and the corresponding side effects (`updateCoOccurrenceTable`, `renderFootprintPlots`, `updateSubgraphGenie3`, nhood heatmap) are gated behind `view === 'leiden'` in `HexagonPlotComponent` whenever a different categorical property is active.
+   * Switching the active clustering property re-derives the selected cluster (`selectClusterForActiveProperty`): the selected cell's value under the new property if a cell is selected, otherwise the same default-cluster heuristic used on initial load (`autoSelectDefaultCluster` — for Leiden, prefers a cluster with co-occurrence data; otherwise the most populous value).
+3. **Continuous Views** (`gene_expression`, `regulatory_scores`, etc.):
    * Clicking a spot outlines *only* that individual hexagon with a **thick black border (`3px`)**.
    * All other spots have a **transparent border (`1px`)** (no cluster outlines).
    * Navigates directly to the **Cell Information** tab.
 4. **Color-By Dropdown**:
-   * Changing the active feature property synchronizes the sidebar to the corresponding tab and clears active cluster outlines (`activeClusterId = null`).
-5. **Compare View**:
+   * Changing the active feature property synchronizes the sidebar to the corresponding tab and clears active cluster outlines (`activeClusterValue = null`) unless the new property is categorical, per rule 2.
+5. **Tab-Jump Suppression** (`HexagonPlotComponent.suppressTabJump` / `withoutTabJump()`): a single choke point that both jump primitives (`jumpToTabByLabel`, `jumpToTab`) check before moving the sidebar. Any control that lives inside a tab and triggers a property change that would otherwise re-derive and jump to a (possibly different) tab should wrap its call in `withoutTabJump(() => ...)`, rather than threading a new boolean parameter through every intermediate method — the pattern `onColorbyPropertyChange`'s own `skipTabJump` parameter had to use. Used today by the "Cluster by" dropdown, so switching the clustering property never jumps away from the Cluster Information tab.
+6. **Compare View**:
    * Renders main and compare datasets in synchronized half-height containers with independent color-scales and feature selectors.
 
 ---
@@ -214,5 +218,32 @@ To prevent worker exhaustion during heavy R/Python computations:
 
 * **Dataset `config.json` Network Paths**: Ensure `output_files` contains `genie_network_path` and `sponge_network_path` pointing to the filtered network CSVs; otherwise, interactive D3 subgraphs (`/geneset_connections_*`) will return empty results.
 * **Named AnnData `obs` Index in LIANA+**: When unpacking loadings, `liana_bivariate.py` uses `_index_by_first_column()` to prevent `KeyError` on datasets where `adata.obs.index.name` is not `"index"`.
-* **Case-Sensitivity in Mouse Datasets**: LIANA+ consensus resources use uppercase human symbols. When processing mouse datasets, run backfills with `--keep-var-case` to prevent permanent mutation of `adata.var_names`.
+* **Case-Sensitivity in Mouse Datasets**: LIANA+'s `consensus` resource uses uppercase human symbols, so `run_liana` used to do `adata.var.index = adata.var.index.str.upper()` in place — permanently rewriting mouse symbols (`Xkr4` -> `XKR4`) in the object that then gets written to disk. **Fixed**: `calc_liana.run_liana` now takes `organism=` (default: auto-detected from symbol casing) and selects LIANA's mouse-native `mouseconsensus` resource instead of touching the data. On visual_cortex this also *improves* LR coverage (89.5% of resource genes present vs 81.3% for the uppercase-vs-human match). `backfill_liana_scores.py` takes the same `--organism {auto,human,mouse}`. For other species use `li.rs.get_hcop_orthologs()` + `li.rs.translate_resource()` on a *copy* of the resource.
+* **Repairing an already-mangled dataset**: `str.upper()` is not invertible — correct mouse casing follows no single rule (`Rb1cc1`, `4732440D04Rik`, `mt-Nd1`, `AI597479` each need a different one), so re-capitalising cannot recover it. Use `scripts/restore_var_symbols.py --adata <file> --source <uncorrupted file>`, which copies symbols positionally and refuses unless the correspondence is provable (same var count, elementwise upper-case match, no upper-case collisions). `var_names` is not the only casualty: every score stage that ran *after* LIANA wrote its results keyed by the mangled symbols, so the script repairs those in the same pass —
+  * `uns['moranI']`, `uns['gearyC']` — one row per gene
+  * `uns['{viper,aucell,spongeffects_GSVA,spongeffects_ssGSEA}_scores_genie3_{moranI,gearyC}']` — one row per regulon
+  * `uns['genie_genesets']` / `uns['sponge_genesets']` — both the regulon keys and the target-gene lists
+  * `obsm['*_scores_{genie3,sponge}']` — regulon column names
+
+  Two guards keep it from over-reaching, and both matter in practice: a table is only rewritten if **every** one of its names resolves against the restored var index, and obsm is restricted to the `_genie3`/`_sponge` suffixes the pipeline uses. Without them, `obsm['pathway_activity_score_mlm']` (whose PROGENy column names include a literal `EGFR`) and `obsm['proportions_class']` (whose cell-class labels `Sst`, `Vip`, `Pvalb`, `Lamp5`, `Sncg`, `Meis2` are all real mouse genes) would be silently relabelled into something that means the wrong thing.
+
+  Deliberately **not** repaired: `uns['ligand_receptor_global_scores']` and `uns['liana_columns']['ligand_receptor']`. Those hold `LIGAND^RECEPTOR` names from the **human** `consensus` resource — not mangled mouse symbols, so there is nothing to map them back to. Mouse-native pairs require re-running the LR stage:
+  ```bash
+  python3 backend/scripts/backfill_liana_scores.py --adata <file> --organism mouse \
+      --skip cell_comp_tf_activity pathway_activity --force
+  ```
+  After any restore, regenerate the GeoJSON — the frontend reads these names from `meta`, not from the h5ad.
+
+* **Human datasets are affected too, just less visibly.** It is tempting to assume `.upper()` is a no-op on human symbols. It is not: HGNC writes uncharacterised open reading frames with a lowercase `orf` (`C1orf159`), and there are a few hundred of them. The heart builtin had 321 such genes upper-cased to `C1ORF159`.
+
+  Heart also shows why "just restore the backup" is not automatically right. Its symbols were **entirely lowercase** before the LIANA backfill (`al627309.1`, `linc01409`, `samd11`) — itself non-standard — so the upper-casing actually *improved* 26,547 of 26,868 symbols and broke only the 321 `orf` ones. Reverting to the backup would have regressed almost everything. The authoritative source was instead `var['SYMBOL']` in `HCAHeartST11290662_adata_final_annotation.h5ad` (proper HGNC casing, 0 upper-case collisions), reached with the script's `--source-column SYMBOL --allow-unmatched`:
+  ```bash
+  python3 backend/scripts/restore_var_symbols.py \
+      --adata backend/data/heart/plasmidpoop/adata_tg_scores.h5ad \
+      --source backend/data/heart/HCAHeartST11290662_adata_final_annotation.h5ad \
+      --source-column SYMBOL --allow-unmatched --backup
+  ```
+  `--allow-unmatched` is needed because the source is a different annotation build: 738 of heart's genes are absent from it (`LINC01409`, `PRXL2B`) and are already correct, so they are left alone. That run corrected 317 symbols plus 4,000 rows each in `uns['moranI']` and `uns['gearyC']` — which were *lowercase*, having been computed before the upper-casing, and so disagreed with `var_names` in the opposite direction. One gene, `C12ORF81`, is absent from the source and remains mis-cased; `MORF4L1`/`MORF4L2`/`MORF4L2-AS1` merely contain the substring and are correctly upper-case.
+
+  **Impact on heart's scores was small**, because the human reference networks are almost entirely upper-case: `consensus` has **zero** mixed-case genes, so the ligand-receptor results were unaffected and need no re-run. `progeny(human)` has 170 mixed-case targets of 17,610 and `collectri(human)` 46 of 6,675, so pathway and TF activity missed roughly 1% of their networks while the symbols were upper-cased. Re-running those stages now recovers that 1%.
 * **Corrupted `uns['neighbors']`**: Datasets processed without Scanpy clustering may contain partial neighbor dictionaries. `backfill_squidpy_scores.py` automatically clears malformed `uns['neighbors']` prior to computing graphs.
