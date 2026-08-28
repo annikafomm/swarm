@@ -20,6 +20,7 @@ import pandas as pd
 import scanpy as sc
 import uvicorn
 from app import calculate_scores_helper
+import spatial_correlation
 from models import (
     UploadRequest,
     UploadResponse,
@@ -450,12 +451,19 @@ def _normalize_gene_key(gene: str) -> str:
     return gene.strip().lower()
 
 
-def _resolve_gene_name(adata: sc.AnnData, gene: str) -> Optional[str]:
+def _resolve_gene_name(
+    adata: sc.AnnData, gene: str, adata_path: Optional[str] = None
+) -> Optional[str]:
     """
     Case-insensitive lookup of `gene` against adata.var_names.
     Returns the actual var_names entry (matching the dataset's own casing convention,
     e.g. human symbols are conventionally uppercase) so callers can index with it directly,
     or None if no gene matches regardless of case.
+
+    Ensembl ids are accepted as well as symbols. That matters because SPONGE identifies genes
+    by Ensembl id everywhere, so a gene picked out of a SPONGE module or network arrives here
+    as `ENSG00000141510` while `var_names` holds `TP53` — without this the expression view
+    would 404 for exactly the genes the SPONGE panels invite you to click on.
     """
     if gene in adata.var_names:
         return gene
@@ -463,7 +471,171 @@ def _resolve_gene_name(adata: sc.AnnData, gene: str) -> Optional[str]:
     for name in adata.var_names:
         if name.lower() == lowered:
             return name
+
+    # `adata_path` is only the cache key for the symbol map; without it the map is rebuilt
+    # here, which is cheap but pointless to repeat, so callers should pass the path they
+    # already resolved.
+    symbols = _get_gene_symbol_map(adata_path) if adata_path else _build_gene_symbol_map(adata)
+    key = gene.strip().upper()
+    # Version suffixes are stripped as a fallback: a network may carry ENSG00000141510.17 for
+    # a dataset that recorded the id unversioned (or vice versa).
+    symbol = symbols.get(key) or symbols.get(_strip_ensembl_version(key))
+    if symbol is not None and symbol in adata.var_names:
+        return symbol
     return None
+
+
+# -----------------------------------------------------------------------------
+# Ensembl id -> gene symbol
+#
+# SPONGE is the reason this exists: its networks, its ceRNA modules and therefore every
+# score derived from them (`uns["sponge_genesets"]`, the `*_sponge` obsm tables, the
+# interaction/analysis CSVs) are keyed by Ensembl gene id, while GENIE3 and the expression
+# matrix are keyed by symbol. Without a translation layer the whole SPONGE half of the UI
+# reads as `ENSG00000141510` where the GENIE3 half reads `TP53`.
+#
+# The mapping is derived from the dataset's own `var` rather than an external annotation
+# release, so an id always resolves to the symbol *this* dataset uses for it — the two can
+# genuinely disagree across Ensembl releases, and a label that contradicts the gene-expression
+# view would be worse than no label at all.
+# -----------------------------------------------------------------------------
+
+# Ensembl gene ids: ENSG00000141510 (human), ENSMUSG00000059552 (mouse), optionally carrying
+# a version suffix (ENSG00000141510.17).
+_ENSEMBL_ID_RE = re.compile(r"^ENS[A-Z]{0,4}G\d{6,}(?:\.\d+)?$", re.IGNORECASE)
+
+# `var` columns that conventionally hold the Ensembl id, most specific first. `ensemble_id`
+# is a misspelling that CELLxGENE-derived h5ads ship with (the builtin BRCA dataset is one),
+# so it has to be listed literally rather than normalised away.
+_ENSEMBL_VAR_COLUMNS = (
+    "ensembl_id",
+    "ensemble_id",
+    "ensembl_gene_id",
+    "ensembl",
+    "gene_ids",
+    "gene_id",
+)
+
+# ...and the ones that hold the symbol. `feature_name` is last because CELLxGENE writes
+# `SYMBOL_ENSG...` into it whenever a symbol is ambiguous — usable, but only after cleanup.
+_SYMBOL_VAR_COLUMNS = (
+    "gene_symbol",
+    "gene_symbols",
+    "symbol",
+    "gene_name",
+    "gene_names",
+    "feature_name",
+)
+
+_MISSING_SYMBOL_VALUES = {"", "nan", "none", "na", "n/a", "null", "<na>"}
+
+# path -> (mtime, {ensembl_id: symbol}). Keyed the same way as _ADATA_CACHE so a re-written
+# h5ad invalidates the map with it.
+_GENE_SYMBOL_CACHE: Dict[str, tuple] = {}
+
+
+def _strip_ensembl_version(gene_id: str) -> str:
+    """ENSG00000141510.17 -> ENSG00000141510."""
+    return gene_id.split(".", 1)[0]
+
+
+def _looks_like_ensembl(values) -> bool:
+    """Whether a column/index is a column of Ensembl ids, judged from a sample of it."""
+    sample = [str(v) for v in list(values)[:500]]
+    sample = [v for v in sample if v.strip().lower() not in _MISSING_SYMBOL_VALUES]
+    if not sample:
+        return False
+    hits = sum(1 for v in sample if _ENSEMBL_ID_RE.match(v.strip()))
+    return hits >= 0.5 * len(sample)
+
+
+def _find_var_column(var: pd.DataFrame, candidates) -> Optional[str]:
+    """First of `candidates` present in `var`, matched case-insensitively."""
+    lowered = {str(c).lower(): str(c) for c in var.columns}
+    for candidate in candidates:
+        if candidate in lowered:
+            return lowered[candidate]
+    return None
+
+
+def _clean_symbol(symbol: Any, gene_id: str) -> str:
+    """Normalise one symbol, returning "" when there isn't a usable one.
+
+    Drops the `_ENSG...` disambiguation suffix CELLxGENE appends, and rejects values that are
+    themselves Ensembl ids — labelling `ENSG00000141510` as `ENSG00000141510` is just noise.
+    """
+    text = str(symbol).strip()
+    if text.lower() in _MISSING_SYMBOL_VALUES:
+        return ""
+    bare_id = _strip_ensembl_version(gene_id)
+    if bare_id and text.endswith(f"_{bare_id}"):
+        text = text[: -(len(bare_id) + 1)]
+    if not text or text.lower() in _MISSING_SYMBOL_VALUES or _ENSEMBL_ID_RE.match(text):
+        return ""
+    return text
+
+
+def _build_gene_symbol_map(adata: sc.AnnData) -> Dict[str, str]:
+    """Build {ensembl_id: symbol} from `adata.var`, or {} when the dataset can't support it.
+
+    Handles both var layouts seen in practice: symbols in the index with the ids in a column
+    (the builtin BRCA and Heart datasets), and ids in the index with the symbols in a column.
+    Both the versioned and unversioned form of each id are emitted as keys, because networks
+    and score tables are inconsistent about which they carry.
+    """
+    var = adata.var
+    if var is None or len(var) == 0:
+        return {}
+
+    index_values = [str(v) for v in var.index]
+    index_is_ensembl = _looks_like_ensembl(index_values)
+
+    if index_is_ensembl:
+        ids = index_values
+        symbol_col = _find_var_column(var, _SYMBOL_VAR_COLUMNS)
+        if symbol_col is None:
+            return {}
+        symbols = [str(v) for v in var[symbol_col].astype(str)]
+    else:
+        id_col = _find_var_column(var, _ENSEMBL_VAR_COLUMNS)
+        if id_col is None:
+            # No conventionally-named column: accept any column that is Ensembl ids.
+            id_col = next(
+                (str(c) for c in var.columns if _looks_like_ensembl(var[c].astype(str))),
+                None,
+            )
+        if id_col is None:
+            return {}
+        ids = [str(v) for v in var[id_col].astype(str)]
+        symbols = index_values
+
+    mapping: Dict[str, str] = {}
+    for gene_id, symbol in zip(ids, symbols):
+        gene_id = gene_id.strip()
+        if not _ENSEMBL_ID_RE.match(gene_id):
+            continue
+        clean = _clean_symbol(symbol, gene_id)
+        if not clean:
+            continue
+        # setdefault, not assignment: where several rows share an id the first wins, matching
+        # how the rest of the pipeline de-duplicates.
+        mapping.setdefault(gene_id, clean)
+        mapping.setdefault(_strip_ensembl_version(gene_id), clean)
+    return mapping
+
+
+def _get_gene_symbol_map(adata_path: str) -> Dict[str, str]:
+    """Cached _build_gene_symbol_map for the dataset at `adata_path`."""
+    abs_path = str(Path(adata_path).resolve())
+    mtime = os.path.getmtime(abs_path) if Path(abs_path).exists() else None
+
+    cached = _GENE_SYMBOL_CACHE.get(abs_path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    mapping = _build_gene_symbol_map(_load_adata_cached(adata_path))
+    _GENE_SYMBOL_CACHE[abs_path] = (mtime, mapping)
+    return mapping
 
 
 def _get_visible_dataset_paths(session_data: SessionData) -> Dict[str, str]:
@@ -614,12 +786,16 @@ def _resolve_network_path(
     return fallback_session_path
 
 
-def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, float]]:
+def _extract_gene_min_max(
+    adata: sc.AnnData, gene: str, adata_path: Optional[str] = None
+) -> Optional[Dict[str, float]]:
     """
     Return min/max for one gene from an AnnData object.
     Returns None if gene is not found.
+
+    `adata_path` is passed straight through to _resolve_gene_name as its symbol-map cache key.
     """
-    resolved_gene = _resolve_gene_name(adata, gene)
+    resolved_gene = _resolve_gene_name(adata, gene, adata_path)
     if resolved_gene is None:
         return None
 
@@ -648,7 +824,7 @@ def _get_cached_or_compute_gene_stats(dataset_id: str, adata_path: str, gene: st
         return {"min": float(cached["min"]), "max": float(cached["max"])}
 
     adata = _load_adata_cached(adata_path)
-    stats = _extract_gene_min_max(adata, gene)
+    stats = _extract_gene_min_max(adata, gene, adata_path)
     if stats is None:
         return None
 
@@ -714,15 +890,21 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
     """
     Given an array of edge annotations, compute an appropriate step size and borders
     for binning the annotations into categories.
-
-    Returns (step_size, min_border, max_border)
     """
-    w_min = np.min(edge_annotations)
-    w_max = np.max(edge_annotations)
+    if edge_annotations is None or len(edge_annotations) == 0:
+        return {"step": 0.1, "min_border": 0.0, "max_border": 1.0, "default_value": 0.5}
+
+    w_min = float(np.min(edge_annotations))
+    w_max = float(np.max(edge_annotations))
     w_range = w_max - w_min
 
     if w_range == 0:
-        return (1.0, w_min - 0.5, w_max + 0.5)
+        return {
+            "step": 1.0,
+            "min_border": w_min - 0.5,
+            "max_border": w_max + 0.5,
+            "default_value": w_min,
+        }
 
     # Determine step size based on range
     if w_range <= 0.1:
@@ -737,10 +919,10 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
     num_possible_steps = w_range / step
 
     # Calculate borders
-    min_border = np.floor(w_min / step) * step
-    max_border = np.ceil(w_max / step) * step
+    min_border = float(np.floor(w_min / step) * step)
+    max_border = float(np.ceil(w_max / step) * step)
 
-    default_value = min_border + (np.ceil(num_possible_steps / 2) * step)
+    default_value = float(min_border + (np.ceil(num_possible_steps / 2) * step))
 
     return {"step": step, "min_border": min_border, "max_border": max_border, "default_value": default_value}
 
@@ -748,16 +930,29 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
 
 def get_subnetwork_data(file_path, gene_set, network_type):
     # gene_set is a set or list of gene names
+    if not file_path or not os.path.exists(file_path):
+        return pd.DataFrame(), {}
+
+    # Expand gene set to handle case variations (e.g. ATF6 vs Atf6 for mouse datasets)
+    raw_genes = [str(g) for g in gene_set if g is not None]
+    expanded_gene_set = (
+        set(raw_genes)
+        | {g.lower() for g in raw_genes}
+        | {g.upper() for g in raw_genes}
+        | {g.capitalize() for g in raw_genes}
+        | {g.title() for g in raw_genes}
+    )
+
     filtered_rows = []
     edge_annotations = []
     for chunk in pd.read_csv(file_path, chunksize=10000):
         if network_type == "genie":
-            mask = chunk["regulatoryGene"].isin(gene_set) | chunk[
+            mask = chunk["regulatoryGene"].astype(str).isin(expanded_gene_set) | chunk[
                 "targetGene"
-            ].isin(gene_set)
+            ].astype(str).isin(expanded_gene_set)
             annotation = "weight"
         elif network_type == "sponge":
-            gene_mask = chunk["geneA"].isin(gene_set) | chunk["geneB"].isin(gene_set)
+            gene_mask = chunk["geneA"].astype(str).isin(expanded_gene_set) | chunk["geneB"].astype(str).isin(expanded_gene_set)
 
             mask = (
                 gene_mask
@@ -770,15 +965,15 @@ def get_subnetwork_data(file_path, gene_set, network_type):
         else:
             continue
         filtered_chunk = chunk[mask]
-        edge_annotations.extend(filtered_chunk[annotation].values.tolist())
         if not filtered_chunk.empty:
+            edge_annotations.extend(filtered_chunk[annotation].dropna().values.tolist())
             filtered_rows.append(filtered_chunk)
-            # remove chunk from memory
             del filtered_chunk, chunk
+
     if filtered_rows:
         return pd.concat(filtered_rows, ignore_index=True), _step_and_borders_networks(np.array(edge_annotations))
     else:
-        return pd.DataFrame()
+        return pd.DataFrame(), {}
 
 
 # -----------------------------------------------------------------------------
@@ -2051,7 +2246,12 @@ async def get_geojson(dataset_id: str):
         return FileResponse(
             geojson_path,
             media_type="application/geo+json",
-            filename=f"{dataset_id}.geojson"
+            filename=f"{dataset_id}.geojson",
+            # This file is regenerated in place (e.g. re-running visium_to_geojson.py with a new
+            # hexagon radius); without an explicit no-store, FileResponse only sends Last-Modified/
+            # ETag and leaves caching to browser heuristics, which can keep serving pre-regeneration
+            # bytes for a normal (non-hard) reload.
+            headers={"Cache-Control": "no-store"},
         )
     except HTTPException:
         raise
@@ -2289,9 +2489,14 @@ async def get_geneset_connections_genie(
     if "genie_genesets" not in adata.uns:
         return {"connections": [], "slider_data": {}}
 
-    gene_set = adata.uns["genie_genesets"].get(
-        gene_set_name, None
-    )
+    gene_set = adata.uns["genie_genesets"].get(gene_set_name, None)
+    if gene_set is None and hasattr(adata.uns["genie_genesets"], "keys"):
+        lower_to_key = {str(k).lower(): k for k in adata.uns["genie_genesets"].keys()}
+        matched_key = lower_to_key.get(gene_set_name.lower())
+        if matched_key:
+            gene_set = adata.uns["genie_genesets"][matched_key]
+            gene_set_name = matched_key
+
     if gene_set is None:
         gene_set = [gene_set_name]
     else:
@@ -2330,10 +2535,22 @@ async def get_geneset_connections_sponge(
 
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
-    gene_set = adata.uns["sponge_genesets"].get(
-        gene_set_name, None
-    )
-    gene_set = list(gene_set) + [gene_set_name]
+
+    if "sponge_genesets" not in adata.uns:
+        return {"connections": [], "slider_data": {}}
+
+    gene_set = adata.uns["sponge_genesets"].get(gene_set_name, None)
+    if gene_set is None and hasattr(adata.uns["sponge_genesets"], "keys"):
+        lower_to_key = {str(k).lower(): k for k in adata.uns["sponge_genesets"].keys()}
+        matched_key = lower_to_key.get(gene_set_name.lower())
+        if matched_key:
+            gene_set = adata.uns["sponge_genesets"][matched_key]
+            gene_set_name = matched_key
+
+    if gene_set is None:
+        gene_set = [gene_set_name]
+    else:
+        gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from sponge_network
     connections, slider_data = get_subnetwork_data(
@@ -2407,6 +2624,36 @@ async def get_var_column(
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
     return adata.var[column].to_dict()
+
+
+@app.get("/api/gene_symbols", dependencies=[Depends(cookie)])
+async def get_gene_symbols(
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    """Ensembl gene id -> gene symbol for one dataset, derived from its own `var`.
+
+    The frontend loads this once per dataset and uses it to label anything keyed by Ensembl id
+    — chiefly the SPONGE side of the UI (ceRNA module dropdowns, network nodes, the global and
+    per-spot regulatory score tables), which is Ensembl-keyed throughout while GENIE3 and gene
+    expression are symbol-keyed.
+
+    Ids are returned both with and without their version suffix. Datasets whose `var` carries
+    no Ensembl ids at all return an empty map, which the frontend treats as "keep showing ids".
+
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/api/gene_symbols?dataset_id=job_123`
+    """
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+        symbols = _get_gene_symbol_map(adata_path)
+    except Exception as e:
+        # A dataset without a resolvable adata simply has no symbols to offer; that is not an
+        # error for the caller, which falls back to displaying the raw ids.
+        print(f"[gene_symbols] no mapping for dataset_id={dataset_id}: {type(e).__name__}: {e}")
+        return {"dataset_id": dataset_id, "symbols": {}, "count": 0}
+
+    return {"dataset_id": dataset_id, "symbols": symbols, "count": len(symbols)}
+
 
 
 # @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
@@ -2594,7 +2841,7 @@ async def get_X_by_gene(
     """
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
-    resolved_gene = _resolve_gene_name(adata, gene)
+    resolved_gene = _resolve_gene_name(adata, gene, adata_path)
     if resolved_gene is None:
         raise HTTPException(status_code=404, detail=f"Gene '{gene}' not found")
     expressions = adata[:, resolved_gene].X.toarray().flatten().tolist()
@@ -2872,6 +3119,53 @@ async def compute_footprint(
         })
 
     return {"results": results}
+
+
+@app.get("/api/datasets/{dataset_id}/spatial_correlation_matrix", dependencies=[Depends(cookie)])
+async def get_spatial_correlation_matrix(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier),
+):
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found: {e}")
+
+    if not adata_path or not Path(adata_path).exists():
+        raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
+
+    adata = _load_adata_cached(adata_path)
+    result = await asyncio.to_thread(spatial_correlation.compute_spatial_correlation_matrix, adata)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/datasets/{dataset_id}/spatial_correlation_pair", dependencies=[Depends(cookie)])
+async def get_spatial_correlation_pair(
+    dataset_id: str,
+    feature_id_a: str,
+    feature_id_b: str,
+    session_data: SessionData = Depends(verifier),
+):
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found: {e}")
+
+    if not adata_path or not Path(adata_path).exists():
+        raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
+
+    adata = _load_adata_cached(adata_path)
+    try:
+        result = await asyncio.to_thread(
+            spatial_correlation.get_pair_scatter_data, adata, feature_id_a, feature_id_b
+        )
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 if __name__ == "__main__":
