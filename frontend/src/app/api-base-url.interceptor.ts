@@ -4,22 +4,17 @@ import {
   HttpRequest,
   HttpHandler,
   HttpEvent,
+  HttpErrorResponse,
+  HttpEventType,
 } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, throwError, EMPTY } from 'rxjs';
+import { catchError, switchMap } from 'rxjs/operators';
 import { environment } from '../environments/environment';
 
 /**
  * Automatically prepends `environment.apiBaseUrl` to every relative URL
  * (i.e. URLs starting with '/') made through Angular's HttpClient.
- *
- * Dev:  apiBaseUrl = 'http://localhost:3000'
- *       '/api/datasets'  →  'http://localhost:3000/api/datasets'
- *
- * Prod: apiBaseUrl = '/swarm'
- *       '/api/datasets'  →  '/swarm/api/datasets'
- *       '/swarm/api/...' →  unchanged  (already prefixed)
- *
- * Absolute URLs (http:// / https://) are never modified.
+ * Also automatically re-creates sessions on 403 "invalid session" errors (e.g. after backend restarts).
  */
 @Injectable()
 export class ApiBaseUrlInterceptor implements HttpInterceptor {
@@ -29,22 +24,39 @@ export class ApiBaseUrlInterceptor implements HttpInterceptor {
     req: HttpRequest<unknown>,
     next: HttpHandler,
   ): Observable<HttpEvent<unknown>> {
-    // Only transform relative URLs
-    if (!this.baseUrl || !req.url.startsWith('/')) {
-      return next.handle(req);
+    let targetUrl = req.url;
+    if (this.baseUrl && req.url.startsWith('/')) {
+      const basePath = this.baseUrl.startsWith('/') ? this.baseUrl : undefined;
+      if (!basePath || !req.url.startsWith(basePath)) {
+        targetUrl = `${this.baseUrl}${req.url}`;
+      }
     }
 
-    // Avoid double-prefixing when the URL already starts with the base path
-    // (e.g. session.service.ts already prepends apiBaseUrl for some calls)
-    const basePath = this.baseUrl.startsWith('/')
-      ? this.baseUrl        // prod:  '/swarm'
-      : undefined;          // dev:   'http://localhost:3000' — no relative prefix to skip
+    const prefixedReq = req.clone({ url: targetUrl });
 
-    if (basePath && req.url.startsWith(basePath)) {
-      return next.handle(req);
-    }
+    return next.handle(prefixedReq).pipe(
+      catchError((error: HttpErrorResponse) => {
+        if (
+          error.status === 403 &&
+          error.error?.detail === 'invalid session' &&
+          !targetUrl.includes('/create_session')
+        ) {
+          console.warn('[ApiBaseUrlInterceptor] Session invalidated by backend restart. Auto-creating fresh session...');
+          const createSessionUrl = `${this.baseUrl}/create_session`;
+          const createSessionReq = new HttpRequest('POST', createSessionUrl, {}, { withCredentials: true });
 
-    const prefixedReq = req.clone({ url: `${this.baseUrl}${req.url}` });
-    return next.handle(prefixedReq);
+          return next.handle(createSessionReq).pipe(
+            switchMap((event) => {
+              if (event.type === HttpEventType.Response) {
+                // Retry original request with newly issued cookie
+                return next.handle(prefixedReq);
+              }
+              return EMPTY;
+            })
+          );
+        }
+        return throwError(() => error);
+      })
+    );
   }
 }
