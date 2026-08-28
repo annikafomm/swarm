@@ -195,6 +195,14 @@ def main():
 
     # tangram
     parser.add_argument("-tangram", action='store_true', help='Compute Tangram')
+    parser.add_argument(
+        "-score_measured_too",
+        action="store_true",
+        help="With -tangram, ALSO score the measured spatial object (the 'st' slot), not just "
+             "the projected one. Off by default so existing behaviour is bit-for-bit unchanged. "
+             "Strongly recommended for any spatial regulatory analysis: regulon scores on the "
+             "projected layer have Moran's I ~ 0, versus ~ +0.58 on the measured layer.",
+    )
     parser.add_argument('-sc_path', type=str, help="Path to the single-cell .h5ad file.")
     parser.add_argument(
         '-gene_selection',
@@ -452,6 +460,39 @@ def main():
                             logfile,
                             2,
                         )
+            # OPT-IN FIX -- default behaviour above is unchanged.
+            #
+            # The `if args.tangram: ... else: ...` below is mutually exclusive, so a Tangram run
+            # scores ONLY the projected object and the measured spatial object is never scored.
+            # `MultiomeDataset.validate_paths()` nonetheless lists `adata_st_scores` in
+            # `always_required`, and multiome forces `use_tangram = True`, so the data model
+            # demands a file this branch can never produce -- which is why heart shipped a
+            # hand-copied projected object under the spatial filename.
+            #
+            # That is not only an inconsistency, it invalidates the scores. Measured on the heart
+            # builtin (see heart_projection_control_findings.md):
+            #
+            #   * The projected layer's per-spot mapping mass (how much reference-cell
+            #     probability landed on each spot) is itself strongly autocorrelated
+            #     (Moran's I +0.85), and it accounts for 100% of the median per-gene Moran's I.
+            #     Regressing it out drops median I from +0.591 to -0.0013.
+            #   * Regulon-level scores normalise that factor away, so they land at Moran's I ~ 0
+            #     on the projected layer (pipeline AUCell -0.0014, VIPER +0.0063, independent
+            #     implementation -0.0084) versus +0.578 for the same regulons on the measured
+            #     layer.
+            #
+            # So for a Tangram run, every spatial regulatory score the tool serves is computed on
+            # the layer that carries no regulon-level spatial signal. `-score_measured_too` scores
+            # the measured object *in addition*, writing the "st" slot alongside "tg", so the two
+            # can be compared and the frontend's spatial-vs-tangram dataset entries point at
+            # genuinely different data.
+            if args.score_measured_too:
+                log_message(
+                    "-score_measured_too: additionally scoring the MEASURED spatial object "
+                    "(the 'st' slot). See heart_projection_control_findings.md for why.",
+                    logfile,
+                )
+                compute_spatial_scores(adata_work, "st", args, logfile)
         else:
             compute_spatial_scores(adata_work, "st", args, logfile)
 
