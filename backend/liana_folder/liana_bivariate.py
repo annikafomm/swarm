@@ -32,13 +32,21 @@ def _index_by_first_column(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def ligand_receptor_relationships(
-    adata: sc.AnnData, return_scores: bool = False
+    adata: sc.AnnData, return_scores: bool = False, resource_name: str = "consensus"
 ) -> dict | None:
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
+    #
+    # `resource_name` must match the organism's symbol convention: "consensus" is
+    # human-symbol based, "mouseconsensus" is mouse. Passing the wrong one silently yields
+    # (almost) no matching LR pairs rather than an error. run_liana picks it from the
+    # organism, so symbols never need to be rewritten to fit the resource — see the note in
+    # calc_liana.run_liana about the upper-casing this replaced.
+    # `li.rs.show_resources()` lists the rest; other organisms go via
+    # `li.rs.get_hcop_orthologs()` + `li.rs.translate_resource()`.
     lrdata = li.mt.bivariate(
         adata,
-        resource_name="consensus",  # NOTE: uses HUMAN gene symbols!
+        resource_name=resource_name,
         local_name="cosine",  # Name of the function
         global_name="morans",  # Name global function
         n_perms=100,  # Number of permutations to calculate a p-value

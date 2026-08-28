@@ -27,11 +27,18 @@ calling `run_liana` wholesale only buys `--skip` and per-stage timing.
 
 Two behaviours inherited from the pipeline that are worth knowing before you run this:
 
-  * **Gene symbols get upper-cased in place.** `run_liana` does
-    `adata.var.index = adata.var.index.str.upper()` because the `consensus` resource is
-    human-symbol based. That is a no-op for human data but rewrites mouse symbols
-    (`Gapdh` -> `GAPDH`). Pass `--keep-var-case` to skip it if that matters; the LR results
-    will then be empty for non-upper-case symbols.
+  * **The ligand-receptor resource must match the organism.** LIANA's `consensus` resource
+    is human-symbol based, `mouseconsensus` is mouse. This script picks one from
+    `--organism` (default `auto`, inferred from symbol casing) and never modifies
+    `adata.var_names`.
+
+    Earlier versions of both this script and `run_liana` instead did
+    `adata.var.index = adata.var.index.str.upper()` so mouse symbols would match the human
+    resource. That mutation was permanent and destroyed the symbols
+    (`Gapdh` -> `GAPDH`, `mt-Nd1` -> `MT-ND1`); it is not reversible by re-capitalising,
+    since correct mouse casing follows no single rule. If you are working with a dataset
+    processed before this was fixed, repair it with
+    `scripts/restore_var_symbols.py` (needs an uncorrupted source file) before backfilling.
   * **`uns["liana_columns"]` is mandatory downstream.** The two cosine-similarity matrices
     are stored as bare arrays whose column names live only in that dict, and
     `visium_to_geojson.py` re-attaches them at build time. It is written here for whichever
@@ -140,9 +147,11 @@ def main() -> int:
         help="Stages to leave out.",
     )
     parser.add_argument(
-        "--keep-var-case",
-        action="store_true",
-        help="Do not upper-case var_names. See the module docstring before using this.",
+        "--organism",
+        choices=("auto", "human", "mouse"),
+        default="auto",
+        help="Which ligand-receptor resource to use: human -> 'consensus', "
+        "mouse -> 'mouseconsensus'. 'auto' infers it from gene-symbol casing.",
     )
     parser.add_argument("--force", action="store_true", help="Recompute existing results.")
     parser.add_argument(
@@ -197,21 +206,32 @@ def main() -> int:
     adata.uns.setdefault("liana_columns", {})
 
     adata.var.index.name = None
-    if not args.keep_var_case:
-        adata.var.index = adata.var.index.str.upper()
-        _log("upper-cased var_names (consensus resource is human-symbol based)")
+
+    # Matches run_liana: pick the resource to fit the data, never rewrite the data to fit
+    # the resource.
+    organism = args.organism
+    if organism == "auto":
+        from calc_python_scores.calc_liana import looks_like_mouse  # noqa: E402
+
+        organism = "mouse" if looks_like_mouse(adata) else "human"
+        _log(f"organism auto-detected from symbol casing: {organism}")
+    else:
+        _log(f"organism specified: {organism}")
+    resource_name = "mouseconsensus" if organism == "mouse" else "consensus"
 
     if "ligand_receptor" in todo:
+        _log(f"ligand-receptor resource: {resource_name}")
         t0 = time.time()
-        ligand_receptor_relationships(adata)
+        ligand_receptor_relationships(adata, resource_name=resource_name)
         _log(f"ligand-receptor relationships in {_fmt(time.time() - t0)}")
 
     if "cell_comp_tf_activity" in todo:
         import decoupler as dc
 
         t0 = time.time()
-        grn = pd.read_csv(args.grn) if args.grn else dc.op.collectri()
-        _log(f"GRN: {'file ' + args.grn if args.grn else 'CollecTRI'} ({len(grn)} edges)")
+        grn = pd.read_csv(args.grn) if args.grn else dc.op.collectri(organism=organism)
+        _log(f"GRN: {'file ' + args.grn if args.grn else f'CollecTRI ({organism})'} "
+             f"({len(grn)} edges)")
         cell_comp_tf_activity_similarity(
             adata, grn, cell_comp_obsm_key=args.cell_comp_key
         )
@@ -222,10 +242,12 @@ def main() -> int:
 
         t0 = time.time()
         pathway_net = (
-            pd.read_csv(args.pathway_net) if args.pathway_net else dc.op.progeny()
+            pd.read_csv(args.pathway_net)
+            if args.pathway_net
+            else dc.op.progeny(organism=organism)
         )
         _log(
-            f"pathways: {'file ' + args.pathway_net if args.pathway_net else 'PROGENy'} "
+            f"pathways: {'file ' + args.pathway_net if args.pathway_net else f'PROGENy ({organism})'} "
             f"({len(pathway_net)} rows)"
         )
         pathway_activities(adata, pathway_net)
