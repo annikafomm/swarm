@@ -1,13 +1,13 @@
 .further-attributes-panel {
   display: flex;
   flex-direction: column;
-  height: 100%;
   padding: 16px;
   background: #ffffff;
   box-sizing: border-box;
   font-family: inherit;
   color: #2c3e50;
-  overflow-y: auto;
+  /* No independent scroll -- this lives inside tab content, which is the single scrollable box
+     (see .metadata-tables-container in hexagon-plot.component.scss). */
 }
 
 .panel-header {

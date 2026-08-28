@@ -74,9 +74,12 @@
 
   .table-scroll {
     position: relative;
-    height: var(--ftable-height);
-    max-height: var(--ftable-height);
-    overflow-y: auto;
+    min-height: var(--ftable-height);
+    /* No vertical overflow here: this table lives inside tab content, which is the single
+       scrollable box (see .metadata-tables-container in hexagon-plot.component.scss). A fixed
+       height + its own overflow-y here used to nest a second independent scrollbar inside that
+       one, which is what made scrolling feel wrong -- especially with two of these stacked in
+       compare mode. */
     overflow-x: auto;
     /* allow horizontal scrolling for wide tables */
     scrollbar-gutter: stable; //both-edges;
