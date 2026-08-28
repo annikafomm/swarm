@@ -94,6 +94,7 @@ const EXACT_FIELD_CATEGORY: Record<string, string> = {
   broad_celltype_margin: 'identity',
   pathologist_annotation: 'identity',
   stereoscope_annotation: 'identity',
+  region: 'identity',
 
   n_genes_by_counts: 'qc',
   total_counts: 'qc',
@@ -180,6 +181,8 @@ const FIELD_INFO: Record<string, string> = {
   broad_celltype_top2: 'The second most likely broad cell type for this cell, useful for spotting ambiguous calls.',
   broad_celltype_margin: 'Difference in score between the top and second cell-type call — a small margin flags an ambiguous assignment.',
   pathologist_annotation: 'Region or cell-type annotation manually assigned by a pathologist reviewing the tissue image.',
+  region: 'Cortical layer (or white matter) inferred for this spot by scoring canonical mouse cortex layer marker genes (scanpy score_genes) and taking the highest-scoring layer. This is a computational estimate, not a ground-truth anatomical annotation — no curated layer/region labels exist for this dataset upstream.',
+  'region_score_*': "This layer's marker-gene module score (scanpy score_genes) for this spot — the value compared across layers to produce the region call. Higher means stronger expression of that layer's marker genes relative to background.",
   stereoscope_annotation: 'Cell-type annotation derived from Stereoscope deconvolution of this spot.',
 
   n_genes_by_counts: 'Number of distinct genes detected with non-zero counts in this cell.',
@@ -389,13 +392,21 @@ export class InfoService {
     if (k.startsWith('motif_')) {
       return 'regulatory';
     }
+    if (k.startsWith('region_score_')) {
+      return 'identity';
+    }
     if (k.endsWith('_ontology_term_id')) {
       return 'ontology';
     }
     if (/(?:^|_)(x|y)(?:_|$)/i.test(k)) {
       return 'location';
     }
-    return 'other';
+    // Dataset-specific numeric fields not otherwise recognized are most often deconvolution /
+    // cell-type-composition fractions (e.g. Heart's aCM1/FB1/..., or a class-proportion column
+    // written directly from obsm) -- bucket those together rather than dumping them in "other".
+    const isNumeric = typeof value === 'number' ||
+      (typeof value === 'string' && value.trim() !== '' && Number.isFinite(+value));
+    return isNumeric ? 'composition' : 'other';
   }
 
   /** Short help text for a single field, or null if nothing specific is known about it. */
@@ -406,6 +417,9 @@ export class InfoService {
     }
     if (k.startsWith('motif_')) {
       return FIELD_INFO['motif_*'];
+    }
+    if (k.startsWith('region_score_')) {
+      return FIELD_INFO['region_score_*'];
     }
     if (k.endsWith('_ontology_term_id')) {
       return FIELD_INFO['*_ontology_term_id'];
