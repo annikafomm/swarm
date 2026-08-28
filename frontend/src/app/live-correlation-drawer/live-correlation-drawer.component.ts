@@ -16,6 +16,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import * as Plotly from 'plotly.js-dist-min';
+import * as d3 from 'd3';
 
 export interface SpatialFeatureRef {
   id: string;
@@ -144,11 +145,20 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     const cellIds = points.map((p: any) => p.cell_id);
     const clusters = points.map((p: any) => p.cluster);
 
+    // `cluster` is a label (leiden id or cell_type name, both stringified by the backend), not a
+    // number -- passing it straight into `color` with a continuous `colorscale` (as before) only
+    // works by accident for numeric-looking leiden ids, and silently falls back to a single flat
+    // color for cell_type labels like "B cell", since those aren't valid CSS color names either.
+    // Map each distinct cluster to its own color from a qualitative palette instead.
+    const clusterColorScale = d3.scaleOrdinal<string>(d3.schemeSet2).domain(Array.from(new Set(clusters)));
+    const pointColors = clusters.map((c: string) => clusterColorScale(c));
+
     const hoverTexts = points.map(
       (p: any) =>
         `<b>Cell:</b> ${p.cell_id}<br>` +
         `<b>${this.featureA?.name}:</b> ${typeof p.x === 'number' ? p.x.toFixed(3) : p.x}<br>` +
-        `<b>${this.featureB?.name}:</b> ${typeof p.y === 'number' ? p.y.toFixed(3) : p.y}`
+        `<b>${this.featureB?.name}:</b> ${typeof p.y === 'number' ? p.y.toFixed(3) : p.y}<br>` +
+        `<b>Cluster:</b> ${p.cluster}`
     );
 
     const data: Partial<Plotly.PlotData>[] = [
@@ -162,8 +172,7 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
         hoverinfo: 'text',
         marker: {
           size: 5,
-          color: clusters as any,
-          colorscale: 'Viridis',
+          color: pointColors,
           opacity: 0.75
         },
         name: 'Cells'
