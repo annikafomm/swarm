@@ -271,7 +271,7 @@ as a known algebraic property of the two statistics for near-Gaussian row-standa
 | A second heart donor / section | Any generalisable AVN biological claim; converts PRIMARY 3 from descriptive to inferential |
 | Resolve the projected-vs-measured pipeline question | Removes the confound under every heart autocorrelation number |
 | ATAC for visual cortex | Separates TF expression from TF activity; currently impossible there |
-| Regenerate V1 from uncorrupted mm10 symbols | Restores joins to mouse annotations. **Do not fix by re-capitalising** — case collisions make it ambiguous |
+| Regenerate V1 from uncorrupted mm10 symbols | **Done** — `scripts/restore_var_symbols.py` copied symbols positionally from `visual_cortex_visium_1_prepro_final.h5ad` (same order, no upper-case collisions), repairing `var_names` plus the gene-keyed `uns` score tables. **Do not fix by re-capitalising** — `str.upper()` is not invertible: correct mouse casing follows no single rule, and neither `.title()` nor `.capitalize()` recovers `Rb1cc1`, `4732440D04Rik`, `mt-Nd1` and `AI597479` together. Root cause fixed upstream: LIANA now uses the `mouseconsensus` resource instead of upper-casing the data |
 | A GENIE3 network for V1 from a non-IEG-inducing design | De-circularises any activity-dependent claim |
 | Resolve SPONGE module names to symbols | Makes the ceRNA modules biologically interpretable |
 
