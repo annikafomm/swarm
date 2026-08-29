@@ -74,38 +74,40 @@
 
 .co-occurrence-table-container {
   overflow-x: auto;
-  margin: 20px 0;
-  border-radius: 6px;
-  background: white;
-  border: 1px solid #ffe082;
+  margin: 16px 0;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .co-occurrence-table {
   width: 100%;
   border-collapse: collapse;
-  color: #1a1a1a;
+  color: #1e293b;
+  font-size: 0.83rem;
 
   thead {
-    background: linear-gradient(135deg, #fff3e0 0%, #ffecb3 100%);
-    border-bottom: 1px solid #ffb74d;
+    background: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
 
     th {
-      padding: 12px 14px;
-      font-weight: 700;
-      color: #ff6f00;
+      padding: 9px 12px;
+      font-weight: 600;
+      color: #475569;
       text-align: center;
-      font-size: 0.9rem;
-      letter-spacing: 0.5px;
+      font-size: 0.82rem;
+      white-space: nowrap;
     }
   }
 
   tbody {
     tr {
-      border-bottom: 1px solid #ffe082;
-      transition: all 0.2s ease;
+      border-bottom: 1px solid #f1f5f9;
+      transition: background 0.15s ease;
 
       &:hover {
-        background-color: #fff9e6;
+        background-color: #f8fafc;
       }
 
       &:last-child {
@@ -113,14 +115,14 @@
       }
 
       td {
-        padding: 12px 14px;
+        padding: 8px 12px;
         text-align: center;
-        font-size: 0.95rem;
-        color: #1a1a1a;
+        font-size: 0.83rem;
+        color: #334155;
 
         &:first-child {
           font-weight: 600;
-          color: #ff6f00;
+          color: #1e293b;
           text-align: left;
         }
       }
@@ -131,12 +133,12 @@
 .no-data {
   padding: 24px;
   text-align: center;
-  background: #fff9e6;
-  border: 1px dashed #ffe082;
-  border-radius: 6px;
-  color: #f57f17;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
   font-weight: 500;
-  margin: 20px 0;
+  margin: 16px 0;
 }
 
 .interval-navigation {

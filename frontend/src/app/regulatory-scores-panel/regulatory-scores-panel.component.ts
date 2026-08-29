@@ -225,6 +225,10 @@ export class RegulatoryScoresPanelComponent {
   /** Emits when the (main-only) help icon next to "Global Regulatory Scores" is clicked. Parent
    * calls its existing globalRegulatoryScoresTutorial(). */
   @Output() globalScoresTutorialRequested = new EventEmitter<void>();
+  @Output() networkScoresTutorialRequested = new EventEmitter<void>();
+  @Output() cellScoresTutorialRequested = new EventEmitter<void>();
+
+
 
   // ---- Regulatory Network Graphs: shared ----
   /** Emitted when the "Regulatory Network Graphs" panel is opened, from both instances. Binding

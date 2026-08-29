@@ -1,5 +1,4 @@
 <div class="regulatory-scores-panel">
-  <h4 *ngIf="isCompare">Aggregated Regulatory Scores</h4>
 
   <div class="selected-gene-info">
     <strong>{{ selectionLabel }}</strong><br>
@@ -23,11 +22,6 @@
         <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
           <span class="hx-title-with-info">
             Global Regulatory Scores
-            <button mat-icon-button type="button" class="hx-info-btn"
-              [matTooltip]="infoService.getScoreInfo('aucell') || ''" matTooltipPosition="above"
-              (click)="$event.stopPropagation()">
-              <mat-icon>help_outline</mat-icon>
-            </button>
           </span>
           <button mat-icon-button class="info-btn" *ngIf="!isCompare"
             (click)="globalScoresTutorialRequested.emit(); $event.stopPropagation()">
@@ -52,13 +46,26 @@
           <mat-icon>help_outline</mat-icon>
         </button>
       </div>
-
+      <h4 class="hx-title-with-info">
+        Genie3 Regulatory Scores (TF regulons)
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </h4>
       <app-table [data]="genie3TableData" [features]="features" [datasetId]="datasetId"
         [actionColumns]="genie3ActionColumns" [updateColumn]="'regulatory_scores'" [emptyMessage]="genie3EmptyMessage"
         [isCompare]="isCompare" [indexColumnLabel]="'Gene'" (loadingChange)="tableLoadingChange.emit($event)"
         (featuresUpdated)="globalFeaturesUpdated.emit()"
         (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
         (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"></app-table>
+      <h4 class="hx-title-with-info">
+        Sponge Regulatory Scores (ceRNA modules)
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('sponge_network') || ''" matTooltipPosition="above">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </h4>
       <app-table [data]="spongeTableData" [features]="features" [datasetId]="datasetId"
         [updateColumn]="'regulatory_scores'" [actionColumns]="spongeActionColumns" [emptyMessage]="spongeEmptyMessage"
         [isCompare]="isCompare" [indexColumnLabel]="'Gene'" (featuresUpdated)="globalFeaturesUpdated.emit()"
@@ -71,9 +78,8 @@
       <mat-expansion-panel-header>
         <span class="hx-title-with-info">
           Regulatory Network Graphs
-          <button mat-icon-button type="button" class="hx-info-btn"
-            [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above"
-            (click)="$event.stopPropagation()">
+          <button mat-icon-button class="info-btn" *ngIf="!isCompare"
+            (click)="networkScoresTutorialRequested.emit(); $event.stopPropagation()">
             <mat-icon>help_outline</mat-icon>
           </button>
         </span>
@@ -249,55 +255,66 @@
       </ng-template>
     </mat-expansion-panel>
 
-    <mat-expansion-panel *ngIf="selectedCell">
+    <mat-expansion-panel>
       <mat-expansion-panel-header>
-        <h4 class="hx-title-with-info">
+        <span class="hx-title-with-info">
           Cell Regulatory Scores
-          <button mat-icon-button type="button" class="hx-info-btn"
-            [matTooltip]="infoService.getScoreInfo('aucell') || ''" matTooltipPosition="above"
-            (click)="$event.stopPropagation()">
+          <button mat-icon-button class="info-btn" *ngIf="!isCompare"
+            (click)="cellScoresTutorialRequested.emit(); $event.stopPropagation()">
             <mat-icon>help_outline</mat-icon>
           </button>
-        </h4>
+        </span>
       </mat-expansion-panel-header>
 
-      <div class="cell-reg-scores">
-        <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
+      <ng-template matExpansionPanelContent>
+        <div *ngIf="selectedCell; else noCellSelectedTpl" class="cell-reg-scores">
+          <h4>Regulatory Scores for Selected Cell: {{ selectedCell.properties.barcode }}</h4>
 
-        <h3 class="hx-title-with-info">
-          Genie3 Regulatory Scores (TF regulons)
-          <button mat-icon-button type="button" class="hx-info-btn"
-            [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above">
-            <mat-icon>help_outline</mat-icon>
-          </button>
-        </h3>
-        <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
-          [updateColumn]="'regulatory_scores'" [actionColumns]="genie3CellActionColumns" [datasetId]="datasetId"
-          [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
-          (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
-          (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
-          (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })">
-        </app-table>
+          <h4 class="hx-title-with-info">
+            Genie3 Regulatory Scores (TF regulons)
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('genie3_network') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </h4>
+          <app-table *ngIf="genie3Elements.length > 0" [data]="genie3RawData" [features]="features"
+            [updateColumn]="'regulatory_scores'" [actionColumns]="genie3CellActionColumns" [datasetId]="datasetId"
+            [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+            (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
+            (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })"
+            (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'genie3' })">
+          </app-table>
 
-        <h3 class="hx-title-with-info">
-          Sponge Regulatory Scores (ceRNA modules)
-          <button mat-icon-button type="button" class="hx-info-btn"
-            [matTooltip]="infoService.getScoreInfo('sponge_network') || ''" matTooltipPosition="above">
-            <mat-icon>help_outline</mat-icon>
-          </button>
-        </h3>
-        <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
-          [updateColumn]="'regulatory_scores'" [actionColumns]="spongeCellActionColumns" [datasetId]="datasetId"
-          [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
-          (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
-          (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
-          (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })">
-        </app-table>
+          <h4 class="hx-title-with-info">
+            Sponge Regulatory Scores (ceRNA modules)
+            <button mat-icon-button type="button" class="hx-info-btn"
+              [matTooltip]="infoService.getScoreInfo('sponge_network') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </h4>
+          <app-table *ngIf="spongeElements.length > 0" [data]="spongeRawData" [features]="features"
+            [updateColumn]="'regulatory_scores'" [actionColumns]="spongeCellActionColumns" [datasetId]="datasetId"
+            [isCompare]="isCompare" [indexColumnLabel]="'Gene'" [emptyMessage]="'No Cell Regulatory Scores Loaded'"
+            (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="cellFeaturesUpdated.emit()"
+            (geneSelected)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })"
+            (geneSelectedCompare)="geneSelected.emit({ gene: $event.gene, action: $event.action, networkType: 'sponge' })">
+          </app-table>
 
-        <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
-          No regulatory scores available or still loading.
+          <div *ngIf="genie3Elements.length === 0 && spongeElements.length === 0">
+            No regulatory scores available or still loading.
+          </div>
         </div>
-      </div>
+
+        <ng-template #noCellSelectedTpl>
+          <div class="empty-state-card">
+            <mat-icon class="empty-state-icon">touch_app</mat-icon>
+            <div class="empty-state-title">No Cell Selected</div>
+            <div class="empty-state-message">
+              Click on any cell or spot on the map to view its detailed properties, annotations, quality metrics, and regulatory scores.
+            </div>
+          </div>
+        </ng-template>
+      </ng-template>
     </mat-expansion-panel>
   </mat-accordion>
 </div>

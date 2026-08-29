@@ -90,6 +90,21 @@ export class FurtherAttributesPanelComponent implements OnChanges {
     if (changes['features']) {
       this.computeAttributes();
     }
+    if (changes['selectedAttribute'] || changes['features']) {
+      // selectedAttribute is already used for the active-row highlight in the template, but that
+      // only does anything if the row's own page happens to already be showing -- jump to it too.
+      this.jumpToPageForSelectedAttribute();
+    }
+  }
+
+  private jumpToPageForSelectedAttribute(): void {
+    if (!this.selectedAttribute) return;
+    const index = this.filteredAttributes.findIndex((a) => a.key === this.selectedAttribute);
+    // Not found means selectedAttribute isn't a Further Attributes row at all (e.g. it lives on a
+    // dedicated tab, or the current search/type filter hides it) -- leave pagination alone rather
+    // than jumping to a page that doesn't actually contain it.
+    if (index === -1) return;
+    this.currentPage = Math.floor(index / this.pageSize) + 1;
   }
 
   /**

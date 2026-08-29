@@ -120,10 +120,144 @@ else:
 
 ### Important Implications
 1. **Values**: On Tangram datasets, the *Gene Expression* tab, regulatory scores, and spatial metrics reflect imputed/projected gene densities.
-2. **Spatial Autocorrelation**: Projection smooths expression across neighboring spots, naturally yielding higher Moran's $I$ values than raw spatial measurements.
+2. **Spatial Autocorrelation — corrected**: the line that used to stand here ("projection smooths expression, naturally yielding higher Moran's I") understates what is actually going on. It is not generic smoothing, it is a specific, measurable artifact that can inflate *or destroy* autocorrelation depending on the estimator — see 5.1 below.
 3. **`cell_type` vs. `leiden`**:
    * `cell_type`: Required for Tangram deconvolution, differential motif grouping, and footprinting.
    * `leiden`: Computed automatically by Scanpy only when spatial clustering metrics are requested and no pre-existing cluster column exists.
+
+### 5.1 Why the projected object's spatial scores are not trustworthy
+
+Investigated in depth on the heart AVN multiome (3153 spots); full numbers, code and raw output
+in [`heart_projection_control_findings.md`](heart_projection_control_findings.md) and
+[`backend/scripts/heart_projection_control.py`](backend/scripts/heart_projection_control.py).
+Two independent problems compound, not one.
+
+**(a) Tangram's `project_genes` is a linear operator: `X_space = M.T @ X_sc`**
+(`tangram/utils.py:368`, confirmed by reading the installed package — no `.raw` reference exists
+anywhere in `tangram`, it uses whatever `adata_sc.X` holds). `M` has shape
+(reference cells x spots) with **every row summing to exactly 1.0** (sd 5.6e-08) — each reference
+cell's probability distribution over spots. Its per-spot column sums (`m[s] = sum_c M[c,s]`,
+"mapping mass") have **CV 0.2194**.
+
+That mass factor is the *entire* per-gene spatial signal in the projected object:
+
+| measurement (heart, 26,868 genes) | value |
+|---|---:|
+| Moran's I of `m` itself | **+0.8525** |
+| median \|corr(gene's projected field, `m`)\| | **0.833** (43% of genes > 0.9) |
+| median per-gene Moran's I, raw | +0.591 |
+| median per-gene Moran's I, after regressing `m` out | **-0.0013** |
+
+Rank-based regulon estimators (AUCell, VIPER, GSVA, ssGSEA) are invariant to any per-spot
+rescaling `X[s,:] -> lambda_s * X[s,:]`, so they implicitly divide `m[s]` back out — and once it
+is gone, nothing spatially structured is left. Measured regulon Moran's I on the projected
+object: AUCell **-0.0014**, VIPER **+0.0063** (both from the pipeline's own stored scores).
+Cross-validated with an independent Python implementation: **-0.0084**.
+
+**Practical consequence**: `n_perms=None` (the pipeline's only autocorrelation null, see
+Gotcha "Corrupted `uns[\'neighbors\']`" below and `add_to_adata.py`) tests against spatial
+*randomness*, which `m` violates before any biology enters — hence up to **98.6%** of genes
+looking "significant" on a Tangram-projected object. Any Moran's I computed on such an object
+needs a mapping-aware null (permute the reference profile across cells, re-project through the
+same `M` — do **not** use an i.i.d. random profile, that under-generates the null by ~30x) or it
+is measuring the mapping, not the tissue.
+
+**(b) SWARM feeds `project_genes` log-scale input; the reference pipeline uses linear counts.**
+Verified empirically on heart: both `ad_sc.raw` (`calc_tangram.py:236`) and the spatial `ad_sp.X`
+are log1p-scale (non-integer, max ~6.9-10).
+
+*Fitting and projecting are not two steps with independently choosable scales — they are the
+same linear operator, applied twice, confirmed by reading the installed package.* The fit step's
+loss (`mapping_optimizer.py`) computes
+
+```python
+M_probs = softmax(self.M, dim=1)
+G_pred  = torch.matmul(M_probs.t(), S)          # identical form to project_genes' M.T @ X_sc
+gv_term = cosine_similarity(G_pred, G, dim=0).mean()
+```
+
+where `S = adata_sc[:, training_genes].X` and `G = adata_sp[:, training_genes].X`
+(`mapping_utils.py:260,269`) — **no transform between `.X` and either matrix**. So whatever scale
+`adata_sc.X`/`adata_sp.X` hold at call time is the scale the cosine-similarity loss is fit
+against, and it is the same scale `project_genes` later multiplies by `M.T`. There is no
+"fit in log space, project in linear space" option in the package as shipped — the input scale
+choice is made once, before `pp_adatas`, and both steps inherit it.
+
+Given that, feeding log-scale data is the wrong choice specifically *because* of the second use.
+Cosine similarity is scale-tolerant for the fit (it depends only on vector direction, so a
+monotone per-gene transform mostly reorders which genes dominate the mean, it does not break the
+objective). Linear projection is not: `project_genes` computes `sum_c w_c * log(1+x_c)`, but the
+mixture Tangram is meant to estimate is `log(1 + sum_c w_c*x_c)`. Since `log` is concave, Jensen's
+inequality means the first is systematically <= the second — projected expression is compressed
+relative to the true mixture, worst wherever a spot mixes cells with very different expression
+(exactly the boundary regions AVN-style analyses target). Fitting tolerates the wrong scale;
+projecting does not.
+
+*Checked against primary sources, not summaries — the official tutorial notebook was fetched and
+parsed directly (grepped the raw `.ipynb` JSON, not a paraphrase):*
+after `sc.read_h5ad`, the very first thing the [official Tangram tutorial](https://github.com/broadinstitute/Tangram/blob/master/tutorial_tangram_without_squidpy.ipynb)
+does is verify the loaded data is raw counts (`np.unique(ad_sc.X.toarray()[0,:])`, immediately
+following its own stated rule "if the data are in integer format, that probably means they are in
+raw count"), applies `sc.pp.normalize_total` only — **zero occurrences of `log1p` or `.scale(` in
+the entire notebook** — and passes the spatial object through with **no preprocessing at all**.
+Cell-level commentary: *"mapping works great with raw data... [normalize_total is] light
+pre-processing."* This is a genuine deviation from documented Tangram usage, not an equally-valid
+alternative reading.
+
+**What the papers say — confirmed, not just the code/tutorial.** The original paper
+([Biancalani et al. 2021, *Nat. Methods*](https://www.nature.com/articles/s41592-021-01264-7))
+states in its Methods that the single-cell and spatial count matrices are **normalized for
+library size only** before mapping — no log transform. This matches the tutorial and the
+installed package exactly: `S`/`G` in the fit loss and `X_sc` in `project_genes` are all
+library-size-normalized counts, never logarithmized, at every point the paper, the code, and the
+tutorial notebook can be checked against each other. There is no ambiguity left on this point.
+
+Given that, a later benchmarking paper
+([refinement strategies for Tangram, Bioinformatics/ISMB 2025](https://pmc.ncbi.nlm.nih.gov/articles/PMC12261478/))
+is simply wrong on this detail — it states in its own methods that *"As suggested by Tangram's
+developers, both datasets are normalized by the total counts over all genes per cell or spot and
+**logarithmized** before running Tangram,"* which is not what the original paper or the official
+tutorial does. Treat that specific sentence as a mistaken paraphrase, not a competing convention.
+The same paper is still useful independent evidence for scoring the measured object over the
+projected one, on grounds unrelated to this point: it documents that Tangram gives
+**"inconsistent results over repeated runs"** and that **"genes expressed in fewer cells or spots
+tend to have poorer predictions"** (i.e. the projected layer's reliability degrades exactly on
+the sparser, more spatially-interesting genes) — both orthogonal to, and consistent with, the
+mapping-mass finding above.
+
+**Bottom line: SWARM's heart pipeline feeds log1p data into an interface that both the paper and
+the official tutorial specify as library-size-normalized-only.** This is confirmed as a bug
+against the documented method, not a defensible alternative reading of ambiguous guidance.
+
+**(c) Scoring the measured object instead is correct, but is not a drop-in fix.** Measured
+object regulon Moran's I: AUCell **+0.4393**, VIPER **+0.5221**, GSVA **+0.6280**, ssGSEA
+**+0.6194** — all bracketing the +0.578 predicted independently in advance. But:
+  * The two objects disagree on gene-identifier namespace (projected: symbol index +
+    `ensembl_id` column; measured: Ensembl index + `SYMBOL` column) and must be reconciled
+    before scoring — see `backend/scripts/prepare_measured_for_scoring.py`.
+  * **Rank-based R scorers are pathologically slow on real (sparse) Visium counts, and a
+    per-gene detection filter does not fix it.** The projected object is fully dense (0 genes at
+    zero); AUCell/VIPER completed on it in 16s/12s. The measured object is ~3% dense: **15,092 of
+    33,538 genes are zero in every spot**, and even after filtering to genes detected in >=10
+    spots (13,222 genes, 617/634 GENIE3 regulators and 92.6% of targets retained), a *single* spot
+    still has ~11,600 zero-valued genes forming one enormous tie group for AUCell/GSVA/ssGSEA to
+    rank through (vs. a largest tie group of 7 on the projected object). That is a per-**spot**
+    problem, not a per-**gene** one, so gene filtering barely helps it: scoring took 5h+ once
+    unfiltered (killed, no output) and ~6h15m once filtered. Budget accordingly; do not expect a
+    gene-count filter alone to make this fast.
+  * Scores are per-spot x per-regulon (gene-axis independent), so after scoring the smaller
+    filtered object they were transplanted back onto the full symbol-indexed 33,538-gene object
+    to preserve full Gene Expression coverage — see the same script's usage in the heart config.
+
+**Where this now lives for heart**: `adata_st_scores_path` in `backend/data/heart/config.json`
+points at `plasmidpoop/adata_st_scores_measured.h5ad` (regulatory scores computed on the
+*measured* object), while `adata_tg_scores_path` is untouched. Because `_resolve_adata_path`
+(live API — gene values, obsm tables) prefers `adata_st_scores_path` while `_determine_adata_path`
+(registration + GeoJSON) uses `adata_tg_scores_path`, the map's baked-in properties are still
+projection-derived but live-fetched regulatory scores now come from the measured object.
+`calc_scores.py` also gained an opt-in `-score_measured_too` flag (default off, existing runs
+bit-for-bit unchanged) that scores the measured object into the `st` slot alongside a Tangram
+run's `tg` slot, so future re-runs do not need this by-hand transplant.
 
 ---
 

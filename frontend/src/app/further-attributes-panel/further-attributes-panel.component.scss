@@ -387,9 +387,15 @@
   background: #ffffff;
   color: #334155;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 700 !important;
+  font-weight: bold !important;
   cursor: pointer;
   transition: all 0.15s ease;
+
+  span, strong {
+    font-weight: 700 !important;
+    font-weight: bold !important;
+  }
 
   .action-icon {
     font-size: 14px;
@@ -399,14 +405,16 @@
 
   &:hover {
     border-color: #ff9800;
-    color: #ff9800;
+    color: #d97706;
     background: #fff8eb;
+    font-weight: 700 !important;
   }
 
   &.active-btn {
-    background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%);
+    background: #ff9800;
     color: #ffffff;
     border-color: #ff9800;
+    font-weight: 700 !important;
     box-shadow: 0 1px 3px rgba(255, 152, 0, 0.3);
   }
 }

@@ -217,9 +217,8 @@
           <!-- Action Button -->
           <td class="col-action" (click)="$event.stopPropagation()">
             <button type="button" class="action-btn" [class.active-btn]="attr.key === selectedAttribute"
-              (click)="selectAttribute(attr)" title="Color hexagons by this attribute">
-              <mat-icon class="action-icon">{{ attr.key === selectedAttribute ? 'check' : 'palette' }}</mat-icon>
-              <span>{{ attr.key === selectedAttribute ? 'Selected' : 'Color Map' }}</span>
+              (click)="selectAttribute(attr)" title="Show attribute on map">
+              <strong>Show</strong>
             </button>
           </td>
         </tr>
