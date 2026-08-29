@@ -37,23 +37,17 @@
         </div>
       </div>
 
-      <!-- Bivariate 2D Scale (2D Color Matrix Box + Dual Axes) -->
+      <!-- Bivariate 2D Scale -- same pixel-accurate canvas blend and plain axis-label layout as
+           the Live Correlation drawer's own bivariate legend (see renderBivariateLegendCanvas),
+           so the same underlying blend doesn't look like three different legends across the app. -->
       <div *ngIf="legendInfo.type === 'bivariate'" class="legend-bivariate-container">
-        <div class="bivariate-legend-wrapper">
-          <div class="bivariate-y-axis">
-            <span class="axis-label y-axis-label" [title]="legendInfo.bivariateInfo?.labelB || 'Feature B'">
-              {{ legendInfo.bivariateInfo?.labelB || 'Feature B' }} &uarr;
-            </span>
-          </div>
-          <div class="bivariate-square-box">
-            <div class="bivariate-gradient-square"></div>
-          </div>
-        </div>
-        <div class="bivariate-x-axis">
-          <span class="axis-label x-axis-label" [title]="legendInfo.bivariateInfo?.labelA || 'Feature A'">
-            {{ legendInfo.bivariateInfo?.labelA || 'Feature A' }} &rarr;
-          </span>
-        </div>
+        <span class="axis-label-y" [title]="legendInfo.bivariateInfo?.labelB || 'Feature B'">
+          {{ legendInfo.bivariateInfo?.labelB || 'Feature B' }}
+        </span>
+        <canvas #bivariateLegendCanvas class="bivariate-legend-canvas"></canvas>
+        <span class="axis-label-x" [title]="legendInfo.bivariateInfo?.labelA || 'Feature A'">
+          {{ legendInfo.bivariateInfo?.labelA || 'Feature A' }}
+        </span>
       </div>
     </div>
   </div>
@@ -79,49 +73,55 @@
 
 <div class="view-controls-wrapper" [class.compare-controls]="isCompare">
   <!-- Row 1: Dropdowns & Info buttons -->
-  <div [class]="isCompare ? 'row-container' : 'centered-row-container'" [style.width]="isCompare ? null : '100%'">
-    <mat-form-field appearance="fill" [id]="isCompare ? null : 'color-by-property'">
-      <mat-label>{{ isCompare ? 'Compare hexagons by' : 'Color hexagons by' }}</mat-label>
-      <mat-select [ngModel]="selectedView" (ngModelChange)="selectedViewChange.emit($event)"
-        (selectionChange)="colorByChanged.emit()" [disabled]="isInitializing">
-        <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
-          <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!isPropertyAvailable(prop)">
-            {{ prop | translate | async }}
-          </mat-option>
-        </mat-optgroup>
-      </mat-select>
-    </mat-form-field>
+  <div class="row-container">
+    <div class="field-with-info">
+      <mat-form-field appearance="fill" [id]="isCompare ? null : 'color-by-property'">
+        <mat-label>{{ isCompare ? 'Compare hexagons by' : 'Color hexagons by' }}</mat-label>
+        <mat-select [ngModel]="selectedView" (ngModelChange)="selectedViewChange.emit($event)"
+          (selectionChange)="colorByChanged.emit()" [disabled]="isInitializing">
+          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!isPropertyAvailable(prop)">
+              {{ prop | translate | async }}
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
 
-    <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="viewTutorialClicked.emit()">
-      <mat-icon>help_outline</mat-icon>
-    </button>
+      <span style="min-width: 28px">
+        <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="viewTutorialClicked.emit()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </span>
+    </div>
 
-    <mat-form-field [id]="isCompare ? null : 'dataset-dropdown-main'" appearance="fill" class="dataset-dropdown">
-      <mat-label>{{ isCompare ? 'Compare with Dataset' : 'Select Dataset' }}</mat-label>
-      <mat-select [ngModel]="selectedDataset" (ngModelChange)="selectedDatasetChange.emit($event)"
-        (selectionChange)="datasetChanged.emit($event.value)" [disabled]="isInitializing">
-        <mat-option *ngIf="isCompare" [value]="null">None</mat-option>
-        <mat-optgroup label="Built-in Datasets">
-          <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
-            {{ ds.alias }}
-          </mat-option>
-        </mat-optgroup>
-        <mat-optgroup label="Your Uploads">
-          <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
-            {{ ds.alias }}
-          </mat-option>
-        </mat-optgroup>
-        <mat-optgroup label="Tangram" *ngIf="(tangramDatasets$ | async)?.length">
-          <mat-option *ngFor="let ds of (tangramDatasets$ | async)" [value]="ds"
-            (onSelectionChange)="tangramDatasetSelected.emit(ds)">
-            {{ ds.alias }} (Tangram)
-          </mat-option>
-        </mat-optgroup>
-      </mat-select>
-    </mat-form-field>
+    <div class="field-with-info">
+      <mat-form-field [id]="isCompare ? null : 'dataset-dropdown-main'" appearance="fill" class="dataset-dropdown">
+        <mat-label>{{ isCompare ? 'Compare with Dataset' : 'Select Dataset' }}</mat-label>
+        <mat-select [ngModel]="selectedDataset" (ngModelChange)="selectedDatasetChange.emit($event)"
+          (selectionChange)="datasetChanged.emit($event.value)" [disabled]="isInitializing">
+          <mat-option *ngIf="isCompare" [value]="null">None</mat-option>
+          <mat-optgroup label="Built-in Datasets">
+            <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+              {{ ds.alias }}
+            </mat-option>
+          </mat-optgroup>
+          <mat-optgroup label="Your Uploads">
+            <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+              {{ ds.alias }}
+            </mat-option>
+          </mat-optgroup>
+          <mat-optgroup label="Tangram" *ngIf="(tangramDatasets$ | async)?.length">
+            <mat-option *ngFor="let ds of (tangramDatasets$ | async)" [value]="ds"
+              (onSelectionChange)="tangramDatasetSelected.emit(ds)">
+              {{ ds.alias }} (Tangram)
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
 
-    <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="datasetTutorialClicked.emit()">
-      <mat-icon>help_outline</mat-icon>
-    </button>
+        <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="datasetTutorialClicked.emit()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+    </div>
   </div>
 </div>

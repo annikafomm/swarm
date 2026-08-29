@@ -15,10 +15,6 @@
           Bivariate Moran's <em>I</em>
         </mat-button-toggle>
       </mat-button-toggle-group>
-
-      <button mat-icon-button (click)="loadCorrelationMatrix()" matTooltip="Reload correlation matrix">
-        <mat-icon>refresh</mat-icon>
-      </button>
     </div>
   </div>
 
@@ -118,10 +114,30 @@
                 <span>Compare on Spatial Map</span>
               </button>
 
-              <button type="button" (click)="toggleBivariateMap()" class="action-btn-secondary" [class.active]="isBivariateActive">
+              <!-- Only outside compare mode: recolors the real map directly (see compareModeActive
+                   doc) -- in compare mode the mini-map below already shows this without a toggle. -->
+              <button *ngIf="!compareModeActive" type="button" (click)="toggleBivariateMap()"
+                class="action-btn-secondary" [class.active]="isBivariateActive">
                 <mat-icon>{{ isBivariateActive ? 'palette' : 'palette_outlined' }}</mat-icon>
                 <span>{{ isBivariateActive ? 'Hide 2D Bivariate Map' : '2D Bivariate Map Color' }}</span>
               </button>
+            </div>
+          </div>
+
+          <!-- Bivariate Spatial Map: only in compare mode, where there's a drawer/mini-map surface
+               to show it on instead of the (already split, two-property) real maps. -->
+          <div *ngIf="compareModeActive" class="bivariate-map-box">
+            <div class="bivariate-title">Bivariate Spatial Map</div>
+            <div class="bivariate-map-row">
+              <div #bivariateMapContainer class="bivariate-map-canvas"></div>
+
+              <!-- This canvas IS the legend for the map: same bivariateColor(u, v) blend, pixel
+                   for pixel, so it can't drift out of sync with what the map actually shows. -->
+              <div class="bivariate-legend-col">
+                <span class="axis-label-y">{{ selectedFeatureB?.name }}</span>
+                <canvas #bivariateLegendCanvas class="bivariate-legend-canvas"></canvas>
+                <span class="axis-label-x">{{ selectedFeatureA?.name }}</span>
+              </div>
             </div>
           </div>
         </div>

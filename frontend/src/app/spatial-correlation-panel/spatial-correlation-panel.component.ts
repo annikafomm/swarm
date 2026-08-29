@@ -9,6 +9,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import * as Plotly from 'plotly.js-dist-min';
 import * as d3 from 'd3';
+import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 export interface SpatialFeature {
   id: string;
@@ -53,14 +54,36 @@ export interface PairScatterData {
 export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
   @Input() isCompare = false;
   @Input() datasetId?: string;
-  @Input() isBivariateActive = false;
+  /** Whether the app's global split-view compare mode is currently on (not to be confused with
+   * `isCompare`, which just says whether THIS panel instance is the compare-side one -- both the
+   * main and compare instances get the same value here). Compare mode already shows two real maps
+   * side by side, each with its own property, so bivariately recoloring either one would throw
+   * that comparison away -- there, the bivariate view instead renders as an independent mini-map
+   * inside the Live Correlation drawer. Outside compare mode there's only one map and no drawer,
+   * so it's recolored directly instead, like this always did originally. */
+  @Input() compareModeActive = false;
+  /** Reference geometry (this panel's own dataset's hexagons) for the bivariate mini-map -- this
+   * panel doesn't have its own map, it colors the same hexagon shapes the real map uses, just with
+   * a 2D blend of featureA/featureB instead of one property. Not wired to cell-click/tab-jump
+   * interactions (unlike the real maps) -- kept independent/static for now, same as the drawer's.
+   * Named hexFeatures (not `features`) because that name is already the correlatable-properties
+   * list below. Only relevant while compareModeActive (see that doc) -- otherwise the real map is
+   * recolored directly instead. */
+  @Input() hexFeatures: CellFeature[] = [];
 
   @Output() syncCompareRequested = new EventEmitter<{ featA: SpatialFeature; featB: SpatialFeature }>();
   @Output() applyBivariateColorRequested = new EventEmitter<{ featA: SpatialFeature; featB: SpatialFeature; enabled?: boolean }>();
   @Output() cellSelected = new EventEmitter<string>();
 
+  /** Local UI state for the bivariate toggle button shown outside compare mode (see
+   * compareModeActive doc) -- not an @Input(), this button's own on/off state doesn't need to be
+   * controlled by the parent the way e.g. datasetId does. */
+  isBivariateActive = false;
+
   @ViewChild('heatmapContainer', { static: false }) heatmapContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('scatterplotContainer', { static: false }) scatterplotContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('bivariateMapContainer', { static: false }) bivariateMapContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('bivariateLegendCanvas', { static: false }) bivariateLegendCanvas?: ElementRef<HTMLCanvasElement>;
 
   metricMode: 'pearson' | 'moran' = 'pearson';
   isLoadingMatrix = false;
@@ -235,10 +258,17 @@ export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
         this.pairScatterData = res;
         this.isLoadingScatter = false;
         setTimeout(() => this.renderScatterplot(), 50);
+        // Outside compare mode there's no mini-map to draw -- the real map gets recolored directly
+        // instead, via the toggle button (see compareModeActive doc / toggleBivariateMap).
+        if (this.compareModeActive) {
+          setTimeout(() => this.renderBivariateVisuals(), 50);
+        }
       },
       error: (err) => {
         console.error('Failed to load scatter data:', err);
-        this.scatterError = err?.error?.detail || 'Failed to load comparison data';
+        // Deliberately generic and always the same, regardless of the backend's actual detail --
+        // that can be a raw, unfiltered exception message, not something meant for a user to read.
+        this.scatterError = "Can't correlate the selected pair";
         this.isLoadingScatter = false;
       }
     });
@@ -348,6 +378,8 @@ export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
     }
   }
 
+  /** Outside compare mode only (see compareModeActive doc) -- recolors the real map directly via
+   * the parent's onApplyBivariateColor. */
   toggleBivariateMap(): void {
     if (this.selectedFeatureA && this.selectedFeatureB) {
       this.isBivariateActive = !this.isBivariateActive;
@@ -357,5 +389,105 @@ export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
         enabled: this.isBivariateActive
       });
     }
+  }
+
+  /** Same formula as live-correlation-drawer.component.ts's bivariateColor -- kept in sync by
+   * hand since these are two separate components with their own render pipelines (matching this
+   * codebase's existing pattern of each having its own renderScatterplot rather than sharing one).
+   * u/v are featureA/featureB each normalized to [0,1]; green marks how close they are to each
+   * other. Corners: (0,0)=green, (1,1)=white, (0,1)=red, (1,0)=blue. */
+  private bivariateColor(u: number, v: number): string {
+    const r = Math.round(255 * v);
+    const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
+    const b = Math.round(255 * u);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  private renderBivariateVisuals(): void {
+    this.renderBivariateMap();
+    this.renderBivariateLegend();
+  }
+
+  /** Renders hexFeatures (this panel's own dataset's real hexagon shapes) colored by a 2D blend of
+   * featureA (x) / featureB (y) instead of a single property. Uses bivariate_coords, which the
+   * same /spatial_correlation_pair fetch behind the scatterplot above already returns for every
+   * cell (not just the scatter sample), so this needs no separate request. Static/non-interactive
+   * for now -- no click-to-select, no tab-jump wiring, matching the real maps. */
+  private renderBivariateMap(): void {
+    const container = this.bivariateMapContainer?.nativeElement;
+    const coords = (this.pairScatterData as any)?.bivariate_coords;
+    if (!container || !coords?.cell_ids?.length || !this.hexFeatures?.length) return;
+
+    const pointsMap = new Map<string, { x: number; y: number }>();
+    for (let i = 0; i < coords.cell_ids.length; i++) {
+      pointsMap.set(String(coords.cell_ids[i]), { x: coords.x[i], y: coords.y[i] });
+    }
+    const allX: number[] = coords.x;
+    const allY: number[] = coords.y;
+    const minX = Math.min(...allX), maxX = Math.max(...allX);
+    const minY = Math.min(...allY), maxY = Math.max(...allY);
+
+    const width = container.clientWidth || 300;
+    const height = width;
+    const padding = 10;
+
+    d3.select(container).selectAll('svg').remove();
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`);
+
+    const projection = d3.geoIdentity().fitExtent(
+      [[padding, padding], [width - padding, height - padding]],
+      { type: 'FeatureCollection', features: this.hexFeatures } as any,
+    );
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+
+    svg.selectAll('path')
+      .data(this.hexFeatures, (d: any) => d.properties.barcode)
+      .join('path')
+      .attr('d', (d) => pathGenerator(d) || '')
+      .attr('fill', (d) => {
+        const cellId = String(d.properties?.barcode ?? d.id ?? '');
+        const pt = pointsMap.get(cellId);
+        if (!pt) return '#ccc';
+        const u = maxX > minX ? (pt.x - minX) / (maxX - minX) : 0.5;
+        const v = maxY > minY ? (pt.y - minY) / (maxY - minY) : 0.5;
+        return this.bivariateColor(u, v);
+      })
+      .style('stroke', 'none')
+      .style('opacity', 0.9);
+  }
+
+  /** Draws the actual 2D blend as a pixel grid (bivariateColor isn't a simple 2-stop gradient, so
+   * no CSS linear-gradient can represent it) so this legend always matches renderBivariateMap
+   * exactly instead of being a separately hand-picked gradient that can drift out of sync. */
+  private renderBivariateLegend(): void {
+    const canvas = this.bivariateLegendCanvas?.nativeElement;
+    if (!canvas) return;
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const image = ctx.createImageData(size, size);
+    for (let row = 0; row < size; row++) {
+      const v = 1 - row / (size - 1);
+      for (let col = 0; col < size; col++) {
+        const u = col / (size - 1);
+        const [r, g, b] = this.bivariateColor(u, v)
+          .replace(/^rgb\(|\)$/g, '')
+          .split(',')
+          .map(Number);
+        const idx = (row * size + col) * 4;
+        image.data[idx] = r;
+        image.data[idx + 1] = g;
+        image.data[idx + 2] = b;
+        image.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
   }
 }

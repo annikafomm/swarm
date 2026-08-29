@@ -70,20 +70,19 @@
           </div>
         </div>
 
-        <!-- 2D Bivariate Map Toggle & Legend -->
-        <div class="drawer-actions">
-          <button type="button" (click)="toggleBivariateMap()" class="apply-bivariate-btn" [class.active]="isBivariateActive">
-            <mat-icon>{{ isBivariateActive ? 'palette' : 'palette_outlined' }}</mat-icon>
-            <span>{{ isBivariateActive ? 'Hide 2D Bivariate Map' : '2D Bivariate Map Color' }}</span>
-          </button>
-        </div>
+        <!-- Bivariate Spatial Map, always shown alongside the scatterplot above -->
+        <div class="bivariate-map-box">
+          <div class="bivariate-title">Bivariate Spatial Map</div>
+          <div class="bivariate-map-row">
+            <div #bivariateMapContainer class="bivariate-map-canvas"></div>
 
-        <div *ngIf="isBivariateActive" class="bivariate-legend-box">
-          <div class="bivariate-title">2D Bivariate Color Blend</div>
-          <div class="bivariate-grid-layout">
-            <span class="axis-label-y">{{ featureB?.name }}</span>
-            <div class="bivariate-color-square"></div>
-            <span class="axis-label-x">{{ featureA?.name }}</span>
+            <!-- This canvas IS the legend for the map: same bivariateColor(u, v) blend, pixel
+                 for pixel, so it can't drift out of sync with what the map actually shows. -->
+            <div class="bivariate-legend-col">
+              <span class="axis-label-y">{{ featureB?.name }}</span>
+              <canvas #bivariateLegendCanvas class="bivariate-legend-canvas"></canvas>
+              <span class="axis-label-x">{{ featureA?.name }}</span>
+            </div>
           </div>
         </div>
       </div>

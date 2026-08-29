@@ -17,6 +17,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import * as Plotly from 'plotly.js-dist-min';
 import * as d3 from 'd3';
+import { CellFeature } from '../hexagon-view/cell-feature.types';
 
 export interface SpatialFeatureRef {
   id: string;
@@ -38,16 +39,25 @@ export interface SpatialFeatureRef {
 })
 export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
   @Input() datasetId: string | undefined;
+  /** The compare map's dataset, when featureB comes from a different dataset than featureA
+   * (e.g. main vs. compare showing separate datasets rather than two properties of one).
+   * Defaults to `datasetId` when not set, matching the same-dataset case. */
+  @Input() datasetIdCompare: string | undefined;
   @Input() featureA: SpatialFeatureRef | null = null;
   @Input() featureB: SpatialFeatureRef | null = null;
   @Input() isVisible: boolean = false;
-  @Input() isBivariateActive: boolean = false;
+  /** Reference geometry (main dataset's hexagons) for the bivariate mini-map -- this drawer
+   * doesn't have its own map, it colors the SAME hexagon shapes the real main map uses, just with
+   * a 2D blend of featureA/featureB instead of one property. Not wired to cell-click/tab-jump
+   * interactions (unlike the real maps) -- kept independent/static for now. */
+  @Input() features: CellFeature[] = [];
 
   @Output() cellSelected = new EventEmitter<string>();
-  @Output() applyBivariateColorRequested = new EventEmitter<{ featA: SpatialFeatureRef; featB: SpatialFeatureRef; enabled?: boolean }>();
   @Output() drawerClosed = new EventEmitter<void>();
 
   @ViewChild('drawerScatterContainer') scatterContainer!: ElementRef<HTMLDivElement>;
+  @ViewChild('bivariateMapContainer') bivariateMapContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('bivariateLegendCanvas') bivariateLegendCanvas?: ElementRef<HTMLCanvasElement>;
 
   public isCollapsed: boolean = false;
   public isLoading: boolean = false;
@@ -62,16 +72,6 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     this.drawerClosed.emit();
   }
 
-  public toggleBivariateMap(): void {
-    if (!this.featureA || !this.featureB) return;
-    this.isBivariateActive = !this.isBivariateActive;
-    this.applyBivariateColorRequested.emit({
-      featA: this.featureA,
-      featB: this.featureB,
-      enabled: this.isBivariateActive
-    });
-  }
-
   ngOnChanges(changes: SimpleChanges): void {
     const prevA = changes['featureA']?.previousValue?.id;
     const currA = changes['featureA']?.currentValue?.id;
@@ -79,10 +79,12 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     const currB = changes['featureB']?.currentValue?.id;
     const prevDs = changes['datasetId']?.previousValue;
     const currDs = changes['datasetId']?.currentValue;
+    const prevDsB = changes['datasetIdCompare']?.previousValue;
+    const currDsB = changes['datasetIdCompare']?.currentValue;
 
     const featAChanged = prevA !== currA && !!currA;
     const featBChanged = prevB !== currB && !!currB;
-    const datasetChanged = prevDs !== currDs && !!currDs;
+    const datasetChanged = (prevDs !== currDs && !!currDs) || prevDsB !== currDsB;
     const visChanged = changes['isVisible'] && changes['isVisible'].currentValue && !changes['isVisible'].previousValue;
 
     if (this.isVisible && (featAChanged || featBChanged || datasetChanged || visChanged)) {
@@ -100,6 +102,7 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     this.isCollapsed = !this.isCollapsed;
     if (!this.isCollapsed && this.scatterData) {
       setTimeout(() => this.renderScatterplot(), 50);
+      setTimeout(() => this.renderBivariateVisuals(), 50);
     }
   }
 
@@ -111,7 +114,10 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     this.isLoading = true;
     this.errorMsg = '';
 
-    const url = `/api/datasets/${encodeURIComponent(this.datasetId)}/spatial_correlation_pair?feature_id_a=${encodeURIComponent(this.featureA.id)}&feature_id_b=${encodeURIComponent(this.featureB.id)}`;
+    let url = `/api/datasets/${encodeURIComponent(this.datasetId)}/spatial_correlation_pair?feature_id_a=${encodeURIComponent(this.featureA.id)}&feature_id_b=${encodeURIComponent(this.featureB.id)}`;
+    if (this.datasetIdCompare && this.datasetIdCompare !== this.datasetId) {
+      url += `&dataset_id_b=${encodeURIComponent(this.datasetIdCompare)}`;
+    }
 
     if (this.currentFetchSub) {
       this.currentFetchSub.unsubscribe();
@@ -124,10 +130,14 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
         if (!this.isCollapsed) {
           setTimeout(() => this.renderScatterplot(), 50);
         }
+        setTimeout(() => this.renderBivariateVisuals(), 50);
       },
       error: (err) => {
         this.isLoading = false;
-        this.errorMsg = 'Failed to calculate cross-map correlation';
+        // Deliberately generic and always the same message, regardless of the backend's actual
+        // detail -- that detail can be a raw, unfiltered exception message (e.g. an internal
+        // TypeError from a computation bug), not something meant for an end user to read.
+        this.errorMsg = "Can't correlate the selected pair";
         console.error('Failed to load drawer scatter data:', err);
       }
     });
@@ -224,8 +234,107 @@ export class LiveCorrelationDrawerComponent implements OnChanges, OnDestroy {
     });
   }
 
-  public onApplyBivariate(): void {
-    this.toggleBivariateMap();
+  /** The one place the featureA(u)/featureB(v) -> color blend is defined -- both the mini-map and
+   * the legend canvas call this, so the legend is guaranteed to actually match what the map shows
+   * instead of being a separately hand-picked gradient that can drift out of sync with it (the
+   * previous static CSS gradient swatch was a blue->magenta look that didn't match this formula's
+   * actual corners at all: (0,0)=green, (1,1)=white, (0,1)=red, (1,0)=blue). u and v are each
+   * featureA/featureB normalized to [0,1]; green marks how close the two are to each other. */
+  private bivariateColor(u: number, v: number): string {
+    const r = Math.round(255 * v);
+    const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
+    const b = Math.round(255 * u);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  private renderBivariateVisuals(): void {
+    this.renderBivariateMap();
+    this.renderBivariateLegend();
+  }
+
+  /** Renders the hexagon geometry from `features` (the main map's own shapes -- this drawer has
+   * no map of its own) colored by a 2D blend of featureA (x) / featureB (y) instead of a single
+   * property. Uses `bivariate_coords`, which the same /spatial_correlation_pair fetch behind the
+   * scatterplot already returns for every cell (not just the <=2000-point scatter sample), so this
+   * needs no separate network request. Static/non-interactive for now -- no click-to-select, no
+   * tab-jump wiring, matching the real maps' interactions. */
+  private renderBivariateMap(): void {
+    const container = this.bivariateMapContainer?.nativeElement;
+    const coords = this.scatterData?.bivariate_coords;
+    if (!container || !coords?.cell_ids?.length || !this.features?.length) return;
+
+    const pointsMap = new Map<string, { x: number; y: number }>();
+    for (let i = 0; i < coords.cell_ids.length; i++) {
+      pointsMap.set(String(coords.cell_ids[i]), { x: coords.x[i], y: coords.y[i] });
+    }
+    const allX: number[] = coords.x;
+    const allY: number[] = coords.y;
+    const minX = Math.min(...allX), maxX = Math.max(...allX);
+    const minY = Math.min(...allY), maxY = Math.max(...allY);
+
+    const width = container.clientWidth || 300;
+    const height = width; // square, matching the real map's own aspect ratio convention
+    const padding = 10;
+
+    d3.select(container).selectAll('svg').remove();
+    const svg = d3.select(container)
+      .append('svg')
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`);
+
+    const projection = d3.geoIdentity().fitExtent(
+      [[padding, padding], [width - padding, height - padding]],
+      { type: 'FeatureCollection', features: this.features } as any,
+    );
+    const pathGenerator = d3.geoPath<CellFeature>().projection(projection);
+
+    svg.selectAll('path')
+      .data(this.features, (d: any) => d.properties.barcode)
+      .join('path')
+      .attr('d', (d) => pathGenerator(d) || '')
+      .attr('fill', (d) => {
+        const cellId = String(d.properties?.barcode ?? d.id ?? '');
+        const pt = pointsMap.get(cellId);
+        if (!pt) return '#ccc';
+        const u = maxX > minX ? (pt.x - minX) / (maxX - minX) : 0.5;
+        const v = maxY > minY ? (pt.y - minY) / (maxY - minY) : 0.5;
+        return this.bivariateColor(u, v);
+      })
+      .style('stroke', 'none')
+      .style('opacity', 0.9);
+  }
+
+  /** Draws the actual 2D blend as a pixel grid (bivariateColor isn't a simple 2-stop gradient --
+   * the green channel depends on |u-v|, so no CSS linear-gradient can represent it correctly) so
+   * the legend always matches renderBivariateMap exactly, corner for corner. */
+  private renderBivariateLegend(): void {
+    const canvas = this.bivariateLegendCanvas?.nativeElement;
+    if (!canvas) return;
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const image = ctx.createImageData(size, size);
+    for (let row = 0; row < size; row++) {
+      // Canvas y grows downward; v (featureB) should read bottom-to-top like the axis label does.
+      const v = 1 - row / (size - 1);
+      for (let col = 0; col < size; col++) {
+        const u = col / (size - 1);
+        const [r, g, b] = this.bivariateColor(u, v)
+          .replace(/^rgb\(|\)$/g, '')
+          .split(',')
+          .map(Number);
+        const idx = (row * size + col) * 4;
+        image.data[idx] = r;
+        image.data[idx + 1] = g;
+        image.data[idx + 2] = b;
+        image.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
   }
 }
 

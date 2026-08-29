@@ -186,6 +186,11 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
 
   @ViewChild('hexbinContainer', { static: true }) private hexbinContainerRef!: ElementRef<HTMLDivElement>;
 
+  /** Behind *ngIf="legendInfo.type === 'bivariate'", so this is undefined until that becomes
+   * true -- renderBivariateLegendCanvas() below is always called after a setTimeout(0) to give
+   * Angular a tick to create it first. */
+  @ViewChild('bivariateLegendCanvas') private bivariateLegendCanvasRef?: ElementRef<HTMLCanvasElement>;
+
   /** Public: read by the parent's updateHexColors/getViewVariablesToUpdate via @ViewChild until
    * those are migrated too (they're deeply tied to cross-cutting concerns staying in the parent
    * for now — see the refactor plan). */
@@ -224,6 +229,12 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
         this.activeClusterValue = null;
       }
     }
+    if (changes['legendInfo'] && this.legendInfo?.type === 'bivariate') {
+      // The <canvas> sits behind *ngIf="legendInfo.type === 'bivariate'" (see template), so on
+      // the transition into this type it doesn't exist yet this tick -- give Angular one to
+      // create it before rendering into it.
+      setTimeout(() => this.renderBivariateLegendCanvas(), 0);
+    }
     if (changes['selectedCell'] || changes['selectedView']) {
       this.updateSelectionHighlight();
     }
@@ -239,6 +250,46 @@ export class HexagonViewComponent implements OnChanges, OnDestroy {
   /** Removes any existing SVG in this instance's container before a fresh createHexagonPlot(). */
   public clearSvg(): void {
     d3.select(this.hexbinContainerRef.nativeElement).selectAll('svg').remove();
+  }
+
+  /** Same formula as live-correlation-drawer.component.ts's/spatial-correlation-panel's own
+   * bivariateColor -- kept in sync by hand since each has its own render pipeline (matching this
+   * codebase's existing pattern). u/v are featureA/featureB each normalized to [0,1]; green marks
+   * how close they are to each other. Corners: (0,0)=green, (1,1)=white, (0,1)=red, (1,0)=blue. */
+  private bivariateColor(u: number, v: number): [number, number, number] {
+    const r = Math.round(255 * v);
+    const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
+    const b = Math.round(255 * u);
+    return [r, g, b];
+  }
+
+  /** Draws the same pixel-accurate 2D blend the Live Correlation drawer and Spatial Correlation
+   * panel use for their own bivariate legends (this legend previously used a hand-picked CSS
+   * linear-gradient that neither matched their exact corner colors nor the real bivariateColor
+   * formula -- three different-looking "bivariate legends" for the same underlying blend). */
+  private renderBivariateLegendCanvas(): void {
+    const canvas = this.bivariateLegendCanvasRef?.nativeElement;
+    if (!canvas) return;
+    const size = 64;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const image = ctx.createImageData(size, size);
+    for (let row = 0; row < size; row++) {
+      const v = 1 - row / (size - 1);
+      for (let col = 0; col < size; col++) {
+        const u = col / (size - 1);
+        const [r, g, b] = this.bivariateColor(u, v);
+        const idx = (row * size + col) * 4;
+        image.data[idx] = r;
+        image.data[idx + 1] = g;
+        image.data[idx + 2] = b;
+        image.data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(image, 0, 0);
   }
 
   public createHexagonPlot(): void {

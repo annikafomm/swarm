@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: center;
   margin-bottom: 1rem;
-  margin-right: 1rem;
+  margin-right: 0rem;
   border-radius: 12px;
 }
 
@@ -297,7 +297,9 @@
     }
   }
 
-  // Bivariate 2D Scale
+  // Bivariate 2D Scale -- matches live-correlation-drawer.component.scss's own
+  // .bivariate-legend-col exactly (plain stacked labels, no rotation/arrows, same canvas sizing)
+  // so the identical bivariateColor(u,v) blend reads as the same legend everywhere it appears.
   .legend-bivariate-container {
     display: flex;
     flex-direction: column;
@@ -305,61 +307,23 @@
     padding: 6px 4px 2px 4px;
     gap: 4px;
 
-    .bivariate-legend-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-
-      .bivariate-y-axis {
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-        text-align: center;
-
-        .y-axis-label {
-          font-size: 10px;
-          font-weight: 600;
-          color: #c026d3; // Magenta for Feature B (Y)
-          white-space: nowrap;
-          max-width: 75px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          display: inline-block;
-        }
-      }
-
-      .bivariate-square-box {
-        width: 76px;
-        height: 76px;
-        border: 1px solid rgba(0, 0, 0, 0.25);
-        border-radius: 4px;
-        overflow: hidden;
-        box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.15);
-
-        .bivariate-gradient-square {
-          width: 100%;
-          height: 100%;
-          background:
-            linear-gradient(to top, rgba(0, 255, 0, 0.7), rgba(255, 0, 0, 0.9)),
-            linear-gradient(to right, transparent, rgba(0, 0, 255, 0.9));
-          background-blend-mode: screen;
-        }
-      }
+    .axis-label-y, .axis-label-x {
+      font-size: 0.62rem;
+      color: #64748b;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    .bivariate-x-axis {
-      text-align: center;
-      width: 100%;
-
-      .x-axis-label {
-        font-size: 10px;
-        font-weight: 600;
-        color: #0284c7; // Cyan for Feature A (X)
-        white-space: nowrap;
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: inline-block;
-      }
+    .bivariate-legend-canvas {
+      width: 44px;
+      height: 44px;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      image-rendering: pixelated;
     }
   }
 }
@@ -367,7 +331,7 @@
 .view-controls-wrapper {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   width: 100%;
   gap: 4px;
   margin-top: 4px;
@@ -376,7 +340,7 @@
   .toggles-row {
     display: flex;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     gap: 10px;
     margin-top: 4px;
     z-index: 100;
@@ -440,14 +404,23 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 10px;
   width: 100%;
   box-sizing: border-box;
 
+  .field-with-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
   .mat-mdc-form-field {
-    min-width: 90px;
-    max-width: 140px;
+    width: 175px;
+    min-width: 175px;
+    max-width: 175px;
+    flex-shrink: 0;
 
     // Compact height — default filled container is 56px, reduce to ~44px
     --mat-form-field-container-height: 44px;
@@ -475,6 +448,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 
     mat-icon {
       font-size: 18px;
@@ -506,7 +480,7 @@
   box-sizing: border-box;
   overflow: hidden;
   margin-bottom: 0.5rem;
-  margin-right: 1rem;
+  margin-right: 0;
 
   svg {
     display: block;
@@ -604,7 +578,7 @@
 
   .row-container,
   .centered-row-container {
-    gap: 4px;
+    gap: 10px;
 
     .mat-mdc-form-field {
       font-size: 0.82rem;

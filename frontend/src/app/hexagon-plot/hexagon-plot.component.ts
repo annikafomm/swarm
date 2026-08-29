@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, ViewChild, ViewChildren, QueryList, ElementRef, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -88,6 +88,29 @@ export const LEIDEN_CLUSTER_PALETTE: string[] = [
   '#78909c', // 25: Steel Grey
 ];
 
+/** The two-level tab grouping: each entry is one outer category tab, `tabs` lists the actual
+ * (inner) tab labels it contains, in display order. Order here must match the template's outer
+ * <mat-tab> order on both the main and compare sides -- jumpToTabByLabel/jumpToTab below use this
+ * to find which category index a real tab label lives in, then which position within that
+ * category's own inner mat-tab-group (see innerTabGroupsMain/innerTabGroupsCompare). */
+const TAB_CATEGORIES: { category: string; tabs: string[] }[] = [
+  { category: 'Cell & Cluster', tabs: ['Cell Information', 'Cluster Information', 'Further Attributes'] },
+  { category: 'Gene & Pathway Activity', tabs: ['Gene Expression', 'Pathway Activity', 'DGEA'] },
+  { category: 'RNA Regulatory Scores', tabs: ['Regulatory Scores', 'TF Activity'] },
+  {
+    category: 'ATAC / Multiome',
+    tabs: [
+      "ChromVar spatial correlation : Moran's I / Geary's C",
+      'Differential Motif Activity',
+      'Footprints',
+      'GRN Evaluation',
+      'GRN Evaluation - On Demand',
+    ],
+  },
+  { category: 'LIANA+', tabs: ['Ligand-Receptor Relationships', 'Cell Composition TF Activity'] },
+  { category: 'Spatial Correlation', tabs: ['Spatial Correlation'] },
+];
+
 @Component({
   selector: 'app-hexagon-plot',
   imports: [CommonModule, FormsModule, FilterableTableComponent, HexagonViewComponent, CellInfoPanelComponent, ClusterInfoPanelComponent, CoOccurrencePanelComponent, RegulatoryTablesPanelComponent, ChromvarCorrelationPanelComponent, DifferentialMotifActivityPanelComponent, FootprintPanelComponent, DgeaPanelComponent, RegulatoryScoresPanelComponent, GrnEvaluationPanelComponent, GrnEvaluationOnDemandPanelComponent, FurtherAttributesPanelComponent, SpatialCorrelationPanelComponent, LiveCorrelationDrawerComponent, MatButtonModule, MatButtonToggleModule, MatIconModule, MatTooltipModule, MatDialogModule, MatProgressSpinnerModule, MatFormField, MatLabel, MatOption, MatSelect, TranslatePipe, MatExpansionModule, MatTableModule, MatDividerModule, MatTabsModule, MatInputModule, MatCheckboxModule],
@@ -98,6 +121,14 @@ export const LEIDEN_CLUSTER_PALETTE: string[] = [
 export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('mainTabGroup', { static: false }) tabGroup?: MatTabGroup;
   @ViewChild('compareTabGroup', { static: false }) tabGroupCompare?: MatTabGroup;
+  /** One inner mat-tab-group per outer category tab (see TAB_CATEGORIES) -- '#innerTabGroupMain'
+   * is reused on all 6 of the main side's category tabs, so this QueryList's order matches
+   * TAB_CATEGORIES' order (Angular populates ViewChildren in template document order). Needed
+   * because jumpToTabByLabel/jumpToTab now have to select the right category on the outer group
+   * AND the right tab within that category's own inner group -- outerGroup._tabs alone (the old,
+   * single-level lookup) only sees the 6 category tabs now, not the real tab labels inside them. */
+  @ViewChildren('innerTabGroupMain') innerTabGroupsMain?: QueryList<MatTabGroup>;
+  @ViewChildren('innerTabGroupCompare') innerTabGroupsCompare?: QueryList<MatTabGroup>;
   @ViewChild('cellInfoTab', { static: false, read: MatTab }) cellInfoTab?: MatTab;
   @ViewChild('clusterInfoTab', { static: false, read: MatTab }) clusterInfoTab?: MatTab;
   @ViewChild('cellInfoTabCompare', { static: false, read: MatTab }) cellInfoTabCompare?: MatTab;
@@ -145,10 +176,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public grnImageUrlBoundCompare = (imageName: string): string => this.getGrnImageUrl(imageName, true);
 
   compareMode: boolean = false;
-  isLiveDrawerOpen: boolean = true;
+  isLiveDrawerOpen: boolean = false;
 
   public toggleLiveDrawer(): void {
-    this.isLiveDrawerOpen = !this.isLiveDrawerOpen;
+    const opening = !this.isLiveDrawerOpen;
+    this.isLiveDrawerOpen = opening;
+    if (opening) {
+      // getActiveFeatureId() prefers lastActiveFeatureMain/Compare over deriving from the
+      // current selectedView/selectedCompareView -- a pin from an earlier "Compare on Spatial
+      // Map"/bivariate action (applySpatialCompareSync, which sets isLiveDrawerOpen directly, not
+      // through this method) can otherwise persist indefinitely and resurface here on a later,
+      // unrelated "Show Correlation" click, showing a stale gene/feature instead of whatever the
+      // Color/Compare hexagons by dropdowns are actually set to right now.
+      this.lastActiveFeatureMain = null;
+      this.lastActiveFeatureCompare = null;
+    }
   }
 
   // Track component destruction to avoid setting state on an unmounted component
@@ -213,6 +255,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedView = 'regulatory_scores';
   public selectedCompareView: string = 'regulatory_scores';
 
+  /** selectedView as it was just before onApplyBivariateColor overwrote it with the synthetic
+   * 'bivariate_overlay' value, so toggling bivariate coloring back off can restore the real
+   * property instead of leaving selectedView (and therefore the legend renderLegend builds from
+   * it) stuck on 'bivariate_overlay'. */
+  private preBivariateSelectedView: string | null = null;
+
+  /** One-shot guard covering onColorbyPropertyChange's own jumpToTabByLabel call when it was asked
+   * to preserveFeaturePin: switching the *outer* category tab (see TAB_CATEGORIES) fires
+   * onCategoryTabChange, which re-invokes onTabChange/onTabColorChange for the newly-revealed
+   * inner tab's already-active tab -- and THAT nested call goes through this same function again,
+   * with its own default preserveFeaturePin=false, immediately wiping the pin the outer call was
+   * specifically asked to keep (e.g. applySpatialCompareSync's two protected calls). Armed right
+   * before the jump that can trigger this cascade and disarmed on the next macrotask -- long enough
+   * to cover both a same-tick and a next-microtask (selectedTabChange) emission, short enough to
+   * never bleed into a later, genuinely unrelated user tab click. */
+  private tabJumpPreservesFeaturePin = false;
+
   public selectedItemByView: { [view: string]: string | null } = {};
   public selectedItemByViewCompare: { [view: string]: string | null } = {};
 
@@ -227,7 +286,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   public selectedRegulatoryScoreCompare: string | null = null;
   public selectedGeneExpressionMain: string | null = null;
   public selectedGeneExpressionCompare: string | null = null;
-  public isBivariateActive: boolean = false;
   private lastActiveFeatureMain: { id: string; name: string } | null = null;
   private lastActiveFeatureCompare: { id: string; name: string } | null = null;
   private regulatoryObsmKeysMain: string[] = [];
@@ -901,6 +959,41 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return Array.isArray(f) && f.length > 0;
   }
 
+  /** Whether a whole modality/category has no precomputed data for this dataset at all, rather
+   * than each of its tabs individually being disabled with no explanation -- shown as an info
+   * banner above that category's inner tab-group (see the template). Only defined for categories
+   * where "this modality just wasn't run for this dataset" is a real, expected situation (e.g. an
+   * RNA-only dataset has no ATAC data); the others (Cell & Cluster, Spatial Correlation) are always
+   * meaningful regardless of dataset, so they're not checked here. GRN Evaluation - On Demand is
+   * deliberately excluded from the ATAC/Multiome check -- it computes a fresh evaluation rather
+   * than requiring precomputed ATAC data, so its own availability doesn't answer "does this
+   * dataset have ATAC data", which is what this banner is actually telling the user. */
+  public isCategoryDataMissing(category: string, compare: boolean = false): boolean {
+    switch (category) {
+      case 'Gene & Pathway Activity':
+        return !this.propertyAvailable('gene_expression', compare)
+          && !this.propertyAvailable('pathway_activity', compare)
+          && !this.hasDgeaData(compare);
+      case 'RNA Regulatory Scores':
+        return !this.propertyAvailable('regulatory_scores', compare) && !this.propertyAvailable('tf_activity', compare);
+      case 'ATAC / Multiome': {
+        const m = compare ? this.metaCompare : this.meta;
+        const footprintUrls = compare ? this.footprintPlotUrlsCompare : this.footprintPlotUrls;
+        const motifs = compare ? this.availableMotifsCompare : this.availableMotifs;
+        return !this.propertyAvailable('chromvar_total_sum', compare)
+          && !m?.['diff_motif_activity_top_motifs']
+          && (footprintUrls?.length ?? 0) === 0
+          && (motifs?.length ?? 0) === 0
+          && !m?.['peak_stats'];
+      }
+      case 'LIANA+':
+        return !this.propertyAvailable('ligand_receptor_relationships', compare)
+          && !this.propertyAvailable('cell_comp_tf_activity_similarity', compare);
+      default:
+        return false;
+    }
+  }
+
   public onFurtherAttributeSelected(attribute: string, compare: boolean = false): void {
     if (compare) {
       this.selectedCompareView = attribute;
@@ -958,54 +1051,88 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
   public jumpToTabByLabel(tabLabel: string, compare: boolean = false): void {
     if (this.suppressTabJump) return;
-    const group = compare ? this.tabGroupCompare : this.tabGroup;
-    if (!group) return;
-
-    const select = () => {
-      const tabs: MatTab[] = (group as any)._tabs?.toArray?.() ?? [];
-      const targetTab = tabs.find(t => t.textLabel?.trim().toLowerCase() === tabLabel.trim().toLowerCase());
-      if (targetTab) {
-        const index = tabs.indexOf(targetTab);
-        if (index !== -1) {
-          group.selectedIndex = index;
-          if (compare) {
-            this.activeTabLabelCompare = targetTab.textLabel;
-            this.syncClusterHighlight(true);
-          } else {
-            this.activeTabLabel = targetTab.textLabel;
-            this.syncClusterHighlight(false);
-          }
-        }
-      }
-    };
-    select();
-    setTimeout(select, 0);
+    this.selectNestedTabByLabel(tabLabel, compare);
   }
 
   /**
-   * Selects `tab` within `group`, resolved via the group's own tab list rather than a
-   * hardcoded index — the Cell/Cluster Information tabs are added/removed with *ngIf, which
-   * shifts every other tab's numeric index whenever they appear or disappear.
+   * Fires when an outer category tab is clicked (see TAB_CATEGORIES). MatTabGroup only emits
+   * (selectedTabChange) on an actual index change, so the category's own inner mat-tab-group --
+   * whose default/currently-selected tab is being revealed, not "selected" from Angular's point
+   * of view -- never gets a selectedTabChange of its own the first time a category is visited.
+   * That event is what onTabChange relies on to set selectedView/selectedCompareView (and, from
+   * there, colorby state and the *ngIf gates several tab panels render behind), so without this
+   * the freshly-revealed tab renders blank until some *other* inner-tab click happens to fire a
+   * real change event. Manually resolve the inner group's active tab and re-run the same
+   * onTabChange dispatch for it whenever the outer category changes.
+   */
+  public onCategoryTabChange(event: MatTabChangeEvent, compare: boolean = false): void {
+    const invokeForActiveInnerTab = (): boolean => {
+      const innerGroups = (compare ? this.innerTabGroupsCompare : this.innerTabGroupsMain)?.toArray() ?? [];
+      const innerGroup = innerGroups[event.index];
+      if (!innerGroup) return false;
+      const tabs: MatTab[] = (innerGroup as any)._tabs?.toArray?.() ?? [];
+      const activeTab = tabs[innerGroup.selectedIndex ?? 0];
+      if (!activeTab) return false;
+      this.onTabChange({ index: innerGroup.selectedIndex ?? 0, tab: activeTab } as MatTabChangeEvent, compare);
+      return true;
+    };
+    if (!invokeForActiveInnerTab()) {
+      setTimeout(invokeForActiveInnerTab, 0);
+    }
+  }
+
+  /**
+   * Selects `tab`, resolved via its own textLabel rather than a hardcoded index — the Cell/Cluster
+   * Information tabs are added/removed with *ngIf, which shifts every other tab's numeric index
+   * whenever they appear or disappear. `group` is only used to tell which side (main/compare)
+   * this is, since the actual navigation goes through selectNestedTabByLabel now.
    */
   private jumpToTab(group: MatTabGroup | undefined, tab: MatTab | undefined): void {
     if (this.suppressTabJump) return;
-    if (!group || !tab) return;
-    const select = () => {
-      const tabs: MatTab[] = (group as any)._tabs?.toArray?.() ?? [];
-      const index = tabs.indexOf(tab);
-      if (index !== -1) {
-        group.selectedIndex = index;
-        if (group === this.tabGroup) {
-          this.activeTabLabel = tab.textLabel;
-          this.syncClusterHighlight(false);
-        } else if (group === this.tabGroupCompare) {
-          this.activeTabLabelCompare = tab.textLabel;
-          this.syncClusterHighlight(true);
-        }
+    if (!tab?.textLabel) return;
+    this.selectNestedTabByLabel(tab.textLabel, group === this.tabGroupCompare);
+  }
+
+  /**
+   * Two-level tab selection: tabs are grouped under category tabs on an outer mat-tab-group (see
+   * TAB_CATEGORIES), with the real tab for `tabLabel` living inside that category's own inner
+   * mat-tab-group (innerTabGroupsMain/innerTabGroupsCompare, in TAB_CATEGORIES order -- Angular
+   * populates ViewChildren in template document order, which matches). Finds which category
+   * contains tabLabel, switches the outer group to it, then switches that category's inner group
+   * to the actual tab. Retried via setTimeout: switching the outer group can reveal an inner
+   * mat-tab-group whose own _tabs QueryList isn't populated yet in the same tick.
+   */
+  private selectNestedTabByLabel(tabLabel: string, compare: boolean): void {
+    const outerGroup = compare ? this.tabGroupCompare : this.tabGroup;
+    if (!outerGroup) return;
+
+    const categoryIndex = TAB_CATEGORIES.findIndex(cat =>
+      cat.tabs.some(t => t.trim().toLowerCase() === tabLabel.trim().toLowerCase())
+    );
+    if (categoryIndex === -1) return;
+
+    outerGroup.selectedIndex = categoryIndex;
+
+    const selectInner = () => {
+      const innerGroups = (compare ? this.innerTabGroupsCompare : this.innerTabGroupsMain)?.toArray() ?? [];
+      const innerGroup = innerGroups[categoryIndex];
+      if (!innerGroup) return;
+      const tabs: MatTab[] = (innerGroup as any)._tabs?.toArray?.() ?? [];
+      const targetTab = tabs.find(t => t.textLabel?.trim().toLowerCase() === tabLabel.trim().toLowerCase());
+      if (!targetTab) return;
+      const index = tabs.indexOf(targetTab);
+      if (index === -1) return;
+      innerGroup.selectedIndex = index;
+      if (compare) {
+        this.activeTabLabelCompare = targetTab.textLabel;
+        this.syncClusterHighlight(true);
+      } else {
+        this.activeTabLabel = targetTab.textLabel;
+        this.syncClusterHighlight(false);
       }
     };
-    select();
-    setTimeout(select, 0);
+    selectInner();
+    setTimeout(selectInner, 0);
   }
 
   private nextRequestToken(graphType: string): number {
@@ -1288,6 +1415,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.compareMode = !this.compareMode;
 
     if (this.compareMode) {
+      // Reset here (not just the class-field default) so a drawer left open from a previous
+      // compare session doesn't reappear the next time compare mode is turned on via this plain
+      // toggle button -- onSyncSpatialCompare (the Spatial Correlation "Compare" action) sets this
+      // true itself right after, for the one flow where auto-opening it is actually wanted.
+      this.isLiveDrawerOpen = false;
       this.isLoadingCompare = true;
       this.regulatoryObsmKeysCompare = [...this.regulatoryObsmKeysMain];
 
@@ -1724,10 +1856,22 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
           // Populate dropdown options from gene set keys
           this.genie3Elements = this.sortedByGeneLabel(Object.keys(this.geneSetsGenie3));
           this.spongeElements = this.sortedByGeneLabel(Object.keys(this.geneSetsSponge));
-          this.selectedGeneSetGenie3 =
-            Object.keys(compare ? this.metaCompare['genie_genesets'] || {} : this.meta['genie_genesets'] || {})[0] || null;
-          this.selectedGeneSetSponge =
-            Object.keys(compare ? this.metaCompare['sponge_genesets'] || {} : this.meta['sponge_genesets'] || {})[0] || null;
+          // Bug fixed here: this used to always assign to the main (non-Compare) fields even when
+          // compare===true, so selectedGeneSetGenie3Compare/selectedGeneSetSpongeCompare were never
+          // set (stayed null) -- the compare panel showed "None" while main showed a real default,
+          // and getActiveFeatureId(true) then fell back to a bogus `obs::regulatory_scores` id
+          // (the view name itself, not a real feature) for the Live Correlation drawer.
+          if (compare) {
+            this.selectedGeneSetGenie3Compare =
+              Object.keys(this.metaCompare['genie_genesets'] || {})[0] || null;
+            this.selectedGeneSetSpongeCompare =
+              Object.keys(this.metaCompare['sponge_genesets'] || {})[0] || null;
+          } else {
+            this.selectedGeneSetGenie3 =
+              Object.keys(this.meta['genie_genesets'] || {})[0] || null;
+            this.selectedGeneSetSponge =
+              Object.keys(this.meta['sponge_genesets'] || {})[0] || null;
+          }
 
           if (compare) {
             this.isLoadingGenie3Compare = !!this.selectedGeneSetGenie3Compare;
@@ -2169,7 +2313,34 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * property, which getTabLabelForProperty maps to 'Cell Information' — without this guard,
    * clicking either tab immediately bounced back to Cell Information).
    */
-  public onColorbyPropertyChange(compare: boolean = false, skipTabJump: boolean = false): void {
+  public onColorbyPropertyChange(compare: boolean = false, skipTabJump: boolean = false, preserveFeaturePin: boolean = false): void {
+    // Clears the Live Correlation drawer's pinned feature (see getActiveFeatureId): that pin only
+    // exists so the drawer can show an exact feature the "Compare"/bivariate actions chose (needed
+    // because the generic derivation below can't always reconstruct e.g. a chromvar/pathway id
+    // losslessly). It must not survive a plain color-by change made through any other path (a tab
+    // click, a dropdown, a Further Attributes row) or the drawer keeps showing a stale pair forever
+    // once ANY pin has ever been set. applySpatialCompareSync passes preserveFeaturePin=true for
+    // its own two calls here -- it pins its exact chosen feature BEFORE calling this (so the
+    // drawer's very first render already has the right value instead of a generic fallback that
+    // can't losslessly reconstruct e.g. a chromvar/pathway id), and this must not immediately wipe
+    // that pin back out again.
+    if (!preserveFeaturePin && !this.tabJumpPreservesFeaturePin) {
+      if (compare) {
+        this.lastActiveFeatureCompare = null;
+      } else {
+        this.lastActiveFeatureMain = null;
+      }
+      // The drawer's [featureA]/[featureB] bindings call getActiveFeatureId() (see the
+      // <app-live-correlation-drawer> template) rather than reading a plain field, so Angular
+      // only re-evaluates them on its own next change-detection pass -- normally triggered
+      // automatically by the same click/selection event that got us here, but a caller invoked
+      // from outside that normal zone-triggered flow (e.g. a table row's own internal event
+      // handling) could leave the drawer showing the just-cleared pin's stale feature until
+      // something else happens to trigger CD. Forcing it here means the drawer can never lag
+      // behind an actual color-by change while it's open.
+      this.cdr.detectChanges();
+    }
+
     const colorProp = compare ? this.selectedCompareView : this.selectedView;
     const targetView = compare ? this.compareView : this.mainView;
     targetView?.setCurrentView(colorProp, this.isActiveCategorical(compare));
@@ -2177,6 +2348,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // Automatically jump sidebar to matching tab for the selected property
     if (!skipTabJump) {
       const matchingTabLabel = this.getTabLabelForProperty(colorProp, compare);
+      if (preserveFeaturePin) {
+        // See tabJumpPreservesFeaturePin's own doc: this jump can switch the outer category tab,
+        // which re-enters this function (via onCategoryTabChange/onTabChange) for the inner tab
+        // it reveals -- that nested call must not clear the pin this one was told to preserve.
+        this.tabJumpPreservesFeaturePin = true;
+        setTimeout(() => { this.tabJumpPreservesFeaturePin = false; }, 0);
+      }
       this.jumpToTabByLabel(matchingTabLabel, compare);
     }
 
@@ -2200,11 +2378,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     if (colorProp === 'regulatory_scores') {
       if (regulatoryScore?.endsWith('genie3') && geneSetGenie3) {
-        this.fetchAndUpdate(regulatoryScore, geneSetGenie3, compare);
+        this.fetchAndUpdate(regulatoryScore, geneSetGenie3, compare, undefined, false);
         this.updateSubgraphGenie3(compare);
         this.updateSubgraphSponge(compare);
       } else if (regulatoryScore?.endsWith('sponge') && geneSetSponge) {
-        this.fetchAndUpdate(regulatoryScore, geneSetSponge, compare);
+        this.fetchAndUpdate(regulatoryScore, geneSetSponge, compare, undefined, false);
         this.updateSubgraphGenie3(compare);
         this.updateSubgraphSponge(compare);
       }
@@ -3606,7 +3784,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetGenie3Changed,
-              compare
+              compare,
+              undefined,
+              false
             );
           }
         }, 100);
@@ -3636,7 +3816,9 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
             this.fetchAndUpdate(
               regulatoryScoreChanged,
               geneSetSpongeChanged,
-              compare
+              compare,
+              undefined,
+              false
             );
           }
         }, 100);
@@ -4048,7 +4230,20 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     });
   }
 
-  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string) {
+  /**
+   * setPin: false for call sites that are just syncing the map to state that already exists
+   * (dataset-load initialization, a tab becoming active) rather than a genuine "correlate this"
+   * click -- those should leave lastActiveFeatureMain/Compare alone so getActiveFeatureId's
+   * generic derivation (which already reconstructs tf_activity/regulatory_scores views correctly
+   * and, unlike a pin, stays reactive to whatever's actually selected) keeps driving the Live
+   * Correlation drawer instead of a pin that can go stale the moment the user moves on. Confirmed
+   * bug: entering compare mode schedules an "initial graph visualization" fetchAndUpdate (for the
+   * default gene set, e.g. the first TF in the network) purely to prime the regulatory-score
+   * graph -- with setPin defaulting true, that alone pinned the drawer to that TF indefinitely,
+   * showing it long after the user picked an unrelated feature elsewhere. Only literal
+   * single-item selections (a gene/TF/pathway row clicked in a table) default to true.
+   */
+  async fetchAndUpdate(columnName: string, index: string, compare: boolean = false, view?: string, setPin: boolean = true) {
     const tokenType = compare ? 'obsm_compare' : 'obsm_main';
     const token = this.nextRequestToken(tokenType);
     const safeIndex = encodeURIComponent(index);
@@ -4059,12 +4254,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const propertyToUpdate =
       view || (isGeneExpression ? 'gene_expression' : 'regulatory_scores');
 
-    const featId = isGeneExpression ? `gene_expression::${index}` : `obsm::${columnName}::${index}`;
-    const featName = isGeneExpression ? `Gene: ${index}` : `${index}`;
-    if (compare) {
-      this.lastActiveFeatureCompare = { id: featId, name: featName };
-    } else {
-      this.lastActiveFeatureMain = { id: featId, name: featName };
+    if (setPin) {
+      const featId = isGeneExpression ? `gene_expression::${index}` : `obsm::${columnName}::${index}`;
+      const featName = isGeneExpression ? `Gene: ${index}` : `${index}`;
+      if (compare) {
+        this.lastActiveFeatureCompare = { id: featId, name: featName };
+      } else {
+        this.lastActiveFeatureMain = { id: featId, name: featName };
+      }
     }
 
     const baseRequest = isGeneExpression
@@ -4291,6 +4488,42 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       id: 'global-regulatory-scores',
       attachTo: { element: '#global-regulatory-scores-info', on: 'left' },
       text: 'The global regulatory scores summarize overall regulatory activity per gene set by aggregating the scores over all cells. They can be used to identify genesets with overall high regulatory activity or to find general candidate genesets to prioritize for further analysis.',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
+  public networkRegulatoryScoresTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'network-regulatory-scores',
+      attachTo: { element: '#network-regulatory-scores-info', on: 'left' },
+      text: 'The network regulatory scores show the activity of sets of genes, derived from the regulatory network, aggregated over all cells. They can be used to identify which cells are most likely to be regulated by a given gene set and to find candidate genesets that are active in specific cell populations.',
+      buttons: [{ text: "Done", action: tour.complete }]
+    });
+
+    tour.start();
+  }
+
+  public cellRegulatoryScoresTutorial(): void {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'shepherd-theme-custom'
+      }
+    });
+
+    tour.addStep({
+      id: 'cell-regulatory-scores',
+      attachTo: { element: '#cell-regulatory-scores-info', on: 'left' },
+      text: 'The cell regulatory scores show the activity of sets of genes, derived from the regulatory network, in each cell. They can be used to identify which cells are most likely to be regulated by a given gene set and to find candidate genesets that are active in specific cell populations.',
       buttons: [{ text: "Done", action: tour.complete }]
     });
 
@@ -5338,16 +5571,43 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
   }
 
   public onSyncSpatialCompare(event: { featA: any; featB: any }, isCompare: boolean = false): void {
-    if (!this.compareMode) {
+    const wasCompareModeOff = !this.compareMode;
+    if (wasCompareModeOff) {
       this.onCompareMode();
     }
 
-    if (event.featA) {
-      this.lastActiveFeatureMain = { id: event.featA.id, name: event.featA.name };
+    const applySync = () => this.applySpatialCompareSync(event, isCompare);
+    if (wasCompareModeOff) {
+      // onCompareMode() just re-emitted the main dataset into the compare stream, which triggers
+      // a full async reload of the compare geojson/meta (even though it's the same dataset) --
+      // and once THAT finishes, it resets selectedCompareView/selectedGeneSet*Compare back to
+      // their fresh-load defaults (cell_type / first gene set). A fixed short delay here used to
+      // race that reload and lose: applySync would run first, then the reload's own default-
+      // setting would silently clobber it a moment later, which is why the compare map fell back
+      // to Cell Information/cell_type. Wait for the reload to actually finish instead of guessing
+      // a delay.
+      this.waitForCompareDataReady(applySync);
+    } else {
+      setTimeout(applySync, 50);
     }
-    if (event.featB) {
-      this.lastActiveFeatureCompare = { id: event.featB.id, name: event.featB.name };
+  }
+
+  /** See onSyncSpatialCompare's call site comment for why this needs to wait rather than use a
+   * fixed delay. Edge-triggered (waits for a true->false transition, not just "currently false")
+   * because isLoadingCompare doesn't flip to true until reloadComparisonView's own 50ms delay
+   * elapses, so checking it immediately after triggering the reload would false-positive as
+   * "already done". Times out after ~7.5s as a safety net rather than waiting forever. */
+  private waitForCompareDataReady(cb: () => void, seenLoading: boolean = false, attempt: number = 0): void {
+    const maxAttempts = 150;
+    const isLoadingNow = this.isLoadingCompare;
+    if ((seenLoading && !isLoadingNow) || attempt >= maxAttempts) {
+      cb();
+      return;
     }
+    setTimeout(() => this.waitForCompareDataReady(cb, seenLoading || isLoadingNow, attempt + 1), 50);
+  }
+
+  private applySpatialCompareSync(event: { featA: any; featB: any }, isCompare: boolean): void {
 
     const setFeatureProps = (feat: any, isCompareTarget: boolean) => {
       if (!feat) return;
@@ -5380,8 +5640,24 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       }
     };
 
-    setFeatureProps(event.featA, false);
-    setFeatureProps(event.featB, true);
+    setFeatureProps(event.featA, isCompare);
+    setFeatureProps(event.featB, !isCompare);
+
+    // Pin the exact chosen features BEFORE opening the drawer/detectChanges below: the drawer's
+    // featureA/featureB inputs read this pin first (see getActiveFeatureId), falling back to a
+    // generic derivation from selectedView otherwise -- a derivation that can't losslessly
+    // reconstruct e.g. a chromvar/pathway feature id. Pinning here, before the drawer ever renders,
+    // means its very first fetch already uses the right id instead of a wrong generic guess for one
+    // render cycle (which used to happen when this was pinned only after onColorbyPropertyChange
+    // ran, further down).
+    if (event.featA) {
+      const target = isCompare ? 'lastActiveFeatureCompare' : 'lastActiveFeatureMain';
+      this[target] = { id: event.featA.id, name: event.featA.name };
+    }
+    if (event.featB) {
+      const target = isCompare ? 'lastActiveFeatureMain' : 'lastActiveFeatureCompare';
+      this[target] = { id: event.featB.id, name: event.featB.name };
+    }
 
     // Open drawer AFTER features are set so the first API call uses the correct feature IDs.
     // If opened before setFeatureProps, getActiveFeatureId() still returns the previous view
@@ -5389,98 +5665,94 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     this.isLiveDrawerOpen = true;
     this.cdr.detectChanges();
 
-    // skipTabJump=true: we're coming from the Spatial Correlation tab and must not navigate away
+    // skipTabJump=false: jump both sidebars to whichever tab matches the newly-selected
+    // attribute (e.g. Further Attributes for a plain obs column) instead of staying on Spatial
+    // Correlation -- the user wants to land on the tab/table that actually explains the value
+    // they just picked, not stay on the picker they came from. preserveFeaturePin=true: these two
+    // calls must not clear the pin just set above (see onColorbyPropertyChange's own comment).
     setTimeout(() => {
-      this.onColorbyPropertyChange(false, /* skipTabJump */ true);
-      this.onColorbyPropertyChange(true, /* skipTabJump */ true);
+      this.onColorbyPropertyChange(false, /* skipTabJump */ false, /* preserveFeaturePin */ true);
+      this.onColorbyPropertyChange(true, /* skipTabJump */ false, /* preserveFeaturePin */ true);
     }, 50);
   }
 
-  public onApplyBivariateColor(event: { featA: any; featB: any; enabled?: boolean }, isCompare: boolean = false): void {
+  /** Single (non-compare) mode only: recolors the real hexagon map itself with the 2D bivariate
+   * blend, like this always did before the drawer/mini-map existed. Compare mode instead shows an
+   * independent mini bivariate map inside the Live Correlation drawer (see
+   * live-correlation-drawer.component.ts's renderBivariateMap) without touching either real map --
+   * there are already two maps each showing one property side by side there, so recoloring either
+   * of them bivariately would just throw away that comparison. spatial-correlation-panel only emits
+   * this event at all when !compareModeActive (see its own template), so this shouldn't normally
+   * be reachable while compareMode is on, but the guard below is kept as a safety net regardless. */
+  public onApplyBivariateColor(event: { featA: any; featB: any; enabled?: boolean }): void {
+    if (this.compareMode) return;
+
     if (event.enabled === false) {
-      this.isBivariateActive = false;
+      this.selectedView = this.preBivariateSelectedView ?? 'cell_type';
+      this.preBivariateSelectedView = null;
       this.onColorbyPropertyChange(false, true);
-      if (this.compareMode) {
-        this.onColorbyPropertyChange(true, true);
-      }
       return;
     }
 
-    this.isBivariateActive = true;
-    const dataset = isCompare ? this.selectedDatasetCompare : this.selectedDataset;
+    const dataset = this.selectedDataset;
     if (!dataset) return;
+
+    // Only capture on the initial on-toggle -- if the pair is changed while bivariate coloring
+    // is already active, selectedView is already 'bivariate_overlay' and must not clobber the
+    // real property saved from before bivariate was first turned on.
+    if (this.selectedView !== 'bivariate_overlay') {
+      this.preBivariateSelectedView = this.selectedView;
+    }
 
     const url = `/api/datasets/${encodeURIComponent(dataset.id)}/spatial_correlation_pair?feature_id_a=${encodeURIComponent(event.featA.id)}&feature_id_b=${encodeURIComponent(event.featB.id)}`;
 
     this.http.get<any>(url, { withCredentials: true }).subscribe({
       next: (res) => {
         const pointsMap = new Map<string, { x: number; y: number }>();
-        if (res.bivariate_coords && res.bivariate_coords.cell_ids) {
-          const ids = res.bivariate_coords.cell_ids;
-          const xs = res.bivariate_coords.x;
-          const ys = res.bivariate_coords.y;
-          for (let i = 0; i < ids.length; i++) {
-            pointsMap.set(String(ids[i]), { x: xs[i], y: ys[i] });
+        const coords = res.bivariate_coords;
+        if (coords?.cell_ids) {
+          for (let i = 0; i < coords.cell_ids.length; i++) {
+            pointsMap.set(String(coords.cell_ids[i]), { x: coords.x[i], y: coords.y[i] });
           }
-        } else if (res.points) {
-          res.points.forEach((p: any) => pointsMap.set(String(p.cell_id), { x: p.x, y: p.y }));
         }
-
-        const allX: number[] = res.bivariate_coords?.x || (res.points || []).map((p: any) => p.x);
-        const allY: number[] = res.bivariate_coords?.y || (res.points || []).map((p: any) => p.y);
+        const allX: number[] = coords?.x || [];
+        const allY: number[] = coords?.y || [];
         if (allX.length === 0 || allY.length === 0) return;
 
         const minX = Math.min(...allX), maxX = Math.max(...allX);
         const minY = Math.min(...allY), maxY = Math.max(...allY);
 
-        const colorizeMap = (targetView: any, containerName: string, isComp: boolean) => {
-          targetView?.resetClusterExtension();
-          targetView?.setCurrentView('bivariate_overlay', false);
-          const bivariateLegend: MapLegendInfo = {
-            title: `Bivariate: ${event.featA.name} vs ${event.featB.name}`,
-            type: 'bivariate',
-            bivariateInfo: {
-              labelA: event.featA.name,
-              labelB: event.featB.name,
-              colorA: '#0284c7',
-              colorB: '#c026d3'
-            }
-          };
-
-          if (isComp) {
-            this.selectedClusterCompare = null;
-            this.selectedCompareView = 'bivariate_overlay';
-            this.compareLegendInfo = bivariateLegend;
-          } else {
-            this.selectedCluster = null;
-            this.selectedView = 'bivariate_overlay';
-            this.mainLegendInfo = bivariateLegend;
+        this.mainView?.resetClusterExtension();
+        this.mainView?.setCurrentView('bivariate_overlay', false);
+        this.selectedCluster = null;
+        this.selectedView = 'bivariate_overlay';
+        this.mainLegendInfo = {
+          title: `Bivariate: ${event.featA.name} vs ${event.featB.name}`,
+          type: 'bivariate',
+          bivariateInfo: {
+            labelA: event.featA.name,
+            labelB: event.featB.name,
+            colorA: '#0284c7',
+            colorB: '#c026d3'
           }
-
-          const sel = targetView?.g ? targetView.g.selectAll('path') : d3.select(containerName).selectAll('path');
-          sel.interrupt()
-            .style('stroke', 'transparent')
-            .style('stroke-width', '1px')
-            .attr('fill', (d: any) => {
-              const cellId = String(d?.properties?.barcode || d?.properties?.['cell_id'] || d?.properties?.['id'] || d?.id || '');
-              const pt = pointsMap.get(cellId);
-              if (!pt) return '#ccc';
-
-              const u = maxX > minX ? (pt.x - minX) / (maxX - minX) : 0.5;
-              const v = maxY > minY ? (pt.y - minY) / (maxY - minY) : 0.5;
-
-              const r = Math.round(255 * v);
-              const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
-              const b = Math.round(255 * u);
-              return `rgb(${r},${g},${b})`;
-            })
-            .style('opacity', 0.85);
         };
 
-        colorizeMap(this.mainView, '#hexbin', false);
-        if (this.compareMode && this.compareView) {
-          colorizeMap(this.compareView, '#hexbin-compare', true);
-        }
+        const sel = this.mainView?.g ? this.mainView.g.selectAll('path') : d3.select('#hexbin').selectAll('path');
+        sel.interrupt()
+          .style('stroke', 'transparent')
+          .style('stroke-width', '1px')
+          .attr('fill', (d: any) => {
+            const cellId = String(d?.properties?.barcode || d?.properties?.['cell_id'] || d?.properties?.['id'] || d?.id || '');
+            const pt = pointsMap.get(cellId);
+            if (!pt) return '#ccc';
+            const u = maxX > minX ? (pt.x - minX) / (maxX - minX) : 0.5;
+            const v = maxY > minY ? (pt.y - minY) / (maxY - minY) : 0.5;
+            const r = Math.round(255 * v);
+            const g = Math.round(255 * Math.max(0, 1 - Math.abs(u - v)));
+            const b = Math.round(255 * u);
+            return `rgb(${r},${g},${b})`;
+          })
+          .style('opacity', 0.85);
       },
       error: (err) => console.error('Failed to fetch bivariate colors:', err)
     });

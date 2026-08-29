@@ -190,12 +190,20 @@
           flex-wrap: wrap;
 
           .scatterplot-container {
-            flex: 1 1 380px;
+            // flex-basis: 100% forces this onto its own row (flex-wrap above then wraps the stats
+            // card / bivariate map box below it, instead of squeezing in beside it whenever the
+            // tab happens to be wide enough). height is set explicitly because Plotly's own
+            // `layout.height` (in renderScatterplot) only sizes the chart it draws, not this div --
+            // without an explicit height here the container had no way to know how tall to be and
+            // collapsed to near-nothing, even though width came from flex-basis/min-width fine.
+            flex: 1 1 100%;
             min-width: 320px;
+            height: 340px;
             border: 1px solid #e2e8f0;
             border-radius: 8px;
             padding: 6px;
             background-color: #ffffff;
+            box-sizing: border-box;
           }
 
           .stats-card {
@@ -308,6 +316,81 @@
                   width: 16px;
                   height: 16px;
                 }
+              }
+
+            }
+          }
+
+          .bivariate-map-box {
+            // 280px, not the drawer's full-width column -- but wide enough that the map isn't
+            // disproportionately cramped next to its own 44px legend swatch (matches
+            // live-correlation-drawer.component.scss's sizing/colors so the same mini-map doesn't
+            // look meaningfully different depending on which panel it's shown in).
+            flex: 0 0 280px;
+            padding: 10px;
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+
+            .bivariate-title {
+              font-size: 0.72rem;
+              font-weight: 700;
+              color: #475569;
+              margin-bottom: 6px;
+              text-align: center;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+
+            .bivariate-map-row {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+
+            .bivariate-map-canvas {
+              flex: 1 1 0;
+              min-width: 0;
+              aspect-ratio: 1 / 1;
+              background: #ffffff;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              overflow: hidden;
+
+              svg {
+                display: block;
+                width: 100%;
+                height: 100%;
+              }
+            }
+
+            // The legend for the map: same bivariateColor(u, v) blend rendered pixel-for-pixel
+            // onto a small canvas (see renderBivariateLegend) -- not a hand-picked gradient, so
+            // it can't drift out of sync with what the map actually shows.
+            .bivariate-legend-col {
+              flex: 0 0 auto;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 4px;
+
+              .axis-label-y, .axis-label-x {
+                font-size: 0.62rem;
+                color: #64748b;
+                font-weight: 600;
+                text-align: center;
+              }
+
+              .axis-label-y {
+                max-width: 44px;
+              }
+
+              .bivariate-legend-canvas {
+                width: 44px;
+                height: 44px;
+                border-radius: 4px;
+                border: 1px solid #cbd5e1;
+                image-rendering: pixelated;
               }
             }
           }

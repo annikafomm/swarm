@@ -9,6 +9,7 @@
     </div>
   </div>
 
+  <div class="main-visualization-row">
   <div id="main-visualization" [class.compare-mode]="compareMode" [class.with-sidenav]="selectedCell">
 
     <!-- Main Dataset View Box -->
@@ -49,230 +50,293 @@
       <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
 
 
-      <mat-tab-group #mainTabGroup (selectedTabChange)="onTabChange($event)" preserveContent="true"
-        dynamicHeight="false" class="metadata-tables" [attr.aria-disabled]="isInitializing">
+      <mat-tab-group #mainTabGroup preserveContent="true" dynamicHeight="false" class="metadata-tables category-tab-group"
+        (selectedTabChange)="onCategoryTabChange($event)" [attr.aria-disabled]="isInitializing">
 
-        <mat-tab label="Cell Information" #cellInfoTab>
-          <app-cell-info-panel [cell]="selectedCell" [currentView]="selectedView"
-            [datasetFeatures]="features"></app-cell-info-panel>
+        <mat-tab label="Cell &amp; Cluster">
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
+
+            <mat-tab label="Cell Information" #cellInfoTab>
+              <app-cell-info-panel [cell]="selectedCell" [currentView]="selectedView"
+                [datasetFeatures]="features"></app-cell-info-panel>
+            </mat-tab>
+
+            <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null" #clusterInfoTab>
+              <mat-form-field appearance="fill" class="cluster-property-select">
+                <mat-label>Cluster by</mat-label>
+                <mat-select [ngModel]="selectedView" (selectionChange)="onClusterPropertySelected($event.value, false)">
+                  <mat-option *ngFor="let prop of categoricalProperties(false)" [value]="prop">
+                    {{ prop | translate | async }}
+                  </mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <app-cluster-info-panel #mainClusterInfo [isCompare]="false" [isLeidenView]="selectedView === 'leiden'"
+                [clusterId]="selectedCluster" [availableClusterIds]="activeClusterValues(false)"
+                (clusterSelected)="selectCluster($event, false)" [clusterCellCount]="clusterCells.length"
+                [clusterCellTypes]="clusterCellTypes" [clusterCentralityAvg]="clusterCentralityAvg"
+                [colorScale]="colorScale"
+                (metricSelected)="onFurtherAttributeSelected($event, false)"></app-cluster-info-panel>
+
+              <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence') && selectedView === 'leiden'" [isCompare]="false"
+                [selectedClusterId]="$any(selectedCluster)" [coOccurrenceData]="coOccurrenceData" [clusterCount]="clusterCount"
+                [threshold]="coOccurrenceThreshold" [maxInterval]="maxInterval" [selectedInterval]="selectedInterval"
+                [intervalBoundaries]="getIntervalBoundaries()" [continuousColorScale]="continuousColorScale"
+                (intervalChanged)="selectedInterval = $event; updateCoOccurrenceTable()"
+                (clusterSelected)="selectCluster($event)"></app-co-occurrence-panel>
+            </mat-tab>
+
+            <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(false)">
+              <app-further-attributes-panel [features]="features" [selectedAttribute]="selectedView" [isCompare]="false"
+                (attributeSelected)="onFurtherAttributeSelected($event, false)"></app-further-attributes-panel>
+            </mat-tab>
+
+          </mat-tab-group>
         </mat-tab>
 
-        <mat-tab label="Cluster Information" *ngIf="selectedCluster !== null" #clusterInfoTab>
-          <mat-form-field appearance="fill" class="cluster-property-select">
-            <mat-label>Cluster by</mat-label>
-            <mat-select [ngModel]="selectedView" (selectionChange)="onClusterPropertySelected($event.value, false)">
-              <mat-option *ngFor="let prop of categoricalProperties(false)" [value]="prop">
-                {{ prop | translate | async }}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-
-          <app-cluster-info-panel #mainClusterInfo [isCompare]="false" [isLeidenView]="selectedView === 'leiden'"
-            [clusterId]="selectedCluster" [availableClusterIds]="activeClusterValues(false)"
-            (clusterSelected)="selectCluster($event, false)" [clusterCellCount]="clusterCells.length"
-            [clusterCellTypes]="clusterCellTypes" [clusterCentralityAvg]="clusterCentralityAvg"
-            [colorScale]="colorScale"
-            (metricSelected)="onFurtherAttributeSelected($event, false)"></app-cluster-info-panel>
-
-          <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence') && selectedView === 'leiden'" [isCompare]="false"
-            [selectedClusterId]="$any(selectedCluster)" [coOccurrenceData]="coOccurrenceData" [clusterCount]="clusterCount"
-            [threshold]="coOccurrenceThreshold" [maxInterval]="maxInterval" [selectedInterval]="selectedInterval"
-            [intervalBoundaries]="getIntervalBoundaries()" [continuousColorScale]="continuousColorScale"
-            (intervalChanged)="selectedInterval = $event; updateCoOccurrenceTable()"
-            (clusterSelected)="selectCluster($event)"></app-co-occurrence-panel>
-        </mat-tab>
-
-        <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
-          <app-regulatory-scores-panel *ngIf="selectedView === 'regulatory_scores'" [isCompare]="false"
-            [selectedRegulatoryScore]="selectedRegulatoryScore" [regulatoryScoreDisplayMode]="regulatoryScoreDisplayMode"
-            [genie3TableData]="getRegulatoryTableData('genie3', false)"
-            [spongeTableData]="getRegulatoryTableData('sponge', false)"
-            [genie3ActionColumns]="getRegulatoryActionColumns('genie3', false)"
-            [spongeActionColumns]="getRegulatoryActionColumns('sponge', false)"
-            [genie3EmptyMessage]="getRegulatoryEmptyMessage('genie3', false)"
-            [spongeEmptyMessage]="getRegulatoryEmptyMessage('sponge', false)" [features]="features"
-            [datasetId]="selectedDataset?.id" [genie3Elements]="genie3Elements" [spongeElements]="spongeElements"
-            [selectedGeneSetGenie3]="selectedGeneSetGenie3" [selectedGeneSetSponge]="selectedGeneSetSponge"
-            [genie3SliderData]="genie3SliderData" [genie3WeightCutoff]="genie3WeightCutoff"
-            [genie3MinEdges]="genie3MinEdges" [isLoadingGenie3]="isLoadingGenie3" [spongeSliderData]="spongeSliderData"
-            [spongePValueCutoff]="spongePValueCutoff" [spongeMinEdges]="spongeMinEdges"
-            [isLoadingSponge]="isLoadingSponge" [selectedCell]="selectedCell" [genie3RawData]="genie3RawData"
-            [spongeRawData]="spongeRawData"
-            (regulatoryScoreDisplayModeChange)="regulatoryScoreDisplayMode = $event; onRegulatoryDisplayModeChange(false)"
-            (tableLoadingChange)="onTableLoadingChange($event)"
-            (geneSelected)="onGeneSelectedFromTable({ gene: $event.gene, action: $event.action }, $event.networkType, false)"
-            (globalFeaturesUpdated)="updateHexColors()" (cellFeaturesUpdated)="repaintBothViews()"
-            (globalScoresTutorialRequested)="globalRegulatoryScoresTutorial()"
-            (graphsPanelOpened)="onRegulatoryGraphsPanelOpened(false)"
-            (selectedGeneSetGenie3Change)="selectedGeneSetGenie3 = $event; onGeneSetChange(false)"
-            (selectedGeneSetSpongeChange)="selectedGeneSetSponge = $event; onGeneSetChange(false)"
-            (genie3WeightCutoffChange)="genie3WeightCutoff = $event" (genie3MinEdgesChange)="genie3MinEdges = $event"
-            (genie3SliderChanged)="onSliderChangeGenie3(false)"
-            (spongePValueCutoffChange)="spongePValueCutoff = $event" (spongeMinEdgesChange)="spongeMinEdges = $event"
-            (spongeSliderChanged)="onSliderChangeSponge(false)"
-            (analyzeInGProfilerRequested)="analyzeGeneSetInGProfiler($event)"></app-regulatory-scores-panel>
-        </mat-tab>
-
-        <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
-          <div *ngIf="selectedView === 'ligand_receptor_relationships'">
-            <app-regulatory-tables-panel kind="ligand_receptor" [isCompare]="false" [meta]="meta"
-              [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
-              [showGlobalScores]="showGlobalLigandReceptorScores"
-              (showGlobalScoresChange)="showGlobalLigandReceptorScores = $event"
-              (itemSelected)="onItemSelected($event.event, $event.view)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+        <mat-tab label="Gene &amp; Pathway Activity">
+          <div *ngIf="isCategoryDataMissing('Gene &amp; Pathway Activity', false)" class="modality-missing-info">
+            <mat-icon>info_outline</mat-icon>
+            <span>This dataset doesn't include gene expression, pathway activity, or DGEA results.</span>
           </div>
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
+
+            <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
+              <div *ngIf="selectedView === 'gene_expression'">
+                <div class="selected-gene-info">
+                  <strong>Current selection</strong><br>
+                  Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
+                  Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || meta?.['default_gene_expression_gene'] || 'None' }}
+                </div>
+
+                <div class="moran-geary-toggle"
+                  style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+                  <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                    (change)="showMoranI = $event.value === 'moranI'">
+                    <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                    <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+                  </mat-button-toggle-group>
+                </div>
+
+                <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+                <ng-template #moranI>
+                  <h4 class="hx-title-with-info">Moran's I
+                    <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('moranI') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                    </button>
+                  </h4>
+                  <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
+                    [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
+                    [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                    [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
+                    [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
+                    (loadingChange)="onTableLoadingChange($event)"
+                    (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
+                </ng-template>
+
+                <ng-template #gearyC>
+                  <h4 class="hx-title-with-info">Geary's C
+                    <button mat-icon-button type="button" class="hx-info-btn"
+                    [matTooltip]="infoService.getScoreInfo('gearyC') || ''" matTooltipPosition="above">
+                    <mat-icon>help_outline</mat-icon>
+                    </button>
+                  </h4>
+                  <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
+                    [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
+                    [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                    [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
+                    [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
+                    (loadingChange)="onTableLoadingChange($event)"
+                    (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
+                </ng-template>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
+              <div *ngIf="selectedView === 'pathway_activity'">
+                <app-regulatory-tables-panel kind="pathway_activity" [isCompare]="false" [meta]="meta"
+                  [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
+                  (itemSelected)="onItemSelected($event.event, $event.view)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="DGEA" [disabled]="!hasDgeaData()">
+              <app-dgea-panel #mainDgeaPanel [isCompare]="false" [ready]="dgeaReady" [obsCols]="getDgeaObsCols()"
+                [selectedObsCol]="selectedDgeaObsCol" [levels]="getDgeaLevels()" [group1]="selectedDgeaGroup1"
+                [group2]="selectedDgeaGroup2" [vsAll]="dgeaVsAll" [comparison]="getSelectedDgeaComparison()"
+                [features]="features" [datasetId]="selectedDataset?.id"
+                (obsColChange)="selectedDgeaObsCol = $event; onDgeaObsColChange(false)"
+                (group1Change)="selectedDgeaGroup1 = $event; onDgeaSelectionChange(false)"
+                (group2Change)="selectedDgeaGroup2 = $event; onDgeaSelectionChange(false)"
+                (vsAllChange)="dgeaVsAll = $event; onDgeaVsAllChange(false)"
+                (tableLoadingChange)="onTableLoadingChange($event)"
+                (geneSelected)="onDgeaGeneSelected($event, false)"></app-dgea-panel>
+            </mat-tab>
+
+          </mat-tab-group>
         </mat-tab>
 
-        <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression')">
-          <div *ngIf="selectedView === 'gene_expression'">
-            <div class="selected-gene-info">
-              <strong>Current selection</strong><br>
-              Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
-              Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || 'None' }}
-            </div>
-
-            <div class="moran-geary-toggle"
-              style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-              <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
-                (change)="showMoranI = $event.value === 'moranI'">
-                <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
-                <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
-              </mat-button-toggle-group>
-            </div>
-
-            <div *ngIf="showMoranI; then moranI; else gearyC"></div>
-            <ng-template #moranI>
-              <h4>Moran's I</h4>
-              <app-table [data]="this.meta['moranI']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" [emptyMessage]="'No Moran\'s I scores loaded'"
-                [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
-                [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
-                [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
-                (loadingChange)="onTableLoadingChange($event)"
-                (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
-            </ng-template>
-
-            <ng-template #gearyC>
-              <h4>Geary's C</h4>
-              <app-table [data]="this.meta['gearyC']" [actionColumns]="['gene_expression']" [features]="features"
-                [updateColumn]="'gene_expression'" [emptyMessage]="'No Geary\'s C scores loaded'"
-                [datasetId]="selectedDataset?.id" [indexColumnLabel]="'Gene'"
-                [filters]="geneExpressionSharedFilters" [sortState]="geneExpressionSharedSortState"
-                [resetStateOnDataChange]="false" (featuresUpdated)="repaintBothViews()"
-                (loadingChange)="onTableLoadingChange($event)"
-                (geneSelected)="onGeneExpressionSelected($event, false)"></app-table>
-            </ng-template>
+        <mat-tab label="RNA Regulatory Scores">
+          <div *ngIf="isCategoryDataMissing('RNA Regulatory Scores', false)" class="modality-missing-info">
+            <mat-icon>info_outline</mat-icon>
+            <span>This dataset doesn't include RNA-based regulatory network scores (GENIE3/SPONGE).</span>
           </div>
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
+
+            <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores')">
+              <app-regulatory-scores-panel *ngIf="selectedView === 'regulatory_scores'" [isCompare]="false"
+                [selectedRegulatoryScore]="selectedRegulatoryScore" [regulatoryScoreDisplayMode]="regulatoryScoreDisplayMode"
+                [genie3TableData]="getRegulatoryTableData('genie3', false)"
+                [spongeTableData]="getRegulatoryTableData('sponge', false)"
+                [genie3ActionColumns]="getRegulatoryActionColumns('genie3', false)"
+                [spongeActionColumns]="getRegulatoryActionColumns('sponge', false)"
+                [genie3EmptyMessage]="getRegulatoryEmptyMessage('genie3', false)"
+                [spongeEmptyMessage]="getRegulatoryEmptyMessage('sponge', false)" [features]="features"
+                [datasetId]="selectedDataset?.id" [genie3Elements]="genie3Elements" [spongeElements]="spongeElements"
+                [selectedGeneSetGenie3]="selectedGeneSetGenie3" [selectedGeneSetSponge]="selectedGeneSetSponge"
+                [genie3SliderData]="genie3SliderData" [genie3WeightCutoff]="genie3WeightCutoff"
+                [genie3MinEdges]="genie3MinEdges" [isLoadingGenie3]="isLoadingGenie3" [spongeSliderData]="spongeSliderData"
+                [spongePValueCutoff]="spongePValueCutoff" [spongeMinEdges]="spongeMinEdges"
+                [isLoadingSponge]="isLoadingSponge" [selectedCell]="selectedCell" [genie3RawData]="genie3RawData"
+                [spongeRawData]="spongeRawData"
+                (regulatoryScoreDisplayModeChange)="regulatoryScoreDisplayMode = $event; onRegulatoryDisplayModeChange(false)"
+                (tableLoadingChange)="onTableLoadingChange($event)"
+                (geneSelected)="onGeneSelectedFromTable({ gene: $event.gene, action: $event.action }, $event.networkType, false)"
+                (globalFeaturesUpdated)="updateHexColors()" (cellFeaturesUpdated)="repaintBothViews()"
+                (globalScoresTutorialRequested)="globalRegulatoryScoresTutorial()"
+                (networkScoresTutorialRequested)="networkRegulatoryScoresTutorial()"
+                (cellScoresTutorialRequested)="networkRegulatoryScoresTutorial()"
+                (graphsPanelOpened)="onRegulatoryGraphsPanelOpened(false)"
+                (selectedGeneSetGenie3Change)="selectedGeneSetGenie3 = $event; onGeneSetChange(false)"
+                (selectedGeneSetSpongeChange)="selectedGeneSetSponge = $event; onGeneSetChange(false)"
+                (genie3WeightCutoffChange)="genie3WeightCutoff = $event" (genie3MinEdgesChange)="genie3MinEdges = $event"
+                (genie3SliderChanged)="onSliderChangeGenie3(false)"
+                (spongePValueCutoffChange)="spongePValueCutoff = $event" (spongeMinEdgesChange)="spongeMinEdges = $event"
+                (spongeSliderChanged)="onSliderChangeSponge(false)"
+                (analyzeInGProfilerRequested)="analyzeGeneSetInGProfiler($event)"></app-regulatory-scores-panel>
+            </mat-tab>
+
+            <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
+              <div *ngIf="selectedView === 'tf_activity'">
+                <app-regulatory-tables-panel kind="tf_activity" [isCompare]="false" [meta]="meta"
+                  [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
+                  (itemSelected)="onItemSelected($event.event, $event.view)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+              </div>
+            </mat-tab>
+
+          </mat-tab-group>
         </mat-tab>
 
-
-
-        <mat-tab label="Cell Composition TF Activity"
-          [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
-          <div *ngIf="selectedView === 'cell_comp_tf_activity_similarity'">
-            <app-regulatory-tables-panel kind="cell_comp_tf_activity" [isCompare]="false" [meta]="meta"
-              [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
-              (itemSelected)="onItemSelected($event.event, $event.view)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+        <mat-tab label="ATAC / Multiome">
+          <div *ngIf="isCategoryDataMissing('ATAC / Multiome', false)" class="modality-missing-info">
+            <mat-icon>info_outline</mat-icon>
+            <span>This dataset doesn't include ATAC-seq / multiome data, so chromatin accessibility, motif, and footprinting analyses aren't available. GRN Evaluation - On Demand can still compute a fresh evaluation.</span>
           </div>
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
+
+            <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
+              [disabled]="!propertyAvailable('chromvar_total_sum')">
+              <app-chromvar-correlation-panel [isCompare]="false" [moranIData]="meta['chromvar_moranI']"
+                [gearyCData]="meta['chromvar_gearyC']" [features]="features" [datasetId]="selectedDataset?.id"
+                (tableLoadingChange)="onTableLoadingChange($event)"
+                (featuresUpdated)="updateHexColors()"></app-chromvar-correlation-panel>
+            </mat-tab>
+
+            <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
+              <app-differential-motif-activity-panel
+                [topMotifs]="meta['diff_motif_activity_top_motifs']"></app-differential-motif-activity-panel>
+            </mat-tab>
+
+            <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
+              <app-footprint-panel [isCompare]="false" [footprintPlotUrls]="footprintPlotUrls"
+                [onDemandFootprintUrls]="onDemandFootprintUrls" [availableMotifs]="availableMotifs"
+                [availableCellTypes]="availableCellTypes" [(motifSearchQuery)]="motifSearchQuery"
+                [(footprintClusterBy)]="footprintClusterBy" [(footprintMotifs)]="footprintMotifs"
+                [isComputingFootprint]="isComputingFootprint" [footprintComputeError]="footprintComputeError"
+                (computeFootprintRequested)="computeFootprint()"></app-footprint-panel>
+            </mat-tab>
+
+            <mat-tab label="GRN Evaluation" [disabled]="!this.meta['peak_stats']">
+              <app-grn-evaluation-panel [isCompare]="false"
+                [peakStats]="this.meta['peak_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
+                [hasMotifStats]="!!this.meta['motif_stats']"
+                [motifStats]="this.meta['motif_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
+                [features]="features" [datasetId]="selectedDataset?.id" [grnGraphFilter]="grnGraphFilter"
+                [isLoadingGrnGraphPrior]="isLoadingGrnGraphPrior" [isLoadingGrnGraphExtended]="isLoadingGrnGraphExtended"
+                [isLoadingGrnGraphFull]="isLoadingGrnGraphFull" [isLoadingGrnPlots]="isLoadingGrnPlots"
+                [grnPlots]="grnPlots" [getImageUrl]="grnImageUrlBound"
+                (tableLoadingChange)="onTableLoadingChange($event)" (featuresUpdated)="updateHexColors('#hexbin')"
+                (grnGraphFilterChange)="onChangeGrnGraphFilter($event, false)"></app-grn-evaluation-panel>
+            </mat-tab>
+
+            <mat-tab label="GRN Evaluation - On Demand">
+              <app-grn-evaluation-on-demand-panel [isCompare]="false" [(obsKey)]="onDemandGrnParams.obsKey"
+                [(cluster)]="onDemandGrnParams.cluster" [(name)]="onDemandGrnParams.name"
+                [(geneSet)]="onDemandGrnParams.geneSet" [(usePriorGrn)]="onDemandGrnParams.usePriorGrn"
+                [isComputingOnDemandGrn]="isComputingOnDemandGrn" [computeError]="onDemandGrnError"
+                [outputPath]="onDemandOutputPath" [availableRuns]="onDemandGrnRuns" [selectedRun]="selectedOnDemandRun"
+                [tabError]="grnTabError" [isLoadingStats]="isLoadingGrnStats" [peakStats]="grnPeakStats"
+                [motifStats]="grnMotifStats" [features]="features" [datasetId]="selectedDataset?.id"
+                [graphFilter]="grnGraphFilter" [isLoadingGraph]="isLoadingGrnGraph" [isLoadingPlots]="isLoadingGrnPlots"
+                [plots]="grnPlots" [getImageUrl]="grnImageUrlBound" (computeRequested)="computeOnDemandGrnEvaluation(false)"
+                (selectedRunChange)="onSelectGrnRun($event, false)" (refreshRunsRequested)="loadOnDemandGrnRuns(false)"
+                (tableLoadingChange)="onTableLoadingChange($event)" (graphFilterChange)="onChangeGrnGraphFilter($event, false)"
+                (registerRequested)="registerOnDemandGrnRun(false)"></app-grn-evaluation-on-demand-panel>
+            </mat-tab>
+
+          </mat-tab-group>
         </mat-tab>
 
-        <mat-tab label="TF Activity" [disabled]="!propertyAvailable('tf_activity')">
-          <div *ngIf="selectedView === 'tf_activity'">
-            <app-regulatory-tables-panel kind="tf_activity" [isCompare]="false" [meta]="meta"
-              [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
-              (itemSelected)="onItemSelected($event.event, $event.view)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+        <mat-tab label="LIANA+">
+          <div *ngIf="isCategoryDataMissing('LIANA+', false)" class="modality-missing-info">
+            <mat-icon>info_outline</mat-icon>
+            <span>This dataset doesn't include LIANA+ ligand-receptor or cell-composition scores.</span>
           </div>
-        </mat-tab>
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
 
-        <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity')">
-          <div *ngIf="selectedView === 'pathway_activity'">
-            <app-regulatory-tables-panel kind="pathway_activity" [isCompare]="false" [meta]="meta"
-              [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
-              (itemSelected)="onItemSelected($event.event, $event.view)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
-          </div>
-        </mat-tab>
-        <mat-tab label="DGEA" [disabled]="!hasDgeaData()">
-          <app-dgea-panel #mainDgeaPanel [isCompare]="false" [ready]="dgeaReady" [obsCols]="getDgeaObsCols()"
-            [selectedObsCol]="selectedDgeaObsCol" [levels]="getDgeaLevels()" [group1]="selectedDgeaGroup1"
-            [group2]="selectedDgeaGroup2" [vsAll]="dgeaVsAll" [comparison]="getSelectedDgeaComparison()"
-            [features]="features" [datasetId]="selectedDataset?.id"
-            (obsColChange)="selectedDgeaObsCol = $event; onDgeaObsColChange(false)"
-            (group1Change)="selectedDgeaGroup1 = $event; onDgeaSelectionChange(false)"
-            (group2Change)="selectedDgeaGroup2 = $event; onDgeaSelectionChange(false)"
-            (vsAllChange)="dgeaVsAll = $event; onDgeaVsAllChange(false)"
-            (tableLoadingChange)="onTableLoadingChange($event)"
-            (geneSelected)="onDgeaGeneSelected($event, false)"></app-dgea-panel>
+            <mat-tab label="Ligand-Receptor Relationships" [disabled]="!propertyAvailable('ligand_receptor_relationships')">
+              <div *ngIf="selectedView === 'ligand_receptor_relationships'">
+                <app-regulatory-tables-panel kind="ligand_receptor" [isCompare]="false" [meta]="meta"
+                  [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
+                  [showGlobalScores]="showGlobalLigandReceptorScores"
+                  (showGlobalScoresChange)="showGlobalLigandReceptorScores = $event"
+                  (itemSelected)="onItemSelected($event.event, $event.view)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+              </div>
+            </mat-tab>
+
+            <mat-tab label="Cell Composition TF Activity"
+              [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity')">
+              <div *ngIf="selectedView === 'cell_comp_tf_activity_similarity'">
+                <app-regulatory-tables-panel kind="cell_comp_tf_activity" [isCompare]="false" [meta]="meta"
+                  [selectedItemMap]="selectedItemByView" [features]="features" [datasetId]="selectedDataset?.id"
+                  (itemSelected)="onItemSelected($event.event, $event.view)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (featuresUpdated)="updateHexColors()"></app-regulatory-tables-panel>
+              </div>
+            </mat-tab>
+
+          </mat-tab-group>
         </mat-tab>
 
         <mat-tab label="Spatial Correlation">
-          <app-spatial-correlation-panel [isCompare]="false" [datasetId]="selectedDataset?.id"
-            [isBivariateActive]="isBivariateActive"
-            (syncCompareRequested)="onSyncSpatialCompare($any($event), false)"
-            (applyBivariateColorRequested)="onApplyBivariateColor($any($event), false)"
-            (cellSelected)="onSpatialCellSelected($event, false)"></app-spatial-correlation-panel>
-        </mat-tab>
+          <mat-tab-group #innerTabGroupMain (selectedTabChange)="onTabChange($event)" preserveContent="true" dynamicHeight="false">
 
-        <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
-          [disabled]="!propertyAvailable('chromvar_total_sum')">
-          <app-chromvar-correlation-panel [isCompare]="false" [moranIData]="meta['chromvar_moranI']"
-            [gearyCData]="meta['chromvar_gearyC']" [features]="features" [datasetId]="selectedDataset?.id"
-            (tableLoadingChange)="onTableLoadingChange($event)"
-            (featuresUpdated)="updateHexColors()"></app-chromvar-correlation-panel>
-        </mat-tab>
+            <mat-tab label="Spatial Correlation">
+              <app-spatial-correlation-panel [isCompare]="false" [datasetId]="selectedDataset?.id"
+                [hexFeatures]="features" [compareModeActive]="compareMode"
+                (syncCompareRequested)="onSyncSpatialCompare($any($event), false)"
+                (applyBivariateColorRequested)="onApplyBivariateColor($any($event))"
+                (cellSelected)="onSpatialCellSelected($event, false)"></app-spatial-correlation-panel>
+            </mat-tab>
 
-        <mat-tab label="Differential Motif Activity" [disabled]="!this.meta['diff_motif_activity_top_motifs']">
-          <app-differential-motif-activity-panel
-            [topMotifs]="meta['diff_motif_activity_top_motifs']"></app-differential-motif-activity-panel>
-        </mat-tab>
-
-        <mat-tab label="Footprints" [disabled]="footprintPlotUrls.length === 0 && availableMotifs.length === 0">
-          <app-footprint-panel [isCompare]="false" [footprintPlotUrls]="footprintPlotUrls"
-            [onDemandFootprintUrls]="onDemandFootprintUrls" [availableMotifs]="availableMotifs"
-            [availableCellTypes]="availableCellTypes" [(motifSearchQuery)]="motifSearchQuery"
-            [(footprintClusterBy)]="footprintClusterBy" [(footprintMotifs)]="footprintMotifs"
-            [isComputingFootprint]="isComputingFootprint" [footprintComputeError]="footprintComputeError"
-            (computeFootprintRequested)="computeFootprint()"></app-footprint-panel>
-        </mat-tab>
-
-        <mat-tab label="GRN Evaluation" [disabled]="!this.meta['peak_stats']">
-          <app-grn-evaluation-panel [isCompare]="false"
-            [peakStats]="this.meta['peak_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
-            [hasMotifStats]="!!this.meta['motif_stats']"
-            [motifStats]="this.meta['motif_stats']?.[this.selectedDataset?.grn_evaluation_name || 'GRN_Evaluation']"
-            [features]="features" [datasetId]="selectedDataset?.id" [grnGraphFilter]="grnGraphFilter"
-            [isLoadingGrnGraphPrior]="isLoadingGrnGraphPrior" [isLoadingGrnGraphExtended]="isLoadingGrnGraphExtended"
-            [isLoadingGrnGraphFull]="isLoadingGrnGraphFull" [isLoadingGrnPlots]="isLoadingGrnPlots"
-            [grnPlots]="grnPlots" [getImageUrl]="grnImageUrlBound"
-            (tableLoadingChange)="onTableLoadingChange($event)" (featuresUpdated)="updateHexColors('#hexbin')"
-            (grnGraphFilterChange)="onChangeGrnGraphFilter($event, false)"></app-grn-evaluation-panel>
-        </mat-tab>
-
-        <mat-tab label="GRN Evaluation - On Demand">
-          <app-grn-evaluation-on-demand-panel [isCompare]="false" [(obsKey)]="onDemandGrnParams.obsKey"
-            [(cluster)]="onDemandGrnParams.cluster" [(name)]="onDemandGrnParams.name"
-            [(geneSet)]="onDemandGrnParams.geneSet" [(usePriorGrn)]="onDemandGrnParams.usePriorGrn"
-            [isComputingOnDemandGrn]="isComputingOnDemandGrn" [computeError]="onDemandGrnError"
-            [outputPath]="onDemandOutputPath" [availableRuns]="onDemandGrnRuns" [selectedRun]="selectedOnDemandRun"
-            [tabError]="grnTabError" [isLoadingStats]="isLoadingGrnStats" [peakStats]="grnPeakStats"
-            [motifStats]="grnMotifStats" [features]="features" [datasetId]="selectedDataset?.id"
-            [graphFilter]="grnGraphFilter" [isLoadingGraph]="isLoadingGrnGraph" [isLoadingPlots]="isLoadingGrnPlots"
-            [plots]="grnPlots" [getImageUrl]="grnImageUrlBound" (computeRequested)="computeOnDemandGrnEvaluation(false)"
-            (selectedRunChange)="onSelectGrnRun($event, false)" (refreshRunsRequested)="loadOnDemandGrnRuns(false)"
-            (tableLoadingChange)="onTableLoadingChange($event)" (graphFilterChange)="onChangeGrnGraphFilter($event, false)"
-            (registerRequested)="registerOnDemandGrnRun(false)"></app-grn-evaluation-on-demand-panel>
-        </mat-tab>
-
-        <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(false)">
-          <app-further-attributes-panel [features]="features" [selectedAttribute]="selectedView" [isCompare]="false"
-            (attributeSelected)="onFurtherAttributeSelected($event, false)"></app-further-attributes-panel>
+          </mat-tab-group>
         </mat-tab>
 
       </mat-tab-group>
@@ -294,261 +358,313 @@
           (selectedDatasetChange)="selectedDatasetCompare = $event" (datasetChanged)="onDatasetSelected($event, true)"
           (tangramDatasetSelected)="onDatasetTangramSelected($event, true)">
         </app-hexagon-view>
-
-        <app-live-correlation-drawer
-          [datasetId]="selectedDataset?.id"
-          [featureA]="getActiveFeatureId(false)"
-          [featureB]="getActiveFeatureId(true)"
-          [isVisible]="compareMode && isLiveDrawerOpen"
-          [isBivariateActive]="isBivariateActive"
-          (cellSelected)="onSpatialCellSelected($event, false)"
-          (applyBivariateColorRequested)="onApplyBivariateColor($event, false)"
-          (drawerClosed)="toggleLiveDrawer()">
-        </app-live-correlation-drawer>
       </div>
 
       <div class="metadata-tables-container" [style.pointer-events]="isInitializing ? 'none' : 'auto'">
-        <mat-tab-group #compareTabGroup (selectedTabChange)="onTabChange($event,true)" preserveContent="true"
-          dynamicHeight="false" class="metadata-tables-compare">
+        <mat-tab-group #compareTabGroup preserveContent="true" dynamicHeight="false" class="metadata-tables-compare category-tab-group"
+          (selectedTabChange)="onCategoryTabChange($event, true)">
 
-          <mat-tab label="Cell Information" #cellInfoTabCompare>
-            <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView"
-              [datasetFeatures]="compareFeatures"></app-cell-info-panel>
+          <mat-tab label="Cell &amp; Cluster">
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
+
+              <mat-tab label="Cell Information" #cellInfoTabCompare>
+                <app-cell-info-panel [cell]="selectedCellCompare" [currentView]="selectedCompareView"
+                  [datasetFeatures]="compareFeatures"></app-cell-info-panel>
+              </mat-tab>
+
+              <mat-tab label="Cluster Information" *ngIf="selectedClusterCompare !== null" #clusterInfoTabCompare>
+                <mat-form-field appearance="fill" class="cluster-property-select">
+                  <mat-label>Cluster by</mat-label>
+                  <mat-select [ngModel]="selectedCompareView" (selectionChange)="onClusterPropertySelected($event.value, true)">
+                    <mat-option *ngFor="let prop of categoricalProperties(true)" [value]="prop">
+                      {{ prop | translate | async }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+
+                <app-cluster-info-panel #compareClusterInfo [isCompare]="true"
+                  [isLeidenView]="selectedCompareView === 'leiden'" [clusterId]="selectedClusterCompare"
+                  [availableClusterIds]="activeClusterValues(true)" (clusterSelected)="selectCluster($event, true)"
+                  [clusterCellCount]="compareClusterCells.length" [clusterCellTypes]="compareClusterCellTypes"
+                  [clusterCentralityAvg]="compareClusterCentralityAvg" [colorScale]="colorScale"
+                  (metricSelected)="onFurtherAttributeSelected($event, true)"></app-cluster-info-panel>
+
+                <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence', true) && selectedCompareView === 'leiden'" [isCompare]="true"
+                  [selectedClusterId]="$any(selectedClusterCompare)" [coOccurrenceData]="compareCoOccurrenceData"
+                  [clusterCount]="clusterCountCompare" [threshold]="compareCoOccurrenceThreshold"
+                  [maxInterval]="maxIntervalCompare" [selectedInterval]="selectedIntervalCompare"
+                  [intervalBoundaries]="getIntervalBoundaries(true)" [continuousColorScale]="continuousColorScaleCompare"
+                  (intervalChanged)="selectedIntervalCompare = $event; updateCoOccurrenceTable(true)"
+                  (clusterSelected)="selectCluster($event, true)"></app-co-occurrence-panel>
+              </mat-tab>
+
+              <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(true)">
+                <app-further-attributes-panel [features]="compareFeatures" [selectedAttribute]="selectedCompareView"
+                  [isCompare]="true" (attributeSelected)="onFurtherAttributeSelected($event, true)"></app-further-attributes-panel>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
-          <mat-tab label="Cluster Information" *ngIf="selectedClusterCompare !== null" #clusterInfoTabCompare>
-            <mat-form-field appearance="fill" class="cluster-property-select">
-              <mat-label>Cluster by</mat-label>
-              <mat-select [ngModel]="selectedCompareView" (selectionChange)="onClusterPropertySelected($event.value, true)">
-                <mat-option *ngFor="let prop of categoricalProperties(true)" [value]="prop">
-                  {{ prop | translate | async }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-
-            <app-cluster-info-panel #compareClusterInfo [isCompare]="true"
-              [isLeidenView]="selectedCompareView === 'leiden'" [clusterId]="selectedClusterCompare"
-              [availableClusterIds]="activeClusterValues(true)" (clusterSelected)="selectCluster($event, true)"
-              [clusterCellCount]="compareClusterCells.length" [clusterCellTypes]="compareClusterCellTypes"
-              [clusterCentralityAvg]="compareClusterCentralityAvg" [colorScale]="colorScale"
-              (metricSelected)="onFurtherAttributeSelected($event, true)"></app-cluster-info-panel>
-
-            <app-co-occurrence-panel *ngIf="propertyAvailable('co_occurrence', true) && selectedCompareView === 'leiden'" [isCompare]="true"
-              [selectedClusterId]="$any(selectedClusterCompare)" [coOccurrenceData]="compareCoOccurrenceData"
-              [clusterCount]="clusterCountCompare" [threshold]="compareCoOccurrenceThreshold"
-              [maxInterval]="maxIntervalCompare" [selectedInterval]="selectedIntervalCompare"
-              [intervalBoundaries]="getIntervalBoundaries(true)" [continuousColorScale]="continuousColorScaleCompare"
-              (intervalChanged)="selectedIntervalCompare = $event; updateCoOccurrenceTable(true)"
-              (clusterSelected)="selectCluster($event, true)"></app-co-occurrence-panel>
-          </mat-tab>
-
-
-          <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', true)">
-            <app-regulatory-scores-panel *ngIf="selectedCompareView === 'regulatory_scores'" [isCompare]="true"
-              [selectedRegulatoryScore]="selectedRegulatoryScoreCompare"
-              [regulatoryScoreDisplayMode]="regulatoryScoreDisplayModeCompare"
-              [genie3TableData]="getRegulatoryTableData('genie3', true)"
-              [spongeTableData]="getRegulatoryTableData('sponge', true)"
-              [genie3ActionColumns]="getRegulatoryActionColumns('genie3', true)"
-              [spongeActionColumns]="getRegulatoryActionColumns('sponge', true)"
-              [genie3EmptyMessage]="getRegulatoryEmptyMessage('genie3', true)"
-              [spongeEmptyMessage]="getRegulatoryEmptyMessage('sponge', true)" [features]="compareFeatures"
-              [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [genie3Elements]="genie3ElementsCompare"
-              [spongeElements]="spongeElementsCompare" [selectedGeneSetGenie3]="selectedGeneSetGenie3Compare"
-              [selectedGeneSetSponge]="selectedGeneSetSpongeCompare" [genie3SliderData]="genie3SliderDataCompare"
-              [genie3WeightCutoff]="genie3WeightCutoffCompare" [genie3MinEdges]="genie3MinEdgesCompare"
-              [isLoadingGenie3]="isLoadingGenie3Compare" [spongeSliderData]="spongeSliderDataCompare"
-              [spongePValueCutoff]="spongePValueCutoffCompare" [spongeMinEdges]="spongeMinEdgesCompare"
-              [isLoadingSponge]="isLoadingSpongeCompare" [selectedCell]="selectedCellCompare"
-              [genie3RawData]="genie3RawDataCompare" [spongeRawData]="spongeRawDataCompare"
-              (regulatoryScoreDisplayModeChange)="regulatoryScoreDisplayModeCompare = $event; onRegulatoryDisplayModeChange(true)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (geneSelected)="onGeneSelectedFromTable({ gene: $event.gene, action: $event.action }, $event.networkType, true)"
-              (globalFeaturesUpdated)="repaintBothViews()" (cellFeaturesUpdated)="repaintBothViews()"
-              (graphsPanelOpened)="onRegulatoryGraphsPanelOpened(true)"
-              (selectedGeneSetGenie3Change)="selectedGeneSetGenie3Compare = $event; onGeneSetChange(true)"
-              (selectedGeneSetSpongeChange)="selectedGeneSetSpongeCompare = $event; onGeneSetChange(true)"
-              (genie3WeightCutoffChange)="genie3WeightCutoffCompare = $event"
-              (genie3MinEdgesChange)="genie3MinEdgesCompare = $event" (genie3SliderChanged)="onSliderChangeGenie3(true)"
-              (spongePValueCutoffChange)="spongePValueCutoffCompare = $event"
-              (spongeMinEdgesChange)="spongeMinEdgesCompare = $event"
-              (spongeSliderChanged)="onSliderChangeSponge(true)"></app-regulatory-scores-panel>
-          </mat-tab>
-
-          <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression', true)">
-            <div *ngIf="selectedCompareView === 'gene_expression'">
-              <div class="selected-gene-info">
-                <h4>Gene Expression Comparison</h4>
-              </div>
-
-              <div class="moran-geary-toggle"
-                style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
-                <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
-                  (change)="showMoranI = $event.value === 'moranI'">
-                  <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
-                  <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
-                </mat-button-toggle-group>
-              </div>
-
-              <div *ngIf="showMoranI; then moranI; else gearyC"></div>
-
-              <ng-template #moranI>
-                <h4>Moran's I</h4>
-                <app-table [data]="this.metaCompare['moranI']" [actionColumns]="['gene_expression']"
-                  [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
-                  [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
-                  [resetStateOnDataChange]="false"
-                  (featuresUpdated)="repaintBothViews()"
-                  (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
-                  [emptyMessage]="'No Moran\'s I scores loaded'"></app-table>
-              </ng-template>
-
-              <ng-template #gearyC>
-                <h4>Geary's C</h4>
-                <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
-                  [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
-                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
-                  [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
-                  [resetStateOnDataChange]="false"
-                  (featuresUpdated)="repaintBothViews()"
-                  (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
-                  [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
-              </ng-template>
+          <mat-tab label="Gene &amp; Pathway Activity">
+            <div *ngIf="isCategoryDataMissing('Gene &amp; Pathway Activity', true)" class="modality-missing-info">
+              <mat-icon>info_outline</mat-icon>
+              <span>This dataset doesn't include gene expression, pathway activity, or DGEA results.</span>
             </div>
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
+
+              <mat-tab label="Gene Expression" [disabled]="!propertyAvailable('gene_expression', true)">
+                <div *ngIf="selectedCompareView === 'gene_expression'">
+                  <div class="selected-gene-info">
+                    <h4>Gene Expression Comparison</h4>
+                  </div>
+
+                  <div class="moran-geary-toggle"
+                    style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center;">
+                    <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+                      (change)="showMoranI = $event.value === 'moranI'">
+                      <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+                      <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+                    </mat-button-toggle-group>
+                  </div>
+
+                  <div *ngIf="showMoranI; then moranI; else gearyC"></div>
+
+                  <ng-template #moranI>
+                    <h4>Moran's I</h4>
+                    <app-table [data]="this.metaCompare['moranI']" [actionColumns]="['gene_expression']"
+                      [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
+                      [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                      [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
+                      [resetStateOnDataChange]="false"
+                      (featuresUpdated)="repaintBothViews()"
+                      (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
+                      [emptyMessage]="'No Moran\'s I scores loaded'"></app-table>
+                  </ng-template>
+
+                  <ng-template #gearyC>
+                    <h4>Geary's C</h4>
+                    <app-table [data]="this.metaCompare['gearyC']" [actionColumns]="['gene_expression']"
+                      [features]="compareFeatures" [updateColumn]="'gene_expression'" [isCompare]="true"
+                      [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [indexColumnLabel]="'Gene'"
+                      [filters]="geneExpressionSharedFiltersCompare" [sortState]="geneExpressionSharedSortStateCompare"
+                      [resetStateOnDataChange]="false"
+                      (featuresUpdated)="repaintBothViews()"
+                      (loadingChange)="onTableLoadingChange($event)" (geneSelected)="onGeneExpressionSelected($event, true)"
+                      [emptyMessage]="'No Geary\'s C scores loaded'"></app-table>
+                  </ng-template>
+                </div>
+              </mat-tab>
+
+              <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', true)">
+                <div *ngIf="selectedCompareView === 'pathway_activity'">
+                  <app-regulatory-tables-panel kind="pathway_activity" [isCompare]="true" [meta]="metaCompare"
+                    [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
+                    [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                    (itemSelected)="onItemSelected($event.event, $event.view, true)"
+                    (tableLoadingChange)="onTableLoadingChange($event)"
+                    (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+                </div>
+              </mat-tab>
+
+              <mat-tab label="DGEA" [disabled]="!hasDgeaData(true)">
+                <app-dgea-panel #compareDgeaPanel [isCompare]="true" [ready]="dgeaReadyCompare"
+                  [obsCols]="getDgeaObsCols(true)" [selectedObsCol]="selectedDgeaObsColCompare"
+                  [levels]="getDgeaLevels(true)" [group1]="selectedDgeaGroup1Compare" [group2]="selectedDgeaGroup2Compare"
+                  [vsAll]="dgeaVsAllCompare" [comparison]="getSelectedDgeaComparison(true)" [features]="compareFeatures"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  (obsColChange)="selectedDgeaObsColCompare = $event; onDgeaObsColChange(true)"
+                  (group1Change)="selectedDgeaGroup1Compare = $event; onDgeaSelectionChange(true)"
+                  (group2Change)="selectedDgeaGroup2Compare = $event; onDgeaSelectionChange(true)"
+                  (vsAllChange)="dgeaVsAllCompare = $event; onDgeaVsAllChange(true)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (geneSelected)="onDgeaGeneSelected($event, true)"></app-dgea-panel>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
-          <mat-tab label="Ligand-Receptor Relationships"
-            [disabled]="!propertyAvailable('ligand_receptor_relationships', true)">
-            <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
-              <app-regulatory-tables-panel kind="ligand_receptor" [isCompare]="true" [meta]="metaCompare"
-                [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                [showGlobalScores]="showGlobalLigandReceptorScores"
-                (showGlobalScoresChange)="showGlobalLigandReceptorScores = $event"
-                (itemSelected)="onItemSelected($event.event, $event.view, true)"
-                (tableLoadingChange)="onTableLoadingChange($event)"
-                (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+          <mat-tab label="RNA Regulatory Scores">
+            <div *ngIf="isCategoryDataMissing('RNA Regulatory Scores', true)" class="modality-missing-info">
+              <mat-icon>info_outline</mat-icon>
+              <span>This dataset doesn't include RNA-based regulatory network scores (GENIE3/SPONGE).</span>
             </div>
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
+
+              <mat-tab label="Regulatory Scores" [disabled]="!propertyAvailable('regulatory_scores', true)">
+                <app-regulatory-scores-panel *ngIf="selectedCompareView === 'regulatory_scores'" [isCompare]="true"
+                  [selectedRegulatoryScore]="selectedRegulatoryScoreCompare"
+                  [regulatoryScoreDisplayMode]="regulatoryScoreDisplayModeCompare"
+                  [genie3TableData]="getRegulatoryTableData('genie3', true)"
+                  [spongeTableData]="getRegulatoryTableData('sponge', true)"
+                  [genie3ActionColumns]="getRegulatoryActionColumns('genie3', true)"
+                  [spongeActionColumns]="getRegulatoryActionColumns('sponge', true)"
+                  [genie3EmptyMessage]="getRegulatoryEmptyMessage('genie3', true)"
+                  [spongeEmptyMessage]="getRegulatoryEmptyMessage('sponge', true)" [features]="compareFeatures"
+                  [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id" [genie3Elements]="genie3ElementsCompare"
+                  [spongeElements]="spongeElementsCompare" [selectedGeneSetGenie3]="selectedGeneSetGenie3Compare"
+                  [selectedGeneSetSponge]="selectedGeneSetSpongeCompare" [genie3SliderData]="genie3SliderDataCompare"
+                  [genie3WeightCutoff]="genie3WeightCutoffCompare" [genie3MinEdges]="genie3MinEdgesCompare"
+                  [isLoadingGenie3]="isLoadingGenie3Compare" [spongeSliderData]="spongeSliderDataCompare"
+                  [spongePValueCutoff]="spongePValueCutoffCompare" [spongeMinEdges]="spongeMinEdgesCompare"
+                  [isLoadingSponge]="isLoadingSpongeCompare" [selectedCell]="selectedCellCompare"
+                  [genie3RawData]="genie3RawDataCompare" [spongeRawData]="spongeRawDataCompare"
+                  (regulatoryScoreDisplayModeChange)="regulatoryScoreDisplayModeCompare = $event; onRegulatoryDisplayModeChange(true)"
+                  (tableLoadingChange)="onTableLoadingChange($event)"
+                  (geneSelected)="onGeneSelectedFromTable({ gene: $event.gene, action: $event.action }, $event.networkType, true)"
+                  (globalFeaturesUpdated)="repaintBothViews()" (cellFeaturesUpdated)="repaintBothViews()"
+                  (graphsPanelOpened)="onRegulatoryGraphsPanelOpened(true)"
+                  (selectedGeneSetGenie3Change)="selectedGeneSetGenie3Compare = $event; onGeneSetChange(true)"
+                  (selectedGeneSetSpongeChange)="selectedGeneSetSpongeCompare = $event; onGeneSetChange(true)"
+                  (genie3WeightCutoffChange)="genie3WeightCutoffCompare = $event"
+                  (genie3MinEdgesChange)="genie3MinEdgesCompare = $event" (genie3SliderChanged)="onSliderChangeGenie3(true)"
+                  (spongePValueCutoffChange)="spongePValueCutoffCompare = $event"
+                  (spongeMinEdgesChange)="spongeMinEdgesCompare = $event"
+                  (spongeSliderChanged)="onSliderChangeSponge(true)"></app-regulatory-scores-panel>
+              </mat-tab>
+
+              <mat-tab label="TF Activity" *ngIf="selectedCell"
+                [disabled]="!propertyAvailable('tf_activity', true)">
+                <div *ngIf="selectedCompareView === 'tf_activity'">
+                  <app-regulatory-tables-panel kind="tf_activity" [isCompare]="true" [meta]="metaCompare"
+                    [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
+                    [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                    (itemSelected)="onItemSelected($event.event, $event.view, true)"
+                    (tableLoadingChange)="onTableLoadingChange($event)"
+                    (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+                </div>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
-          <mat-tab label="Cell Composition TF Activity"
-            [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity', true)">
-            <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
-              <app-regulatory-tables-panel kind="cell_comp_tf_activity" [isCompare]="true" [meta]="metaCompare"
-                [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (itemSelected)="onItemSelected($event.event, $event.view, true)"
-                (tableLoadingChange)="onTableLoadingChange($event)"
-                (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+          <mat-tab label="ATAC / Multiome">
+            <div *ngIf="isCategoryDataMissing('ATAC / Multiome', true)" class="modality-missing-info">
+              <mat-icon>info_outline</mat-icon>
+              <span>This dataset doesn't include ATAC-seq / multiome data, so chromatin accessibility, motif, and footprinting analyses aren't available. GRN Evaluation - On Demand can still compute a fresh evaluation.</span>
             </div>
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
+
+              <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
+                [disabled]="!propertyAvailable('chromvar_total_sum', true)">
+                <app-chromvar-correlation-panel [isCompare]="true" [moranIData]="metaCompare['chromvar_moranI']"
+                  [gearyCData]="metaCompare['chromvar_gearyC']" [features]="compareFeatures"
+                  [datasetId]="selectedDatasetCompare?.id" (tableLoadingChange)="onTableLoadingChange($event)"
+                  (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-chromvar-correlation-panel>
+              </mat-tab>
+
+              <mat-tab label="Differential Motif Activity" [disabled]="!this.metaCompare['diff_motif_activity_top_motifs']">
+                <app-differential-motif-activity-panel
+                  [topMotifs]="metaCompare['diff_motif_activity_top_motifs']"></app-differential-motif-activity-panel>
+              </mat-tab>
+
+              <mat-tab label="Footprints"
+                [disabled]="footprintPlotUrlsCompare.length === 0 && availableMotifsCompare.length === 0">
+                <app-footprint-panel [isCompare]="true" [footprintPlotUrls]="footprintPlotUrlsCompare"
+                  [onDemandFootprintUrls]="onDemandFootprintUrlsCompare" [availableMotifs]="availableMotifsCompare"
+                  [availableCellTypes]="availableCellTypesCompare" [(motifSearchQuery)]="motifSearchQueryCompare"
+                  [(footprintClusterBy)]="footPrintClusterByCompare" [(footprintMotifs)]="footprintMotifsCompare"
+                  [isComputingFootprint]="isComputingFootprintCompare"
+                  [footprintComputeError]="footprintComputeErrorCompare"
+                  (computeFootprintRequested)="computeFootprint(true)"></app-footprint-panel>
+              </mat-tab>
+
+              <mat-tab label="GRN Evaluation" [disabled]="!this.metaCompare['peak_stats']">
+                <app-grn-evaluation-panel [isCompare]="true"
+                  [peakStats]="this.metaCompare['peak_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
+                  [hasMotifStats]="!!this.metaCompare['motif_stats']"
+                  [motifStats]="this.metaCompare['motif_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
+                  [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  [grnGraphFilter]="grnGraphFilterCompare" [isLoadingGrnGraphPrior]="isLoadingGrnGraphPriorCompare"
+                  [isLoadingGrnGraphExtended]="isLoadingGrnGraphExtendedCompare"
+                  [isLoadingGrnGraphFull]="isLoadingGrnGraphFullCompare" [isLoadingGrnPlots]="isLoadingGrnPlotsCompare"
+                  [grnPlots]="grnPlotsCompare" [getImageUrl]="grnImageUrlBoundCompare"
+                  (tableLoadingChange)="onTableLoadingChange($event)" (featuresUpdated)="updateHexColors('#hexbin-compare')"
+                  (grnGraphFilterChange)="onChangeGrnGraphFilter($event, true)"></app-grn-evaluation-panel>
+              </mat-tab>
+
+              <mat-tab label="GRN Evaluation - On Demand">
+                <app-grn-evaluation-on-demand-panel [isCompare]="true" [(obsKey)]="onDemandGrnParams.obsKey"
+                  [(cluster)]="onDemandGrnParams.cluster" [(name)]="onDemandGrnParams.name"
+                  [(geneSet)]="onDemandGrnParams.geneSet" [(usePriorGrn)]="onDemandGrnParams.usePriorGrn"
+                  [isComputingOnDemandGrn]="isComputingOnDemandGrn" [computeError]="onDemandGrnError"
+                  [outputPath]="onDemandOutputPathCompare" [availableRuns]="onDemandGrnRunsCompare" [selectedRun]="selectedOnDemandRunCompare"
+                  [tabError]="grnTabErrorCompare" [isLoadingStats]="isLoadingGrnStatsCompare" [peakStats]="grnPeakStatsCompare"
+                  [motifStats]="grnMotifStatsCompare" [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
+                  [graphFilter]="grnGraphFilterCompare" [isLoadingGraph]="isLoadingGrnGraphCompare" [isLoadingPlots]="isLoadingGrnPlotsCompare"
+                  [plots]="grnPlotsCompare" [getImageUrl]="grnImageUrlBoundCompare" (computeRequested)="computeOnDemandGrnEvaluation(true)"
+                  (selectedRunChange)="onSelectGrnRun($event, true)" (refreshRunsRequested)="loadOnDemandGrnRuns(true)"
+                  (tableLoadingChange)="onTableLoadingChange($event)" (graphFilterChange)="onChangeGrnGraphFilter($event, true)"
+                  (registerRequested)="registerOnDemandGrnRun(true)"></app-grn-evaluation-on-demand-panel>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
-          <mat-tab label="TF Activity" *ngIf="selectedCell"
-            [disabled]="!propertyAvailable('tf_activity', true)">
-            <div *ngIf="selectedCompareView === 'tf_activity'">
-              <app-regulatory-tables-panel kind="tf_activity" [isCompare]="true" [meta]="metaCompare"
-                [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (itemSelected)="onItemSelected($event.event, $event.view, true)"
-                (tableLoadingChange)="onTableLoadingChange($event)"
-                (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+          <mat-tab label="LIANA+">
+            <div *ngIf="isCategoryDataMissing('LIANA+', true)" class="modality-missing-info">
+              <mat-icon>info_outline</mat-icon>
+              <span>This dataset doesn't include LIANA+ ligand-receptor or cell-composition scores.</span>
             </div>
-          </mat-tab>
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
 
-          <mat-tab label="Pathway Activity" [disabled]="!propertyAvailable('pathway_activity', true)">
-            <div *ngIf="selectedCompareView === 'pathway_activity'">
-              <app-regulatory-tables-panel kind="pathway_activity" [isCompare]="true" [meta]="metaCompare"
-                [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
-                [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-                (itemSelected)="onItemSelected($event.event, $event.view, true)"
-                (tableLoadingChange)="onTableLoadingChange($event)"
-                (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
-            </div>
-          </mat-tab>
+              <mat-tab label="Ligand-Receptor Relationships"
+                [disabled]="!propertyAvailable('ligand_receptor_relationships', true)">
+                <div *ngIf="selectedCompareView === 'ligand_receptor_relationships'">
+                  <app-regulatory-tables-panel kind="ligand_receptor" [isCompare]="true" [meta]="metaCompare"
+                    [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
+                    [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                    [showGlobalScores]="showGlobalLigandReceptorScores"
+                    (showGlobalScoresChange)="showGlobalLigandReceptorScores = $event"
+                    (itemSelected)="onItemSelected($event.event, $event.view, true)"
+                    (tableLoadingChange)="onTableLoadingChange($event)"
+                    (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+                </div>
+              </mat-tab>
 
-          <mat-tab label="DGEA" [disabled]="!hasDgeaData(true)">
-            <app-dgea-panel #compareDgeaPanel [isCompare]="true" [ready]="dgeaReadyCompare"
-              [obsCols]="getDgeaObsCols(true)" [selectedObsCol]="selectedDgeaObsColCompare"
-              [levels]="getDgeaLevels(true)" [group1]="selectedDgeaGroup1Compare" [group2]="selectedDgeaGroup2Compare"
-              [vsAll]="dgeaVsAllCompare" [comparison]="getSelectedDgeaComparison(true)" [features]="compareFeatures"
-              [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-              (obsColChange)="selectedDgeaObsColCompare = $event; onDgeaObsColChange(true)"
-              (group1Change)="selectedDgeaGroup1Compare = $event; onDgeaSelectionChange(true)"
-              (group2Change)="selectedDgeaGroup2Compare = $event; onDgeaSelectionChange(true)"
-              (vsAllChange)="dgeaVsAllCompare = $event; onDgeaVsAllChange(true)"
-              (tableLoadingChange)="onTableLoadingChange($event)"
-              (geneSelected)="onDgeaGeneSelected($event, true)"></app-dgea-panel>
+              <mat-tab label="Cell Composition TF Activity"
+                [disabled]="!propertyAvailable('cell_comp_tf_activity_similarity', true)">
+                <div *ngIf="selectedCompareView === 'cell_comp_tf_activity_similarity'">
+                  <app-regulatory-tables-panel kind="cell_comp_tf_activity" [isCompare]="true" [meta]="metaCompare"
+                    [selectedItemMap]="selectedItemByViewCompare" [features]="compareFeatures"
+                    [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                    (itemSelected)="onItemSelected($event.event, $event.view, true)"
+                    (tableLoadingChange)="onTableLoadingChange($event)"
+                    (featuresUpdated)="repaintBothViews()"></app-regulatory-tables-panel>
+                </div>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
           <mat-tab label="Spatial Correlation">
-            <app-spatial-correlation-panel [isCompare]="true" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
-              (syncCompareRequested)="onSyncSpatialCompare($any($event), true)"
-              (applyBivariateColorRequested)="onApplyBivariateColor($any($event), true)"
-              (cellSelected)="onSpatialCellSelected($event, true)"></app-spatial-correlation-panel>
+            <mat-tab-group #innerTabGroupCompare (selectedTabChange)="onTabChange($event,true)" preserveContent="true" dynamicHeight="false">
+
+              <mat-tab label="Spatial Correlation">
+                <app-spatial-correlation-panel [isCompare]="true" [datasetId]="selectedDatasetCompare?.id || selectedDataset?.id"
+                  [hexFeatures]="compareFeatures" [compareModeActive]="compareMode"
+                  (syncCompareRequested)="onSyncSpatialCompare($any($event), true)"
+                  (cellSelected)="onSpatialCellSelected($event, true)"></app-spatial-correlation-panel>
+              </mat-tab>
+
+            </mat-tab-group>
           </mat-tab>
 
-          <mat-tab label="ChromVar spatial correlation : Moran's I / Geary's C"
-            [disabled]="!propertyAvailable('chromvar_total_sum', true)">
-            <app-chromvar-correlation-panel [isCompare]="true" [moranIData]="metaCompare['chromvar_moranI']"
-              [gearyCData]="metaCompare['chromvar_gearyC']" [features]="compareFeatures"
-              [datasetId]="selectedDatasetCompare?.id" (tableLoadingChange)="onTableLoadingChange($event)"
-              (featuresUpdated)="updateHexColors('#hexbin-compare')"></app-chromvar-correlation-panel>
-          </mat-tab>
-
-          <mat-tab label="Differential Motif Activity" [disabled]="!this.metaCompare['diff_motif_activity_top_motifs']">
-            <app-differential-motif-activity-panel
-              [topMotifs]="metaCompare['diff_motif_activity_top_motifs']"></app-differential-motif-activity-panel>
-          </mat-tab>
-
-          <mat-tab label="Footprints"
-            [disabled]="footprintPlotUrlsCompare.length === 0 && availableMotifsCompare.length === 0">
-            <app-footprint-panel [isCompare]="true" [footprintPlotUrls]="footprintPlotUrlsCompare"
-              [onDemandFootprintUrls]="onDemandFootprintUrlsCompare" [availableMotifs]="availableMotifsCompare"
-              [availableCellTypes]="availableCellTypesCompare" [(motifSearchQuery)]="motifSearchQueryCompare"
-              [(footprintClusterBy)]="footPrintClusterByCompare" [(footprintMotifs)]="footprintMotifsCompare"
-              [isComputingFootprint]="isComputingFootprintCompare"
-              [footprintComputeError]="footprintComputeErrorCompare"
-              (computeFootprintRequested)="computeFootprint(true)"></app-footprint-panel>
-          </mat-tab>
-
-
-          <mat-tab label="GRN Evaluation" [disabled]="!this.metaCompare['peak_stats']">
-            <app-grn-evaluation-panel [isCompare]="true"
-              [peakStats]="this.metaCompare['peak_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
-              [hasMotifStats]="!!this.metaCompare['motif_stats']"
-              [motifStats]="this.metaCompare['motif_stats']?.[this.selectedDatasetCompare?.grn_evaluation_name || 'GRN_Evaluation']"
-              [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
-              [grnGraphFilter]="grnGraphFilterCompare" [isLoadingGrnGraphPrior]="isLoadingGrnGraphPriorCompare"
-              [isLoadingGrnGraphExtended]="isLoadingGrnGraphExtendedCompare"
-              [isLoadingGrnGraphFull]="isLoadingGrnGraphFullCompare" [isLoadingGrnPlots]="isLoadingGrnPlotsCompare"
-              [grnPlots]="grnPlotsCompare" [getImageUrl]="grnImageUrlBoundCompare"
-              (tableLoadingChange)="onTableLoadingChange($event)" (featuresUpdated)="updateHexColors('#hexbin-compare')"
-              (grnGraphFilterChange)="onChangeGrnGraphFilter($event, true)"></app-grn-evaluation-panel>
-          </mat-tab>
-
-          <mat-tab label="GRN Evaluation - On Demand">
-            <app-grn-evaluation-on-demand-panel [isCompare]="true" [(obsKey)]="onDemandGrnParams.obsKey"
-              [(cluster)]="onDemandGrnParams.cluster" [(name)]="onDemandGrnParams.name"
-              [(geneSet)]="onDemandGrnParams.geneSet" [(usePriorGrn)]="onDemandGrnParams.usePriorGrn"
-              [isComputingOnDemandGrn]="isComputingOnDemandGrn" [computeError]="onDemandGrnError"
-              [outputPath]="onDemandOutputPathCompare" [availableRuns]="onDemandGrnRunsCompare" [selectedRun]="selectedOnDemandRunCompare"
-              [tabError]="grnTabErrorCompare" [isLoadingStats]="isLoadingGrnStatsCompare" [peakStats]="grnPeakStatsCompare"
-              [motifStats]="grnMotifStatsCompare" [features]="compareFeatures" [datasetId]="selectedDatasetCompare?.id"
-              [graphFilter]="grnGraphFilterCompare" [isLoadingGraph]="isLoadingGrnGraphCompare" [isLoadingPlots]="isLoadingGrnPlotsCompare"
-              [plots]="grnPlotsCompare" [getImageUrl]="grnImageUrlBoundCompare" (computeRequested)="computeOnDemandGrnEvaluation(true)"
-              (selectedRunChange)="onSelectGrnRun($event, true)" (refreshRunsRequested)="loadOnDemandGrnRuns(true)"
-              (tableLoadingChange)="onTableLoadingChange($event)" (graphFilterChange)="onChangeGrnGraphFilter($event, true)"
-              (registerRequested)="registerOnDemandGrnRun(true)"></app-grn-evaluation-on-demand-panel>
-          </mat-tab>
-
-          <mat-tab label="Further Attributes" [disabled]="!hasFurtherAttributes(true)">
-            <app-further-attributes-panel [features]="compareFeatures" [selectedAttribute]="selectedCompareView"
-              [isCompare]="true" (attributeSelected)="onFurtherAttributeSelected($event, true)"></app-further-attributes-panel>
-          </mat-tab>
         </mat-tab-group>
       </div>
     </div>
 
+  </div>
+
+  <app-live-correlation-drawer
+    [datasetId]="selectedDataset?.id"
+    [datasetIdCompare]="selectedDatasetCompare?.id"
+    [featureA]="getActiveFeatureId(false)"
+    [featureB]="getActiveFeatureId(true)"
+    [features]="features"
+    [isVisible]="compareMode && isLiveDrawerOpen"
+    (cellSelected)="onSpatialCellSelected($event, false)"
+    (drawerClosed)="toggleLiveDrawer()">
+  </app-live-correlation-drawer>
   </div>
 </div>

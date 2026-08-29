@@ -1,22 +1,29 @@
+// Host element: transparent flex child -- .live-side-drawer-container below is the actual sized
+// flex item within .main-visualization-row (hexagon-plot.component.scss), same convention as
+// hexagon-view.component.ts's :host.
+:host {
+  display: contents;
+}
+
 .live-side-drawer-container {
-  position: fixed;
-  top: 64px;
-  right: 0;
-  bottom: 0;
   width: 360px;
-  z-index: 1000;
+  flex-shrink: 0;
+  height: 100%;
+  min-height: 0;
   pointer-events: auto;
   display: flex;
   font-family: inherit;
-  box-shadow: -6px 0 24px rgba(0, 0, 0, 0.12);
 
-  /* Full vertical side drawer panel */
+  /* Full vertical side drawer panel -- sits inline next to the map as a flex sibling (not an
+     overlay anymore), so it's styled as a plain card matching the other panels (.matrix-card,
+     .detail-box) instead of the heavy directional drop-shadow it had when it floated over the map. */
   .drawer-panel {
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(12px);
-    border-left: 1px solid #cbd5e1;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -133,7 +140,7 @@
       }
 
       .error-state {
-        color: #ef4444;
+        color: #000000;
       }
 
       .correlation-content {
@@ -243,45 +250,7 @@
           }
         }
 
-        .drawer-actions {
-          margin-top: 4px;
-
-          .apply-bivariate-btn {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            padding: 10px 16px;
-            border-radius: 8px;
-            border: none;
-            background: linear-gradient(135deg, #ff9800 0%, #ffa726 100%);
-            color: #ffffff;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            box-shadow: 0 2px 6px rgba(255, 152, 0, 0.3);
-            transition: all 0.2s ease;
-
-            &:hover {
-              box-shadow: 0 4px 12px rgba(255, 152, 0, 0.45);
-              transform: translateY(-1px);
-            }
-
-            &.active {
-              background: linear-gradient(135deg, #0284c7 0%, #c026d3 100%);
-              box-shadow: 0 2px 8px rgba(192, 38, 211, 0.4);
-            }
-
-            mat-icon {
-              font-size: 18px;
-              width: 18px;
-              height: 18px;
-            }
-          }
-        }
-
-        .bivariate-legend-box {
+        .bivariate-map-box {
           margin-top: 8px;
           padding: 10px;
           background: #f8fafc;
@@ -298,33 +267,55 @@
             letter-spacing: 0.5px;
           }
 
-          .bivariate-grid-layout {
+          .bivariate-map-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .bivariate-map-canvas {
+            flex: 1 1 0;
+            min-width: 0;
+            aspect-ratio: 1 / 1;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            overflow: hidden;
+
+            svg {
+              display: block;
+              width: 100%;
+              height: 100%;
+            }
+          }
+
+          // The legend for the map: same bivariateColor(u, v) blend rendered pixel-for-pixel onto
+          // a small canvas (see renderBivariateLegend) -- not a hand-picked gradient, so it can't
+          // drift out of sync with what the map actually shows.
+          .bivariate-legend-col {
+            flex: 0 0 auto;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
 
+            .axis-label-y, .axis-label-x {
+              font-size: 0.62rem;
+              color: #64748b;
+              font-weight: 600;
+              text-align: center;
+            }
+
             .axis-label-y {
-              font-size: 0.68rem;
-              color: #c026d3;
-              font-weight: 600;
-              text-align: center;
+              max-width: 44px;
             }
 
-            .bivariate-color-square {
-              width: 90px;
-              height: 90px;
-              border-radius: 6px;
+            .bivariate-legend-canvas {
+              width: 44px;
+              height: 44px;
+              border-radius: 4px;
               border: 1px solid #cbd5e1;
-              background: linear-gradient(to top right, #000000 0%, #0284c7 45%, #c026d3 55%, #ffffff 100%);
-              box-shadow: inset 0 0 4px rgba(0,0,0,0.1);
-            }
-
-            .axis-label-x {
-              font-size: 0.68rem;
-              color: #0284c7;
-              font-weight: 600;
-              text-align: center;
+              image-rendering: pixelated;
             }
           }
         }

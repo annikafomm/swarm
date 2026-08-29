@@ -300,17 +300,26 @@ def get_feature_vector(adata: sc.AnnData, feature_info: Dict[str, Any]) -> np.nd
         return np.zeros(adata.n_obs, dtype=float)
 
 
-def build_spatial_weight_matrix(adata: sc.AnnData, k: int = DEFAULT_SPATIAL_KNN) -> sparse.csr_matrix:
-    """Builds a spatial k-nearest neighbor row-standardized weight matrix W."""
-    coords = None
-    if 'spatial' in adata.obsm:
-        coords = adata.obsm['spatial']
-    elif 'spatial_grid' in adata.obsm:
-        coords = adata.obsm['spatial_grid']
-    elif 'X_umap' in adata.obsm:
-        coords = adata.obsm['X_umap']
+def build_spatial_weight_matrix(adata_or_coords: Any, k: int = DEFAULT_SPATIAL_KNN) -> sparse.csr_matrix:
+    """Builds a spatial k-nearest neighbor row-standardized weight matrix W.
 
-    n_obs = adata.n_obs
+    Accepts either an AnnData (uses its own obsm coordinates) or a raw coordinate array directly
+    -- the latter is what cross-dataset correlation needs, since Bivariate Moran's I there must be
+    computed over just the cells common to both datasets, not adata.obsm['spatial'] in full.
+    """
+    if isinstance(adata_or_coords, np.ndarray):
+        coords = adata_or_coords
+        n_obs = coords.shape[0]
+    else:
+        adata = adata_or_coords
+        coords = None
+        if 'spatial' in adata.obsm:
+            coords = adata.obsm['spatial']
+        elif 'spatial_grid' in adata.obsm:
+            coords = adata.obsm['spatial_grid']
+        elif 'X_umap' in adata.obsm:
+            coords = adata.obsm['X_umap']
+        n_obs = adata.n_obs
     if coords is None or n_obs < 2:
         return sparse.csr_matrix((n_obs, n_obs))
 
@@ -466,19 +475,29 @@ def extract_obsm_vector(adata: sc.AnnData, obsm_key: str, col_identifier: Any) -
         if hasattr(matrix, 'shape') and len(matrix.shape) == 2:
             colnames = [str(i) for i in range(matrix.shape[1])]
 
+    def _extract_if_numeric(idx: int) -> Optional[np.ndarray]:
+        vec = _extract_vector(matrix, idx)
+        # A non-numeric obsm column (e.g. a categorical similarity/classification label like
+        # "cell_comp_tf_activity_category") comes back here as an object/string array rather than
+        # raising -- np.nan_to_num silently passes it through -- and only fails much later with a
+        # confusing raw "unsupported operand type(s) for /: 'str' and 'int'" from scipy deep inside
+        # the correlation math. Treat it as not-found here instead, same as the obs-column guards
+        # in resolve_feature_or_dynamic, so it surfaces as a clear "feature not found" error.
+        return vec if np.issubdtype(vec.dtype, np.number) else None
+
     if colnames is not None and matrix is not None:
         target = str(col_identifier).strip()
         str_cols = [str(c).strip() for c in colnames]
         if target in str_cols:
             idx = str_cols.index(target)
-            return _extract_vector(matrix, idx)
+            return _extract_if_numeric(idx)
         # Try case-insensitive or stripped match
         target_lower = target.lower()
         for idx, c in enumerate(str_cols):
             if c.lower() == target_lower:
-                return _extract_vector(matrix, idx)
+                return _extract_if_numeric(idx)
         if isinstance(col_identifier, int) and 0 <= col_identifier < matrix.shape[1]:
-            return _extract_vector(matrix, col_identifier)
+            return _extract_if_numeric(col_identifier)
     return None
 
 
@@ -530,7 +549,18 @@ def resolve_feature_or_dynamic(adata: sc.AnnData, feature_id: str, all_features:
         return feat, vec
 
     # 3. Dynamic Obs Metadata
-    if (category == "obs" or category == "obs_metadata") and symbol in adata.obs.columns:
+    # is_numeric_dtype guard: a categorical column (leiden, cell_type, ...) coerced through
+    # pd.to_numeric(errors='coerce').fillna(0.0) doesn't fail loudly, it silently becomes an
+    # all-zero vector -- indistinguishable from a real, flat feature. This matters here more than
+    # it would look like it should, because the live-correlation drawer's default feature (before
+    # the user has picked a real one from a table) is whatever's currently colored on the map,
+    # which is leiden/cell_type on first load -- so this path used to be reached on every fresh
+    # drawer open, correlating against fabricated zeros instead of surfacing "pick a feature".
+    if (
+        (category == "obs" or category == "obs_metadata")
+        and symbol in adata.obs.columns
+        and pd.api.types.is_numeric_dtype(adata.obs[symbol])
+    ):
         vec = pd.to_numeric(adata.obs[symbol], errors='coerce').fillna(0.0).values.astype(float)
         vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
         feat = {
@@ -558,7 +588,7 @@ def resolve_feature_or_dynamic(adata: sc.AnnData, feature_id: str, all_features:
             return feat, vec
 
     # 5. Search obs columns as fallback
-    if symbol in adata.obs.columns:
+    if symbol in adata.obs.columns and pd.api.types.is_numeric_dtype(adata.obs[symbol]):
         vec = pd.to_numeric(adata.obs[symbol], errors='coerce').fillna(0.0).values.astype(float)
         vec = np.nan_to_num(vec, nan=0.0, posinf=0.0, neginf=0.0)
         feat = {
@@ -569,29 +599,73 @@ def resolve_feature_or_dynamic(adata: sc.AnnData, feature_id: str, all_features:
         }
         return feat, vec
 
-    feat = {
-        "id": feature_id,
-        "name": symbol.replace('_', ' ').title(),
-        "category": category,
-        "symbol": symbol.upper()
-    }
-    return feat, np.zeros(adata.n_obs, dtype=float)
+    # Nothing numeric matched this id. Note this can legitimately happen for a categorical column
+    # that *does* exist (leiden, cell_type, ...) -- steps 3/5 above deliberately skip those rather
+    # than "resolving" them into a meaningless all-zero vector, so raise here instead of returning
+    # one, so the caller gets a clear error instead of a scatterplot that looks like real (flat)
+    # data.
+    if symbol in adata.obs.columns:
+        raise ValueError(
+            f"'{symbol}' is a categorical label (e.g. cluster/cell type), not a numeric "
+            f"score -- pick a specific gene or score to correlate instead."
+        )
+    raise ValueError(f"Feature '{feature_id}' not found in dataset")
 
 
-def get_pair_scatter_data(adata: sc.AnnData, feature_id_a: str, feature_id_b: str) -> Dict[str, Any]:
+def get_pair_scatter_data(
+    adata: sc.AnnData,
+    feature_id_a: str,
+    feature_id_b: str,
+    adata_b: Optional[sc.AnnData] = None,
+) -> Dict[str, Any]:
     """
     Computes cell-by-cell scatterplot vectors and regression stats for a selected pair of features.
+
+    `adata_b` is the compare-view dataset when the Live Correlation drawer's two features come from
+    different datasets (e.g. main map vs. compare map showing separate builtin/uploaded datasets).
+    Defaults to `adata` itself when the pair is two properties of the same dataset. Cross-dataset
+    pairs are only comparable where the two datasets actually share cells/spots (e.g. a Tangram
+    -mapped object and its real-spatial counterpart for the same tissue, which keep the same
+    obs_names) -- resolving feature_id_b against a wholly different adata_b without this would
+    silently produce an all-zero vector via resolve_feature_or_dynamic's final fallback, since the
+    feature would never be found there.
     """
-    all_features = extract_all_score_features(adata)
+    adata_b = adata if adata_b is None else adata_b
+    same_dataset = adata_b is adata
+
+    all_features_a = extract_all_score_features(adata)
+    all_features_b = all_features_a if same_dataset else extract_all_score_features(adata_b)
     # resolve_feature_or_dynamic handles: pre-extracted features, gene_expression, obs/obs_metadata
     # and returns both the feat dict AND the already-extracted vector. Do NOT re-call
     # get_feature_vector afterwards — that only handles obsm_key/obs_col and would return zeros
     # for any dynamically-resolved feature (e.g. obs::ligand_receptor_relationships).
-    feat_a, vec_a = resolve_feature_or_dynamic(adata, feature_id_a, all_features)
-    feat_b, vec_b = resolve_feature_or_dynamic(adata, feature_id_b, all_features)
+    feat_a, vec_a_full = resolve_feature_or_dynamic(adata, feature_id_a, all_features_a)
+    feat_b, vec_b_full = resolve_feature_or_dynamic(adata_b, feature_id_b, all_features_b)
 
     if not feat_a or not feat_b:
         raise ValueError(f"One or both features ({feature_id_a}, {feature_id_b}) not found in dataset")
+
+    if same_dataset:
+        common_ids = list(adata.obs_names)
+        idx_a = np.arange(len(common_ids))
+        vec_a, vec_b = vec_a_full, vec_b_full
+        spatial_coords = adata.obsm.get('spatial')
+        cluster_source, cluster_idx = adata, idx_a
+    else:
+        names_a = pd.Index(adata.obs_names)
+        names_b = pd.Index(adata_b.obs_names)
+        common_ids = names_a.intersection(names_b)
+        if len(common_ids) == 0:
+            raise ValueError(
+                "The main and compare datasets don't share any cells/spots to correlate -- "
+                "cross-dataset correlation only works between two views of the same underlying "
+                "tissue (e.g. Tangram-mapped vs. real-spatial)."
+            )
+        idx_a = names_a.get_indexer(common_ids)
+        idx_b = names_b.get_indexer(common_ids)
+        vec_a, vec_b = vec_a_full[idx_a], vec_b_full[idx_b]
+        spatial_coords = adata.obsm['spatial'][idx_a] if 'spatial' in adata.obsm else None
+        cluster_source, cluster_idx = adata, idx_a
 
     if np.std(vec_a) > 0 and np.std(vec_b) > 0:
         r, p_val = stats.pearsonr(vec_a, vec_b)
@@ -601,7 +675,7 @@ def get_pair_scatter_data(adata: sc.AnnData, feature_id_a: str, feature_id_b: st
     else:
         r, p_val, rho, slope, intercept, r2 = 0.0, 1.0, 0.0, 0.0, 0.0, 0.0
 
-    W = build_spatial_weight_matrix(adata)
+    W = build_spatial_weight_matrix(spatial_coords if spatial_coords is not None else adata)
     bivariate_i = compute_bivariate_morans_i(vec_a, vec_b, W)
     is_circ, reason = check_circularity_dependency(feat_a, feat_b)
 
@@ -613,13 +687,14 @@ def get_pair_scatter_data(adata: sc.AnnData, feature_id_a: str, feature_id_b: st
     else:
         sample_idx = indices
 
-    cell_ids = list(adata.obs_names[sample_idx]) if hasattr(adata, 'obs_names') else [str(i) for i in sample_idx]
+    cell_ids = [str(common_ids[i]) for i in sample_idx]
 
     clusters = []
-    if 'leiden' in adata.obs:
-        clusters = list(adata.obs['leiden'].iloc[sample_idx].astype(str))
-    elif 'cell_type' in adata.obs:
-        clusters = list(adata.obs['cell_type'].iloc[sample_idx].astype(str))
+    cluster_obs = cluster_source.obs.iloc[cluster_idx[sample_idx]]
+    if 'leiden' in cluster_source.obs:
+        clusters = list(cluster_obs['leiden'].astype(str))
+    elif 'cell_type' in cluster_source.obs:
+        clusters = list(cluster_obs['cell_type'].astype(str))
     else:
         clusters = ["0"] * len(sample_idx)
 
@@ -633,9 +708,8 @@ def get_pair_scatter_data(adata: sc.AnnData, feature_id_a: str, feature_id_b: st
         for i, idx in enumerate(sample_idx)
     ]
 
-    all_cell_ids = [str(c) for c in adata.obs_names] if hasattr(adata, 'obs_names') else [str(i) for i in range(N)]
     bivariate_coords = {
-        "cell_ids": all_cell_ids,
+        "cell_ids": [str(c) for c in common_ids],
         "x": [float(x) for x in vec_a],
         "y": [float(y) for y in vec_b]
     }

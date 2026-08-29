@@ -521,6 +521,17 @@ if __name__ == "__main__":
             if global_score in spatial_data.uns:
                 meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
 
+    # Every cell's baked-in properties["gene_expression"] (see Hexagons.to_geojson's own
+    # gene_expression_of_interest, computed the same way here since that's a local inside the
+    # class method) is a real gene's value from the moment the map loads, picked as the top gene
+    # by Moran's I (falling back to Geary's C) -- but the frontend's "Current selection" box had
+    # no way to know which gene that was before the user ever picks one from the Moran's
+    # I/Geary's C table, and showed "Gene: None" despite the map already showing real data.
+    for score in genewise_scores:
+        if score in spatial_data.uns:
+            meta_dict['default_gene_expression_gene'] = str(spatial_data.uns[score].index[0])
+            break  # Moran's I has prio over Geary's C, matching Hexagons.to_geojson
+
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
 

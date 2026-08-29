@@ -3146,6 +3146,11 @@ async def get_spatial_correlation_pair(
     dataset_id: str,
     feature_id_a: str,
     feature_id_b: str,
+    # feature_id_b lives on the compare map's dataset when the drawer is correlating across two
+    # different datasets, not two properties of one. Without this, feature_id_b was always looked
+    # up in `dataset_id` (the main dataset) alone, so a compare-only feature could never resolve
+    # and silently came back as a column of zeros.
+    dataset_id_b: Optional[str] = None,
     session_data: SessionData = Depends(verifier),
 ):
     try:
@@ -3159,9 +3164,24 @@ async def get_spatial_correlation_pair(
         raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
 
     adata = _load_adata_cached(adata_path)
+
+    adata_b = adata
+    if dataset_id_b and dataset_id_b != dataset_id:
+        try:
+            adata_path_b = _resolve_adata_path(session_data, dataset_id_b)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Compare dataset '{dataset_id_b}' not found: {e}")
+
+        if not adata_path_b or not Path(adata_path_b).exists():
+            raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id_b}' not found")
+
+        adata_b = adata if adata_path_b == adata_path else _load_adata_cached(adata_path_b)
+
     try:
         result = await asyncio.to_thread(
-            spatial_correlation.get_pair_scatter_data, adata, feature_id_a, feature_id_b
+            spatial_correlation.get_pair_scatter_data, adata, feature_id_a, feature_id_b, adata_b
         )
         return JSONResponse(content=result)
     except Exception as e:
