@@ -106,7 +106,7 @@
                 <div class="selected-gene-info">
                   <strong>Current selection</strong><br>
                   Score: {{ showMoranI ? "Moran's I" : "Geary's C" }}<br>
-                  Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || meta?.['default_gene_expression_gene'] || 'None' }}
+                  Gene: {{ selectedGeneExpressionMain || selectedGeneExpressionCompare || meta['default_gene_expression_gene'] || 'None' }}
                 </div>
 
                 <div class="moran-geary-toggle"
