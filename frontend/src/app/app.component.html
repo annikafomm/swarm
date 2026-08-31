@@ -1,6 +1,6 @@
 <div class="app-shell">
   <nav class="top-bar" [class.disabled]="unregisteredDialogOpen">
-    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" onclick="window.location.href='/'" />
+    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" routerLink="/" style="cursor: pointer;" />
 
     <div class="nav-buttons">
       <button type="button" class="header-btn" (click)="openForm()">Upload data</button>
