@@ -43,6 +43,10 @@
   height: 100vh;
 }
 
+.app-shell:has(app-info) .main {
+  padding: 0;
+}
+
 .content {
   display: flex;
   justify-content: flex-start;
