@@ -9,6 +9,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { InfoService } from '../info.service';
 
 /**
@@ -65,6 +66,7 @@ import { InfoService } from '../info.service';
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
+    MatExpansionModule,
   ],
   templateUrl: './footprint-panel.component.html',
   styleUrls: ['./footprint-panel.component.scss'],

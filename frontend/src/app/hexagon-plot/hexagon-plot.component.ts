@@ -218,7 +218,11 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       map(datasets => datasets.filter(d => d.type === 'uploaded'))
     );
     this.tangram_Datasets$ = this.datasetService.availableDatasets$.pipe(
-      map(datasets => datasets.filter(d => d.tangram_adata_path))
+      map(datasets => datasets.filter(d =>
+        d.type === 'uploaded' &&
+        Boolean(d.tangram_adata_path) &&
+        d.tangram_adata_path !== d.adata_path
+      ))
     );
 
   }
@@ -3972,7 +3976,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     const urls = precomputedPaths.map(path =>
       this.sanitizer.bypassSecurityTrustResourceUrl(
-        `${this.sessionService.apiUrl}/api/download/${path}`
+        `${this.sessionService.apiUrl}/api/download/${path.startsWith('/') ? path.slice(1) : path}`
       )
     );
     if (compare) {

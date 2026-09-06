@@ -4,6 +4,10 @@
   width: 100%;
 }
 
+.footprint-expansion-panel {
+  margin-bottom: 20px;
+}
+
 // Duplicated from hexagon-plot.component.scss, whose rules don't cross into this child
 // component's view encapsulation.
 .no-data {

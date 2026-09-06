@@ -460,10 +460,14 @@ class DatasetRegistry:
                 # This might be stored as adata_path or xenium_grid_adata_path in config
                 return output_files.get("xenium_grid_adata_path") or output_files.get("adata_path")
 
-        # Handle Multiome datasets - use adata_st_scores_path if available
+        # Handle Multiome datasets
         if "multiome" in dataset_type.lower():
-            print(f"Multiome dataset detected [DEBUG], checking for adata_st_scores_path and adata_tg_scores_path")
-            return output_files.get("adata_tg_scores_path")
+            if output_files.get("adata_path"):
+                return output_files.get("adata_path")
+            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+            if use_tangram and output_files.get("adata_tg_scores_path"):
+                return output_files.get("adata_tg_scores_path")
+            return output_files.get("adata_st_scores_path") or output_files.get("adata_tg_scores_path")
 
         # Handle Visium datasets - prefer adata_st_scores_path (original ST with scores) if available
         if "visium" in dataset_type.lower():
@@ -736,7 +740,7 @@ class DatasetRegistry:
                 alias=alias,
                 adata_path=adata_path,
                 user="builtin",
-                tangram_adata_path=adata_tg_scores_path,
+                tangram_adata_path=None if (dataset_id in ("builtin_heart_multiome", "builtin_heart_tangram") or adata_path == adata_tg_scores_path) else adata_tg_scores_path,
                 geojson_path=geojson_path,
                 genie_network_path=genie_network_path,
                 sponge_network_path=sponge_network_path,

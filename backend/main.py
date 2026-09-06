@@ -247,9 +247,19 @@ DEFAULT_DATASETS = [
     },
     {
         "id": "builtin_heart_multiome",
-        "alias": "Heart (Multiome)",
+        "alias": "Heart (Multiome - Measured)",
         "dir": "data/heart",
-        "description": "Human Heart Cell Atlas (Multiome)",
+        "config_file": "config.json",
+        "geojson_file": "hexagons_measured.geojson",
+        "description": "Human Heart Cell Atlas (Multiome - Measured Expression & Scores)",
+    },
+    {
+        "id": "builtin_heart_tangram",
+        "alias": "Heart (Multiome - Tangram)",
+        "dir": "data/heart",
+        "config_file": "config_tangram.json",
+        "geojson_file": "hexagons.geojson",
+        "description": "Human Heart Cell Atlas (Multiome - Tangram Projected Expression & ChromVAR)",
     }
 ]
 
@@ -274,7 +284,12 @@ async def lifespan(app: FastAPI):
             continue
 
         # Look for config file in dataset directory
-        config_files = list(ds_dir.glob("config.json")) or list(ds_dir.glob("*config*.json"))
+        config_filename = ds_conf.get("config_file")
+        if config_filename:
+            explicit_config = ds_dir / config_filename
+            config_files = [explicit_config] if explicit_config.exists() else []
+        else:
+            config_files = list(ds_dir.glob("config.json")) or list(ds_dir.glob("*config*.json"))
         if config_files:
             try:
                 dataset_registry.register_builtin_from_config(
@@ -1391,7 +1406,7 @@ async def upload(
                 subprocess.run,
                 [
                     "Rscript",
-                    "../backend/rds_to_h5ad.R",
+                    "/workspaces/swarm/backend/rds_to_h5ad.R",
                     "--rds_path", rds_path,
                     "--assay", "RNA",
                     "--h5ad_path", h5ad_path,
@@ -1543,7 +1558,7 @@ async def upload(
                 subprocess.run,
                 [
                     "python3",
-                    "../backend/visium_to_geojson.py",
+                    "/workspaces/swarm/backend/visium_to_geojson.py",
                     "--adata", adata_path,
                     "--outpath", geojson_path,
                     "--data_type", dataset.lower(),
@@ -2210,7 +2225,8 @@ async def get_geojson(dataset_id: str):
             # 1. Match from DEFAULT_DATASETS directory
             match_conf = next((d for d in DEFAULT_DATASETS if d["id"] == dataset_id), None)
             if match_conf:
-                candidate = base_path / match_conf.get("dir", "data") / "hexagons.geojson"
+                geojson_file = match_conf.get("geojson_file", "hexagons.geojson")
+                candidate = base_path / match_conf.get("dir", "data") / geojson_file
                 if candidate.exists():
                     geojson_path = candidate
 
@@ -2786,13 +2802,18 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
-    # TODO: remove this. just so that hardcodded footprint plot can be used
-    # Prevent path traversal outside uploads dir
-    # if BASE_UPLOAD_DIR not in full_path.parents:
-    #     raise HTTPException(status_code=403, detail="Forbidden")
-
     if not full_path.exists() or not full_path.is_file():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        # Fallback 1: check if file_path is an absolute path (leading slash stripped by FastAPI)
+        alt = Path("/" + file_path).resolve()
+        if alt.exists() and alt.is_file():
+            full_path = alt
+        elif Path(file_path).is_file():
+            full_path = Path(file_path).resolve()
+        # Fallback 2: check relative to backend directory (for data/...)
+        elif (Path(__file__).resolve().parent / file_path).is_file():
+            full_path = (Path(__file__).resolve().parent / file_path).resolve()
+        else:
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
     return FileResponse(str(full_path))
 
@@ -2962,6 +2983,20 @@ async def get_available_motifs(
     try:
         adata = _load_adata_cached(adata_path)
         motifs = list(adata.uns.get("chromvar_motifs", []))
+        if not motifs:
+            # Fallback: check motif_to_tf_csv_path from dataset
+            try:
+                target_ds_id = dataset_id or session_data.current_dataset_id
+                if target_ds_id:
+                    ds_dict = _resolve_dataset_dict(session_data, target_ds_id)
+                    motif_csv = ds_dict.get("motif_to_tf_csv_path")
+                    if motif_csv and Path(motif_csv).exists():
+                        import pandas as pd
+                        df = pd.read_csv(motif_csv)
+                        if "motif_id" in df.columns:
+                            motifs = sorted(df["motif_id"].dropna().astype(str).unique().tolist())
+            except Exception as ex:
+                print(f"[get_available_motifs] Fallback motif_to_tf error: {ex}")
         print(f"[get_available_motifs] Found motifs[0:5]: {motifs[:5]}, total={len(motifs)}, dataset_id={dataset_id}")
         return {"motifs": motifs}
     except Exception as e:
@@ -3076,7 +3111,7 @@ async def compute_footprint(
     import subprocess
     motifs_csv = ",".join(motif)
     cmd = [
-        "Rscript", "../backend/calc_multiome_scores/compute_additional_footprints.R",
+        "Rscript", "/workspaces/swarm/backend/calc_multiome_scores/compute_additional_footprints.R",
         "--outdir", str(out_dir),
         "--motifs", motifs_csv,
         "--cluster_by", cluster_by,

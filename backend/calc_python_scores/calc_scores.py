@@ -421,7 +421,7 @@ def main():
 
                     cmd = [
                         "micromamba", "run", "-n", "tangram",
-                        "python", "../backend/calc_python_scores/calc_tangram.py",
+                        "python", "/workspaces/swarm/backend/calc_python_scores/calc_tangram.py",
                         "--sc_path", sc_preprocessed,
                         "--sp_path", st_preprocessed,
                         "--outdir", args.outdir,
