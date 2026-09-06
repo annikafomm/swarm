@@ -1,0 +1,7 @@
+<div *ngFor="let comparison of topMotifs | keyvalue">
+  <h4>{{ comparison.key }}</h4>
+
+  <app-table [data]="comparison.value" [actionColumns]="[]" [showIndexColumn]="false"></app-table>
+
+  <br />
+</div>

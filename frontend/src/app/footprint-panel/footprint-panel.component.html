@@ -1,0 +1,106 @@
+<div class="footprint-panel">
+
+  <!-- ── Section 1: Pre-computed footprints ─────────────────────── -->
+  <mat-expansion-panel [expanded]="true" class="footprint-expansion-panel">
+    <mat-expansion-panel-header>
+      <span class="hx-title-with-info">
+        Pre-computed Footprint Plots
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above"
+          (click)="$event.stopPropagation()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </span>
+    </mat-expansion-panel-header>
+
+    <div *ngIf="footprintPlotUrls.length === 0" class="no-data">
+      No pre-computed footprint plots for this dataset.
+    </div>
+
+    <div *ngFor="let url of footprintPlotUrls" class="footprint-plot">
+      <iframe [src]="url" width="100%" height="500px"></iframe>
+    </div>
+  </mat-expansion-panel>
+
+  <!-- ── Section 2: Compute on demand ───────────────────────────── -->
+  <mat-expansion-panel [expanded]="true" class="footprint-expansion-panel">
+    <mat-expansion-panel-header>
+      <span class="hx-title-with-info">
+        Compute New Footprint
+
+        <!-- <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above"
+          (click)="$event.stopPropagation()">
+          <mat-icon>help_outline</mat-icon>
+        </button> -->
+      </span>
+    </mat-expansion-panel-header>
+    This feature will come.
+    <!-- <div class="footprint-form">
+
+      <mat-form-field appearance="fill">
+        <mat-label>Color / Group by</mat-label>
+        <mat-select [ngModel]="footprintClusterBy" (ngModelChange)="onClusterByChange($event)">
+          <mat-option value="cell_type">Cell Type</mat-option>
+          <mat-option value="leiden">Leiden</mat-option>
+          <mat-optgroup *ngIf="availableCellTypes.length > 0" label="Specific Cell Type (is_…)">
+            <mat-option *ngFor="let ct of availableCellTypes" [value]="'is_' + ct">
+              {{ ct }}
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
+
+
+      <mat-form-field appearance="fill">
+        <mat-label>Motif ID(s)</mat-label>
+        <mat-select multiple [ngModel]="footprintMotifs" (ngModelChange)="onMotifsChange($event)"
+          [disabled]="availableMotifs.length === 0">
+          <mat-select-trigger>
+            {{ footprintMotifs.length === 0 ? '' : footprintMotifs.length + ' motif(s) selected' }}
+          </mat-select-trigger>
+          <div class="motif-search">
+            <input placeholder="Search motifs…" [value]="motifSearchQuery"
+              (input)="onMotifSearchInput($any($event.target).value)" (click)="$event.stopPropagation()"
+              (keydown)="$event.stopPropagation()" />
+          </div>
+          <mat-option *ngFor="let m of filteredMotifs" [value]="m">{{ m }}</mat-option>
+          <mat-option *ngIf="filteredMotifs.length === 0" disabled>No motifs match</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+
+      <button class="hx-btn hx-btn-upload" [disabled]="footprintMotifs.length === 0 || isComputingFootprint"
+        (click)="computeFootprintRequested.emit()">
+        <span *ngIf="!isComputingFootprint">Compute Footprints</span>
+        <span *ngIf="isComputingFootprint">
+          Computing&hellip;
+          <mat-progress-spinner mode="indeterminate" [diameter]="16" class="inline-spinner">
+          </mat-progress-spinner>
+        </span>
+      </button>
+
+      <div *ngIf="footprintComputeError" class="error-msg">
+        {{ footprintComputeError }}
+      </div>
+    </div> -->
+  </mat-expansion-panel>
+
+  <!-- ── On-demand results ───────────────────────────── -->
+  <mat-expansion-panel [expanded]="true" class="footprint-expansion-panel" *ngIf="onDemandFootprintUrls.length > 0">
+    <mat-expansion-panel-header>
+      <span class="hx-title-with-info">
+        On-Demand Footprint Plots
+        <button mat-icon-button type="button" class="hx-info-btn"
+          [matTooltip]="infoService.getScoreInfo('footprinting') || ''" matTooltipPosition="above"
+          (click)="$event.stopPropagation()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </span>
+    </mat-expansion-panel-header>
+    <div *ngFor="let url of onDemandFootprintUrls" class="footprint-plot">
+      <iframe [src]="url" width="100%" height="500px"></iframe>
+    </div>
+  </mat-expansion-panel>
+
+</div>

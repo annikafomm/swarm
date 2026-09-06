@@ -19,7 +19,7 @@ suppressPackageStartupMessages({
 })
 
 # source("../backend/calc_R_scores/utils.R")
-source("../backend/calc_multiome_scores/calc_global_motif_analysis.R")
+source("/workspaces/swarm/backend/calc_multiome_scores/calc_global_motif_analysis.R")
 
 #  Rscript calc_multiome_scores.R --outdir path/to/out_dir -log path/to/log_file -multiome -chromvar --multiome_rds path/to/multiome_rds path/to/multiome_rds_file
 # eg:
@@ -99,7 +99,7 @@ global_motif_analysis <- function(object, args, logfile) {
             dir.create(outdir_multiome, recursive = TRUE, showWarnings = FALSE)
           }
     write.csv(chromvar_scores, file = file.path(outdir_multiome, "chromvar_scores.csv"))
-    
+
     if (args$differential_motif_activity) {
       # find differential motif activity for each cluster
       print("Finding differential motif activity...")
@@ -119,7 +119,7 @@ global_motif_analysis <- function(object, args, logfile) {
     frag_obj <- CreateFragmentObject(
       #TODO: use provided fragment path, currently upload not working
       #path  = args$fragments_tsv_gz,
-      path = "../backend/data/multiome_data/GSM7821196_KTBpool6_Ashkenazi_jew_atac_fragments.tsv.gz",
+      path = "/workspaces/swarm/backend/data/multiome_data/GSM7821196_KTBpool6_Ashkenazi_jew_atac_fragments.tsv.gz",
       cells = colnames(object)   # restrict to cells in this object
     )
     object[["peaks"]]@fragments <- list(frag_obj)

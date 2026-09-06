@@ -21,6 +21,7 @@ def dict2params(param_dict):
                         match skey:
                             case "normalization":
                                 python_params.append("-normalize_st")
+                                network_params.append("--normalized_st")
                             case "filtering":
                                 python_params.append("-filter_st")
             case "files":
@@ -72,6 +73,7 @@ def dict2params(param_dict):
                                     python_params.append("-filter_sc")
                                 case "normalization":
                                     python_params.append("-normalize_sc")
+                                    network_params.append("--normalized_sc")
                                 case "gene_selection_mode":
                                     value = param_dict.get(key).get(tkey)
 
@@ -332,16 +334,18 @@ async def calculate_scores_helper(job_dir, json_dict):
             print("Using dataset type:", dataset)
 
 
-            # Run scripts sequentially
+            # Run scripts sequentially. Each is a blocking subprocess.run() offloaded to a
+            # worker thread via asyncio.to_thread so it doesn't stall the single asyncio
+            # event loop (and therefore every other user's request) for the whole pipeline.
             if multiome_params:
-                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "/workspaces/swarm/backend/calc_python_scores/calc_scores.py",
                                 "-dataset", dataset,
                                 "-outdir", out_dir,
                                 "-multiome",
                                 "-log", log_file] + python_params,
                                 check=True)
             else:
-                subprocess.run(["python3", "../backend/calc_python_scores/calc_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "/workspaces/swarm/backend/calc_python_scores/calc_scores.py",
                                 "-dataset", dataset,
                                 "-outdir", out_dir,
                                 "-log", log_file] + python_params,
@@ -349,32 +353,32 @@ async def calculate_scores_helper(job_dir, json_dict):
 
             if multiome_params:
                 print("RUNNING CALCULATION OF MULTIOME SCORES")
-                print(f'"Rscript", "../backend/calc_multiome_scores/calc_multiome_scores.R",\
+                print(f'"Rscript", "/workspaces/swarm/backend/calc_multiome_scores/calc_multiome_scores.R",\
                                 "--outdir", {out_dir},\
                                 "--log", {log_file} + {multiome_params}"')
-                subprocess.run(["Rscript", "../backend/calc_multiome_scores/calc_multiome_scores_test.R",
+                await asyncio.to_thread(subprocess.run, ["Rscript", "/workspaces/swarm/backend/calc_multiome_scores/calc_multiome_scores_test.R",
                                 "--outdir", out_dir,
                                 "--log", log_file] + multiome_params,
                                 check=True)
-                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "/workspaces/swarm/backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
                                 "-log", log_file,
                                 "-multiome"],
                                 check=True)
 
-                subprocess.run(["python3", "../backend/calc_multiome_scores/calc_multiome_scores.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "/workspaces/swarm/backend/calc_multiome_scores/calc_multiome_scores.py",
                                 "--dir", out_dir,
                                 "--log", log_file] + multiome_params_py,
                                 check=True)
 
             if [p for p in R_params if p != "--tangram"]:
-                subprocess.run(["Rscript", "../backend/calc_R_scores/calc_scores.R",
+                await asyncio.to_thread(subprocess.run, ["Rscript", "/workspaces/swarm/backend/calc_R_scores/calc_scores.R",
                                 "--dir", out_dir,
                                 "--log", log_file] + R_params,
                                 check=True)
 
 
-                subprocess.run(["python3", "../backend/calc_python_scores/add_to_adata.py",
+                await asyncio.to_thread(subprocess.run, ["python3", "/workspaces/swarm/backend/calc_python_scores/add_to_adata.py",
                                 "-indir", out_dir,
                                 "-log", log_file,
                                 "-Rscores"],
@@ -392,7 +396,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                     print("Tangram used:", tangram_used)
                     print("Running back mapping for Xenium...")
                     cmd = [
-                        "python3", "../backend/xenium/compute_backmapping.py",
+                        "python3", "/workspaces/swarm/backend//xenium/compute_backmapping.py",
                         "-indir", out_dir,
                         "-log", log_file
                     ]
@@ -400,7 +404,7 @@ async def calculate_scores_helper(job_dir, json_dict):
                     #if tangram_used:
                     #cmd.append("-tangram")
 
-                    subprocess.run(cmd, check=True)
+                    await asyncio.to_thread(subprocess.run, cmd, check=True)
 
         # finish the log file
         message = f"Finished! Check out the log file and the AnnData object(s) in {out_dir} for details."
@@ -427,26 +431,26 @@ async def calculate_scores_helper(job_dir, json_dict):
 
 if __name__ == "__main__":
 
-    visium_files = "../backend/datasets_prepro_new"
+    visium_files = "/workspaces/swarm/backend/datasets_prepro_new"
     for file in os.listdir(visium_files):
         if file.startswith("GSM"):
             file_path = os.path.join(visium_files, file)
 
             python_params = ["-input", file_path,
-                            "-tangram", "-sc_path", "../backend/datasets_prepro_new/Wu_annotated_prepro.h5ad",
+                            "-tangram", "-sc_path", "/workspaces/swarm/backend/datasets_prepro_new/Wu_annotated_prepro.h5ad",
                             "-cell_label", "cell_subclass", "-ensembl_col", "ensembl_id", "-feature_col", "feature_type",
                             "-liana", "-cell_comp_key", "celltype_scores",
                             "-moranI", "-gearyC", "-centrality_scores", "-co_occurrence", "-nhood_enrichment",
                             "-R_scores"]
             R_params = ["--tangram",
-                        "--sponge_network", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv",
-                        "--sponge_analysis", "../backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv",
-                        "--genie_network", "../backend/networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv",
+                        "--sponge_network", "/workspaces/swarm/backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv",
+                        "--sponge_analysis", "/workspaces/swarm/backend/networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv",
+                        "--genie_network", "/workspaces/swarm/backend/networks/GENIE3/BRCA/genie3_BRCA_tpm.top_100k.csv",
                         "--aucell", "--gsva", "--ssgsea", "--viper"]
 
             params_dict = {"params_python_script": python_params,
                         "params_R_script": R_params}
 
-            asyncio.run(calculate_scores_helper(os.path.join("../backend/datasets_scores", file.replace(".h5ad", "")), params_dict))
+            asyncio.run(calculate_scores_helper(os.path.join("/workspaces/swarm/backend/datasets_scores", file.replace(".h5ad", "")), params_dict))
 
             # ! needs to be called from frontend directory

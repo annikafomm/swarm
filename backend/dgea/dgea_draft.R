@@ -119,14 +119,19 @@ build_heatmap_context <- function(
   other_groups <- setdiff(all_groups, c(group1, group2))
   groups_ordered <- c(group1, group2, other_groups)
 
-  mat_raw <- sapply(groups_ordered, function(g) {
+  # do.call(cbind, lapply(...)), not sapply(...): sapply silently *simplifies* a list of
+  # length-1 vectors into a plain vector rather than a matrix whenever exactly one gene passes
+  # the significance/logFC filter upstream (genes_use has length 1) -- then rownames()/colnames()
+  # below fail with "length of 'dimnames' [1] not equal to array extent" because mat_raw is no
+  # longer 2-D. lapply never simplifies, so cbind-ing its result is always a proper matrix.
+  mat_raw <- do.call(cbind, lapply(groups_ordered, function(g) {
     cells <- colnames(seu)[group_values == g]
     if (length(cells) == 0) {
       rep(NA_real_, length(genes_use))
     } else {
       Matrix::rowMeans(expr_mat[genes_use, cells, drop = FALSE])
     }
-  })
+  }))
 
   mat_raw <- as.matrix(mat_raw)
   rownames(mat_raw) <- genes_use
@@ -206,14 +211,19 @@ build_heatmap_context_vs_all <- function(
   other_groups <- setdiff(all_groups, group1)
   groups_ordered <- c(group1, other_groups)
 
-  mat_raw <- sapply(groups_ordered, function(g) {
+  # do.call(cbind, lapply(...)), not sapply(...): sapply silently *simplifies* a list of
+  # length-1 vectors into a plain vector rather than a matrix whenever exactly one gene passes
+  # the significance/logFC filter upstream (genes_use has length 1) -- then rownames()/colnames()
+  # below fail with "length of 'dimnames' [1] not equal to array extent" because mat_raw is no
+  # longer 2-D. lapply never simplifies, so cbind-ing its result is always a proper matrix.
+  mat_raw <- do.call(cbind, lapply(groups_ordered, function(g) {
     cells <- colnames(seu)[group_values == g]
     if (length(cells) == 0) {
       rep(NA_real_, length(genes_use))
     } else {
       Matrix::rowMeans(expr_mat[genes_use, cells, drop = FALSE])
     }
-  })
+  }))
 
   mat_raw <- as.matrix(mat_raw)
   rownames(mat_raw) <- genes_use

@@ -1,0 +1,127 @@
+<div class="map-container-wrapper" [id]="isCompare ? 'compare-map-container' : 'main-map-container'">
+  <div #hexbinContainer [id]="isCompare ? 'hexbin-compare' : 'hexbin'"></div>
+
+  <!-- HTML Draggable, Resizable & Collapsible Legend Overlay -->
+  <div *ngIf="legendInfo" #legendOverlay class="map-legend-overlay" [class.compare-legend]="isCompare"
+    [class.collapsed]="isLegendCollapsed" [class.user-resized]="isLegendUserResized"
+    cdkDrag cdkDragBoundary=".map-container-wrapper"
+    (wheel)="$event.stopPropagation()" (mousedown)="$event.stopPropagation()">
+    <div class="legend-header" cdkDragHandle (dblclick)="toggleLegendCollapse($event)">
+      <mat-icon class="drag-handle-icon" matTooltip="Drag to move">drag_indicator</mat-icon>
+      <span class="legend-title" [title]="legendInfo.title">{{ legendInfo.title }}</span>
+      <button type="button" class="legend-toggle-btn" (click)="toggleLegendCollapse($event)"
+        [matTooltip]="isLegendCollapsed ? 'Expand legend' : 'Collapse legend'">
+        <mat-icon>{{ isLegendCollapsed ? 'expand_more' : 'expand_less' }}</mat-icon>
+      </button>
+    </div>
+
+    <!-- Legend Body (collapsed on toggle) -->
+    <div class="legend-body" *ngIf="!isLegendCollapsed">
+      <!-- Continuous Scale -->
+      <div *ngIf="legendInfo.type === 'continuous'" class="legend-continuous-container">
+        <div class="gradient-bar" [style.background]="legendInfo.gradientStops"></div>
+        <div class="gradient-labels">
+          <span>{{ legendInfo.minText }}</span>
+          <span>{{ legendInfo.maxText }}</span>
+        </div>
+      </div>
+
+      <!-- Categorical Scale (Scrollable & Resizable) -->
+      <div *ngIf="legendInfo.type === 'categorical'" class="legend-categorical-container">
+        <div *ngFor="let item of legendInfo.items" class="legend-category-item" role="button" tabindex="0"
+          [title]="'Select a cell in ' + item.label" (click)="legendCategoryClicked.emit(item.label)"
+          (keydown.enter)="legendCategoryClicked.emit(item.label)"
+          (keydown.space)="$event.preventDefault(); legendCategoryClicked.emit(item.label)">
+          <span class="category-color-swatch" [style.background-color]="item.color"></span>
+          <span class="category-label">{{ item.label }}</span>
+        </div>
+      </div>
+
+      <!-- Bivariate 2D Scale -- same pixel-accurate canvas blend and plain axis-label layout as
+           the Live Correlation drawer's own bivariate legend (see renderBivariateLegendCanvas),
+           so the same underlying blend doesn't look like three different legends across the app. -->
+      <div *ngIf="legendInfo.type === 'bivariate'" class="legend-bivariate-container">
+        <span class="axis-label-y" [title]="legendInfo.bivariateInfo?.labelB || 'Feature B'">
+          {{ legendInfo.bivariateInfo?.labelB || 'Feature B' }}
+        </span>
+        <canvas #bivariateLegendCanvas class="bivariate-legend-canvas"></canvas>
+        <span class="axis-label-x" [title]="legendInfo.bivariateInfo?.labelA || 'Feature A'">
+          {{ legendInfo.bivariateInfo?.labelA || 'Feature A' }}
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div *ngIf="isLoadingMap" class="map-loading-overlay">
+    <mat-progress-spinner mode="indeterminate" [diameter]="48" color="primary"
+      [attr.aria-label]="isCompare ? 'Loading compare hexagon plot' : 'Loading hexagon plot'">
+    </mat-progress-spinner>
+  </div>
+
+  <!-- Hover Value Tooltip Overlay -->
+  <div *ngIf="hoveredHexInfo" class="map-hover-tooltip"
+    [style.left.px]="hoverTooltipPos.x" [style.top.px]="hoverTooltipPos.y">
+    <div class="tooltip-main-row">
+      <span class="tooltip-prop">{{ hoveredHexInfo.propertyName }}:</span>
+      <span class="tooltip-val">{{ hoveredHexInfo.value }}</span>
+    </div>
+    <div class="tooltip-sub-row" *ngIf="hoveredHexInfo.cluster !== undefined && selectedView !== 'leiden'">
+      <span class="tooltip-sub">Cluster {{ hoveredHexInfo.cluster }}</span>
+    </div>
+  </div>
+</div>
+
+<div class="view-controls-wrapper" [class.compare-controls]="isCompare">
+  <!-- Row 1: Dropdowns & Info buttons -->
+  <div class="row-container">
+    <div class="field-with-info">
+      <mat-form-field appearance="fill" [id]="isCompare ? null : 'color-by-property'">
+        <mat-label>{{ isCompare ? 'Compare hexagons by' : 'Color hexagons by' }}</mat-label>
+        <mat-select [ngModel]="selectedView" (ngModelChange)="selectedViewChange.emit($event)"
+          (selectionChange)="colorByChanged.emit()" [disabled]="isInitializing">
+          <mat-optgroup *ngFor="let group of groupedProperties" [label]="group.key">
+            <mat-option *ngFor="let prop of group.value" [value]="prop" [disabled]="!isPropertyAvailable(prop)">
+              {{ prop | translate | async }}
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
+
+      <span style="min-width: 28px">
+        <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="viewTutorialClicked.emit()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+      </span>
+    </div>
+
+    <div class="field-with-info">
+      <mat-form-field [id]="isCompare ? null : 'dataset-dropdown-main'" appearance="fill" class="dataset-dropdown">
+        <mat-label>{{ isCompare ? 'Compare with Dataset' : 'Select Dataset' }}</mat-label>
+        <mat-select [ngModel]="selectedDataset" (ngModelChange)="selectedDatasetChange.emit($event)"
+          (selectionChange)="datasetChanged.emit($event.value)" [disabled]="isInitializing">
+          <mat-option *ngIf="isCompare" [value]="null">None</mat-option>
+          <mat-optgroup label="Built-in Datasets">
+            <mat-option *ngFor="let ds of (builtinDatasets$ | async)" [value]="ds">
+              {{ ds.alias }}
+            </mat-option>
+          </mat-optgroup>
+          <mat-optgroup label="Your Uploads">
+            <mat-option *ngFor="let ds of (uploadedDatasets$ | async)" [value]="ds">
+              {{ ds.alias }}
+            </mat-option>
+          </mat-optgroup>
+          <mat-optgroup label="Tangram" *ngIf="(tangramDatasets$ | async)?.length">
+            <mat-option *ngFor="let ds of (tangramDatasets$ | async)" [value]="ds"
+              (onSelectionChange)="tangramDatasetSelected.emit(ds)">
+              {{ ds.alias }} (Tangram)
+            </mat-option>
+          </mat-optgroup>
+        </mat-select>
+      </mat-form-field>
+
+        <button mat-icon-button class="info-btn" *ngIf="!isCompare" (click)="datasetTutorialClicked.emit()">
+          <mat-icon>help_outline</mat-icon>
+        </button>
+    </div>
+  </div>
+</div>

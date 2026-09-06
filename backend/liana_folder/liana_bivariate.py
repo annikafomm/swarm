@@ -11,14 +11,42 @@ matplotlib.use('Agg')
 CAT_REMAP = {-1: "high-low / low-high", 0: "low-low", 1: "high-high"}
 
 
+def _index_by_first_column(df: pd.DataFrame) -> pd.DataFrame:
+    """Re-index a liana loadings/scores frame on its identifier column.
+
+    These frames come back from `li.ut.get_variable_loadings` / `li.ut.get_factor_scores`
+    already `reset_index()`-ed, with the identifier in the first column and `Factor1..N`
+    after it. The two helpers disagree about that column's name:
+    `get_variable_loadings` clears `df.index.name` before resetting, so it always yields
+    `"index"`, while `get_factor_scores` does not — it yields whatever `adata.obs.index.name`
+    happens to be. Hardcoding `.set_index("index")` therefore worked only for datasets whose
+    obs index is unnamed, and raised `KeyError: "None of ['index'] are in the columns"` for
+    any dataset that names it (e.g. the heart multiome builtin, whose index is `spot_id`).
+
+    Selecting the first column instead is correct for both, since the factor columns are
+    always appended after the identifier.
+    """
+    if df.columns.empty:
+        raise ValueError("expected an identifier column plus factor columns, got none")
+    return df.set_index(df.columns[0])
+
+
 def ligand_receptor_relationships(
-    adata: sc.AnnData, return_scores: bool = False
+    adata: sc.AnnData, return_scores: bool = False, resource_name: str = "consensus"
 ) -> dict | None:
     # Bivariate Ligand-Receptor Relationships
     # Parameters from tutorial
+    #
+    # `resource_name` must match the organism's symbol convention: "consensus" is
+    # human-symbol based, "mouseconsensus" is mouse. Passing the wrong one silently yields
+    # (almost) no matching LR pairs rather than an error. run_liana picks it from the
+    # organism, so symbols never need to be rewritten to fit the resource — see the note in
+    # calc_liana.run_liana about the upper-casing this replaced.
+    # `li.rs.show_resources()` lists the rest; other organisms go via
+    # `li.rs.get_hcop_orthologs()` + `li.rs.translate_resource()`.
     lrdata = li.mt.bivariate(
         adata,
-        resource_name="consensus",  # NOTE: uses HUMAN gene symbols!
+        resource_name=resource_name,
         local_name="cosine",  # Name of the function
         global_name="morans",  # Name global function
         n_perms=100,  # Number of permutations to calculate a p-value
@@ -76,13 +104,13 @@ def ligand_receptor_relationships(
     # Loadings have shape ligand receptor pairs x number of factors.
     # Don't think we can use them in a straightforward way, but
     # could come up with something later.
-    lr_loadings = li.ut.get_variable_loadings(
-        lrdata, varm_key="NMF_H"
-    ).set_index("index")
+    lr_loadings = _index_by_first_column(
+        li.ut.get_variable_loadings(lrdata, varm_key="NMF_H")
+    )
 
-    factor_scores = li.ut.get_factor_scores(
-        lrdata, obsm_key="NMF_W"
-    ).set_index("index")
+    factor_scores = _index_by_first_column(
+        li.ut.get_factor_scores(lrdata, obsm_key="NMF_W")
+    )
 
     if return_scores:
         local_scores = {

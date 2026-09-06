@@ -2,6 +2,7 @@ import { Injectable, Injector } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { SessionService } from './session.service';
+import { GeneSymbolService } from './gene-symbol.service';
 
 export interface Dataset {
   // Basic fields
@@ -151,6 +152,18 @@ export class DatasetService {
         next: () => console.log('✓ Loaded SPONGE network'),
         error: (err) => console.error('✗ Failed to load SPONGE network:', err)
       });
+    }
+
+    // Prime the Ensembl id -> symbol map for this dataset, so anything rendering a gene
+    // identifier can ask GeneSymbolService for a label without arranging its own fetch.
+    //
+    // Deliberately last and deliberately guarded: this is a display-only convenience, and the
+    // network loads above are what the regulatory views actually need. Nothing about labelling
+    // genes is worth risking those requests never being issued.
+    try {
+      this.injector.get(GeneSymbolService).load(dataset.id);
+    } catch (err) {
+      console.warn('[GeneSymbols] could not prime the symbol map; ids will display raw', err);
     }
   }
 

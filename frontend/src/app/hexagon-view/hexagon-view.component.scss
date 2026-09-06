@@ -1,0 +1,589 @@
+// Host element: transparent flex child — map wrapper + toolbar render as direct
+// children of the parent's .map-column.
+:host {
+  display: contents;
+}
+
+// ---------------------------------------------------------------------------
+// Map wrapper
+// ---------------------------------------------------------------------------
+.map-container-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  margin-right: 0rem;
+  border-radius: 12px;
+}
+
+// ---------------------------------------------------------------------------
+// Loading overlay (spinner over the map while data loads)
+// ---------------------------------------------------------------------------
+.map-loading-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+// ---------------------------------------------------------------------------
+// Map Hover Tooltip Overlay (Light & Clean Frosted Glass)
+// ---------------------------------------------------------------------------
+.map-hover-tooltip {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: #1e293b;
+  padding: 5px 9px;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 11.5px;
+  line-height: 1.35;
+  white-space: nowrap;
+  z-index: 30;
+  transition: opacity 0.08s ease;
+
+  .tooltip-main-row {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+
+    .tooltip-prop {
+      color: #64748b;
+      font-weight: 500;
+    }
+
+    .tooltip-val {
+      color: #0369a1;
+      font-weight: 700;
+    }
+  }
+
+  .tooltip-sub-row {
+    font-size: 10.5px;
+    color: #64748b;
+    margin-top: 1px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTML Draggable, Resizable & Collapsible Map Legend Overlay
+// ---------------------------------------------------------------------------
+.map-legend-overlay {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: auto;
+  min-width: 150px;
+  max-width: 320px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  border: 1.2px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  z-index: 10;
+  pointer-events: auto;
+  user-select: none;
+  resize: both;
+  overflow: hidden;
+  max-height: calc(100% - 28px);
+  min-height: 36px;
+  transition: box-shadow 0.15s ease;
+
+  &.cdk-drag-dragging {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    opacity: 0.92;
+    cursor: grabbing !important;
+  }
+
+  // `resize: both` above lets the user drag the panel larger, and the browser does that by
+  // writing an inline `height` on this element. The categorical list, however, carries its own
+  // default `max-height` (260px here, a vh-based value in the narrow-screen media query below)
+  // so that a legend with many categories -- heart has 65 cell types -- does not cover the map
+  // on first render. That cap also clamps the scroll viewport, so dragging the panel taller grew
+  // the box while the list stayed clipped at its default height, leaving blank space below it.
+  //
+  // Pure CSS cannot tell "user resized" from "default", because a stylesheet `max-height` always
+  // clamps an inline `height`. So the cap is dropped once the component detects the inline height
+  // the native resize writes (see isLegendUserResized). Three classes here, versus two for the
+  // media-query rule, so this wins at any viewport without !important.
+  &.user-resized {
+    .legend-categorical-container {
+      max-height: none;
+    }
+  }
+
+  &.collapsed {
+    resize: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 6px 8px;
+    width: auto !important;
+    max-width: 240px;
+
+    .legend-header {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+  }
+
+  .legend-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    cursor: grab;
+    padding-bottom: 4px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    margin-bottom: 6px;
+
+    &:active {
+      cursor: grabbing;
+    }
+
+    .drag-handle-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+      color: #94a3b8;
+      cursor: grab;
+      flex-shrink: 0;
+    }
+
+    .legend-title {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #1e293b;
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+
+    .legend-toggle-btn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      border-radius: 4px;
+      color: #64748b;
+      flex-shrink: 0;
+      transition: background 0.15s ease, color 0.15s ease;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.06);
+        color: #0f172a;
+      }
+
+      mat-icon {
+        font-size: 18px;
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  .legend-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  // Continuous
+  .legend-continuous-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 2px 0;
+
+    .gradient-bar {
+      width: 100%;
+      min-width: 130px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+    }
+
+    .gradient-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #475569;
+      font-weight: 500;
+    }
+  }
+
+  // Categorical (Scrollable & Resizable)
+  .legend-categorical-container {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    max-height: 260px;
+    min-height: 40px;
+    padding-right: 4px;
+
+    /* Custom thin scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+
+    &::-webkit-scrollbar {
+      width: 5px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background-color: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    .legend-category-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 2px 4px;
+      margin: 0 -4px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #334155;
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(255, 152, 0, 0.12);
+      }
+
+      &:focus-visible {
+        outline: 2px solid #ff9800;
+        outline-offset: 1px;
+      }
+
+      .category-color-swatch {
+        width: 13px;
+        height: 13px;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+      }
+
+      .category-label {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+      }
+    }
+  }
+
+  // Bivariate 2D Scale -- matches live-correlation-drawer.component.scss's own
+  // .bivariate-legend-col exactly (plain stacked labels, no rotation/arrows, same canvas sizing)
+  // so the identical bivariateColor(u,v) blend reads as the same legend everywhere it appears.
+  .legend-bivariate-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 4px 2px 4px;
+    gap: 4px;
+
+    .axis-label-y, .axis-label-x {
+      font-size: 0.62rem;
+      color: #64748b;
+      font-weight: 600;
+      text-align: center;
+      white-space: nowrap;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .bivariate-legend-canvas {
+      width: 44px;
+      height: 44px;
+      border-radius: 4px;
+      border: 1px solid #cbd5e1;
+      image-rendering: pixelated;
+    }
+  }
+}
+
+.view-controls-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  gap: 4px;
+  margin-top: 4px;
+  position: relative;
+
+  .toggles-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    margin-top: 4px;
+    z-index: 100;
+
+    .compare-header-btn,
+    .live-corr-header-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 600;
+      transition: all 0.2s ease;
+
+      .btn-label {
+        font-weight: 600;
+      }
+    }
+
+    .compare-header-btn {
+      background-color: #fabc36;
+      color: #000;
+      border: none;
+      box-shadow: 0 2px 6px rgba(250, 188, 54, 0.3);
+
+      &:hover {
+        background-color: #f5b025;
+        box-shadow: 0 4px 10px rgba(250, 188, 54, 0.45);
+      }
+
+      &[disabled] {
+        background-color: #f0f0f0;
+        color: #999;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+    }
+
+    .live-corr-header-btn {
+      background: #ffffff;
+      border: 1px solid #ff9800;
+      color: #1e293b;
+      box-shadow: 0 2px 6px rgba(255, 152, 0, 0.18);
+
+      &:hover, &.active {
+        background: #fff8eb;
+        border-color: #f59e0b;
+        color: #d97706;
+        box-shadow: 0 4px 10px rgba(255, 152, 0, 0.35);
+      }
+    }
+  }
+}
+
+.row-container,
+.centered-row-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+
+  .field-with-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .mat-mdc-form-field {
+    width: 175px;
+    min-width: 175px;
+    max-width: 175px;
+    flex-shrink: 0;
+
+    // Compact height — default filled container is 56px, reduce to ~44px
+    --mat-form-field-container-height: 44px;
+    --mat-form-field-filled-with-label-container-padding-top: 14px;
+    --mat-form-field-filled-with-label-container-padding-bottom: 4px;
+
+    .mdc-text-field--filled {
+      height: 44px;
+    }
+
+    .mat-mdc-floating-label {
+      font-size: 0.7rem !important;
+    }
+
+    .mat-mdc-select-value-text, .mat-mdc-select-placeholder {
+      font-size: 0.82rem;
+    }
+  }
+
+  .info-btn {
+    width: 28px;
+    height: 28px;
+    line-height: 28px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: #64748b;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hexbin map container (shared between main and compare)
+// ---------------------------------------------------------------------------
+#hexbin,
+#hexbin-compare {
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.07);
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 480px;
+  height: 480px;
+  max-width: calc(100vw - 32px);
+  aspect-ratio: 1 / 1;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+  margin-right: 0;
+
+  svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Compare-mode overrides
+// ---------------------------------------------------------------------------
+:host-context(.compare-mode) {
+  #hexbin,
+  #hexbin-compare {
+    height: calc(50vh - 125px);
+    max-height: calc(50vh - 125px);
+    min-height: 150px;
+    aspect-ratio: auto;
+    margin-bottom: 0.25rem;
+    margin-right: 0;
+  }
+
+  .map-container-wrapper {
+    margin-bottom: 0.25rem;
+    margin-right: 0;
+  }
+
+  .map-legend-overlay {
+    top: 8px;
+    left: 8px;
+    max-height: calc(100% - 16px);
+    max-width: 240px;
+    min-width: 120px;
+    padding: 6px 8px;
+
+    &.collapsed {
+      max-width: 200px;
+    }
+
+    .legend-header {
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+
+      .drag-handle-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+      }
+
+      .legend-title {
+        font-size: 11px;
+      }
+
+      .legend-toggle-btn {
+        width: 18px;
+        height: 18px;
+        mat-icon {
+          font-size: 16px;
+          width: 16px;
+          height: 16px;
+        }
+      }
+    }
+
+    .legend-continuous-container {
+      .gradient-bar {
+        min-width: 100px;
+        height: 12px;
+      }
+      .gradient-labels {
+        font-size: 10px;
+      }
+    }
+
+    .legend-categorical-container {
+      max-height: calc(50vh - 180px);
+      min-height: 40px;
+      gap: 2px;
+
+      .legend-category-item {
+        font-size: 11px;
+        gap: 6px;
+
+        .category-color-swatch {
+          width: 11px;
+          height: 11px;
+        }
+
+        .category-label {
+          max-width: 140px;
+        }
+      }
+    }
+  }
+
+  .row-container,
+  .centered-row-container {
+    gap: 10px;
+
+    .mat-mdc-form-field {
+      font-size: 0.82rem;
+      min-width: 120px;
+      max-width: 190px;
+    }
+  }
+}

@@ -29,21 +29,34 @@ node_modules/
 *.err
 
 # ───── Local envs ─────
+# Note: .dockerignore does NOT recurse for slash-less patterns like .gitignore
+# does — backend/.env needs its own entry or it would get baked into the image.
 .env
+**/.env
 .venv/
 venv/
 env/
 
 # ───── Project-specific heavy folders ─────
-# Backend big data & outputs
+# Runtime-mounted directories — NEVER bake into the image
+backend/data/          # mounted via docker-compose volume at runtime
+backend/uploads/       # mounted via docker-compose volume at runtime
+
+# Other backend output/cache dirs not needed in the image
 backend/datasets/
 backend/datasets_prepro/
+backend/datasets_runtime/
+backend/datasets_scores/
 backend/networks/
 backend/outputs/
 backend/results/
+backend/prepro/
+temp_downloads/
 
-# Frontend: don’t bake into image, mount instead
-frontend/
+# Frontend: exclude only generated/heavy subdirectories, not the source
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
 
 # Notebooks: usually mounted, not copied into image
 notebooks/

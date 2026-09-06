@@ -1,18 +1,38 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>
-      SWARM | Spatial Transcriptomics Webtool for Analysis of Regulation on a
-      Map
-    </title>
-    <base href="/" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-      <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+<head>
+  <meta charset="utf-8" />
+  <title>
+    SWARM | Spatial Transcriptomics Webtool for Analysis of Regulation on a
+    Map
+  </title>
+  <base href="/" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/png" href="single_bee.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <!-- Matomo (Cookieless privacy-compliant tracking) -->
+  <script>
+    var _paq = window._paq = window._paq || [];
+    /* Cookieless tracking: strictly disable cookies and respect Do Not Track */
+    _paq.push(['disableCookies']);
+    _paq.push(['setDoNotTrack', true]);
+    _paq.push(['trackPageView']);
+    _paq.push(['enableLinkTracking']);
+    (function () {
+      var u = "//exbio.wzw.tum.de/matomo/";
+      _paq.push(['setTrackerUrl', u + 'matomo.php']);
+      _paq.push(['setSiteId', '6']);
+      var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
+      g.async = true; g.src = u + 'matomo.js'; s.parentNode.insertBefore(g, s);
+    })();
+  </script>
+  <!-- End Matomo Code -->
 </head>
-  <body>
-    <app-root></app-root>
-  </body>
+
+<body>
+  <app-root></app-root>
+</body>
+
 </html>

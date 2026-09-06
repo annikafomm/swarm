@@ -1,0 +1,91 @@
+<div *ngIf="isVisible" class="live-side-drawer-container">
+  <!-- Side Drawer Content Panel -->
+  <div class="drawer-panel">
+    <!-- Header -->
+    <div class="drawer-header">
+      <div class="header-main-title">
+        <mat-icon class="header-icon">compare_arrows</mat-icon>
+        <span class="title-text">Live Map Correlation</span>
+      </div>
+
+      <button type="button" class="close-btn" (click)="onClose()" matTooltip="Close side drawer">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+
+    <!-- Active Pair Subheader -->
+    <div class="pair-subheader" *ngIf="featureA && featureB">
+      <span class="feat-badge map1">{{ featureA.name }}</span>
+      <span class="vs-label">vs</span>
+      <span class="feat-badge map2">{{ featureB.name }}</span>
+    </div>
+
+    <!-- Scrollable Body -->
+    <div class="drawer-body">
+      <div *ngIf="isLoading" class="loading-state">
+        <mat-progress-spinner mode="indeterminate" [diameter]="28"></mat-progress-spinner>
+        <span>Calculating cross-map spatial correlation...</span>
+      </div>
+
+      <div *ngIf="errorMsg" class="error-state">
+        <mat-icon>error_outline</mat-icon>
+        <span>{{ errorMsg }}</span>
+      </div>
+
+      <div *ngIf="!isLoading && scatterData" class="correlation-content">
+        <!-- Scatterplot Canvas -->
+        <div class="scatter-box">
+          <div #drawerScatterContainer class="scatter-canvas"></div>
+        </div>
+
+        <!-- Metric Cards Grid -->
+        <div class="metrics-grid">
+          <div class="metric-card" matTooltip="Pearson linear correlation coefficient">
+            <span class="card-label">Pearson <em>r</em></span>
+            <span class="card-val">{{ scatterData.stats.pearson_r | number:'1.3-3' }}</span>
+          </div>
+
+          <div class="metric-card" matTooltip="Spearman rank correlation coefficient">
+            <span class="card-label">Spearman <em>&rho;</em></span>
+            <span class="card-val">{{ scatterData.stats.spearman_rho | number:'1.3-3' }}</span>
+          </div>
+
+          <div class="metric-card" matTooltip="Coefficient of determination">
+            <span class="card-label">R² Score</span>
+            <span class="card-val">{{ scatterData.stats.r_squared | number:'1.3-3' }}</span>
+          </div>
+
+          <div class="metric-card highlight" matTooltip="Bivariate Moran's I spatial co-location score">
+            <span class="card-label">Moran's <em>I<sub>xy</sub></em></span>
+            <span class="card-val">{{ scatterData.stats.bivariate_moran_i | number:'1.3-3' }}</span>
+          </div>
+        </div>
+
+        <!-- Dependency Status Card -->
+        <div class="dependency-card" [class.is-dep]="scatterData.stats.is_dependent">
+          <mat-icon class="dep-icon">{{ scatterData.stats.is_dependent ? 'warning_amber' : 'verified_user' }}</mat-icon>
+          <div class="dep-info">
+            <span class="dep-title">{{ scatterData.stats.is_dependent ? 'Direct Dependency Detected' : 'Independent Cross-Layer Pair' }}</span>
+            <span class="dep-desc">{{ scatterData.stats.dependency_reason || 'Scores represent independent biological layers.' }}</span>
+          </div>
+        </div>
+
+        <!-- Bivariate Spatial Map, always shown alongside the scatterplot above -->
+        <div class="bivariate-map-box">
+          <div class="bivariate-title">Bivariate Spatial Map</div>
+          <div class="bivariate-map-row">
+            <div #bivariateMapContainer class="bivariate-map-canvas"></div>
+
+            <!-- This canvas IS the legend for the map: same bivariateColor(u, v) blend, pixel
+                 for pixel, so it can't drift out of sync with what the map actually shows. -->
+            <div class="bivariate-legend-col">
+              <span class="axis-label-y">{{ featureB?.name }}</span>
+              <canvas #bivariateLegendCanvas class="bivariate-legend-canvas"></canvas>
+              <span class="axis-label-x">{{ featureA?.name }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

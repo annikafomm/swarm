@@ -2,9 +2,11 @@
   background-color: #fff;
   font-family: "Segoe UI", "Roboto", Arial, sans-serif;
   color: #222;
-  --topbar-h: 100px;
-  min-height: calc(100vh - 100px);
-  display: block;
+  --topbar-h: 56px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 :host.modal-open {
@@ -14,19 +16,26 @@
 
 .app-shell {
   position: relative;
-  min-height: 100svh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 .app-shell:has(.sidenav) {
   overflow: hidden;
 }
 
-
-
 .main {
   display: flex;
   justify-content: center;
-  padding: 1rem;
+  padding: 0.5rem 1rem;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .app-shell:has(.sidenav) .main {
@@ -34,12 +43,18 @@
   height: 100vh;
 }
 
+.app-shell:has(app-info) .main {
+  padding: 0;
+}
+
 .content {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  justify-content: flex-start;
+  align-items: stretch;
   width: 100%;
   height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .spacer {
@@ -50,6 +65,7 @@
   width: 100%;
   height: var(--topbar-h);
   background: linear-gradient(90deg, #fff4b7 0%, #f5d0ad 100%);
+  border-bottom: 1px solid rgba(245, 208, 173, 0.7);
   display: flex;
   align-items: center;
   padding: 0 1rem;
@@ -91,12 +107,29 @@
   background-color: transparent;
   color: #23272f;
   font-weight: 600;
-  padding: 0.5rem 1.2rem;
+  padding: 0.35rem 0.9rem;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
   transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  line-height: 1;
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    line-height: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
 }
 
 .top-bar button:hover {
@@ -196,4 +229,94 @@
   width: auto;
   object-fit: contain;
   cursor: pointer;
+}
+
+/* Site Footer */
+.site-footer {
+  width: 100%;
+  background: linear-gradient(90deg, #fff4b7 0%, #f5d0ad 100%);
+  border-top: 1px solid rgba(245, 208, 173, 0.7);
+  padding: 0.35rem 1.5rem;
+  box-sizing: border-box;
+  margin-top: auto;
+  font-size: 0.75rem;
+  color: #4a5568;
+  z-index: 1000;
+  display: block;
+  flex-shrink: 0;
+}
+
+.footer-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.footer-affiliation {
+  font-weight: 500;
+  color: #4a5568;
+
+  a {
+    color: #23272f;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  a {
+    color: #23272f;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+
+  .footer-separator {
+    color: #a0aec0;
+  }
+
+  .footer-privacy-link {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #23272f;
+    font-weight: 600;
+    font-size: 0.75rem;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.2s ease;
+
+    &:hover {
+      color: #e65100;
+      text-decoration: underline;
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .footer-container {
+    flex-direction: column;
+    text-align: center;
+    justify-content: center;
+  }
 }

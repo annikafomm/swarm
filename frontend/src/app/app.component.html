@@ -1,13 +1,19 @@
 <div class="app-shell">
   <nav class="top-bar" [class.disabled]="unregisteredDialogOpen">
-    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" onclick="window.location.href='/'" />
+    <img src="logo.png" id="app-logo" alt="App Logo" class="app-logo" routerLink="/" style="cursor: pointer;" />
 
     <div class="nav-buttons">
-      <button type="button" id="upload-data-btn" (click)="openForm()">Upload data</button>
+      <button type="button" class="header-btn" (click)="openForm()">Upload data</button>
       <app-download-menu></app-download-menu>
       <span class="spacer"></span>
-      <button type="button" class="info-btn" routerLink="/info">ℹ️ Info</button>
-      <button type="button" class="info-btn" (click)="basicTutorial()">❓ Tutorial</button>
+      <button type="button" class="info-btn" routerLink="/info">
+        <mat-icon>info</mat-icon>
+        <span>Info</span>
+      </button>
+      <button type="button" class="info-btn" (click)="basicTutorial()">
+        <mat-icon>help</mat-icon>
+        <span>Tutorial</span>
+      </button>
     </div>
   </nav>
 
@@ -17,6 +23,24 @@
       <router-outlet></router-outlet>
     </div>
   </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <span class="footer-affiliation">
+        <a href="https://www.mls.ls.tum.de/daisybio/startseite/" target="_blank" rel="noopener">Professorship for Data
+          Science in Systems Biology ·
+          Technical University of Munich</a>
+      </span>
+      <div class="footer-links">
+        <a href="https://exbio.wzw.tum.de/impressum#de" target="_blank" rel="noopener">Impressum</a>
+        <span class="footer-separator">/</span>
+        <a href="https://exbio.wzw.tum.de/legal-notice#en" target="_blank" rel="noopener">Legal Notice</a>
+        <span class="footer-separator">/</span>
+        <button type="button" class="footer-privacy-link" (click)="openPrivacyPolicy()">Privacy Policy</button>
+      </div>
+    </div>
+  </footer>
 
   <!-- Upload-Sidepanel -->
   <div class="sidenav" *ngIf="formsOpen">

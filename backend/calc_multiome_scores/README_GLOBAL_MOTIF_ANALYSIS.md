@@ -108,19 +108,19 @@ multiome_params = ["--chromvar", "--footprinting", "--genome", "hg38", ...]
 multiome_params_py = ["-chromvar", "-moranI", "-gearyC", ...]
 
 # Stage 1: R-based Analysis
-Rscript ../backend/calc_multiome_scores/calc_multiome_scores_test.R \
+Rscript /workspaces/swarm/backend/calc_multiome_scores/calc_multiome_scores_test.R \
     --outdir {out_dir} \
     --log {log_file} \
     {multiome_params}
 
 # Stage 2: AnnData Integration
-python3 ../backend/calc_python_scores/add_to_adata.py \
+python3 /workspaces/swarm/backend/calc_python_scores/add_to_adata.py \
     -indir {out_dir} \
     -log {log_file} \
     -multiome
 
 # Stage 3: Spatial Statistics
-python3 ../backend/calc_multiome_scores/calc_multiome_scores.py \
+python3 /workspaces/swarm/backend/calc_multiome_scores/calc_multiome_scores.py \
     --dir {out_dir} \
     --log {log_file} \
     {multiome_params_py}
@@ -146,7 +146,7 @@ Rscript calc_multiome_scores_test.R \
 #### Step 2: Integrate into AnnData
 
 ```bash
-python3 ../backend/calc_python_scores/add_to_adata.py \
+python3 /workspaces/swarm/backend/calc_python_scores/add_to_adata.py \
     -indir /path/to/output \
     -log /path/to/output/calc_scores.log \
     -multiome

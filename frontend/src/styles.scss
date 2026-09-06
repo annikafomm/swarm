@@ -3,6 +3,12 @@
 html,
 body {
   height: 100%;
+  /* The actual browser scrollbar lives here, not on any Angular component -- app-root's own
+     height:100vh + overflow:hidden (app.component.scss) only stops IT from growing past the
+     viewport, it can't do anything about html/body's own default overflow:visible one level up.
+     Without this, the page could still scroll even though every component inside is correctly
+     viewport-locked. */
+  overflow: hidden;
 }
 
 body {
@@ -100,6 +106,15 @@ body {
   border-color: #fabc36 !important;
 }
 
+/* Button toggles (mat-button-toggle-group) - orange selected state, everywhere */
+.mat-button-toggle-checked {
+  background-color: #ff9800 !important;
+
+  .mat-button-toggle-label-content {
+    color: white !important;
+  }
+}
+
 /* Icons - orange for primary, yellow only for icons/svgs */
 .mat-primary {
   color: #ff9800 !important;
@@ -175,6 +190,59 @@ svg.mat-accent {
   background-color: white !important;
 }
 
+/* Dropdowns (mat-select inside mat-form-field, appearance="fill") - softer, rounded, on-theme
+   redesign applied globally so every dropdown in the app picks it up without per-component CSS. */
+.mat-mdc-form-field.mat-form-field-appearance-fill {
+  .mat-mdc-text-field-wrapper {
+    // Rounded on all four corners (not just the top) - a lopsided radius looks fine when the
+    // options panel opens below, but visibly mismatched when there's no room and it opens above.
+    border-radius: 10px !important;
+    overflow: hidden;
+    background-color: #fdf6ec !important;
+    transition: background-color 0.15s ease;
+  }
+
+  &:hover .mat-mdc-text-field-wrapper {
+    background-color: #fbeed9 !important;
+  }
+
+  .mdc-text-field__input,
+  .mat-mdc-select-value {
+    color: #1a1a1a !important;
+  }
+
+  .mdc-line-ripple::before {
+    border-bottom-color: rgba(0, 0, 0, 0.15) !important;
+  }
+
+  .mat-mdc-select-arrow {
+    color: #ff9800 !important;
+  }
+}
+
+.mat-mdc-select-panel {
+  border-radius: 10px !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15) !important;
+  padding: 4px !important;
+  // Cap the options panel so it can't balloon far past its trigger field on long option labels.
+  max-width: 320px !important;
+}
+
+.mat-mdc-option {
+  border-radius: 6px !important;
+  margin: 2px 4px !important;
+  width: calc(100% - 8px) !important;
+}
+
+.mat-mdc-option.mat-mdc-option-active,
+.mat-mdc-option:hover:not(.mdc-list-item--disabled) {
+  background-color: rgba(255, 152, 0, 0.1) !important;
+}
+
+.mat-mdc-option.mdc-list-item--selected:not(.mdc-list-item--disabled) {
+  background-color: rgba(255, 152, 0, 0.16) !important;
+}
+
 /* Expansion panel styles */
 .mat-expansion-panel {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12), 0 2px 4px rgba(0, 0, 0, 0.08) !important;
@@ -214,6 +282,49 @@ body,
 
 /* Custom Shepherd Theme for SWARM with Bee Vibe Colors */
 @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Varela+Round&display=swap');
+
+// Shared header-button look for buttons that live inside their own component (e.g.
+// download-menu's toggle) rather than directly in app.component's own template -- a plain
+// `.top-bar button` rule in app.component.scss can't reach across that component boundary
+// (view encapsulation scopes it to app.component's own elements), so this needs to be a real
+// top-level/global rule instead. It used to be accidentally nested inside .shepherd-theme-custom
+// below, which meant it only ever matched a `.header-btn` inside a Shepherd tour popup -- never
+// the actual toolbar button -- leaving that button with no styling at all.
+// Kept in sync by hand with app.component.scss's .top-bar button -- that rule can't reach a
+// button living inside its own component (view encapsulation), see the comment above, so the
+// two need identical values here rather than one selector covering both.
+.header-btn {
+  background-color: transparent;
+  color: #23272f;
+  font-weight: 600;
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  line-height: 1;
+
+  mat-icon {
+    font-size: 1.1rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    line-height: 1.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+}
+
+.header-btn:hover {
+  background-color: rgba(255, 152, 0, 0.1);
+}
 
 .shepherd-theme-custom {
 
@@ -360,7 +471,6 @@ body,
     font-family: 'Varela Round', sans-serif;
   }
 
-  /* Button styling */
   .shepherd-button {
     background: linear-gradient(135deg, #ffeb3b 0%, #ffd966 100%);
     color: #1a1a1a;
@@ -501,4 +611,107 @@ body,
     background: linear-gradient(135deg, #ffb74d 0%, #ff9800 100%);
     box-shadow: 0 8px 24px rgba(255, 152, 0, 0.4);
   }
+}
+
+/* Global Info & Help Button Styles */
+.hx-title-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.hx-info-btn {
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  line-height: 22px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  border-radius: 50% !important;
+  transition: color 0.15s ease, background-color 0.15s ease !important;
+
+  .mat-mdc-button-touch-target {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  mat-icon {
+    font-size: 16px !important;
+    width: 16px !important;
+    height: 16px !important;
+    line-height: 16px !important;
+    color: #94a3b8 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: color 0.15s ease !important;
+  }
+
+  &:hover {
+    background-color: rgba(37, 99, 235, 0.08) !important;
+
+    mat-icon {
+      color: #2563eb !important;
+    }
+  }
+}
+
+.hx-header-info-btn {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  line-height: 26px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  vertical-align: middle !important;
+  margin-left: 6px !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+
+  .mat-mdc-button-touch-target {
+    width: 26px !important;
+    height: 26px !important;
+  }
+
+  mat-icon {
+    font-size: 18px !important;
+    width: 18px !important;
+    height: 18px !important;
+    line-height: 18px !important;
+    color: #64748b !important;
+  }
+
+  &:hover {
+    background-color: rgba(37, 99, 235, 0.1) !important;
+
+    mat-icon {
+      color: #1d4ed8 !important;
+    }
+  }
+}
+
+/* Material Tooltip Multi-line and Sizing Enhancement */
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  max-width: 320px !important;
+  font-size: 0.78rem !important;
+  line-height: 1.4 !important;
+  padding: 8px 12px !important;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+  white-space: normal !important;
+  word-break: normal !important;
 }

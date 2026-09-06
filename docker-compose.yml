@@ -1,0 +1,104 @@
+version: '3.8'
+
+# Log rotation: 3 files × max 10 MB; oldest deleted when full
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  swarm-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: ghcr.io/daisybio/swarm-backend:latest
+    container_name: swarm-backend
+    logging: *logging
+    restart: unless-stopped
+    # Secret is injected at container runtime, not baked into the image —
+    # backend/.env must exist on this server (see backend/.env.example).
+    env_file:
+      - ./backend/.env
+    environment:
+      # Pin every BLAS/OpenMP thread pool to 1 thread.
+      #
+      # R (%*%, solve, ppcor, GSVA) and numpy/scipy do their heavy lifting in BLAS, which by
+      # default sizes its thread pool to the whole machine — each process independently, with
+      # no awareness of the others. The pipeline runs as a chain of subprocesses and several
+      # uploads can be in flight at once (asyncio.to_thread's default executor allows up to
+      # min(32, cpu_count+4)), so the thread count multiplies:
+      #
+      #     concurrent uploads x subprocesses x <all cores>
+      #
+      # On a 160-core host that reaches thousands of threads and the machine thrashes rather
+      # than computes — measured here at load 1653 from only ~10x oversubscription. Because
+      # the FastAPI event loop shares the machine, that makes the whole site unresponsive for
+      # users who are not running anything, not just for the uploader.
+      #
+      # Nothing is lost by pinning these: the pipeline's speed comes from foreach/multiprocessing
+      # at the job level (and R's own --n_cores defaults to 1 and is never overridden by app.py),
+      # not from BLAS threading. All three variables are set because R may be linked against
+      # OpenBLAS, MKL, or an OpenMP-based build, and which one is in play is not obvious.
+      #
+      # Rule of thumb: parallelise at exactly one level. On a shared server that level is
+      # *jobs*, so the inner levels must be 1.
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+    volumes:
+      # Builtin dataset — read-only NFS bind mount (container never writes here)
+      - ./backend/data:/app/backend/data:ro
+      # User uploads + dataset registry — Docker named volume (stays inside Docker)
+      - swarm-uploads:/app/backend/uploads
+    # Hard resource ceiling, enforced by the kernel rather than by cooperation. The thread
+    # pinning above and SWARM_MAX_CONCURRENT_PIPELINES in main.py are both in-process
+    # conventions; this is the backstop for anything that ignores them (a vendored script
+    # that resets OMP_NUM_THREADS, an R package spawning its own pool, a runaway subprocess).
+    #
+    # Tune per host via a .env file next to this compose file, e.g.
+    #     SWARM_CPU_LIMIT=16
+    #     SWARM_MEM_LIMIT=64g
+    #
+    # Sizing memory: each pipeline stage holds a whole AnnData in memory, and a multiome
+    # object here is ~1.5 GB, with the R stages holding their own copies alongside. Budget
+    # roughly (concurrent pipelines) x (several GB) and leave headroom — a limit set too low
+    # is worse than none at all, because the kernel will OOM-kill mid-pipeline and leave a
+    # half-written job directory behind. The 32g default assumes the default of 2 concurrent
+    # pipelines; raise both together.
+    #
+    # NOTE: `deploy.resources.limits` is applied by Docker Compose **v2** (`docker compose`).
+    # The long-EOL v1 (`docker-compose`, hyphenated) silently ignores the whole `deploy`
+    # block, so limits would not apply. Verify after deploying with:
+    #     docker inspect swarm-backend --format '{{.HostConfig.NanoCpus}} {{.HostConfig.Memory}}'
+    # Both should be non-zero.
+    deploy:
+      resources:
+        limits:
+          cpus: "${SWARM_CPU_LIMIT:-8}"
+          memory: "${SWARM_MEM_LIMIT:-32g}"
+    networks:
+      - swarm-net
+
+  swarm-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    image: ghcr.io/daisybio/swarm-frontend:latest
+    container_name: swarm-frontend
+    logging: *logging
+    restart: unless-stopped
+    ports:
+      - "4204:80"   # exposed on the host; your host nginx proxies here
+    depends_on:
+      - swarm-backend
+    networks:
+      - swarm-net
+
+networks:
+  swarm-net:
+
+volumes:
+  swarm-uploads:   # persists uploaded datasets and the dataset registry across restarts

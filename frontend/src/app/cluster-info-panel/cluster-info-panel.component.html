@@ -1,0 +1,97 @@
+<ng-container *ngIf="clusterId !== null">
+  <div class="cluster-info-container">
+    <div class="cluster-header">
+      <!-- <label [for]="isCompare ? 'cluster-select-compare' : 'cluster-select'">Cluster</label> -->
+      <select [id]="isCompare ? 'cluster-select-compare' : 'cluster-select'" class="cluster-select"
+        [ngModel]="clusterId" (ngModelChange)="clusterSelected.emit($event)">
+        <option *ngFor="let id of availableClusterIds" [ngValue]="id">Cluster {{ id }}</option>
+      </select>
+    </div>
+
+    <div class="cluster-content">
+      <div class="cluster-stats">
+        <h4 class="hx-title-with-info">
+          Cluster Statistics
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getFieldInfo('leiden') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
+        <p><strong>Cells in cluster:</strong> {{ clusterCellCount }}</p>
+        <p><strong>Cluster ID:</strong> {{ clusterId }}</p>
+      </div>
+
+      <div class="cell-types">
+        <h4 class="hx-title-with-info">
+          Cell Type Distribution
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getFieldInfo('cell_type') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
+        <div class="cell-type-item" *ngFor="let cellType of clusterCellTypes">
+          <div class="cell-type-color" [style.background-color]="colorScale(cellType.type)"></div>
+          <span>{{ cellType.type }}: {{ cellType.count }} ({{
+            cellType.percentage
+            }}%)</span>
+        </div>
+      </div>
+
+      <div class="cluster-centrality" *ngIf="isLeidenView">
+        <h4 class="hx-title-with-info">
+          Leiden Centrality Averages
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('leiden_centrality') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
+        <ul class="centrality-list">
+          <li class="hx-title-with-info centrality-metric" tabindex="0" role="button"
+            [matTooltip]="'Color the map by this metric'" matTooltipPosition="above"
+            (click)="metricSelected.emit('degree_centrality')"
+            (keydown.enter)="metricSelected.emit('degree_centrality')">
+            <strong>Degree Centrality:</strong>
+            {{ clusterCentralityAvg.degree_centrality | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn" (click)="$event.stopPropagation()"
+              [matTooltip]="infoService.getScoreInfo('degree_centrality') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </li>
+          <li class="hx-title-with-info centrality-metric" tabindex="0" role="button"
+            [matTooltip]="'Color the map by this metric'" matTooltipPosition="above"
+            (click)="metricSelected.emit('average_clustering')"
+            (keydown.enter)="metricSelected.emit('average_clustering')">
+            <strong>Average Clustering:</strong>
+            {{ clusterCentralityAvg.average_clustering | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn" (click)="$event.stopPropagation()"
+              [matTooltip]="infoService.getScoreInfo('average_clustering') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </li>
+          <li class="hx-title-with-info centrality-metric" tabindex="0" role="button"
+            [matTooltip]="'Color the map by this metric'" matTooltipPosition="above"
+            (click)="metricSelected.emit('closeness_centrality')"
+            (keydown.enter)="metricSelected.emit('closeness_centrality')">
+            <strong>Closeness Centrality:</strong>
+            {{ clusterCentralityAvg.closeness_centrality | number: "1.2-2" }}
+            <button mat-icon-button type="button" class="hx-info-btn" (click)="$event.stopPropagation()"
+              [matTooltip]="infoService.getScoreInfo('closeness_centrality') || ''" matTooltipPosition="above">
+              <mat-icon>help_outline</mat-icon>
+            </button>
+          </li>
+        </ul>
+      </div>
+      <div class="cluster-nhood" *ngIf="isLeidenView">
+        <h4 class="hx-title-with-info">
+          Neighborhood Enrichment (Selected Cell)
+          <button mat-icon-button type="button" class="hx-info-btn"
+            [matTooltip]="infoService.getScoreInfo('nhood_enrichment') || ''" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </h4>
+        <div [id]="isCompare ? 'cluster-nhood-heatmap-compare' : 'cluster-nhood-heatmap'"
+          style="width: 300px; height: 220px"></div>
+      </div>
+    </div>
+  </div>
+</ng-container>
