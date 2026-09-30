@@ -1,0 +1,21 @@
+// Styles duplicated from hexagon-plot.component.scss, whose rules don't cross into this child
+// component's view encapsulation: the tab-body h4 treatment and the "no data" placeholder.
+// (.row-container has no rule here either — it had none in the original hexagon-plot.component.scss.)
+.no-data {
+  padding: 24px;
+  text-align: center;
+  background: #fff9e6;
+  border: 1px dashed #ffe082;
+  border-radius: 6px;
+  color: #f57f17;
+  font-weight: 500;
+  margin: 20px 0;
+}
+
+h4 {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 12px 0 10px 0;
+}

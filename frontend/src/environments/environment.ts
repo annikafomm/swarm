@@ -4,9 +4,9 @@
 // (see `fileReplacements` array in `angular.json`).
 
 export const environment = {
-  production: false, // Indicates that this is NOT a production build (affects logging, debugging, etc.)
+  production: false,
 
-  // Base URL for API requests during development.
-  // This is used by HttpClient calls in the app.
-  apiBaseUrl: '',
+  // In development (devcontainer), the backend runs directly on localhost:3000.
+  // session.service.ts reads this value instead of hardcoding it.
+  apiBaseUrl: 'http://localhost:3000',
 };

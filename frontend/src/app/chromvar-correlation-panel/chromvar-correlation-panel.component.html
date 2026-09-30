@@ -1,0 +1,51 @@
+<div class="chromvar-correlation-panel">
+  <div class="selected-gene-info">
+    <strong>Current selection</strong><br>
+    Score: {{ showMoranI ? "ChromVAR Moran's I" : "ChromVAR Geary's C" }}
+  </div>
+  <div class="moran-geary-toggle"
+    style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: center; align-items: center; gap: 8px;">
+    <mat-button-toggle-group [value]="showMoranI ? 'moranI' : 'gearyC'"
+      (change)="showMoranI = $event.value === 'moranI'">
+      <mat-button-toggle value="moranI">Moran's I</mat-button-toggle>
+      <mat-button-toggle value="gearyC">Geary's C</mat-button-toggle>
+    </mat-button-toggle-group>
+    <button mat-icon-button type="button" class="hx-info-btn"
+      [matTooltip]="showMoranI ? (infoService.getScoreInfo('moranI') || '') : (infoService.getScoreInfo('gearyC') || '')"
+      matTooltipPosition="above">
+      <mat-icon>help_outline</mat-icon>
+    </button>
+  </div>
+
+  <ng-container *ngIf="showMoranI; else gearyCTpl">
+    <h4 class="hx-title-with-info">
+      ChromVAR Moran's I
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('moranI') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
+    <app-table [data]="moranIData" [actionColumns]="['chromvar_spot_scores']" [features]="features"
+      [updateColumn]="'chromvar_total_sum'" [datasetId]="datasetId" [isCompare]="isCompare"
+      [showIndexColumn]="false" [filters]="sharedFilters" [sortState]="sharedSortState"
+      [resetStateOnDataChange]="false"
+      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </ng-container>
+
+  <ng-template #gearyCTpl>
+    <h4 class="hx-title-with-info">
+      ChromVAR Geary's C
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('gearyC') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h4>
+    <app-table [data]="gearyCData" [actionColumns]="['chromvar_spot_scores']" [features]="features"
+      [updateColumn]="'chromvar_total_sum'" [datasetId]="datasetId" [isCompare]="isCompare"
+      [showIndexColumn]="false" [filters]="sharedFilters" [sortState]="sharedSortState"
+      [resetStateOnDataChange]="false"
+      (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </ng-template>
+</div>

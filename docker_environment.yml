@@ -79,5 +79,6 @@ dependencies:
       - liana
       - stlearn
       - fastapi-sessions
+      - python-dotenv
       - gdown
       - nichepca

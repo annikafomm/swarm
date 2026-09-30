@@ -1,0 +1,141 @@
+<mat-expansion-panel>
+  <mat-expansion-panel-header>
+    <span class="hx-title-with-info">
+      Peak-Gene Link Statistics
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('peak_gene_links') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
+  </mat-expansion-panel-header>
+  <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+    <app-table [data]="peakStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
+      [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </div>
+</mat-expansion-panel>
+
+<mat-expansion-panel *ngIf="hasMotifStats">
+  <mat-expansion-panel-header>
+    <span class="hx-title-with-info">
+      Motif Statistics
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('chromvar_motif_activity') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
+  </mat-expansion-panel-header>
+  <div class="grn-stats-container" style="width: 100%; overflow-x: auto;">
+    <app-table [data]="motifStats" [features]="features" [datasetId]="datasetId" [isCompare]="isCompare"
+      [showIndexColumn]="false" (loadingChange)="tableLoadingChange.emit($event)" (featuresUpdated)="featuresUpdated.emit()">
+    </app-table>
+  </div>
+</mat-expansion-panel>
+
+<mat-expansion-panel>
+  <mat-expansion-panel-header>
+    <span class="hx-title-with-info">
+      TF Gene Network Graph
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('grn_filter_mode') || ''" matTooltipPosition="above"
+        (click)="$event.stopPropagation()">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </span>
+  </mat-expansion-panel-header>
+
+  <!-- Filter Mode Selector -->
+  <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center;">
+    <label style="font-weight: 500;" class="hx-title-with-info">
+      GRN Filter Mode:
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('grn_filter_mode') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </label>
+    <mat-form-field style="min-width: 150px;">
+      <mat-label>Select Filter</mat-label>
+      <mat-select [value]="grnGraphFilter" (selectionChange)="grnGraphFilterChange.emit($event.value)">
+        <mat-option value="prior">Prior (Strict)</mat-option>
+        <mat-option value="extended">Extended (Medium)</mat-option>
+        <mat-option value="full">Full (Complete)</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </div>
+
+  <!-- Prior Filter Graph -->
+  <div [hidden]="grnGraphFilter !== 'prior'">
+    <div *ngIf="isLoadingGrnGraphPrior" class="loading-container graph-loading-container">
+      <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+        aria-label="Loading GRN graph (Prior filter)">
+      </mat-progress-spinner>
+    </div>
+    <div [id]="priorContainerId" class="tf-graph-container"
+      style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+    </div>
+  </div>
+
+  <!-- Extended Filter Graph -->
+  <div [hidden]="grnGraphFilter !== 'extended'">
+    <div *ngIf="isLoadingGrnGraphExtended" class="loading-container graph-loading-container">
+      <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+        aria-label="Loading GRN graph (Extended filter)">
+      </mat-progress-spinner>
+    </div>
+    <div [id]="extendedContainerId" class="tf-graph-container"
+      style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+    </div>
+  </div>
+
+  <!-- Full Filter Graph -->
+  <div [hidden]="grnGraphFilter !== 'full'">
+    <div *ngIf="isLoadingGrnGraphFull" class="loading-container graph-loading-container">
+      <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary"
+        aria-label="Loading GRN graph (Full filter)">
+      </mat-progress-spinner>
+    </div>
+    <div [id]="fullContainerId" class="tf-graph-container"
+      style="width: 100%; height: 600px; border: 1px solid #ddd; margin-top: 10px; position: relative;">
+    </div>
+  </div>
+
+</mat-expansion-panel>
+
+<!-- GRN Plots Panel -->
+<mat-expansion-panel>
+  <mat-expansion-panel-header>
+    GRN Evaluation Plots
+  </mat-expansion-panel-header>
+
+  <div *ngIf="isLoadingGrnPlots" class="loading-container">
+    <mat-progress-spinner mode="indeterminate" [diameter]="44" color="primary" aria-label="Loading GRN plots">
+    </mat-progress-spinner>
+  </div>
+
+  <!-- Peak Plots -->
+  <div *ngIf="grnPlots['peak_plots'] && !isLoadingGrnPlots">
+    <h4>Peak-Gene Link Plots</h4>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+      <img *ngFor="let plotName of grnPlots['peak_plots']" [src]="getImageUrl(plotName)"
+        style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+        alt="{{ plotName }}" />
+    </div>
+  </div>
+
+  <!-- Motif Plots -->
+  <div *ngIf="grnPlots['motif_plots'] && !isLoadingGrnPlots" style="margin-top: 20px;">
+    <h4>Motif Plots</h4>
+    <div style="display: flex; flex-wrap: wrap; gap: 20px;">
+      <img *ngFor="let plotName of grnPlots['motif_plots']" [src]="getImageUrl(plotName)"
+        style="flex: 0 1 calc(25% - 15px); max-width: 250px; height: auto; border: 1px solid #ddd; border-radius: 4px; cursor: pointer;"
+        alt="{{ plotName }}" />
+    </div>
+  </div>
+
+  <p *ngIf="!grnPlots['peak_plots'] && !grnPlots['motif_plots'] && !isLoadingGrnPlots" style="color: #666;">
+    No GRN plots available
+  </p>
+
+</mat-expansion-panel>

@@ -1,0 +1,200 @@
+<ng-template #propertyValue let-value let-propKey="propKey">
+  <ng-container *ngIf="isValueEmpty(value); else notEmptyVal">
+    <span class="nan-value">NaN</span>
+  </ng-container>
+
+  <ng-template #notEmptyVal>
+    <ng-container *ngIf="isArray(value); else notArray">
+
+      <ng-container *ngIf="isNestedArray(value); else oneDim">
+        <div class="array-header">
+          <span class="count-badge">{{ value.length }} row{{ value.length === 1 ? '' : 's' }}</span>
+          <button type="button" class="toggle" (click)="toggleExpand(propKey); $event.stopPropagation()">
+            {{ isExpanded(propKey) ? 'Show less' : 'Show more' }}
+          </button>
+        </div>
+
+        <ul class="row-list" [class.collapsed]="!isExpanded(propKey)">
+          <li class="row" *ngFor="let row of value; let r = index; trackBy: trackByIndex">
+            <span class="row-badge">Row {{ r + 1 }}</span>
+            <ul class="chip-list inner">
+              <li class="chip" *ngFor="let x of asArrayRow(row); trackBy: trackByIndex">
+                <ng-container *ngIf="isValueEmpty(x)">
+                  <span class="nan-value">NaN</span>
+                </ng-container>
+                <ng-container *ngIf="!isValueEmpty(x)">
+                  <ng-container *ngIf="isPrimitive(x); else nestedObj">
+                    {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                  </ng-container>
+                  <ng-template #nestedObj>
+                    <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                  </ng-template>
+                </ng-container>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </ng-container>
+
+      <ng-template #oneDim>
+        <div class="array-header">
+          <span class="count-badge">{{ value.length }} item{{ value.length === 1 ? '' : 's' }}</span>
+          <button type="button" class="toggle" (click)="toggleExpand(propKey); $event.stopPropagation()">
+            {{ isExpanded(propKey) ? 'Show less' : 'Show more' }}
+          </button>
+        </div>
+
+        <div class="array-stats" *ngIf="isNumericArray(value)">
+          Min: {{ getArrayStats(value).min | number:'1.0-3' }},
+          Max: {{ getArrayStats(value).max | number:'1.0-3' }},
+          Avg: {{ getArrayStats(value).avg | number:'1.0-3' }}
+        </div>
+
+        <ul class="chip-list" [class.collapsed]="!isExpanded(propKey)">
+          <li class="chip" *ngFor="let item of value; trackBy: trackByIndex">
+            <ng-container *ngIf="isValueEmpty(item)">
+              <span class="nan-value">NaN</span>
+            </ng-container>
+            <ng-container *ngIf="!isValueEmpty(item)">
+              <ng-container *ngIf="isPrimitive(item); else objectItem">
+                {{ isNumberLike(item) ? (toNumberLike(item) | number:'1.0-3') : item }}
+              </ng-container>
+              <ng-template #objectItem>
+                <code class="chip-json">{{ toJsonCompact(item) }}</code>
+              </ng-template>
+            </ng-container>
+          </li>
+        </ul>
+      </ng-template>
+    </ng-container>
+
+    <ng-template #notArray>
+      <ng-container *ngIf="isPrimitive(value); else complex">
+        {{ isNumberLike(value) ? (toNumberLike(value) | number:'1.0-3') : value }}
+      </ng-container>
+
+      <ng-template #complex>
+        <ng-container *ngIf="isPlainObject(value); else complexPre">
+          <div class="array-header">
+            <span class="count-badge">{{ objectKeyCount(value) }}
+              key{{ objectKeyCount(value) === 1 ? '' : 's' }}</span>
+            <button type="button" class="toggle" (click)="toggleExpand(dictId(propKey)); $event.stopPropagation()">
+              {{ isExpanded(dictId(propKey)) ? 'Show less' : 'Show more' }}
+            </button>
+          </div>
+
+          <div class="kv-grid" [class.collapsed]="!isExpanded(dictId(propKey))">
+            <div class="kv-row" *ngFor="let e of objectEntries(value); trackBy: trackByIndex">
+              <div class="kv-key">{{ prettyKey(e.key) }}</div>
+              <div class="kv-val">
+                <ng-container *ngIf="isValueEmpty(e.value)">
+                  <span class="nan-value">NaN</span>
+                </ng-container>
+                <ng-container *ngIf="!isValueEmpty(e.value)">
+                  <ng-container *ngIf="isPrimitive(e.value); else nonPrimitiveVal">
+                    {{ isNumberLike(e.value) ? (toNumberLike(e.value) | number:'1.0-3') : e.value }}
+                  </ng-container>
+                  <ng-template #nonPrimitiveVal>
+                    <ng-container *ngIf="isArray(e.value); else fallbackJson">
+                      <ul class="chip-list small">
+                        <li class="chip" *ngFor="let x of e.value; trackBy: trackByIndex">
+                          <ng-container *ngIf="isValueEmpty(x)">
+                            <span class="nan-value">NaN</span>
+                          </ng-container>
+                          <ng-container *ngIf="!isValueEmpty(x)">
+                            <ng-container *ngIf="isPrimitive(x); else objInArray">
+                              {{ isNumberLike(x) ? (toNumberLike(x) | number:'1.0-3') : x }}
+                            </ng-container>
+                            <ng-template #objInArray>
+                              <code class="chip-json">{{ toJsonCompact(x) }}</code>
+                            </ng-template>
+                          </ng-container>
+                        </li>
+                      </ul>
+                    </ng-container>
+                    <ng-template #fallbackJson>
+                      <code class="inline-json">{{ toJsonCompact(e.value) }}</code>
+                    </ng-template>
+                  </ng-template>
+                </ng-container>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+
+        <ng-template #complexPre>
+          <pre class="prop-json">{{ formatValue(value) }}</pre>
+        </ng-template>
+      </ng-template>
+    </ng-template>
+  </ng-template>
+</ng-template>
+
+<div class="cell-info-panel" *ngIf="cell as c; else noCellSelected">
+  <div class="cell-overview-card">
+    <mat-icon class="cell-overview-icon">fingerprint</mat-icon>
+    <div class="cell-overview-main">
+      <div class="cell-overview-title">{{ c.properties.cell_type || (c.properties.leiden !== undefined && c.properties.leiden !== null ? 'Cluster ' + c.properties.leiden + ' Cell' : 'Cell') }}</div>
+      <div class="cell-overview-barcode">{{ c.properties.barcode }}</div>
+    </div>
+    <div class="cell-overview-chips">
+      <span class="overview-chip" *ngIf="c.properties.leiden !== undefined && c.properties.leiden !== null">
+        <mat-icon>category</mat-icon>Cluster {{ c.properties.leiden }}
+      </span>
+      <span class="overview-chip" *ngIf="c.properties.centroid?.length === 2">
+        <mat-icon>my_location</mat-icon>{{ c.properties.centroid[0] | number:'1.0-1' }}, {{
+        c.properties.centroid[1] | number:'1.0-1' }}
+      </span>
+    </div>
+  </div>
+
+  <ng-container *ngIf="groupedCellProperties(c).length > 0; else noProps">
+    <mat-expansion-panel *ngFor="let group of groupedCellProperties(c); trackBy: trackByGroup"
+      [expanded]="isGroupExpanded(group.key)"
+      (opened)="onGroupOpened(group.key)"
+      (closed)="onGroupClosed(group.key)"
+      class="property-group-panel">
+      <mat-expansion-panel-header>
+        <div class="group-header-row">
+          <mat-icon class="group-icon">{{ group.icon }}</mat-icon>
+          <span class="group-title">{{ group.title }}</span>
+          <span class="group-count-badge">{{ group.items.length }}</span>
+          <button mat-icon-button type="button" class="info-btn" [matTooltip]="group.description"
+            matTooltipPosition="above" (click)="$event.stopPropagation()">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </div>
+      </mat-expansion-panel-header>
+
+      <div class="property-item" *ngFor="let kv of group.items; trackBy: trackByItem"
+        [class.active-live-value]="group.key === 'liveView' && kv.key === currentView">
+        <div class="property-label">
+          <span>{{ kv.label }}</span>
+          <span class="active-badge" *ngIf="group.key === 'liveView' && kv.key === currentView">Currently
+            shown</span>
+          <button *ngIf="kv.info" mat-icon-button type="button" class="info-btn field-info-btn"
+            [matTooltip]="kv.info" matTooltipPosition="above">
+            <mat-icon>help_outline</mat-icon>
+          </button>
+        </div>
+        <div class="property-content">
+          <ng-container
+            *ngTemplateOutlet="propertyValue; context: { $implicit: kv.value, propKey: kv.key }"></ng-container>
+        </div>
+      </div>
+    </mat-expansion-panel>
+  </ng-container>
+  <ng-template #noProps>
+    <p class="no-properties">No additional properties available for this cell.</p>
+  </ng-template>
+</div>
+
+<ng-template #noCellSelected>
+  <div class="empty-state-card">
+    <mat-icon class="empty-state-icon">touch_app</mat-icon>
+    <div class="empty-state-title">No Cell Selected</div>
+    <div class="empty-state-message">
+      Click on any cell or spot on the map to view its detailed properties, annotations, quality metrics, and regulatory scores.
+    </div>
+  </div>
+</ng-template>

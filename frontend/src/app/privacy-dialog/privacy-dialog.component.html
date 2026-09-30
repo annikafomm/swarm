@@ -1,0 +1,468 @@
+<div class="privacy-dialog-container">
+  <div class="dialog-header">
+    <div class="header-title-group">
+      <mat-icon class="header-icon">policy</mat-icon>
+      <div>
+        <h2 mat-dialog-title>
+          {{ currentLang === 'en' ? 'Privacy Policy' : 'Datenschutzerklärung' }}
+        </h2>
+        <span class="subtitle">
+          {{ currentLang === 'en' ? 'In accordance with Art. 13, 14 GDPR / DSGVO' : 'Gemäß Art. 13, 14 DSGVO' }}
+        </span>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div class="lang-switch">
+        <button type="button" [class.active]="currentLang === 'en'" (click)="setLanguage('en')" class="lang-btn">
+          EN
+        </button>
+        <button type="button" [class.active]="currentLang === 'de'" (click)="setLanguage('de')" class="lang-btn">
+          DE
+        </button>
+      </div>
+      <button mat-icon-button (click)="close()" class="close-btn" aria-label="Close dialog">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <mat-dialog-content class="dialog-body">
+    <!-- ==================== ENGLISH VERSION ==================== -->
+    <div *ngIf="currentLang === 'en'" class="privacy-content">
+      <div class="intro-box">
+        <p>
+          Data protection is very important to us. We would like you to know when we store which data and how we use
+          them.
+        </p>
+        <p>
+          Personal data are collected on the servers of the Professorship for Data Science in Systems Biology only to
+          the extent technically necessary. Data processing is carried out in accordance with applicable data protection
+          regulations, in particular the <strong>General Data Protection Regulation (GDPR)</strong>, the
+          <strong>Bavarian Data Protection Act (BayDSG)</strong>, the <strong>Telecommunications-Telemedia Data
+            Protection Act (TDDDG)</strong>, and the <strong>Digital Services Act (DDG)</strong>.
+        </p>
+      </div>
+
+      <section class="policy-section">
+        <h3>1. Technical Implementation & Controller</h3>
+        <p>
+          The web application <strong>SWARM</strong> (<em>Spatial Transcriptomics Webtool for Analysis of Regulation on
+            a Map</em>) is hosted on internal servers of the Professorship for Data Science in Systems Biology at the
+          Technical University of Munich (TUM).
+        </p>
+        <div class="contact-card">
+          <strong>Controller within the meaning of the GDPR:</strong><br />
+          Prof. Dr. Markus List<br />
+          Data Science in Systems Biology<br />
+          Technical University of Munich<br />
+          Maximus-von-Imhof-Forum 1+3/I, 85354 Freising, Germany<br />
+          E-mail: <a href="mailto:markus.list@tum.de">markus.list(at)tum.de</a>
+        </div>
+        <div class="contact-card">
+          <strong>Data Protection Officer of the Technical University of Munich:</strong><br />
+          E-mail: <a href="mailto:beauftragter@datenschutz.tum.de">beauftragter(at)datenschutz.tum.de</a><br />
+          Web: <a href="https://www.datenschutz.tum.de" target="_blank" rel="noopener">www.datenschutz.tum.de</a>
+        </div>
+      </section>
+
+      <section class="policy-section">
+        <h3>2. Technical Access Data & Server Log Files</h3>
+        <p>
+          When you access SWARM, your internet browser automatically transmits technical access data to our web server.
+          During an active connection, the following data are transmitted:
+        </p>
+        <ul>
+          <li>IP address of the requesting computer</li>
+          <li>Date and time of access</li>
+          <li>Name, URL, and volume of data transferred for requested resources</li>
+          <li>Access status (e.g. file transferred, HTTP 200, HTTP 404)</li>
+          <li>Technical browser information (browser type, version, operating system)</li>
+          <li>Referrer URL (if transmitted by your browser)</li>
+        </ul>
+        <p>
+          <strong>Log Files:</strong> We do not store raw IP addresses in permanent backend application logs. Reverse
+          proxies temporarily process connection data to maintain system stability, ensure load balancing, and protect
+          against cyberattacks (DDoS). Server logs are automatically stored for a maximum of <strong>14 days</strong>
+          and subsequently deleted.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h3>3. Web Analytics with Matomo (Cookieless)</h3>
+        <p>
+          SWARM uses the open-source web analytics platform <strong>Matomo</strong> for statistical analysis of reach,
+          feature usage, and to document scientific utility.
+        </p>
+        <ul>
+          <li><strong>Self-Hosted & Private:</strong> Matomo is hosted and operated exclusively on internal servers of
+            the Professorship for Data Science in Systems Biology (<code>exbio.wzw.tum.de</code>). <strong>No data are
+              transferred to third parties or commercial cloud providers.</strong></li>
+          <li><strong>Cookieless Tracking:</strong> Matomo is operated strictly <strong>without tracking
+              cookies</strong>. No identifier files (such as <code>_pk_*</code>) or device fingerprinting techniques are
+            stored on or read from your device.</li>
+          <li><strong>IP Anonymization:</strong> IP addresses are truncated (masked by 3 bytes) prior to storage,
+            rendering individual identification impossible.</li>
+          <li><strong>Do Not Track:</strong> Browser "Do Not Track" (DNT) and "Global Privacy Control" (GPC) headers are
+            automatically respected.</li>
+          <li><strong>Retention Period:</strong> Aggregated statistical reports are automatically deleted after
+            <strong>180 days</strong>.</li>
+        </ul>
+
+        <!-- Interactive Opt-Out -->
+        <div class="optout-card">
+          <div class="optout-header">
+            <mat-icon>security</mat-icon>
+            <div>
+              <strong>Matomo Analytics Opt-Out</strong>
+              <p>You can object to statistical reach measurement at any time.</p>
+            </div>
+          </div>
+          <div class="optout-control">
+            <mat-slide-toggle [(ngModel)]="isOptedOut" (change)="onToggleOptOut()" color="primary">
+              {{ isOptedOut ? 'You are currently OPTED OUT of tracking' : 'Analytics tracking is currently ACTIVE' }}
+            </mat-slide-toggle>
+          </div>
+          <p class="optout-note">
+            <small *ngIf="!isOptedOut">
+              Your visit is currently recorded anonymously for reach measurement. Check the toggle above if you wish to
+              disable tracking.
+            </small>
+            <small *ngIf="isOptedOut">
+              An opt-out flag is set in your browser. Your visits will not be tracked by Matomo.
+            </small>
+          </p>
+        </div>
+      </section>
+
+      <section class="policy-section">
+        <h3>4. Technically Necessary Cookies & Storage</h3>
+        <p>
+          In accordance with <strong>§ 25(2) No. 2 TDDDG</strong> and <strong>Art. 6(1)(e) GDPR</strong>, SWARM uses
+          only strictly technically necessary cookies and browser storage required to operate the interactive web
+          application:
+        </p>
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Identifier</th>
+              <th>Type</th>
+              <th>Purpose</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>cookie</code></td>
+              <td>HttpOnly Session Cookie</td>
+              <td>Isolates your active session, uploaded datasets, and on-demand calculations without requiring user
+                account registration.</td>
+              <td>Session (expires when browser is closed or session is reset)</td>
+            </tr>
+            <tr>
+              <td><code>lastUnregisteredDialogSessionId</code></td>
+              <td><code>sessionStorage</code></td>
+              <td>Remembers whether the dataset discovery prompt was already displayed during the current session.</td>
+              <td>Session duration</td>
+            </tr>
+            <tr>
+              <td><code>swarm_matomo_optout</code></td>
+              <td><code>localStorage</code></td>
+              <td>Stores your preference if you choose to opt out of Matomo analytics.</td>
+              <td>Persistent until cleared by user</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="policy-section">
+        <h3>5. Uploaded Research Data</h3>
+        <p>
+          SWARM allows users to upload spatial transcriptomics datasets (AnnData <code>.h5ad</code>, Visium, Xenium,
+          GeoJSON), single-cell reference datasets, gene lists, multiome files (<code>.rds</code>, fragments), and Gene
+          Regulatory Network (GRN) models for analysis and visualization.
+        </p>
+        <ul>
+          <li><strong>Processing:</strong> Uploaded datasets and calculated regulatory scores are processed in server
+            memory (RAM) and temporary job storage to render the interactive map and graphs.</li>
+          <li><strong>Isolation:</strong> Uploaded datasets are private to your session identifier and cannot be viewed
+            by other visitors.</li>
+          <li><strong>Retention:</strong> Temporary analysis files are held during your active session and purged
+            according to retention routines.</li>
+          <li><strong>User Responsibility:</strong> Users are responsible for ensuring that uploaded scientific data are
+            anonymized and do not contain identifiable patient or personal data.</li>
+        </ul>
+      </section>
+
+      <section class="policy-section">
+        <h3>6. Purpose & Legal Basis of Data Processing</h3>
+        <p>
+          <strong>Purposes:</strong>
+        </p>
+        <ul>
+          <li>Ensuring technical operation, stability, and security of the scientific web platform.</li>
+          <li>Providing user-requested computational analyses and interactive visualizations.</li>
+          <li>Cookieless statistical reach measurement to evaluate tool adoption for scientific research.</li>
+        </ul>
+        <p>
+          <strong>Legal Basis:</strong> Processing is carried out pursuant to <strong>Art. 6(1)(e) GDPR in conjunction
+            with Art. 4 BayDSG and BayHIG</strong> (performance of a task carried out in the public interest: scientific
+          research, higher education, and the provision of public research infrastructure). Strictly necessary cookies
+          are processed under <strong>§ 25(2) No. 2 TDDDG</strong>.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h3>7. Rights of Data Subjects</h3>
+        <p>Under the GDPR, you have the following rights regarding your personal data:</p>
+        <ul>
+          <li><strong>Right of access (Art. 15 GDPR):</strong> You may request confirmation and information regarding
+            processed personal data.</li>
+          <li><strong>Right to rectification (Art. 16 GDPR):</strong> You may request correction of inaccurate data.
+          </li>
+          <li><strong>Right to erasure & restriction (Art. 17, 18 GDPR):</strong> You may request deletion or
+            restriction of processing where statutory conditions are met.</li>
+          <li><strong>Right to object (Art. 21 GDPR):</strong> You may object at any time to processing based on Art.
+            6(1)(e) GDPR for reasons arising from your particular situation.</li>
+        </ul>
+        <div class="contact-card">
+          <strong>Right to Lodge a Complaint with the Supervisory Authority:</strong><br />
+          You have the right to lodge a complaint with the Bavarian Data Protection Authority:<br />
+          <strong>Bayerischer Landesbeauftragte für den Datenschutz (BayLfD)</strong><br />
+          Postal address: Postfach 22 12 19, 80502 München, Germany<br />
+          Office: Wagmüllerstr. 18, 80538 München<br />
+          Phone: +49 89 212672-0 · Web: <a href="https://www.datenschutz-bayern.de" target="_blank"
+            rel="noopener">www.datenschutz-bayern.de</a>
+        </div>
+      </section>
+
+      <div class="policy-footer-note">
+        <small>Last updated: August 2026 · Professorship for Data Science in Systems Biology · Technical University of
+          Munich</small>
+      </div>
+    </div>
+
+    <!-- ==================== GERMAN VERSION ==================== -->
+    <div *ngIf="currentLang === 'de'" class="privacy-content">
+      <div class="intro-box">
+        <p>
+          Der Schutz Ihrer personenbezogenen Daten ist uns ein wichtiges Anliegen. Wir möchten, dass Sie wissen, wann
+          wir welche Daten erheben und wie wir sie verwenden.
+        </p>
+        <p>
+          Personenbezogene Daten werden auf den Servern der Professur für Data Science in Systems Biology nur im
+          technisch notwendigen Umfang verarbeitet. Die Datenverarbeitung erfolgt im Einklang mit den geltenden
+          datenschutzrechtlichen Bestimmungen, insbesondere der <strong>Datenschutz-Grundverordnung (DSGVO)</strong>,
+          dem <strong>Bayerischen Datenschutzgesetz (BayDSG)</strong>, dem
+          <strong>Telekommunikation-Digitale-Dienste-Datenschutz-Gesetz (TDDDG)</strong> sowie dem
+          <strong>Digitale-Dienste-Gesetz (DDG)</strong>.
+        </p>
+      </div>
+
+      <section class="policy-section">
+        <h3>1. Technische Umsetzung & Verantwortlicher</h3>
+        <p>
+          Die Webanwendung <strong>SWARM</strong> (<em>Spatial Transcriptomics Webtool for Analysis of Regulation on a
+            Map</em>) wird auf Servern der Professur für Data Science in Systems Biology der Technischen Universität
+          München (TUM) betrieben.
+        </p>
+        <div class="contact-card">
+          <strong>Verantwortlicher im Sinne der DSGVO:</strong><br />
+          Prof. Dr. Markus List<br />
+          Data Science in Systems Biology<br />
+          Technische Universität München<br />
+          Maximus-von-Imhof-Forum 1+3/I, 85354 Freising<br />
+          E-Mail: <a href="mailto:markus.list@tum.de">markus.list(at)tum.de</a>
+        </div>
+        <div class="contact-card">
+          <strong>Behördlicher Datenschutzbeauftragter der Technischen Universität München:</strong><br />
+          E-Mail: <a href="mailto:beauftragter@datenschutz.tum.de">beauftragter(at)datenschutz.tum.de</a><br />
+          Web: <a href="https://www.datenschutz.tum.de" target="_blank" rel="noopener">www.datenschutz.tum.de</a>
+        </div>
+      </section>
+
+      <section class="policy-section">
+        <h3>2. Technische Zugriffsdaten & Server-Logfiles</h3>
+        <p>
+          Beim Zugriff auf SWARM übermittelt Ihr Internetbrowser automatisch technische Verbindungsdaten an unseren
+          Webserver:
+        </p>
+        <ul>
+          <li>IP-Adresse des anfragenden Rechners</li>
+          <li>Datum und Uhrzeit des Zugriffs</li>
+          <li>Name, URL und übertragene Datenmenge der angeforderten Seiten/Dateien</li>
+          <li>Zugriffsstatus (HTTP-Statuscode, z. B. Datei übertragen, nicht gefunden)</li>
+          <li>Technische Informationen (Browsertyp, Version, Betriebssystem)</li>
+          <li>Referrer-URL (die zuvor besuchte Seite, sofern übermittelt)</li>
+        </ul>
+        <p>
+          <strong>Logfiles:</strong> Vollständige IP-Adressen werden nicht in dauerhaften Anwendungs-Logdateien
+          gespeichert. Der vorgeschaltete Reverse-Proxy verarbeitet Verbindungsdaten kurzzeitig zur Sicherstellung des
+          Betriebs und zur Abwehr von Cyberangriffen (z. B. DDoS). Server-Logs werden maximal für <strong>14
+            Tage</strong> gespeichert und anschließend gelöscht.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h3>3. Webanalyse mit Matomo (Cookielos)</h3>
+        <p>
+          SWARM verwendet den Open-Source-Webanalysedienst <strong>Matomo</strong> zur statistischen Reichweitenmessung
+          und Verbesserung der wissenschaftlichen Nutzbarkeit.
+        </p>
+        <ul>
+          <li><strong>Selbst gehostet:</strong> Matomo wird ausschließlich auf institutseigenen Servern der Professur
+            für Data Science in Systems Biology betrieben (<code>exbio.wzw.tum.de</code>). <strong>Es erfolgt keinerlei
+              Weitergabe an Dritte oder kommerzielle Cloud-Anbieter.</strong></li>
+          <li><strong>Cookielose Erfassung:</strong> Matomo wird <strong>ohne Tracking-Cookies</strong> betrieben. Es
+            werden weder Identifier-Dateien (wie <code>_pk_*</code>) auf Ihrem Endgerät gespeichert noch
+            Geräte-Fingerprinting-Verfahren eingesetzt.</li>
+          <li><strong>IP-Anonymisierung:</strong> IP-Adressen werden vor der Speicherung um 3 Bytes gekürzt, sodass kein
+            Personenbezug herstellbar ist.</li>
+          <li><strong>Do Not Track:</strong> Browsereinstellungen wie „Do Not Track“ (DNT) bzw. Global Privacy Control
+            werden vollständig respektiert.</li>
+          <li><strong>Speicherdauer:</strong> Aggregierte Nutzungsstatistiken werden nach <strong>180 Tagen</strong>
+            automatisch gelöscht.</li>
+        </ul>
+
+        <!-- Interaktiver Opt-Out -->
+        <div class="optout-card">
+          <div class="optout-header">
+            <mat-icon>security</mat-icon>
+            <div>
+              <strong>Matomo-Analyse Widerspruch (Opt-Out)</strong>
+              <p>Sie können der statistischen Erfassung jederzeit widersprechen.</p>
+            </div>
+          </div>
+          <div class="optout-control">
+            <mat-slide-toggle [(ngModel)]="isOptedOut" (change)="onToggleOptOut()" color="primary">
+              {{ isOptedOut ? 'Sie haben der statistischen Erfassung WIDERSPROCHEN' : 'Die statistische
+              Reichweitenmessung ist derzeit AKTIV' }}
+            </mat-slide-toggle>
+          </div>
+          <p class="optout-note">
+            <small *ngIf="!isOptedOut">
+              Ihr Besuch wird derzeit anonymisiert erfasst. Schalten Sie den Schalter um, um die Erfassung zu
+              deaktivieren.
+            </small>
+            <small *ngIf="isOptedOut">
+              In Ihrem Browser ist ein Opt-Out-Vermerk hinterlegt. Ihre Besuche werden von Matomo nicht erfasst.
+            </small>
+          </p>
+        </div>
+      </section>
+
+      <section class="policy-section">
+        <h3>4. Technisch notwendige Cookies & Speicher</h3>
+        <p>
+          Gemäß <strong>§ 25 Abs. 2 Nr. 2 TDDDG</strong> und <strong>Art. 6 Abs. 1 lit. e DSGVO</strong> verwendet SWARM
+          ausschließlich technisch unbedingt erforderliche Cookies und Browserspeicher:
+        </p>
+        <table class="policy-table">
+          <thead>
+            <tr>
+              <th>Kennung</th>
+              <th>Typ</th>
+              <th>Zweck</th>
+              <th>Speicherdauer</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>cookie</code></td>
+              <td>HttpOnly Session-Cookie</td>
+              <td>Technisches Session-Management: Verknüpft Ihren Browser mit Ihren temporär hochgeladenen Datensätzen
+                und Berechnungen ohne Benutzerkonto.</td>
+              <td>Session (wird beim Schließen des Browsers oder beim Zurücksetzen gelöscht)</td>
+            </tr>
+            <tr>
+              <td><code>lastUnregisteredDialogSessionId</code></td>
+              <td><code>sessionStorage</code></td>
+              <td>Speichert, ob der Datensatz-Hinweis während der aktuellen Sitzung bereits angezeigt wurde.</td>
+              <td>Sitzungsdauer</td>
+            </tr>
+            <tr>
+              <td><code>swarm_matomo_optout</code></td>
+              <td><code>localStorage</code></td>
+              <td>Speichert Ihren Widerspruch gegen die Matomo-Reichweitenmessung.</td>
+              <td>Dauerhaft bis zum Löschen durch den Nutzer</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="policy-section">
+        <h3>5. Hochgeladene Forschungsdaten</h3>
+        <p>
+          SWARM ermöglicht das Hochladen von Spatial-Transcriptomics-Datensätzen (AnnData <code>.h5ad</code>, Visium,
+          Xenium, GeoJSON), Einzelzell-Referenzen, Genlisten, Multiome-Dateien (<code>.rds</code>, Fragmente) sowie
+          Genregulationsnetzwerken zur Analyse und Visualisierung.
+        </p>
+        <ul>
+          <li><strong>Verarbeitung:</strong> Hochgeladene Dateien und berechnete Scores werden im Arbeitsspeicher (RAM)
+            und temporären Session-Ordnern zur interaktiven Darstellung verarbeitet.</li>
+          <li><strong>Isolation:</strong> Datensätze sind an Ihre Sitzungskennung gebunden und für andere Nutzer nicht
+            einsehbar.</li>
+          <li><strong>Löschung:</strong> Temporäre Arbeitsdateien bleiben während Ihrer aktiven Sitzung erhalten und
+            werden nach Sitzungsablauf bereinigt.</li>
+          <li><strong>Nutzerverantwortung:</strong> Nutzer sind selbst dafür verantwortlich, dass hochgeladene
+            Forschungsdaten anonymisiert sind und keine personenbezogenen Daten Dritter enthalten.</li>
+        </ul>
+      </section>
+
+      <section class="policy-section">
+        <h3>6. Zwecke & Rechtsgrundlagen der Verarbeitung</h3>
+        <p>
+          <strong>Zwecke:</strong> Bereitstellung des wissenschaftlichen Analysewerkzeugs, Aufrechterhaltung der
+          IT-Sicherheit und cookielose Reichweitenmessung zur Dokumentation des wissenschaftlichen Nutzens.
+        </p>
+        <p>
+          <strong>Rechtsgrundlagen:</strong> Die Verarbeitung erfolgt auf Grundlage von <strong>Art. 6 Abs. 1 lit. e
+            DSGVO i. V. m. Art. 4 BayDSG und BayHIG</strong> (Wahrnehmung von Aufgaben im öffentlichen Interesse:
+          wissenschaftliche Forschung, Lehre und Bereitstellung von Forschungsinfrastruktur). Technisch notwendige
+          Cookies stützen sich auf <strong>§ 25 Abs. 2 Nr. 2 TDDDG</strong>.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h3>7. Rechte der betroffenen Personen</h3>
+        <p>Nach der DSGVO stehen Ihnen folgende Rechte zu:</p>
+        <ul>
+          <li><strong>Auskunftsrecht (Art. 15 DSGVO):</strong> Recht auf Auskunft über die verarbeiteten
+            personenbezogenen Daten.</li>
+          <li><strong>Recht auf Berichtigung (Art. 16 DSGVO):</strong> Recht auf Korrektur unrichtiger Daten.</li>
+          <li><strong>Recht auf Löschung & Einschränkung (Art. 17, 18 DSGVO):</strong> Recht auf Löschung bzw.
+            Einschränkung der Verarbeitung unter den gesetzlichen Voraussetzungen.</li>
+          <li><strong>Widerspruchsrecht (Art. 21 DSGVO):</strong> Recht auf Widerspruch gegen Verarbeitungen auf
+            Grundlage von Art. 6 Abs. 1 lit. e DSGVO aus Gründen, die sich aus Ihrer besonderen Situation ergeben.</li>
+        </ul>
+        <div class="contact-card">
+          <strong>Beschwerderecht bei der Aufsichtsbehörde:</strong><br />
+          Sie haben das Recht auf Beschwerde beim Bayerischen Landesbeauftragten für den Datenschutz:<br />
+          <strong>Bayerischer Landesbeauftragte für den Datenschutz (BayLfD)</strong><br />
+          Postanschrift: Postfach 22 12 19, 80502 München<br />
+          Dienstgebäude: Wagmüllerstr. 18, 80538 München<br />
+          Telefon: +49 89 212672-0 · Web: <a href="https://www.datenschutz-bayern.de" target="_blank"
+            rel="noopener">www.datenschutz-bayern.de</a>
+        </div>
+      </section>
+
+      <div class="policy-footer-note">
+        <small>Stand: Februar 2026 · Professur für Data Science in Systems Biology · Technische Universität
+          München</small>
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <div class="dialog-footer">
+    <div class="footer-links">
+      <a href="https://exbio.wzw.tum.de/impressum#de" target="_blank" rel="noopener">Impressum</a>
+      <span class="link-divider">·</span>
+      <a href="https://exbio.wzw.tum.de/impressum#en" target="_blank" rel="noopener">Legal Notice</a>
+      <span class="link-divider">·</span>
+      <a href="https://www.datenschutz.tum.de" target="_blank" rel="noopener">TUM Data Protection</a>
+    </div>
+    <button mat-flat-button color="primary" (click)="close()" class="close-action-btn">
+      {{ currentLang === 'en' ? 'Close' : 'Schließen' }}
+    </button>
+  </div>
+</div>

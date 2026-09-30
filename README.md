@@ -64,14 +64,22 @@ The web-tool is working with the anndata-format. This is a tutorial on how count
     - `average_clustering`
     - `closeness_centrality`
   - Leiden co-occurrence: stored in `anndata.uns["leiden_co_occurrence"]` as dictionary with entries:
-    - `intervals`: interval boundaries, array of shape `(n_intervals - 1,)`
+    - `interval` (singular): interval boundaries, array of shape `(n_intervals - 1,)`
     - `occ`: 3D array of shape `(n_clusters, n_clusters, n_intervals)` (Make sure to select the right num_intervals in Upload form)
   - Leiden neighborhood enrichment: stored in `anndata.uns["leiden_nhood_enrichment"]` as dictionary with entries:
-    - `counts`: array of shape `(n_clust, n_clust)`
-    - `zscore`: array of shape `(n_clust, nclust)`
+    - `count` (singular): array of shape `(n_clust, n_clust)` — written by squidpy but never read by SWARM
+    - `zscore`: array of shape `(n_clust, n_clust)` — the entry the Cluster Information panel plots
+
+  Note the cluster key is effectively fixed to `leiden`: the upload form lets each squidpy score
+  use a different `obs` column, and squidpy will store results under `uns["<thatcolumn>_*"]`, but
+  [visium_to_geojson.py](backend/visium_to_geojson.py) only ever reads the three `leiden_*` names
+  above, so results computed under any other key never reach the frontend. Leiden labels must also
+  cast to `int` — a non-integer label silently empties `meta.leiden_cluster_annotations`.
 - **Regulon scores**
   - Gene sets: stored in `anndata.uns["genie_genesets"]` and `anndata.uns["sponge_genesets"]` as dictionaries with format:
     - `regulator`: `[gene1, gene2, ..., geneN]`
+    - The two use different identifier types for the regulator keys: GENIE3 gene sets are keyed by
+      gene symbol (e.g. `CEBPA`), SPONGE gene sets by Ensembl gene ID (e.g. `ENSG00000034239`).
   - AUCell: stored in `anndata.obsm["aucell_scores_{sponge|genie3}"]` as DataFrames with regulators as columns.
   - GSVA: stored in `anndata.obsm["spongeffects_GSVA_scores_{sponge|genie3}"]` as DataFrames with regulators as columns.
   - ssGSEA: stored in `anndata.obsm["spongeffects_ssGSEA_scores_{sponge|genie3}"]` as DataFrames with regulators as columns.

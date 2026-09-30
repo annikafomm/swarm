@@ -20,6 +20,7 @@ import pandas as pd
 import scanpy as sc
 import uvicorn
 from app import calculate_scores_helper
+import spatial_correlation
 from models import (
     UploadRequest,
     UploadResponse,
@@ -45,6 +46,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi_sessions.backends.implementations import InMemoryBackend
@@ -59,16 +61,42 @@ from starlette.responses import RedirectResponse
 from datetime import datetime, timedelta
 import asyncio
 from scipy import sparse
+from dotenv import load_dotenv
 
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
 
+# Secrets live in backend/.env, which is gitignored and never baked into the
+# Docker image (see .dockerignore) — each deployment (devcontainer, prod
+# server) creates its own local copy with a real, unshared secret.
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY")
+if not SESSION_SECRET_KEY:
+    raise RuntimeError(
+        "SESSION_SECRET_KEY is not set. Create backend/.env (see "
+        "backend/.env.example) with a real secret, e.g.:\n"
+        '  python -c "import secrets; print(secrets.token_hex(32))"'
+    )
+
 # Base folder for all uploads (created on startup).
 # Use path relative to this file to avoid depending on current working dir.
-#BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
-BASE_UPLOAD_DIR = Path.cwd() / "../backend/uploads"
-BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# Store uploads inside the backend package directory to avoid depending on
+# the current working directory (which may be different when running via
+# devcontainers, docker, or production). This ensures the path is
+# repository-relative and writable by the runtime user.
+BASE_UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
+try:
+    BASE_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+except PermissionError:
+    # Fall back to a writable temp directory if creation fails due to
+    # host mount permissions. This keeps the server running while
+    # surfacing a clear warning in the logs.
+    import tempfile
+    fallback = Path(tempfile.mkdtemp(prefix="swarm-uploads-"))
+    print(f"Warning: cannot create {BASE_UPLOAD_DIR}; using fallback {fallback}")
+    BASE_UPLOAD_DIR = fallback
 
 # Allow configuring CORS origins via environment variable (comma-separated).
 # Example: ALLOWED_ORIGINS="https://myapp.com,https://staging.myapp.com"
@@ -76,7 +104,7 @@ ALLOWED_ORIGINS = [
     o.strip()
     for o in os.getenv(
         "ALLOWED_ORIGINS",
-        "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201"
+        "http://localhost:4200,http://127.0.0.1:4200,http://localhost:4201,http://127.0.0.1:4201,http://localhost:4204,http://127.0.0.1:4204"
     ).split(",")
     if o.strip()
 ]
@@ -84,6 +112,41 @@ ALLOWED_ORIGINS = [
 # Optional maximum file size in megabytes (None disables size check).
 # Adjust to your needs; set to e.g. 500 for 500 MB or leave as None.
 MAX_FILE_MB: Optional[int] = 5000
+
+# How many analysis pipelines may run at once.
+#
+# Without a cap, every concurrent upload starts its own chain of Python/R subprocesses
+# immediately. `asyncio.to_thread` uses the default executor, which allows up to
+# min(32, cpu_count + 4) threads, so ~32 pipelines could be in flight — each spawning
+# subprocesses that, before the thread pinning added in Dockerfile.backend, each sized their
+# BLAS pool to the whole host. Even with BLAS pinned, the memory cost alone is prohibitive:
+# each stage holds a full AnnData in memory (a multiome adata here is ~1.5 GB), so a handful
+# of simultaneous multiome uploads can exhaust RAM and get something OOM-killed — and the
+# OOM killer picks by size, so it tends to kill a legitimate large job rather than the
+# request that caused the pile-up.
+#
+# The FastAPI event loop shares the machine with these subprocesses, so an unbounded pile-up
+# does not just slow uploads down: /api/datasets, /api/geojson and session creation become
+# unresponsive for users who are not running anything at all. Bounding concurrency converts
+# "the whole site degrades" into "your job waits its turn", which is both fairer and far
+# easier to explain to a user.
+#
+# 2 is deliberately conservative: pipeline stages are already internally parallel, so a
+# couple of concurrent jobs is usually enough to keep the machine busy. Raise it via
+# SWARM_MAX_CONCURRENT_PIPELINES once you know your host's RAM headroom.
+MAX_CONCURRENT_PIPELINES = max(1, int(os.getenv("SWARM_MAX_CONCURRENT_PIPELINES", "2")))
+
+# Created lazily: instantiating an asyncio primitive at import time can bind it to the wrong
+# event loop (uvicorn creates its own), which would make it silently ineffective.
+_pipeline_semaphore: Optional[asyncio.Semaphore] = None
+
+
+def get_pipeline_semaphore() -> asyncio.Semaphore:
+    """Return the process-wide pipeline gate, creating it on first use."""
+    global _pipeline_semaphore
+    if _pipeline_semaphore is None:
+        _pipeline_semaphore = asyncio.Semaphore(MAX_CONCURRENT_PIPELINES)
+    return _pipeline_semaphore
 
 # TTL cache for per-(dataset,gene) expression min/max stats.
 # Key: (dataset_id, normalized_gene)
@@ -160,43 +223,114 @@ class GenieNetworkPath(BaseModel):
 
 
 # =============================================================================
-# Application
+# Application & Registry
 # =============================================================================
-# Lifespan event handler
+dataset_registry: Optional[DatasetRegistry] = None
 
+# =============================================================================
+# Built-in Default Datasets List
+# Edit this single list to configure which default datasets SWARM loads.
+# Paths, scores, and metadata are automatically inferred from the dataset directory and its config.json.
+# =============================================================================
+DEFAULT_DATASETS = [
+    {
+        "id": "builtin_main",
+        "alias": "BRCA (Visium)",
+        "dir": "data/brca_visium",
+        "description": "Pre-configured spatial transcriptomics dataset (BRCA Visium)",
+    },
+    {
+        "id": "builtin_visual_cortex",
+        "alias": "Visual Cortex (Visium)",
+        "dir": "data/visual_cortex",
+        "description": "Mouse Visual Cortex spatial transcriptomics dataset",
+    },
+    {
+        "id": "builtin_heart_multiome",
+        "alias": "Heart (Multiome - Measured)",
+        "dir": "data/heart",
+        "config_file": "config.json",
+        "geojson_file": "hexagons_measured.geojson",
+        "description": "Human Heart Cell Atlas (Multiome - Measured Expression & Scores)",
+    },
+    {
+        "id": "builtin_heart_tangram",
+        "alias": "Heart (Multiome - Tangram)",
+        "dir": "data/heart",
+        "config_file": "config_tangram.json",
+        "geojson_file": "hexagons.geojson",
+        "description": "Human Heart Cell Atlas (Multiome - Tangram Projected Expression & ChromVAR)",
+    }
+]
+
+# Lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     global dataset_registry
-    dataset_registry = DatasetRegistry()
+    if dataset_registry is None:
+        dataset_registry = DatasetRegistry()
 
-    # Register builtin datasets from backend/data (use absolute paths)
     base_path = Path(__file__).parent  # backend/ directory
-    builtin_adata = base_path / "data" / "adata.h5ad"
-    builtin_geojson = base_path.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
-    builtin_genie = base_path / "data" / "genie_network_filt.csv"
-    builtin_sponge = base_path / "data" / "sponge_network_smaller.csv"
 
-    print(f"Base path: {base_path}")
-    print(f"Adata exists: {builtin_adata.exists()} at {builtin_adata}")
+    for ds_conf in DEFAULT_DATASETS:
+        dataset_id = ds_conf["id"]
+        alias = ds_conf["alias"]
+        ds_dir = base_path / ds_conf.get("dir", "data")
+        description = ds_conf.get("description", "")
 
-    if builtin_adata.exists():
-        dataset_registry.register_builtin_dataset(
-            dataset_id="builtin_main",
-            alias="Default Dataset (Visium, BRCA)",
-            adata_path=str(builtin_adata),
-            geojson_path="/api/geojson/builtin_main",  # Use API URL for consistency
-            genie_network_path=str(builtin_genie) if builtin_genie.exists() else None,
-            sponge_network_path=str(builtin_sponge) if builtin_sponge.exists() else None,
-            description="Pre-configured spatial transcriptomics dataset"
-        )
-        print(f"✓ Registered builtin dataset with paths:")
-        print(f"  - adata: {builtin_adata}")
-        print(f"  - geojson: /api/geojson/builtin_main")
-        print(f"  - genie: {builtin_genie if builtin_genie.exists() else 'NOT FOUND'}")
-        print(f"  - sponge: {builtin_sponge if builtin_sponge.exists() else 'NOT FOUND'}")
-    else:
-        print(f"✗ Builtin adata not found at {builtin_adata}")
+        if not ds_dir.exists():
+            print(f"✗ Default dataset dir not found: {ds_dir}")
+            continue
+
+        # Look for config file in dataset directory
+        config_filename = ds_conf.get("config_file")
+        if config_filename:
+            explicit_config = ds_dir / config_filename
+            config_files = [explicit_config] if explicit_config.exists() else []
+        else:
+            config_files = list(ds_dir.glob("config.json")) or list(ds_dir.glob("*config*.json"))
+        if config_files:
+            try:
+                dataset_registry.register_builtin_from_config(
+                    config_file=config_files[0],
+                    dataset_id=dataset_id,
+                    alias=alias,
+                    description=description,
+                )
+                continue
+            except Exception as e:
+                print(f"⚠ Failed to register {dataset_id} from config ({e}), falling back to direct files...")
+
+        # Fallback: Infer directly from files in directory (e.g. data/ root)
+        ds_adata = ds_dir / "adata.h5ad"
+        if not ds_adata.exists():
+            h5ad_files = list(ds_dir.rglob("*scores*.h5ad")) or list(ds_dir.glob("*.h5ad"))
+            ds_adata = h5ad_files[0] if h5ad_files else ds_adata
+
+        ds_genie = ds_dir / "genie_network_filt.csv"
+        if not ds_genie.exists():
+            genie_files = list(ds_dir.rglob("*genie*.csv"))
+            ds_genie = genie_files[0] if genie_files else ds_genie
+
+        ds_sponge = ds_dir / "sponge_network_smaller.csv"
+        if not ds_sponge.exists():
+            sponge_files = list(ds_dir.rglob("*sponge*.csv"))
+            ds_sponge = sponge_files[0] if sponge_files else ds_sponge
+
+        if ds_adata.exists():
+            dataset_registry.register_builtin_dataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=str(ds_adata),
+                geojson_path=f"/api/geojson/{dataset_id}",
+                genie_network_path=str(ds_genie) if ds_genie.exists() else None,
+                sponge_network_path=str(ds_sponge) if ds_sponge.exists() else None,
+                description=description,
+            )
+            print(f"✓ Registered default dataset {dataset_id} directly from files")
+        else:
+            print(f"✗ Builtin adata not found for {dataset_id} at {ds_adata}")
 
     asyncio.create_task(cleanup_expired_sessions())
     yield
@@ -214,14 +348,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# GZip compression for large responses (GeoJSON, tables, csv/json)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Uses UUID
-cookie_params = CookieParameters(secure=False, httponly=True, samesite="lax")
+COOKIE_SECURE = os.environ.get("COOKIE_SECURE", "false").lower() == "true"
+cookie_params = CookieParameters(secure=COOKIE_SECURE, httponly=True, samesite="lax")
 
 cookie = SessionCookie(
     cookie_name="cookie",
     identifier="general_verifier",
     auto_error=True,
-    secret_key="DONOTUSE",
+    secret_key=SESSION_SECRET_KEY,
     cookie_params=cookie_params,
 )
 backend = InMemoryBackend[UUID, SessionData]()
@@ -237,19 +375,37 @@ verifier = BasicVerifier(
 
 # -----------------------------------------------------------------------------
 # Utility helpers
-# -----------------------------------------------------------------------------
+# In-memory LRU cache for loaded AnnData objects: path -> (mtime, AnnData)
+_ADATA_CACHE: Dict[str, tuple] = {}
+_MAX_ADATA_CACHE_SIZE = 6
 
 def _load_adata_cached(file_path: str) -> sc.AnnData:
-    """Load on-demand. Python's garbage collector will clean up when no longer referenced."""
+    """Load AnnData with in-memory caching to avoid expensive disk re-reads on every request."""
 
     if file_path is None:
-        # Fall back to builtin dataset if none is set
-        base_path = Path(__file__).parent
-        file_path = base_path / "data" / "adata.h5ad"
-        if not file_path.exists():
+        # Fall back to the first available builtin dataset if none is set yet
+        builtins = dataset_registry.get_all_datasets(as_dict=True).get("builtin", {}) if dataset_registry else {}
+        for dataset_dict in builtins.values():
+            candidate = dataset_dict.get("adata_path")
+            if candidate and Path(candidate).exists():
+                file_path = candidate
+                break
+        if file_path is None:
             raise ValueError("No adata file has been loaded. Please call /read_adata first.")
 
-    adata = sc.read_h5ad(str(file_path))
+    abs_path = str(Path(file_path).resolve())
+    if not Path(abs_path).exists():
+        raise ValueError(f"AnnData file not found at: {abs_path}")
+
+    mtime = os.path.getmtime(abs_path)
+    if abs_path in _ADATA_CACHE:
+        cached_mtime, cached_adata = _ADATA_CACHE[abs_path]
+        if cached_mtime == mtime:
+            return cached_adata
+
+    print(f"[CACHE MISS] Reading AnnData into memory from: {abs_path}")
+    t0 = time.time()
+    adata = sc.read_h5ad(abs_path)
     reconstruct_obsm_cols = {
         "ligand_receptor_cosine_similarity": "ligand_receptor",
         "ligand_receptor_p_value": "ligand_receptor",
@@ -266,6 +422,13 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
                 index=adata.obs_names,
             )
 
+    # Evict oldest entry if cache exceeds limit
+    if len(_ADATA_CACHE) >= _MAX_ADATA_CACHE_SIZE:
+        oldest_key = next(iter(_ADATA_CACHE))
+        del _ADATA_CACHE[oldest_key]
+
+    _ADATA_CACHE[abs_path] = (mtime, adata)
+    print(f"[CACHE LOADED] AnnData loaded in {time.time() - t0:.2f}s (cached in memory)")
     return adata
 
 GRID_PREFIX = "grid_"
@@ -301,6 +464,193 @@ def _sanitize_filename(name: str) -> str:
 
 def _normalize_gene_key(gene: str) -> str:
     return gene.strip().lower()
+
+
+def _resolve_gene_name(
+    adata: sc.AnnData, gene: str, adata_path: Optional[str] = None
+) -> Optional[str]:
+    """
+    Case-insensitive lookup of `gene` against adata.var_names.
+    Returns the actual var_names entry (matching the dataset's own casing convention,
+    e.g. human symbols are conventionally uppercase) so callers can index with it directly,
+    or None if no gene matches regardless of case.
+
+    Ensembl ids are accepted as well as symbols. That matters because SPONGE identifies genes
+    by Ensembl id everywhere, so a gene picked out of a SPONGE module or network arrives here
+    as `ENSG00000141510` while `var_names` holds `TP53` — without this the expression view
+    would 404 for exactly the genes the SPONGE panels invite you to click on.
+    """
+    if gene in adata.var_names:
+        return gene
+    lowered = gene.strip().lower()
+    for name in adata.var_names:
+        if name.lower() == lowered:
+            return name
+
+    # `adata_path` is only the cache key for the symbol map; without it the map is rebuilt
+    # here, which is cheap but pointless to repeat, so callers should pass the path they
+    # already resolved.
+    symbols = _get_gene_symbol_map(adata_path) if adata_path else _build_gene_symbol_map(adata)
+    key = gene.strip().upper()
+    # Version suffixes are stripped as a fallback: a network may carry ENSG00000141510.17 for
+    # a dataset that recorded the id unversioned (or vice versa).
+    symbol = symbols.get(key) or symbols.get(_strip_ensembl_version(key))
+    if symbol is not None and symbol in adata.var_names:
+        return symbol
+    return None
+
+
+# -----------------------------------------------------------------------------
+# Ensembl id -> gene symbol
+#
+# SPONGE is the reason this exists: its networks, its ceRNA modules and therefore every
+# score derived from them (`uns["sponge_genesets"]`, the `*_sponge` obsm tables, the
+# interaction/analysis CSVs) are keyed by Ensembl gene id, while GENIE3 and the expression
+# matrix are keyed by symbol. Without a translation layer the whole SPONGE half of the UI
+# reads as `ENSG00000141510` where the GENIE3 half reads `TP53`.
+#
+# The mapping is derived from the dataset's own `var` rather than an external annotation
+# release, so an id always resolves to the symbol *this* dataset uses for it — the two can
+# genuinely disagree across Ensembl releases, and a label that contradicts the gene-expression
+# view would be worse than no label at all.
+# -----------------------------------------------------------------------------
+
+# Ensembl gene ids: ENSG00000141510 (human), ENSMUSG00000059552 (mouse), optionally carrying
+# a version suffix (ENSG00000141510.17).
+_ENSEMBL_ID_RE = re.compile(r"^ENS[A-Z]{0,4}G\d{6,}(?:\.\d+)?$", re.IGNORECASE)
+
+# `var` columns that conventionally hold the Ensembl id, most specific first. `ensemble_id`
+# is a misspelling that CELLxGENE-derived h5ads ship with (the builtin BRCA dataset is one),
+# so it has to be listed literally rather than normalised away.
+_ENSEMBL_VAR_COLUMNS = (
+    "ensembl_id",
+    "ensemble_id",
+    "ensembl_gene_id",
+    "ensembl",
+    "gene_ids",
+    "gene_id",
+)
+
+# ...and the ones that hold the symbol. `feature_name` is last because CELLxGENE writes
+# `SYMBOL_ENSG...` into it whenever a symbol is ambiguous — usable, but only after cleanup.
+_SYMBOL_VAR_COLUMNS = (
+    "gene_symbol",
+    "gene_symbols",
+    "symbol",
+    "gene_name",
+    "gene_names",
+    "feature_name",
+)
+
+_MISSING_SYMBOL_VALUES = {"", "nan", "none", "na", "n/a", "null", "<na>"}
+
+# path -> (mtime, {ensembl_id: symbol}). Keyed the same way as _ADATA_CACHE so a re-written
+# h5ad invalidates the map with it.
+_GENE_SYMBOL_CACHE: Dict[str, tuple] = {}
+
+
+def _strip_ensembl_version(gene_id: str) -> str:
+    """ENSG00000141510.17 -> ENSG00000141510."""
+    return gene_id.split(".", 1)[0]
+
+
+def _looks_like_ensembl(values) -> bool:
+    """Whether a column/index is a column of Ensembl ids, judged from a sample of it."""
+    sample = [str(v) for v in list(values)[:500]]
+    sample = [v for v in sample if v.strip().lower() not in _MISSING_SYMBOL_VALUES]
+    if not sample:
+        return False
+    hits = sum(1 for v in sample if _ENSEMBL_ID_RE.match(v.strip()))
+    return hits >= 0.5 * len(sample)
+
+
+def _find_var_column(var: pd.DataFrame, candidates) -> Optional[str]:
+    """First of `candidates` present in `var`, matched case-insensitively."""
+    lowered = {str(c).lower(): str(c) for c in var.columns}
+    for candidate in candidates:
+        if candidate in lowered:
+            return lowered[candidate]
+    return None
+
+
+def _clean_symbol(symbol: Any, gene_id: str) -> str:
+    """Normalise one symbol, returning "" when there isn't a usable one.
+
+    Drops the `_ENSG...` disambiguation suffix CELLxGENE appends, and rejects values that are
+    themselves Ensembl ids — labelling `ENSG00000141510` as `ENSG00000141510` is just noise.
+    """
+    text = str(symbol).strip()
+    if text.lower() in _MISSING_SYMBOL_VALUES:
+        return ""
+    bare_id = _strip_ensembl_version(gene_id)
+    if bare_id and text.endswith(f"_{bare_id}"):
+        text = text[: -(len(bare_id) + 1)]
+    if not text or text.lower() in _MISSING_SYMBOL_VALUES or _ENSEMBL_ID_RE.match(text):
+        return ""
+    return text
+
+
+def _build_gene_symbol_map(adata: sc.AnnData) -> Dict[str, str]:
+    """Build {ensembl_id: symbol} from `adata.var`, or {} when the dataset can't support it.
+
+    Handles both var layouts seen in practice: symbols in the index with the ids in a column
+    (the builtin BRCA and Heart datasets), and ids in the index with the symbols in a column.
+    Both the versioned and unversioned form of each id are emitted as keys, because networks
+    and score tables are inconsistent about which they carry.
+    """
+    var = adata.var
+    if var is None or len(var) == 0:
+        return {}
+
+    index_values = [str(v) for v in var.index]
+    index_is_ensembl = _looks_like_ensembl(index_values)
+
+    if index_is_ensembl:
+        ids = index_values
+        symbol_col = _find_var_column(var, _SYMBOL_VAR_COLUMNS)
+        if symbol_col is None:
+            return {}
+        symbols = [str(v) for v in var[symbol_col].astype(str)]
+    else:
+        id_col = _find_var_column(var, _ENSEMBL_VAR_COLUMNS)
+        if id_col is None:
+            # No conventionally-named column: accept any column that is Ensembl ids.
+            id_col = next(
+                (str(c) for c in var.columns if _looks_like_ensembl(var[c].astype(str))),
+                None,
+            )
+        if id_col is None:
+            return {}
+        ids = [str(v) for v in var[id_col].astype(str)]
+        symbols = index_values
+
+    mapping: Dict[str, str] = {}
+    for gene_id, symbol in zip(ids, symbols):
+        gene_id = gene_id.strip()
+        if not _ENSEMBL_ID_RE.match(gene_id):
+            continue
+        clean = _clean_symbol(symbol, gene_id)
+        if not clean:
+            continue
+        # setdefault, not assignment: where several rows share an id the first wins, matching
+        # how the rest of the pipeline de-duplicates.
+        mapping.setdefault(gene_id, clean)
+        mapping.setdefault(_strip_ensembl_version(gene_id), clean)
+    return mapping
+
+
+def _get_gene_symbol_map(adata_path: str) -> Dict[str, str]:
+    """Cached _build_gene_symbol_map for the dataset at `adata_path`."""
+    abs_path = str(Path(adata_path).resolve())
+    mtime = os.path.getmtime(abs_path) if Path(abs_path).exists() else None
+
+    cached = _GENE_SYMBOL_CACHE.get(abs_path)
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+
+    mapping = _build_gene_symbol_map(_load_adata_cached(adata_path))
+    _GENE_SYMBOL_CACHE[abs_path] = (mtime, mapping)
+    return mapping
 
 
 def _get_visible_dataset_paths(session_data: SessionData) -> Dict[str, str]:
@@ -451,15 +801,20 @@ def _resolve_network_path(
     return fallback_session_path
 
 
-def _extract_gene_min_max(adata: sc.AnnData, gene: str) -> Optional[Dict[str, float]]:
+def _extract_gene_min_max(
+    adata: sc.AnnData, gene: str, adata_path: Optional[str] = None
+) -> Optional[Dict[str, float]]:
     """
     Return min/max for one gene from an AnnData object.
     Returns None if gene is not found.
+
+    `adata_path` is passed straight through to _resolve_gene_name as its symbol-map cache key.
     """
-    if gene not in adata.var_names:
+    resolved_gene = _resolve_gene_name(adata, gene, adata_path)
+    if resolved_gene is None:
         return None
 
-    vector = adata[:, gene].X
+    vector = adata[:, resolved_gene].X
     if sparse.issparse(vector):
         min_val = float(vector.min())
         max_val = float(vector.max())
@@ -484,7 +839,7 @@ def _get_cached_or_compute_gene_stats(dataset_id: str, adata_path: str, gene: st
         return {"min": float(cached["min"]), "max": float(cached["max"])}
 
     adata = _load_adata_cached(adata_path)
-    stats = _extract_gene_min_max(adata, gene)
+    stats = _extract_gene_min_max(adata, gene, adata_path)
     if stats is None:
         return None
 
@@ -550,15 +905,21 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
     """
     Given an array of edge annotations, compute an appropriate step size and borders
     for binning the annotations into categories.
-
-    Returns (step_size, min_border, max_border)
     """
-    w_min = np.min(edge_annotations)
-    w_max = np.max(edge_annotations)
+    if edge_annotations is None or len(edge_annotations) == 0:
+        return {"step": 0.1, "min_border": 0.0, "max_border": 1.0, "default_value": 0.5}
+
+    w_min = float(np.min(edge_annotations))
+    w_max = float(np.max(edge_annotations))
     w_range = w_max - w_min
 
     if w_range == 0:
-        return (1.0, w_min - 0.5, w_max + 0.5)
+        return {
+            "step": 1.0,
+            "min_border": w_min - 0.5,
+            "max_border": w_max + 0.5,
+            "default_value": w_min,
+        }
 
     # Determine step size based on range
     if w_range <= 0.1:
@@ -573,10 +934,10 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
     num_possible_steps = w_range / step
 
     # Calculate borders
-    min_border = np.floor(w_min / step) * step
-    max_border = np.ceil(w_max / step) * step
+    min_border = float(np.floor(w_min / step) * step)
+    max_border = float(np.ceil(w_max / step) * step)
 
-    default_value = min_border + (np.ceil(num_possible_steps / 2) * step)
+    default_value = float(min_border + (np.ceil(num_possible_steps / 2) * step))
 
     return {"step": step, "min_border": min_border, "max_border": max_border, "default_value": default_value}
 
@@ -584,16 +945,29 @@ def _step_and_borders_networks(edge_annotations: np.ndarray) -> dict[str, Any]:
 
 def get_subnetwork_data(file_path, gene_set, network_type):
     # gene_set is a set or list of gene names
+    if not file_path or not os.path.exists(file_path):
+        return pd.DataFrame(), {}
+
+    # Expand gene set to handle case variations (e.g. ATF6 vs Atf6 for mouse datasets)
+    raw_genes = [str(g) for g in gene_set if g is not None]
+    expanded_gene_set = (
+        set(raw_genes)
+        | {g.lower() for g in raw_genes}
+        | {g.upper() for g in raw_genes}
+        | {g.capitalize() for g in raw_genes}
+        | {g.title() for g in raw_genes}
+    )
+
     filtered_rows = []
     edge_annotations = []
     for chunk in pd.read_csv(file_path, chunksize=10000):
         if network_type == "genie":
-            mask = chunk["regulatoryGene"].isin(gene_set) | chunk[
+            mask = chunk["regulatoryGene"].astype(str).isin(expanded_gene_set) | chunk[
                 "targetGene"
-            ].isin(gene_set)
+            ].astype(str).isin(expanded_gene_set)
             annotation = "weight"
         elif network_type == "sponge":
-            gene_mask = chunk["geneA"].isin(gene_set) | chunk["geneB"].isin(gene_set)
+            gene_mask = chunk["geneA"].astype(str).isin(expanded_gene_set) | chunk["geneB"].astype(str).isin(expanded_gene_set)
 
             mask = (
                 gene_mask
@@ -606,15 +980,15 @@ def get_subnetwork_data(file_path, gene_set, network_type):
         else:
             continue
         filtered_chunk = chunk[mask]
-        edge_annotations.extend(filtered_chunk[annotation].values.tolist())
         if not filtered_chunk.empty:
+            edge_annotations.extend(filtered_chunk[annotation].dropna().values.tolist())
             filtered_rows.append(filtered_chunk)
-            # remove chunk from memory
             del filtered_chunk, chunk
+
     if filtered_rows:
         return pd.concat(filtered_rows, ignore_index=True), _step_and_borders_networks(np.array(edge_annotations))
     else:
-        return pd.DataFrame()
+        return pd.DataFrame(), {}
 
 
 # -----------------------------------------------------------------------------
@@ -1026,10 +1400,13 @@ async def upload(
         h5ad_path = re.sub(r"\.rds$", ".h5ad", rds_path)
         log_path = Path(h5ad_path).with_suffix(".log")
         with log_path.open("w") as log_file:
-            result = subprocess.run(
+            # Offloaded to a worker thread so this blocking Rscript call doesn't stall
+            # the single asyncio event loop (and every other user's request) while it runs.
+            result = await asyncio.to_thread(
+                subprocess.run,
                 [
                     "Rscript",
-                    "../backend/rds_to_h5ad.R",
+                    "/workspaces/swarm/backend/rds_to_h5ad.R",
                     "--rds_path", rds_path,
                     "--assay", "RNA",
                     "--h5ad_path", h5ad_path,
@@ -1118,8 +1495,22 @@ async def upload(
     # 4) Convert UploadRequest to dict for pipeline processing
     payload = upload_request.model_dump(exclude_none=False)
 
-    # 5) Run analysis pipeline
-    out_dir = await calculate_scores_helper(job_dir, payload)
+    # 5) Run analysis pipeline, bounded by MAX_CONCURRENT_PIPELINES so concurrent uploads
+    #    queue instead of all piling onto the machine at once (see the constant's note).
+    semaphore = get_pipeline_semaphore()
+    if semaphore.locked():
+        print(
+            f"⏳ Pipeline slots full ({MAX_CONCURRENT_PIPELINES} running) — "
+            f"queueing job {os.path.basename(job_dir)}",
+            flush=True,
+        )
+    queued_at = datetime.now()
+    async with semaphore:
+        waited = (datetime.now() - queued_at).total_seconds()
+        if waited > 1:
+            print(f"▶ Starting queued job {os.path.basename(job_dir)} after {waited:.0f}s wait",
+                  flush=True)
+        out_dir = await calculate_scores_helper(job_dir, payload)
 
     print(f"\n=== DEBUG upload() ===")
     print(f"dataset: {dataset}")
@@ -1161,10 +1552,13 @@ async def upload(
             print("geojson input adata:", adata_path)
             print("geojson data_type:", dataset.lower())
 
-            subprocess.run(
+            # Offloaded to a worker thread so this blocking call doesn't stall the
+            # single asyncio event loop (and every other user's request) while it runs.
+            await asyncio.to_thread(
+                subprocess.run,
                 [
                     "python3",
-                    "../backend/visium_to_geojson.py",
+                    "/workspaces/swarm/backend/visium_to_geojson.py",
                     "--adata", adata_path,
                     "--outpath", geojson_path,
                     "--data_type", dataset.lower(),
@@ -1825,8 +2219,34 @@ async def get_geojson(dataset_id: str):
         # Builtin datasets have format: builtin_{name}
 
         if dataset_id.startswith("builtin_"):
-            # Builtin dataset - located in frontend/public/assets/
-            geojson_path = Path(__file__).parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson"
+            geojson_path = None
+            base_path = Path(__file__).parent
+
+            # 1. Match from DEFAULT_DATASETS directory
+            match_conf = next((d for d in DEFAULT_DATASETS if d["id"] == dataset_id), None)
+            if match_conf:
+                geojson_file = match_conf.get("geojson_file", "hexagons.geojson")
+                candidate = base_path / match_conf.get("dir", "data") / geojson_file
+                if candidate.exists():
+                    geojson_path = candidate
+
+            # 2. Match from dataset directory name directly
+            if not geojson_path or not geojson_path.exists():
+                dir_name = dataset_id.replace("builtin_", "")
+                candidate = base_path / "data" / dir_name / "hexagons.geojson"
+                if candidate.exists():
+                    geojson_path = candidate
+
+            # 3. Fallbacks (legacy root backend/data or frontend/public/assets)
+            if not geojson_path or not geojson_path.exists():
+                candidate_paths = [
+                    Path(__file__).parent / "data" / "hexagons.geojson",
+                    Path(__file__).resolve().parent.parent / "frontend" / "public" / "assets" / "hexagons.geojson",
+                    Path("/app/backend/data/hexagons.geojson"),
+                    Path("/app/frontend/public/assets/hexagons.geojson"),
+                ]
+                geojson_path = next((path for path in candidate_paths if path.exists()), candidate_paths[0])
+
             print(f"[DEBUG] Looking for builtin geojson at: {geojson_path}")
         else:
             # Uploaded dataset - extract job_id from dataset_id format: job_TIMESTAMP_USER
@@ -1842,7 +2262,12 @@ async def get_geojson(dataset_id: str):
         return FileResponse(
             geojson_path,
             media_type="application/geo+json",
-            filename=f"{dataset_id}.geojson"
+            filename=f"{dataset_id}.geojson",
+            # This file is regenerated in place (e.g. re-running visium_to_geojson.py with a new
+            # hexagon radius); without an explicit no-store, FileResponse only sends Last-Modified/
+            # ETag and leaves caching to browser heuristics, which can keep serving pre-regeneration
+            # bytes for a normal (non-hard) reload.
+            headers={"Cache-Control": "no-store"},
         )
     except HTTPException:
         raise
@@ -1901,18 +2326,34 @@ async def get_hexagon(user: str, subdir: str, filename: str):
         return FileResponse(str(file_path))
     raise HTTPException(status_code=404, detail="File not found")
 
-@app.post("/create_session/{name}")
-async def create_session(name: str, response: Response):
+@app.post("/create_session")
+async def create_session(request: Request, response: Response):
     """
-    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session/mopitas`
-    """
-    session = uuid4()
-    data = SessionData(username=name)
+    Identifies the caller purely from its session cookie: the client can no
+    longer choose its own username (that was an ownership-check bypass,
+    since dataset ownership is checked as `owner == session_data.username`).
 
+    If the request already carries a valid, known session cookie, that
+    session is reused as-is so a returning user keeps seeing their own
+    uploads. Otherwise a fresh, server-generated identity is created.
+
+    Example: `curl -c cookies.txt -X POST http://127.0.0.1:3000/create_session`
+    """
+    try:
+        existing_session_id = cookie(request)
+        existing_data = await backend.read(existing_session_id)
+    except HTTPException:
+        existing_data = None
+
+    if existing_data is not None:
+        return {"username": existing_data.username, "is_new": False}
+
+    session = uuid4()
+    data = SessionData(username=str(session))
     await backend.create(session, data)
     cookie.attach_to_response(response, session)
 
-    return f"created session for {name}"
+    return {"username": data.username, "is_new": True}
 
 
 @app.get("/whoami", dependencies=[Depends(cookie)])
@@ -2064,9 +2505,14 @@ async def get_geneset_connections_genie(
     if "genie_genesets" not in adata.uns:
         return {"connections": [], "slider_data": {}}
 
-    gene_set = adata.uns["genie_genesets"].get(
-        gene_set_name, None
-    )
+    gene_set = adata.uns["genie_genesets"].get(gene_set_name, None)
+    if gene_set is None and hasattr(adata.uns["genie_genesets"], "keys"):
+        lower_to_key = {str(k).lower(): k for k in adata.uns["genie_genesets"].keys()}
+        matched_key = lower_to_key.get(gene_set_name.lower())
+        if matched_key:
+            gene_set = adata.uns["genie_genesets"][matched_key]
+            gene_set_name = matched_key
+
     if gene_set is None:
         gene_set = [gene_set_name]
     else:
@@ -2105,10 +2551,22 @@ async def get_geneset_connections_sponge(
 
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
-    gene_set = adata.uns["sponge_genesets"].get(
-        gene_set_name, None
-    )
-    gene_set = list(gene_set) + [gene_set_name]
+
+    if "sponge_genesets" not in adata.uns:
+        return {"connections": [], "slider_data": {}}
+
+    gene_set = adata.uns["sponge_genesets"].get(gene_set_name, None)
+    if gene_set is None and hasattr(adata.uns["sponge_genesets"], "keys"):
+        lower_to_key = {str(k).lower(): k for k in adata.uns["sponge_genesets"].keys()}
+        matched_key = lower_to_key.get(gene_set_name.lower())
+        if matched_key:
+            gene_set = adata.uns["sponge_genesets"][matched_key]
+            gene_set_name = matched_key
+
+    if gene_set is None:
+        gene_set = [gene_set_name]
+    else:
+        gene_set = list(gene_set) + [gene_set_name]
 
     # Get connections from sponge_network
     connections, slider_data = get_subnetwork_data(
@@ -2182,6 +2640,36 @@ async def get_var_column(
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
     return adata.var[column].to_dict()
+
+
+@app.get("/api/gene_symbols", dependencies=[Depends(cookie)])
+async def get_gene_symbols(
+    dataset_id: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    """Ensembl gene id -> gene symbol for one dataset, derived from its own `var`.
+
+    The frontend loads this once per dataset and uses it to label anything keyed by Ensembl id
+    — chiefly the SPONGE side of the UI (ceRNA module dropdowns, network nodes, the global and
+    per-spot regulatory score tables), which is Ensembl-keyed throughout while GENIE3 and gene
+    expression are symbol-keyed.
+
+    Ids are returned both with and without their version suffix. Datasets whose `var` carries
+    no Ensembl ids at all return an empty map, which the frontend treats as "keep showing ids".
+
+    Example: `curl -b cookies.txt http://127.0.0.1:3000/api/gene_symbols?dataset_id=job_123`
+    """
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+        symbols = _get_gene_symbol_map(adata_path)
+    except Exception as e:
+        # A dataset without a resolvable adata simply has no symbols to offer; that is not an
+        # error for the caller, which falls back to displaying the raw ids.
+        print(f"[gene_symbols] no mapping for dataset_id={dataset_id}: {type(e).__name__}: {e}")
+        return {"dataset_id": dataset_id, "symbols": {}, "count": 0}
+
+    return {"dataset_id": dataset_id, "symbols": symbols, "count": len(symbols)}
+
 
 
 # @app.get("/obsm/{table}/{column}", dependencies=[Depends(cookie)])
@@ -2314,13 +2802,18 @@ async def get_obsm_row(
 async def download_file(file_path: str):
     full_path = (BASE_UPLOAD_DIR / file_path).resolve()
 
-    # TODO: remove this. just so that hardcodded footprint plot can be used
-    # Prevent path traversal outside uploads dir
-    # if BASE_UPLOAD_DIR not in full_path.parents:
-    #     raise HTTPException(status_code=403, detail="Forbidden")
-
     if not full_path.exists() or not full_path.is_file():
-        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        # Fallback 1: check if file_path is an absolute path (leading slash stripped by FastAPI)
+        alt = Path("/" + file_path).resolve()
+        if alt.exists() and alt.is_file():
+            full_path = alt
+        elif Path(file_path).is_file():
+            full_path = Path(file_path).resolve()
+        # Fallback 2: check relative to backend directory (for data/...)
+        elif (Path(__file__).resolve().parent / file_path).is_file():
+            full_path = (Path(__file__).resolve().parent / file_path).resolve()
+        else:
+            raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
 
     return FileResponse(str(full_path))
 
@@ -2369,7 +2862,10 @@ async def get_X_by_gene(
     """
     adata_path = _resolve_adata_path(session_data, dataset_id)
     adata = _load_adata_cached(adata_path)
-    expressions = adata[:, gene].X.toarray().flatten().tolist()
+    resolved_gene = _resolve_gene_name(adata, gene, adata_path)
+    if resolved_gene is None:
+        raise HTTPException(status_code=404, detail=f"Gene '{gene}' not found")
+    expressions = adata[:, resolved_gene].X.toarray().flatten().tolist()
     barcodes = adata.obs.index
     return {
         barcode: expression
@@ -2487,6 +2983,20 @@ async def get_available_motifs(
     try:
         adata = _load_adata_cached(adata_path)
         motifs = list(adata.uns.get("chromvar_motifs", []))
+        if not motifs:
+            # Fallback: check motif_to_tf_csv_path from dataset
+            try:
+                target_ds_id = dataset_id or session_data.current_dataset_id
+                if target_ds_id:
+                    ds_dict = _resolve_dataset_dict(session_data, target_ds_id)
+                    motif_csv = ds_dict.get("motif_to_tf_csv_path")
+                    if motif_csv and Path(motif_csv).exists():
+                        import pandas as pd
+                        df = pd.read_csv(motif_csv)
+                        if "motif_id" in df.columns:
+                            motifs = sorted(df["motif_id"].dropna().astype(str).unique().tolist())
+            except Exception as ex:
+                print(f"[get_available_motifs] Fallback motif_to_tf error: {ex}")
         print(f"[get_available_motifs] Found motifs[0:5]: {motifs[:5]}, total={len(motifs)}, dataset_id={dataset_id}")
         return {"motifs": motifs}
     except Exception as e:
@@ -2531,6 +3041,28 @@ async def get_available_cell_types(
         return {"cell_types": cell_types}
     except subprocess.TimeoutExpired:
         raise HTTPException(status_code=504, detail="Rscript timed out reading cell types")
+
+
+def _run_streaming_subprocess(cmd: List[str]) -> tuple[int, list[str]]:
+    """
+    Run cmd, streaming its merged stdout/stderr to our own stdout line-by-line as it
+    runs, and return (returncode, output_lines). Blocking end-to-end (Popen creation,
+    the stdout read loop, and wait()) — call via asyncio.to_thread so it doesn't stall
+    the single asyncio event loop for the whole duration of the R script.
+    """
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,  # merge stderr into stdout so both stream together
+        text=True,
+        bufsize=1,  # line-buffered
+    )
+    output_lines: list[str] = []
+    for line in proc.stdout:  # type: ignore[union-attr]
+        print(f"[R] {line}", end="", flush=True)
+        output_lines.append(line)
+    proc.wait()
+    return proc.returncode, output_lines
 
 
 @app.post("/api/compute_footprint", dependencies=[Depends(cookie)])
@@ -2579,29 +3111,21 @@ async def compute_footprint(
     import subprocess
     motifs_csv = ",".join(motif)
     cmd = [
-        "Rscript", "../backend/calc_multiome_scores/compute_additional_footprints.R",
+        "Rscript", "/workspaces/swarm/backend/calc_multiome_scores/compute_additional_footprints.R",
         "--outdir", str(out_dir),
         "--motifs", motifs_csv,
         "--cluster_by", cluster_by,
     ]
     print(f"[compute_footprint] Running: {' '.join(cmd)}")
-    proc = subprocess.Popen(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,  # merge stderr into stdout so both stream together
-        text=True,
-        bufsize=1,  # line-buffered
-    )
-    output_lines: list[str] = []
-    for line in proc.stdout:  # type: ignore[union-attr]
-        print(f"[R] {line}", end="", flush=True)
-        output_lines.append(line)
-    proc.wait()
-    if proc.returncode != 0:
+    # Offloaded to a worker thread so this blocking R script (Popen + streaming stdout
+    # read + wait) doesn't stall the single asyncio event loop for every other user's
+    # request while it runs.
+    returncode, output_lines = await asyncio.to_thread(_run_streaming_subprocess, cmd)
+    if returncode != 0:
         full_output = "".join(output_lines)
         raise HTTPException(
             status_code=500,
-            detail=f"R script failed (exit {proc.returncode}): {full_output[-2000:]}"
+            detail=f"R script failed (exit {returncode}): {full_output[-2000:]}"
         )
 
     # Collect one result entry per requested motif
@@ -2632,7 +3156,86 @@ async def compute_footprint(
     return {"results": results}
 
 
+@app.get("/api/datasets/{dataset_id}/spatial_correlation_matrix", dependencies=[Depends(cookie)])
+async def get_spatial_correlation_matrix(
+    dataset_id: str,
+    session_data: SessionData = Depends(verifier),
+):
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found: {e}")
+
+    if not adata_path or not Path(adata_path).exists():
+        raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
+
+    adata = _load_adata_cached(adata_path)
+    result = await asyncio.to_thread(spatial_correlation.compute_spatial_correlation_matrix, adata)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/datasets/{dataset_id}/spatial_correlation_pair", dependencies=[Depends(cookie)])
+async def get_spatial_correlation_pair(
+    dataset_id: str,
+    feature_id_a: str,
+    feature_id_b: str,
+    # feature_id_b lives on the compare map's dataset when the drawer is correlating across two
+    # different datasets, not two properties of one. Without this, feature_id_b was always looked
+    # up in `dataset_id` (the main dataset) alone, so a compare-only feature could never resolve
+    # and silently came back as a column of zeros.
+    dataset_id_b: Optional[str] = None,
+    session_data: SessionData = Depends(verifier),
+):
+    try:
+        adata_path = _resolve_adata_path(session_data, dataset_id)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found: {e}")
+
+    if not adata_path or not Path(adata_path).exists():
+        raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
+
+    adata = _load_adata_cached(adata_path)
+
+    adata_b = adata
+    if dataset_id_b and dataset_id_b != dataset_id:
+        try:
+            adata_path_b = _resolve_adata_path(session_data, dataset_id_b)
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"Compare dataset '{dataset_id_b}' not found: {e}")
+
+        if not adata_path_b or not Path(adata_path_b).exists():
+            raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id_b}' not found")
+
+        adata_b = adata if adata_path_b == adata_path else _load_adata_cached(adata_path_b)
+
+    try:
+        result = await asyncio.to_thread(
+            spatial_correlation.get_pair_scatter_data, adata, feature_id_a, feature_id_b, adata_b
+        )
+        return JSONResponse(content=result)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=3000)
+    # Autoreload on code changes — dev only (devcontainer.json sets this env
+    # var); prod runs the built Docker image without it. uvicorn requires an
+    # import string rather than the app object to support reload, and the
+    # watched dir is scoped to backend/ so it doesn't also crawl
+    # frontend/node_modules, data/, and uploads/ on every reload check.
+    reload = os.getenv("UVICORN_RELOAD", "false").lower() == "true"
+    uvicorn.run(
+        "main:app" if reload else app,
+        host="0.0.0.0",
+        port=3000,
+        reload=reload,
+        reload_dirs=[str(Path(__file__).resolve().parent)] if reload else None,
+    )
     # for merit
     # uvicorn.run(app, host="0.0.0.0", port=3005)

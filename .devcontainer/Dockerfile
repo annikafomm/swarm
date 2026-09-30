@@ -1,7 +1,7 @@
 FROM mambaorg/micromamba:1.5.8 AS base
 
-COPY docker_environment.yml /tmp/docker_environment.yml
-COPY tangram.yml /tmp/tangram.yml
+COPY --chmod=644 docker_environment.yml /tmp/docker_environment.yml
+COPY --chmod=644 tangram.yml /tmp/tangram.yml
 
 # COPY multiome.yml /tmp/multiome.yml
 
@@ -86,10 +86,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends git curl \
 # Install SSH to push with git (when cloning with ssh)
 RUN apt-get install -y --no-install-recommends openssh-client
 
-# Create non-root user
-RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/mopitas-mapra \
+# Create non-root user and match the actual repo path used in this workspace.
+RUN useradd -m -u 1000 -s /bin/bash $username && mkdir -p /workspaces/swarm \
     && chown -R $username:$username /workspaces
+
+# Pre-create the Claude state dir so the named volume mounted here inherits
+# $username ownership instead of being created root-owned by Docker.
+RUN mkdir -p /home/$username/.claude && chown -R $username:$username /home/$username/.claude
 
 USER $username
 ENV USER=$username
-WORKDIR /workspaces/mopitas-mapra
+WORKDIR /workspaces/swarm

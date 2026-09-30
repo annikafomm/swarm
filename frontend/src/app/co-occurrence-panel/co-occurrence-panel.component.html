@@ -1,0 +1,68 @@
+<div class="co-occurrence-section">
+  <div class="co-occurrence-controls">
+    <h3 class="hx-title-with-info">
+      Cluster {{ selectedClusterId }} Co-occurrence Matrix
+      <button mat-icon-button type="button" class="hx-info-btn"
+        [matTooltip]="infoService.getScoreInfo('co_occurrence') || ''" matTooltipPosition="above">
+        <mat-icon>help_outline</mat-icon>
+      </button>
+    </h3>
+    <div class="controls-row">
+      <div class="interval-selector">
+        <label [attr.for]="isCompare ? 'interval-select-compare' : 'interval-select'">Interval:</label>
+        <select [id]="isCompare ? 'interval-select-compare' : 'interval-select'" [ngModel]="selectedInterval"
+          (ngModelChange)="intervalChanged.emit($event)">
+          <option *ngFor="let i of intervalOptions" [ngValue]="i">Interval {{ i }}</option>
+        </select>
+        <span class="interval-info">(0-{{ maxInterval }})</span>
+      </div>
+
+      <div class="stats-display" *ngIf="coOccurrenceData.length > 0">
+        <span class="stat-item">Min: {{ getIntervalStats().min | number:'1.4-4' }}</span>
+        <span class="stat-item">Max: {{ getIntervalStats().max | number:'1.4-4' }}</span>
+        <span class="stat-item">Avg: {{ getIntervalStats().avg }}</span>
+        <span class="interval-info">(0-{{ maxInterval }})</span>
+        <span *ngIf="intervalBoundaries.length">
+          <span class="stat-item">Interval borders:&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span class="interval-info">{{ formatActualIntervalRange(selectedInterval) }}</span>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="co-occurrence-table-container">
+    <table class="co-occurrence-table" *ngIf="coOccurrenceData.length > 0">
+      <thead>
+        <tr>
+          <th>Target Cluster</th>
+          <th *ngFor="let i of clusterIndices">{{ i }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cluster-header">Cluster {{ selectedClusterId }}</td>
+          <td *ngFor="let value of coOccurrenceData; let j = index" (click)="clusterSelected.emit(j)"
+            [class.high-cooccurrence]="value > threshold" [class.diagonal]="selectedClusterId === j"
+            [style.background-color]="getCoOccurrenceColor(value)" [title]="tooltipFor(j, value)"
+            style="cursor: pointer;">
+            {{ value | number: "1.0-3" }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div *ngIf="coOccurrenceData.length === 0" class="no-data">
+      No co-occurrence data available for Cluster {{ selectedClusterId }} at
+      interval {{ selectedInterval }}
+    </div>
+  </div>
+
+  <div class="interval-navigation">
+    <button class="nav-btn" (click)="selectPrevInterval()" [disabled]="selectedInterval === 0">
+      ← Previous
+    </button>
+    <span class="current-interval">Interval {{ selectedInterval }} of {{ maxInterval }}</span>
+    <button class="nav-btn" (click)="selectNextInterval()" [disabled]="selectedInterval === maxInterval">
+      Next →
+    </button>
+  </div>
+</div>

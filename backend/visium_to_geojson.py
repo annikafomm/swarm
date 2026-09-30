@@ -117,16 +117,21 @@ class Hexagons:
         return properties_dict
 
     def hexagon_points(self, x, y, radius):
-        # Scale centers
+        # Scale centers and radius together -- leaving radius unscaled meant every hexagon
+        # kept the same absolute size regardless of `scale`, while its center moved, silently
+        # changing the hexagon-size-to-spacing ratio whenever scale != 1.
         x = x * self.scale
         y = y * self.scale
+        radius = radius * self.scale
+        # +pi/2 turns the hexagon 90 degrees from the previous flat-top orientation.
+        angle_offset = np.pi / 2
         return [
             (
-                x + radius * np.cos(np.pi / 3 * i),
-                y + radius * np.sin(np.pi / 3 * i),
+                x + radius * np.cos(np.pi / 3 * i + angle_offset),
+                y + radius * np.sin(np.pi / 3 * i + angle_offset),
             )
             for i in range(6)
-        ] + [(x + radius * np.cos(0), y + radius * np.sin(0))]
+        ] + [(x + radius * np.cos(angle_offset), y + radius * np.sin(angle_offset))]
 
     def parse_coordinates(self):
         anndata_spatial_coordinates = self.anndata.obsm["spatial"].copy()
@@ -516,6 +521,17 @@ if __name__ == "__main__":
             if global_score in spatial_data.uns:
                 meta_dict[global_score] = spatial_data.uns[global_score].to_dict()
 
+    # Every cell's baked-in properties["gene_expression"] (see Hexagons.to_geojson's own
+    # gene_expression_of_interest, computed the same way here since that's a local inside the
+    # class method) is a real gene's value from the moment the map loads, picked as the top gene
+    # by Moran's I (falling back to Geary's C) -- but the frontend's "Current selection" box had
+    # no way to know which gene that was before the user ever picks one from the Moran's
+    # I/Geary's C table, and showed "Gene: None" despite the map already showing real data.
+    for score in genewise_scores:
+        if score in spatial_data.uns:
+            meta_dict['default_gene_expression_gene'] = str(spatial_data.uns[score].index[0])
+            break  # Moran's I has prio over Geary's C, matching Hexagons.to_geojson
+
     meta_dict['global_regulatory_scores_genie3'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_genie3')}
     meta_dict['global_regulatory_scores_sponge'] = {score: spatial_data.obsm[score].mean().to_dict() for score in genie3_score_names + sponge_score_names if score in spatial_data.obsm and score.endswith('_sponge')}
 
@@ -546,25 +562,56 @@ if __name__ == "__main__":
                 meta_dict['global_regulatory_gearyC_sponge'][score] = geary_stats
 
 
-    # Add peak and motif statistics
-    # New structure: uns['peak_stats'][grn_evaluation_name] = {data}
-    # uns['motif_stats'][grn_evaluation_name] = {data}
+    # Add peak and motif statistics.
+    #
+    # The frontend always looks these up as
+    #   meta[stats_key][dataset.grn_evaluation_name || 'GRN_Evaluation']
+    # so meta must be keyed by GRN-evaluation name, never flat. Three shapes occur
+    # in the wild and all have to end up in that one shape:
+    #   1. uns[<grn_name>] = {'peak_stats': {...}, 'motif_stats': {...}}  (per-evaluation
+    #      container; what the TF_GRN_evaluation pipeline writes, and the only shape that
+    #      carries the evaluation's real name)
+    #   2. uns[stats_key] = {<grn_name>: {...}}                            (already keyed)
+    #   3. uns[stats_key] = {<column>: [...]}                              (legacy flat, name lost)
+    # Shape 1 wins when present: a dataset that has it may *also* carry a flat legacy copy
+    # of the same numbers under uns[stats_key], and that copy has no name to key it by.
+    def _is_grn_eval_container(value):
+        return isinstance(value, dict) and (
+            'peak_stats' in value or 'motif_stats' in value
+        )
+
+    grn_eval_names = [
+        key for key, value in spatial_data.uns.items()
+        if _is_grn_eval_container(value)
+    ]
+
     for stats_key in ['peak_stats', 'motif_stats']:
-        if stats_key in spatial_data.uns:
+        per_evaluation = {}
+
+        for grn_name in grn_eval_names:
+            if stats_key in spatial_data.uns[grn_name]:
+                per_evaluation[grn_name] = _make_json_serializable(
+                    spatial_data.uns[grn_name][stats_key]
+                )
+
+        if not per_evaluation and stats_key in spatial_data.uns:
             stats_data = spatial_data.uns[stats_key]
-            # Handle both old and new structure:
-            # If it's a dict of dicts (new structure with grn_evaluation_names as keys):
-            if isinstance(stats_data, dict) and len(stats_data) > 0:
-                first_val = next(iter(stats_data.values()))
-                if isinstance(first_val, dict):
-                    # New structure: stats_data = {grn_name: {data...}, grn_name2: {data...}}
-                    meta_dict[stats_key] = _make_json_serializable(stats_data)
-                else:
-                    # Single dataset case or old structure
-                    meta_dict[stats_key] = _make_json_serializable(stats_data)
+            already_keyed = (
+                isinstance(stats_data, dict)
+                and len(stats_data) > 0
+                and all(isinstance(v, dict) for v in stats_data.values())
+            )
+            if already_keyed:
+                per_evaluation = _make_json_serializable(stats_data)
             else:
-                # Convert to JSON-serializable format (converts numpy arrays to lists)
-                meta_dict[stats_key] = _make_json_serializable(stats_data)
+                # Legacy flat table: no evaluation name survives, so file it under the
+                # same default the frontend falls back to when the dataset has no name.
+                per_evaluation = {
+                    'GRN_Evaluation': _make_json_serializable(stats_data)
+                }
+
+        if per_evaluation:
+            meta_dict[stats_key] = per_evaluation
 
     # The names in the tuple are options; all should have the same column names
     # but we don't want to rely on one obsm key being there
@@ -609,6 +656,19 @@ if __name__ == "__main__":
         meta_dict["interval"] = spatial_data.uns["leiden_co_occurrence"][
             "interval"
         ].tolist()
+
+    # Optional human-readable names for the leiden ids.
+    #
+    # `obs["leiden"]` has to be integer-castable — the cluster-annotation block above does
+    # `.astype(int)` — so a dataset clustered by a named annotation (an expert niche column,
+    # say) necessarily loses those names on the way in. When the producer recorded the
+    # code -> name mapping, carry it through so the numbers stay interpretable; the frontend
+    # currently renders "Cluster 3" but the mapping is at least available to anyone reading
+    # the GeoJSON, and to a future UI that wants to label them.
+    if "leiden_cluster_names" in spatial_data.uns:
+        meta_dict["leiden_cluster_names"] = _make_json_serializable(
+            spatial_data.uns["leiden_cluster_names"]
+        )
 
     meta_dict["data_type"] = args.data_type
     # Add differential motif activity top-motif tables

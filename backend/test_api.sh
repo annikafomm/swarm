@@ -8,7 +8,7 @@ curl -b cookies.txt http://127.0.0.1:3000/whoami && echo ""
 curl -b cookies.txt \
     -H "Content-Type: application/json" \
     -X POST http://127.0.0.1:3000/read_adata \
-    -d '{"path": "../backend/data/adata.h5ad"}' && echo ""
+    -d '{"path": "/workspaces/swarm/backend/data/adata.h5ad"}' && echo ""
 
 curl -b cookies.txt \
     http://127.0.0.1:3000/download_adata && echo ""

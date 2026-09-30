@@ -19,11 +19,15 @@ calc_spongeffects_oe <- function(expr, modules, n_cores=1) {
   return(oe.modules)
 }
 
-calc_spongeffects_gsva <- function(expr, modules, n_cores=1) {
-  
-  gsvaPar <- gsvaParam(exprData = expr, geneSets = modules)
+calc_spongeffects_gsva <- function(expr, modules, n_cores=1, kcdf="Gaussian") {
+  # kcdf controls the kernel GSVA uses to estimate each gene's expression CDF across cells:
+  # "Gaussian" assumes continuous input (log-normalized data); "Poisson" is for raw integer
+  # counts. Passing raw counts with the (package-default) "Gaussian" kernel silently produces
+  # scores dominated by each cell's sequencing depth rather than gene-set-specific signal, so
+  # callers must pass the kernel matching whatever normalization was actually applied to `expr`.
+  gsvaPar <- gsvaParam(exprData = expr, geneSets = modules, kcdf = kcdf)
   gsva.modules <- as.data.frame(gsva(gsvaPar, verbose=FALSE))
-  
+
   return(gsva.modules)
 }
 

@@ -15,13 +15,16 @@ class DatasetRegistry:
     """
 
     def __init__(self, registry_file: Path = None):
-        if registry_file is None:
-            # Use absolute path based on script location
-            base_path = Path(__file__).parent
-            registry_file = base_path / "uploads" / "dataset_registry.json"
-        self.registry_file = registry_file
-        self.registry_file.parent.mkdir(parents=True, exist_ok=True)
-        print(f"Dataset registry path: {self.registry_file}")
+        # Disk persistence (dataset_registry.json) is disabled — see _load_registry
+        # and _save_registry below. Kept commented out rather than deleted since the
+        # registry_file plumbing would need to come back if that ever changes.
+        # if registry_file is None:
+        #     # Use absolute path based on script location
+        #     base_path = Path(__file__).parent
+        #     registry_file = base_path / "uploads" / "dataset_registry.json"
+        # self.registry_file = registry_file
+        # self.registry_file.parent.mkdir(parents=True, exist_ok=True)
+        # print(f"Dataset registry path: {self.registry_file}")
         # self.datasets now stores Dataset objects organized by category
         self.datasets = self._load_registry()
 
@@ -30,100 +33,71 @@ class DatasetRegistry:
         Load existing registry or create new one.
         Deserializes JSON into Dataset objects.
 
+        Disk persistence is disabled (see below) — this always returns empty
+        buckets. Builtins are rebuilt fresh from DEFAULT_DATASETS + their
+        config/files by main.py's startup lifespan hook; uploaded datasets are
+        recovered from job_*_config.json via find_config_files/register_dataset_from_config
+        instead, which also verifies the referenced output files still exist on disk
+        (dataset_registry.json never did — it was a write-only snapshot nothing read back,
+        since this method was always called with clear_uploads=True).
+
         Args:
             clear_uploads: If True (on startup), clear uploaded datasets.
                           If False (runtime), preserve existing uploads.
 
         Returns:
             Dict with "builtin" and "uploaded" keys containing Dataset objects
+            (both always start empty; "builtin" is populated later by the startup hook)
         """
         datasets = {"builtin": {}, "uploaded": {}}
 
-        if self.registry_file.exists():
-            try:
-                with open(self.registry_file, 'r') as f:
-                    data = json.load(f)
-
-                    # Load builtin datasets
-                    for dataset_id, dataset_dict in data.get("builtin", {}).items():
-                        try:
-                            # Mark as builtin to preserve category
-                            dataset_dict["category"] = "builtin"
-                            dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                            datasets["builtin"][dataset_id] = dataset
-                        except Exception as e:
-                            print(f"⚠ Failed to load builtin dataset {dataset_id}: {e}")
-
-                    # Load uploaded datasets (if not clearing)
-                    if not clear_uploads:
-                        for dataset_id, dataset_dict in data.get("uploaded", {}).items():
-                            try:
-                                dataset_dict["category"] = "uploaded"
-                                dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                                datasets["uploaded"][dataset_id] = dataset
-                            except Exception as e:
-                                print(f"⚠ Failed to load uploaded dataset {dataset_id}: {e}")
-
-                return datasets
-
-            except Exception as e:
-                print(f"Error loading registry: {e}")
-                return datasets
+        # if self.registry_file.exists():
+        #     try:
+        #         with open(self.registry_file, 'r') as f:
+        #             data = json.load(f)
+        #
+        #             # Load uploaded datasets (if not clearing)
+        #             if not clear_uploads:
+        #                 for dataset_id, dataset_dict in data.get("uploaded", {}).items():
+        #                     try:
+        #                         dataset_dict["category"] = "uploaded"
+        #                         dataset = DatasetFactory.from_registry_dict(dataset_dict)
+        #                         datasets["uploaded"][dataset_id] = dataset
+        #                     except Exception as e:
+        #                         print(f"⚠ Failed to load uploaded dataset {dataset_id}: {e}")
+        #
+        #         return datasets
+        #
+        #     except Exception as e:
+        #         print(f"Error loading registry: {e}")
+        #         return datasets
 
         return datasets
 
     def _save_registry(self):
         """
-        Persist registry to disk.
-        Converts Dataset objects to dictionaries for JSON serialization.
+        Disk persistence is disabled — this is now a no-op.
+        Previously converted Dataset objects to dicts and wrote them to
+        dataset_registry.json, but nothing ever read that file back (_load_registry
+        is always called with clear_uploads=True), so it was pure write overhead.
+        Kept commented out rather than deleted in case disk persistence is revisited.
         """
-        try:
-            # Convert Dataset objects to dicts for JSON storage
-            json_data = {
-                "builtin": {
-                    dataset_id: dataset.to_registry_dict()
-                    for dataset_id, dataset in self.datasets.get("builtin", {}).items()
-                },
-                "uploaded": {
-                    dataset_id: dataset.to_registry_dict()
-                    for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
-                }
-            }
-
-            with open(self.registry_file, 'w') as f:
-                json.dump(json_data, indent=2, fp=f, default=str)
-            print(f"✓ Registry saved to {self.registry_file}")
-        except Exception as e:
-            print(f"✗ Error saving registry: {e}")
-            raise
-
-    def _refresh_uploaded_datasets(self):
-        """
-        Reload uploaded datasets from the registry file.
-        This keeps the in-memory registry in sync with disk, so newly registered
-        datasets are visible after a page refresh without restarting.
-        """
-        if not self.registry_file.exists():
-            return
-
-        try:
-            with open(self.registry_file, 'r') as f:
-                data = json.load(f)
-
-            # Reload uploaded datasets
-            uploaded = {}
-            for dataset_id, dataset_dict in data.get("uploaded", {}).items():
-                try:
-                    dataset_dict["category"] = "uploaded"
-                    dataset = DatasetFactory.from_registry_dict(dataset_dict)
-                    uploaded[dataset_id] = dataset
-                except Exception as e:
-                    print(f"⚠ Failed to reload uploaded dataset {dataset_id}: {e}")
-
-            self.datasets["uploaded"] = uploaded
-            print(f"[DEBUG] Reloaded {len(uploaded)} uploaded datasets from disk")
-        except Exception as e:
-            print(f"✗ Error reloading uploaded datasets: {e}")
+        pass
+        # try:
+        #     # Convert Dataset objects to dicts for JSON storage
+        #     json_data = {
+        #         "uploaded": {
+        #             dataset_id: dataset.to_registry_dict()
+        #             for dataset_id, dataset in self.datasets.get("uploaded", {}).items()
+        #         }
+        #     }
+        #
+        #     with open(self.registry_file, 'w') as f:
+        #         json.dump(json_data, indent=2, fp=f, default=str)
+        #     print(f"✓ Registry saved to {self.registry_file}")
+        # except Exception as e:
+        #     print(f"✗ Error saving registry: {e}")
+        #     raise
 
     def register_uploaded_dataset(
         self,
@@ -163,8 +137,8 @@ class DatasetRegistry:
         else:
             print()
 
-        print(f"Saving registry to {self.registry_file}")
-        self._save_registry()
+        # print(f"Saving registry to {self.registry_file}")
+        # self._save_registry()
         print(f"✓ Registered dataset {dataset_id if dataset is None else dataset.id}")
 
     def register_builtin_dataset(
@@ -218,7 +192,7 @@ class DatasetRegistry:
             self.datasets["builtin"][dataset_id] = dataset_obj
             print(f"Registered legacy builtin dataset: {dataset_id}")
 
-        self._save_registry()
+        # self._save_registry()
 
     def get_all_datasets(self, as_dict: bool = True) -> Dict:
         """
@@ -287,7 +261,7 @@ class DatasetRegistry:
         for category in ["builtin", "uploaded"]:
             if category in self.datasets and dataset_id in self.datasets[category]:
                 del self.datasets[category][dataset_id]
-                self._save_registry()
+                # self._save_registry()
                 return True
         return False
 
@@ -310,17 +284,18 @@ class DatasetRegistry:
                     setattr(dataset, key, value)
                 else:
                     print(f"⚠ Dataset attribute '{key}' does not exist")
-            self._save_registry()
+            # self._save_registry()
             return True
         return False
 
-    def find_config_files(self, uploads_dir: Path) -> List[Path]:
+    def find_config_files(self, uploads_dir: Path, user: Optional[str] = None) -> List[Path]:
         """
         Scan uploads directory for unregistered configuration files.
         Returns list of config files for datasets not yet in registry.
 
         Args:
             uploads_dir: Path to uploads directory
+            user: Optional username to filter datasets for
 
         Returns:
             List of Paths to unregistered config files
@@ -332,7 +307,7 @@ class DatasetRegistry:
         unregistered = []
         uploads_dir = Path(uploads_dir)
 
-        print(f"[DEBUG] Scanning for config files in: {uploads_dir}")
+        print(f"[DEBUG] Scanning for config files in: {uploads_dir} (filter user: {user})")
         print(f"[DEBUG] Currently registered uploaded datasets: {list(self.datasets.get('uploaded', {}).keys())}")
 
         # Find all config files matching pattern job_*_config.json
@@ -346,6 +321,20 @@ class DatasetRegistry:
                 parent_dir = config_file.parent
                 dataset_id = parent_dir.name
 
+                # Filter by user if specified
+                if user is not None:
+                    # Check if directory name ends with _{user} or matches user
+                    if not (dataset_id.endswith(f"_{user}") or dataset_id == user):
+                        # Also check config file content if user field is present
+                        try:
+                            with open(config_file, 'r') as f:
+                                cfg = json.load(f)
+                                cfg_user = cfg.get("user") or cfg.get("email")
+                                if cfg_user != user:
+                                    continue
+                        except Exception:
+                            continue
+
                 print(f"[DEBUG] Checking config: {dataset_id} - Registered: {dataset_id in self.datasets.get('uploaded', {})}")
 
                 # Allow re-registration even if already registered
@@ -358,7 +347,7 @@ class DatasetRegistry:
         print(f"[DEBUG] Total unregistered config files found: {len(unregistered)}")
         return unregistered
 
-    def get_unregistered_datasets(self, uploads_dir: Path) -> List[Dict[str, Any]]:
+    def get_unregistered_datasets(self, uploads_dir: Path, user: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Get summary info about unregistered datasets from config files.
         Suitable for displaying in UI popup.
@@ -367,15 +356,12 @@ class DatasetRegistry:
 
         Args:
             uploads_dir: Path to uploads directory
+            user: Optional username to filter datasets for
 
         Returns:
             List of dicts with dataset info for UI display
         """
-        # Reload uploaded datasets from disk to sync with latest registry
-        # This ensures newly registered datasets show up after refresh
-        self._refresh_uploaded_datasets()
-
-        config_files = self.find_config_files(uploads_dir)
+        config_files = self.find_config_files(uploads_dir, user=user)
         unregistered = []
 
         for config_file in config_files:
@@ -474,10 +460,14 @@ class DatasetRegistry:
                 # This might be stored as adata_path or xenium_grid_adata_path in config
                 return output_files.get("xenium_grid_adata_path") or output_files.get("adata_path")
 
-        # Handle Multiome datasets - use adata_st_scores_path if available
+        # Handle Multiome datasets
         if "multiome" in dataset_type.lower():
-            print(f"Multiome dataset detected [DEBUG], checking for adata_st_scores_path and adata_tg_scores_path")
-            return output_files.get("adata_tg_scores_path")
+            if output_files.get("adata_path"):
+                return output_files.get("adata_path")
+            use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+            if use_tangram and output_files.get("adata_tg_scores_path"):
+                return output_files.get("adata_tg_scores_path")
+            return output_files.get("adata_st_scores_path") or output_files.get("adata_tg_scores_path")
 
         # Handle Visium datasets - prefer adata_st_scores_path (original ST with scores) if available
         if "visium" in dataset_type.lower():
@@ -635,6 +625,170 @@ class DatasetRegistry:
         # Register it
         self.register_uploaded_dataset(dataset=dataset)
         print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
+        return dataset
+
+    def _resolve_config_path(self, path_str: Optional[str], base_dir: Path) -> Optional[str]:
+        """Resolve a path from config, whether absolute or relative to base_dir."""
+        if not path_str:
+            return None
+        if path_str.startswith("/api/"):
+            return path_str
+        p = Path(path_str)
+        if p.is_absolute() and p.exists():
+            return str(p)
+        candidate = base_dir / p
+        if candidate.exists():
+            return str(candidate)
+        candidates = list(base_dir.rglob(p.name))
+        if candidates:
+            return str(candidates[0])
+        return str(candidate if not p.is_absolute() else p)
+
+    def register_builtin_from_config(
+        self,
+        config_file: Path,
+        dataset_id: str,
+        alias: str,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        """
+        Register a built-in dataset directly from its configuration file.
+        Infers all paths and scores relative to the dataset directory.
+        """
+        config_file = Path(config_file)
+        if not config_file.exists():
+            raise ValueError(f"Builtin config file not found: {config_file}")
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        base_dir = config_file.parent
+        output_files = config.get("output_files", {})
+        dataset_type = config.get("dataset", "Visium")
+
+        if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
+            dataset_type = "Multiome"
+
+        # Determine adata path
+        raw_adata_path = self._determine_adata_path(dataset_type, output_files, config)
+        adata_path = self._resolve_config_path(raw_adata_path, base_dir)
+
+        if not adata_path or not Path(adata_path).exists():
+            # Fallback to finding any .h5ad
+            h5ad_files = list(base_dir.rglob("*scores*.h5ad")) or list(base_dir.glob("*.h5ad"))
+            if h5ad_files:
+                adata_path = str(h5ad_files[0])
+            else:
+                raise ValueError(f"AnnData file not found for builtin dataset {dataset_id} in {base_dir}")
+
+        geojson_path = f"/api/geojson/{dataset_id}"
+        genie_network_path = self._resolve_config_path(output_files.get("genie_network_path"), base_dir)
+        sponge_network_path = self._resolve_config_path(output_files.get("sponge_network_path"), base_dir)
+        tangram_adata_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
+        adata_st_scores_path = self._resolve_config_path(output_files.get("adata_st_scores_path"), base_dir)
+        adata_tg_scores_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
+        tf_graph_path = self._resolve_config_path(output_files.get("tf_graph_path"), base_dir)
+
+        use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
+        use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
+
+        # Which multiome analyses this dataset actually carries. These gate frontend tabs
+        # (ChromVar, Differential Motif Activity, Footprints) and the info page, so they
+        # have to be read off the config rather than left at their False defaults.
+        # `scores.chromVar` implies the chromVar Moran's I / Geary's C autocorrelations,
+        # which the pipeline computes unconditionally alongside it (app.py's chromVar case
+        # appends -moranI -gearyC), so accept either source for those two.
+        scores_conf = config.get("scores") or {}
+        chromvar_conf = config.get("chromVar") or {}
+        use_chromvar = bool(scores_conf.get("chromVar", False))
+        multiome_flags = {
+            "use_chromvar": use_chromvar,
+            "use_differential_motif_activity": bool(
+                chromvar_conf.get(
+                    "differential_motif_activity",
+                    scores_conf.get("differential_motif_activity", False),
+                )
+            ),
+            "use_footprinting": bool(scores_conf.get("footprinting", False)),
+            "use_moranI": bool(chromvar_conf.get("moranI", False)) or use_chromvar,
+            "use_gearyC": bool(chromvar_conf.get("gearyC", False)) or use_chromvar,
+        }
+
+        dataset_type_lower = dataset_type.lower()
+        if "xenium" in dataset_type_lower:
+            xenium_grid_adata_path = self._resolve_config_path(output_files.get("xenium_grid_adata_path") or raw_adata_path, base_dir)
+            dataset = XeniumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                tf_graph_path=tf_graph_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                xenium_grid_adata_path=xenium_grid_adata_path,
+                description=description,
+            )
+        elif "multiome" in dataset_type_lower:
+            dataset = MultiomeDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=None if (dataset_id in ("builtin_heart_multiome", "builtin_heart_tangram") or adata_path == adata_tg_scores_path) else adata_tg_scores_path,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                adata_st_scores_path=adata_st_scores_path,
+                adata_tg_scores_path=adata_tg_scores_path,
+                adata_map_path=self._resolve_config_path(output_files.get("adata_map_path"), base_dir),
+                adata_map_X_csv_path=self._resolve_config_path(output_files.get("adata_map_X_csv_path"), base_dir),
+                adata_map_var_csv_path=self._resolve_config_path(output_files.get("adata_map_var_csv_path"), base_dir),
+                calc_scores_log_path=self._resolve_config_path(output_files.get("calc_scores_log_path"), base_dir),
+                global_motif_analysis_path=self._resolve_config_path(output_files.get("global_motif_analysis_path"), base_dir),
+                motif_to_tf_csv_path=self._resolve_config_path(output_files.get("motif_to_tf_csv_path"), base_dir),
+                spot_obj_chromvar_path=self._resolve_config_path(output_files.get("spot_obj_chromvar_path"), base_dir),
+                spot_obj_footprints_path=self._resolve_config_path(output_files.get("spot_obj_footprints_path"), base_dir),
+                dissociated_obj_footprints_path=self._resolve_config_path(output_files.get("dissociated_obj_footprints_path"), base_dir),
+                chromvar_scores_csv_path=self._resolve_config_path(output_files.get("chromvar_scores_csv_path"), base_dir),
+                diff_motif_activity_csv_paths={k: self._resolve_config_path(v, base_dir) for k, v in output_files.get("diff_motif_activity_csv_paths", {}).items()} if isinstance(output_files.get("diff_motif_activity_csv_paths"), dict) else output_files.get("diff_motif_activity_csv_paths"),
+                footprint_pdf_paths={k: self._resolve_config_path(v, base_dir) for k, v in output_files.get("footprint_pdf_paths", {}).items()} if isinstance(output_files.get("footprint_pdf_paths"), dict) else ([self._resolve_config_path(p, base_dir) for p in output_files.get("footprint_pdf_paths")] if isinstance(output_files.get("footprint_pdf_paths"), list) else output_files.get("footprint_pdf_paths")),
+                tf_graph_path=tf_graph_path,
+                grn_evaluation_name=output_files.get("grn_evaluation_name"),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                **multiome_flags,
+                description=description,
+            )
+        else:
+            dataset = VisiumDataset(
+                dataset_id=dataset_id,
+                alias=alias,
+                adata_path=adata_path,
+                user="builtin",
+                tangram_adata_path=tangram_adata_path if use_tangram else None,
+                geojson_path=geojson_path,
+                genie_network_path=genie_network_path,
+                sponge_network_path=sponge_network_path,
+                created_at=datetime.now(),
+                dataset_type=dataset_type,
+                use_tangram=use_tangram,
+                use_multiome=use_multiome,
+                adata_st_scores_path=adata_st_scores_path,
+                adata_tg_scores_path=adata_tg_scores_path,
+                tf_graph_path=tf_graph_path,
+                description=description,
+            )
+
+        self.register_builtin_dataset(dataset=dataset)
+        print(f"✓ Registered builtin dataset from config: {dataset_id} ({alias})")
         return dataset
 
     def delete_unregistered_dataset(self, dataset_id: str, uploads_dir: Path, delete_files: bool = True) -> bool:

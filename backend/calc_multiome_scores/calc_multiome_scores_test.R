@@ -19,7 +19,7 @@ suppressPackageStartupMessages({
 })
 
 # source("../backend/calc_R_scores/utils.R")
-source("../backend/calc_multiome_scores/calc_global_motif_analysis.R")
+source("/workspaces/swarm/backend/calc_multiome_scores/calc_global_motif_analysis.R")
 
 # example command to run this script:
 # Rscript ../backend/calc_multiome_scores/calc_multiome_scores_test.R \
@@ -530,7 +530,7 @@ global_motif_analysis <- function(object, args, logfile) {
     file_info <- file.info(args$fragments_tsv_gz)
     if (file_info$size == 0) {
         cat("Fragment file empty, using default path\n")
-        args$fragments_tsv_gz <- "../backend/data/multiome_data/GSM7821196_KTBpool6_Ashkenazi_jew_atac_fragments.tsv.gz"
+        args$fragments_tsv_gz <- "/workspaces/swarm/backend/data/multiome_data/GSM7821196_KTBpool6_Ashkenazi_jew_atac_fragments.tsv.gz"
     }
 
     # Attach fragments to dissociated peaks assay (needs to match the cells in object)

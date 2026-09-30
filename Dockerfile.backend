@@ -1,0 +1,72 @@
+FROM mambaorg/micromamba:1.5.8
+
+# ── Copy environment specs ──────────────────────────────────────────────────
+COPY --chmod=644 docker_environment.yml /tmp/docker_environment.yml
+COPY --chmod=644 tangram.yml            /tmp/tangram.yml
+
+# ── Install Python / R / conda dependencies ─────────────────────────────────
+# These RUN steps execute as mambauser (micromamba default) and install
+# packages into /opt/conda which will be readable by mopitaner (see below).
+RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
+    micromamba clean --all --yes
+
+RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
+    micromamba clean --all --yes
+
+# ── Install R packages that need remotes / GitHub ───────────────────────────
+RUN micromamba run -n base R -q -e "\
+  if (!requireNamespace('remotes', quietly = TRUE)) \
+    install.packages('remotes', repos = 'https://cloud.r-project.org'); \
+  if (!requireNamespace('scCustomize', quietly = TRUE)) \
+    install.packages('scCustomize', repos = 'https://cloud.r-project.org'); \
+  remotes::install_github('mojaveazure/seurat-disk')"
+
+# ── Pin correct Seurat versions (conda sometimes installs wrong ones) ────────
+RUN rm -rf /opt/conda/lib/R/library/Seurat \
+           /opt/conda/lib/R/library/SeuratObject && \
+    micromamba install -n base -y -c conda-forge --force-reinstall \
+      r-seurat=5.3.0 \
+      r-seuratobject=5.2.0
+
+# ── Create non-root runtime user (mirrors devcontainer setup) ────────────────
+USER root
+
+ARG username=mopitaner
+RUN useradd -m -u 1000 -s /bin/bash $username
+
+ENV PATH="/opt/conda/bin:$PATH" \
+    CONDA_PREFIX="/opt/conda" \
+    CONDA_DEFAULT_ENV="base" \
+    CONDA_EXE="/opt/conda/bin/micromamba" \
+    CONDA_PYTHON_EXE="/opt/conda/bin/python" \
+    # Redirect caches to /tmp so mopitaner can always write them
+    MPLCONFIGDIR="/tmp/matplotlib" \
+    NUMBA_CACHE_DIR="/tmp/numba_cache" \
+    # Pin BLAS/OpenMP thread pools to 1. R and numpy/scipy both do their heavy lifting in
+    # BLAS, which otherwise sizes its pool to the whole host *per process* — and the pipeline
+    # is a chain of subprocesses with several uploads possibly in flight, so the thread count
+    # multiplies into the thousands and the host thrashes instead of computing. The pipeline
+    # gets its speed from job-level parallelism, not BLAS threading. Set here as well as in
+    # docker-compose.yml so the protection survives running the image directly; compose can
+    # still override per-deployment. See the longer note in docker-compose.yml.
+    OMP_NUM_THREADS="1" \
+    OPENBLAS_NUM_THREADS="1" \
+    MKL_NUM_THREADS="1" \
+    NUMEXPR_NUM_THREADS="1"
+
+# ── Copy backend source & set ownership ─────────────────────────────────────
+WORKDIR /app
+COPY backend/ ./backend/
+# Create uploads dir here so Docker initialises the named volume with
+# mopitaner ownership on first run (volume gets a copy of image content).
+RUN mkdir -p /app/backend/uploads && \
+    chown -R $username:$username /app
+
+USER $username
+
+# ── Runtime ──────────────────────────────────────────────────────────────────
+EXPOSE 3000
+
+# Run from the backend directory so relative imports work
+WORKDIR /app/backend
+CMD ["python", "main.py"]

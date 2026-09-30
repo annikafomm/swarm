@@ -1,0 +1,11 @@
+// Styles duplicated from hexagon-plot.component.scss, whose rules don't cross into this child
+// component's view encapsulation. (.grn-ondemand-container/.grn-ondemand-form/.error-msg/
+// .success-msg/.plots-grid/.grn-results/.loading-container have no rules there either — their
+// look comes entirely from inline `style="..."` attributes, reproduced verbatim in the template.)
+h4 {
+  text-align: center;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 12px 0 10px 0;
+}

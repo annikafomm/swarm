@@ -8,41 +8,30 @@
     <table class="ftable">
       <thead>
         <tr>
-          <th class="index-col">
-            <div class="th-top">
-              <div style="display: flex; align-items: center; flex-direction: column; gap: 2px;">
-                <span
-                  style="display: inline-block; overflow-wrap: break-word; word-break: normal; min-width: 100px; hyphens: none;">Index</span>
-                <input class="input" [(ngModel)]="filters['index']" placeholder="Type to filter..." />
-              </div>
-              <span class="sort-icons">
-                <button class="btn-ghost icon" (click)="setSort('index', true)" aria-label="sort ascending">
-                  ▲
-                </button>
-                <button class="btn-ghost icon" (click)="setSort('index', false)" aria-label="sort descending">
-                  ▼
-                </button>
-              </span>
-            </div>
-
-          </th>
-
-          <th *ngFor="let col of columns" class="other-col">
-            <div class="th-top">
-              <span style="display: inline-block; overflow-wrap: break-word; word-break: normal; hyphens: none;">{{ col
-                | translate | async }}</span>
-              <span class="sort-icons">
-                <button class="btn-ghost icon" (click)="setSort(col, true)">
-                  ▲
-                </button>
-                <button class="btn-ghost icon" (click)="setSort(col, false)">
-                  ▼
-                </button>
-              </span>
-              <input *ngIf="rows.length && typeof rows[0][col] === 'string'" class="input" [(ngModel)]="filters[col]"
-                placeholder="Type to filter..." />
+          <th class="index-col" *ngIf="showIndexColumn" (click)="toggleSort('index')"
+            [matTooltip]="infoService.getColumnInfo(indexColumnLabel) || infoService.getColumnInfo('index') || ''"
+            matTooltipPosition="above">
+            <div class="th-content">
+              <span class="col-title">{{ indexColumnLabel }}</span>
+              <input class="input header-search-input" [(ngModel)]="filters['index']" placeholder="Filter..." (click)="$event.stopPropagation()" />
+              <mat-icon class="sort-icon" *ngIf="sortState.column === 'index'">
+                {{ sortState.asc ? 'arrow_upward' : 'arrow_downward' }}
+              </mat-icon>
             </div>
           </th>
+
+          <th *ngFor="let col of columns" class="other-col" (click)="toggleSort(col)"
+            [matTooltip]="infoService.getColumnInfo(col) || ''"
+            matTooltipPosition="above">
+            <div class="th-content">
+              <span class="col-title">{{ col | translate | async }}</span>
+              <input *ngIf="isSearchableColumn(col)" class="input header-search-input" [(ngModel)]="filters[col]" placeholder="Filter..." (click)="$event.stopPropagation()" />
+              <mat-icon class="sort-icon" *ngIf="sortState.column === col">
+                {{ sortState.asc ? 'arrow_upward' : 'arrow_downward' }}
+              </mat-icon>
+            </div>
+          </th>
+
           <th *ngFor="let action of availableActionColumns" class="action-col">
             {{ action === 'show_on_plot' ? 'Show on plot' : (action | translate | async) }}
           </th>
@@ -79,7 +68,7 @@
       </tbody> -->
       <tbody>
         <tr *ngFor="let row of pagedRows">
-          <td class="index-col">{{ truncateMiddle(row.index) }}</td>
+          <td class="index-col" *ngIf="showIndexColumn" [title]="indexTitle(row.index)">{{ displayIndex(row.index) }}</td>
 
           <td *ngFor="let col of columns" class="other-col">
             {{ displayNumeric(row[col]) }}
