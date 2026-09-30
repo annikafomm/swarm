@@ -1877,6 +1877,21 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     return NaN;
   }
 
+  private isPValueLikeKey(key?: string | null): boolean {
+    const k = String(key ?? '').toLowerCase();
+
+    return (
+      k.includes('p_value') ||
+      k.includes('p-value') ||
+      k.includes('pvalue') ||
+      k.includes('p_val') ||
+      k.includes('padj') ||
+      k.includes('p_adj') ||
+      k.includes('p.adj') ||
+      k.includes('p_adjusted')
+    );
+  }
+
   private normalizeGeneKey(gene: string): string {
     return gene.trim().toLowerCase();
   }
@@ -2359,6 +2374,19 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     // Determine if the property is continuous
     const isContinuous = this.isContinuousScale(viewToUse, features, !isMainView);
+
+    const selectedAction = isMainView
+      ? this.selectedActionByView[viewToUse]
+      : this.selectedActionByViewCompare[viewToUse];
+
+    const selectedRegulatoryAction = isMainView
+      ? this.selectedRegulatoryScore
+      : this.selectedRegulatoryScoreCompare;
+
+    const isPValue =
+      this.isPValueLikeKey(viewToUse) ||
+      this.isPValueLikeKey(selectedAction) ||
+      this.isPValueLikeKey(selectedRegulatoryAction);
 
     if (isContinuous) {
       const compareSharedDomain = this.getPairedContinuousDomainForCompare();
@@ -3832,10 +3860,14 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     compare: boolean = false,
     digits: number = 1
   ): string {
-    const range = this.getActualIntervalRange(index, compare);
-    if (!range) return '';
+    const boundaries = this.getIntervalBoundaries(compare);
+    if (!boundaries?.length) return '';
 
-    return `(${range.start.toFixed(digits)}–${range.end.toFixed(digits)})`;
+    const end = Number(boundaries[index + 1]);
+
+    if (!Number.isFinite(end)) return '';
+
+    return `(0–${end.toFixed(digits)})`;
   }
 
   async getRegulatoryScoresforSpots(barcode: string, datasetId?: string, compare: boolean = false) {
