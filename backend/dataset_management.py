@@ -376,15 +376,19 @@ class DatasetRegistry:
                 dataset_type = config.get("dataset", "Unknown")
                 if dataset_type == "Visium" and config.get("multiome").get("use") == True:
                     dataset_type = "Multiome"
-                output_files = config.get("output_files", {})
+                # Paths may be relative to the config file (swarm_nextflow result folders)
+                output_files = self._resolve_output_files(config.get("output_files", {}), parent_dir)
 
 
                 # Determine which adata file to check based on dataset type and processing
                 adata_path = self._determine_adata_path(dataset_type, output_files, config)
 
-                created_at = datetime.fromtimestamp(
-                    int(dataset_id.split("_")[1]) / 1000, # timestamp in milliseconds
-                ) if "_" in dataset_id else datetime.now()
+                # Upload jobs are named job_<ms timestamp>_<user>; other folders (e.g. pipeline
+                # results named after the sample) fall back to the config file's mtime
+                try:
+                    created_at = datetime.fromtimestamp(int(dataset_id.split("_")[1]) / 1000)
+                except (IndexError, ValueError):
+                    created_at = datetime.fromtimestamp(config_file.stat().st_mtime)
 
                 # Check if adata file exists
                 adata_exists = Path(adata_path).exists() if adata_path else False
@@ -419,7 +423,7 @@ class DatasetRegistry:
 
                 unregistered.append({
                     "dataset_id": dataset_id,
-                    "alias": f"{dataset_type} Dataset - {dataset_id}",
+                    "alias": config.get("alias") or f"{dataset_type} Dataset - {dataset_id}",
                     "dataset_type": dataset_type,
                     "created_at": created_at.isoformat(),
                     "config_path": str(config_file),
@@ -522,8 +526,8 @@ class DatasetRegistry:
         if dataset_id in self.datasets.get("uploaded", {}):
             print(f"[DEBUG] Dataset {dataset_id} already registered, re-registering...")
 
-        # Extract paths and metadata from config
-        output_files = config.get("output_files", {})
+        # Extract paths and metadata from config (paths may be relative to the config file)
+        output_files = self._resolve_output_files(config.get("output_files", {}), parent_dir)
         dataset_type = config.get("dataset", "Visium")
 
         if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
@@ -538,6 +542,10 @@ class DatasetRegistry:
         geojson_path = output_files.get("geojson_path")
         genie_network_path = output_files.get("genie_network_path")
         sponge_network_path = output_files.get("sponge_network_path")
+        is_pipeline_result = config.get("source") == "swarm_nextflow"
+        if is_pipeline_result:
+            # Served by /api/geojson/<id>, which reads <dataset folder>/hexagons.geojson
+            geojson_path = f"/api/geojson/{dataset_id}"
 
         # Validate adata file exists
         if not adata_path or not Path(adata_path).exists():
@@ -599,7 +607,7 @@ class DatasetRegistry:
                 diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
                 tf_graph_path=output_files.get("tf_graph_path"),
-                grn_evaluation_name = output_files.get("grn_evaluation_name")
+                grn_evaluation_name = output_files.get("grn_evaluation_name") or config.get("grn_evaluation_name")
             )
         else:
             # Default to VisiumDataset
@@ -622,10 +630,31 @@ class DatasetRegistry:
                 tf_graph_path=output_files.get("tf_graph_path")
             )
 
+        if is_pipeline_result:
+            # swarm_nextflow results: name, and where the tool finds the pipeline's keys and files
+            dataset.alias = config.get("alias") or dataset.alias
+            dataset.metadata["swarm"] = {
+                "keys": config.get("keys", {}),
+                "paths": {
+                    key: output_files.get(key)
+                    for key in ("genie_subnets_path", "sponge_subnets_path", "genie_genesets_path", "sponge_genesets_path")
+                },
+            }
+
         # Register it
         self.register_uploaded_dataset(dataset=dataset)
         print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
         return dataset
+
+    def _resolve_output_files(self, output_files: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
+        """Resolve relative string paths in output_files against the config's folder."""
+        resolved = {}
+        for key, value in output_files.items():
+            if isinstance(value, str) and value and not value.startswith("/api/") and not Path(value).is_absolute():
+                resolved[key] = str(base_dir / value)
+            else:
+                resolved[key] = value
+        return resolved
 
     def _resolve_config_path(self, path_str: Optional[str], base_dir: Path) -> Optional[str]:
         """Resolve a path from config, whether absolute or relative to base_dir."""

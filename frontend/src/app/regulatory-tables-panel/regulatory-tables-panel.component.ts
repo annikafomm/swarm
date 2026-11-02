@@ -1,4 +1,5 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnChanges, Output, SimpleChanges } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
 import { FilterableTableComponent } from '../filterable-table/filterable-table.component';
 import { CellFeature } from '../hexagon-view/cell-feature.types';
@@ -10,6 +11,17 @@ export type RegulatoryTablesPanelKind =
   | 'pathway_activity';
 
 type TableData = { [col: string]: { [index: string]: string | number } } | string[];
+
+/** Per-feature spatial autocorrelation from GET /api/autocorrelation/{dataset}/{name}. */
+type AutocorrStats = { [feature: string]: { [stat: string]: number | null } };
+
+/** Extra table columns -> keys in AutocorrStats entries. */
+const AUTOCORR_COLUMNS: [string, string][] = [
+  ["Moran's I", 'moranI'],
+  ["Moran's I padj", 'moranI_padj'],
+  ["Geary's C", 'gearyC'],
+  ["Geary's C padj", 'gearyC_padj'],
+];
 
 interface RegulatoryTableConfig {
   /** Key into the `meta`/`metaCompare` blob holding this table's rows. */
@@ -24,6 +36,8 @@ interface RegulatoryTableConfig {
   /** What the table's row index actually identifies — passed to <app-table>'s indexColumnLabel
    * instead of the generic "Index". */
   indexLabel: string;
+  /** Score table whose Moran's I / Geary's C are added as columns (rows = its features). */
+  autocorrName?: string;
 }
 
 interface RegulatoryTablesPanelConfig {
@@ -52,6 +66,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       heading: 'Ligand–Receptor Global Scores',
       view: 'ligand_receptor_global_scores',
       indexLabel: 'Ligand–Receptor Pair',
+      autocorrName: 'ligand_receptor_cosine_similarity',
     },
     secondary: {
       metaKey: 'nmf_factors',
@@ -60,6 +75,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       heading: 'Ligand-Receptor NMF Scores',
       view: 'ligand_receptor_NMF_factors',
       indexLabel: 'NMF Factor',
+      autocorrName: 'ligand_receptor_NMF_factors',
     },
     appendComparisonSuffix: false,
   },
@@ -72,6 +88,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       heading: 'Cell Composition TF Activity Global Scores',
       view: 'cell_comp_tf_activity_global_scores',
       indexLabel: 'TF',
+      autocorrName: 'cell_comp_tf_activity_cosine_similarity',
     },
     scoreLabel: 'Cell composition TF activity similarity',
     appendComparisonSuffix: false,
@@ -85,6 +102,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       heading: 'TF Activity',
       view: 'tf_activity',
       indexLabel: 'TF',
+      autocorrName: 'tf_activity_score_ulm',
     },
     scoreLabel: 'TF activity (ULM)',
     appendComparisonSuffix: true,
@@ -101,6 +119,7 @@ const CONFIG: Record<RegulatoryTablesPanelKind, RegulatoryTablesPanelConfig> = {
       heading: 'Pathway Activity',
       view: 'pathway_activity',
       indexLabel: 'Pathway',
+      autocorrName: 'pathway_activity_score_mlm',
     },
     scoreLabel: 'Pathway activity (MLM)',
     appendComparisonSuffix: true,
@@ -153,6 +172,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { InfoService } from '../info.service';
+import { SessionService } from '../session.service';
 
 @Component({
   selector: 'app-regulatory-tables-panel',
@@ -161,8 +181,19 @@ import { InfoService } from '../info.service';
   templateUrl: './regulatory-tables-panel.component.html',
   styleUrls: ['./regulatory-tables-panel.component.scss'],
 })
-export class RegulatoryTablesPanelComponent {
-  constructor(public infoService: InfoService) {}
+export class RegulatoryTablesPanelComponent implements OnChanges {
+  constructor(
+    public infoService: InfoService,
+    private http: HttpClient,
+    private sessionService: SessionService,
+  ) {}
+
+  /** Table data with the autocorrelation columns merged in. Kept as fields (not getters) so
+   * <app-table> only rebuilds when the data really changes. */
+  primaryTableData: TableData = [];
+  secondaryTableData: TableData = [];
+  /** Autocorrelation per score table name, for the current datasetId. */
+  private autocorr: { [name: string]: AutocorrStats } = {};
 
   @Input({ required: true }) kind!: RegulatoryTablesPanelKind;
   @Input() isCompare = false;
@@ -216,6 +247,76 @@ export class RegulatoryTablesPanelComponent {
 
   get primaryData(): TableData {
     return this.meta[this.activeConfig.primary.metaKey] ?? [];
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['datasetId']) {
+      this.autocorr = {};
+    }
+    if (changes['datasetId'] || changes['kind']) {
+      this.fetchAutocorrelation();
+    }
+    this.rebuildTables();
+  }
+
+  /** Fetch Moran's I / Geary's C for the score tables shown by this panel (missing ones are skipped). */
+  private fetchAutocorrelation(): void {
+    const datasetId = this.datasetId;
+    if (!datasetId || !this.kind) return;
+    const names = [this.activeConfig.primary.autocorrName, this.activeConfig.secondary?.autocorrName]
+      .filter((name): name is string => !!name && !(name in this.autocorr));
+    for (const name of names) {
+      this.http
+        .get<{ features: AutocorrStats }>(
+          `${this.sessionService.apiUrl}/api/autocorrelation/${encodeURIComponent(datasetId)}/${encodeURIComponent(name)}`,
+          { withCredentials: true },
+        )
+        .subscribe({
+          next: (res) => {
+            if (datasetId !== this.datasetId) return;
+            this.autocorr[name] = res?.features ?? {};
+            this.rebuildTables();
+          },
+          error: () => {
+            this.autocorr[name] = {};
+          },
+        });
+    }
+  }
+
+  private rebuildTables(): void {
+    if (!this.kind) return;
+    const config = this.activeConfig;
+    this.primaryTableData = this.withAutocorrelation(this.primaryData, config.primary.autocorrName);
+    this.secondaryTableData = config.secondary
+      ? this.withAutocorrelation(this.secondaryData, config.secondary.autocorrName)
+      : [];
+  }
+
+  /** Add Moran's I / Geary's C columns (+ adjusted p-values) to a table's rows. */
+  private withAutocorrelation(data: TableData, name?: string): TableData {
+    const stats = name ? this.autocorr[name] : undefined;
+    if (!stats || Object.keys(stats).length === 0 || !data) return data;
+
+    const isList = Array.isArray(data);
+    const table: { [col: string]: { [index: string]: any } } = isList ? {} : { ...(data as any) };
+    const index = isList
+      ? (data as string[]).map(String)
+      : Object.keys(Object.values(table)[0] ?? {});
+    if (index.length === 0) return data;
+
+    for (const [column, key] of AUTOCORR_COLUMNS) {
+      const values: { [index: string]: any } = {};
+      let found = false;
+      for (const idx of index) {
+        const value = stats[idx]?.[key];
+        // keep every row index (also without a value), the table derives its rows from the first column
+        values[idx] = value ?? null;
+        found = found || value != null;
+      }
+      if (found) table[column] = values;
+    }
+    return Object.keys(table).length ? table : data;
   }
 
   get primaryActionColumns(): string[] {

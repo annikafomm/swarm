@@ -19,12 +19,13 @@ class GrnEvaluationUtils:
         List all available on-demand GRN evaluation runs by scanning the on_demand directory.
         Returns sorted list of run names (directory names).
         """
-        on_demand_dir = job_dir / "multiome" / "GRN_evaluation" / "on_demand"
-        if not on_demand_dir.exists():
-            return []
+        # initial_upload holds the runs of pipeline results (swarm_nextflow writes one run per
+        # DE column, group and GO term); get_grn_evaluation_path resolves both folders
+        base_dir = job_dir / "multiome" / "GRN_evaluation"
+        run_dirs = [base_dir / "on_demand", base_dir / "initial_upload"]
 
         try:
-            runs = [d.name for d in on_demand_dir.iterdir() if d.is_dir()]
+            runs = {d.name for run_dir in run_dirs if run_dir.exists() for d in run_dir.iterdir() if d.is_dir()}
             return sorted(runs)
         except Exception as e:
             print(f"Error listing GRN runs: {e}")

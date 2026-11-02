@@ -992,6 +992,64 @@ def get_subnetwork_data(file_path, gene_set, network_type):
 
 
 # -----------------------------------------------------------------------------
+# swarm_nextflow result folders
+#
+# Datasets registered from a swarm_nextflow config carry metadata["swarm"]:
+#   keys.obsm            tool obsm name -> pipeline obsm name (only where they differ)
+#   keys.autocorrelation tool table name -> {"moranI": uns key, "gearyC": uns key}
+#   paths                genie/sponge subnets JSON ({module: [edge records]}) and modules JSON
+# Every lookup falls back to the tool's own names, so other datasets are unaffected.
+# -----------------------------------------------------------------------------
+
+_SWARM_JSON_CACHE: Dict[str, Any] = {}
+
+
+def _swarm_info(session_data: "SessionData", dataset_id: Optional[str]) -> Dict[str, Any]:
+    effective_id = dataset_id or session_data.current_dataset_id
+    if not effective_id:
+        return {}
+    try:
+        dataset_dict = _resolve_dataset_dict(session_data, effective_id)
+    except HTTPException:
+        return {}
+    return (dataset_dict.get("metadata") or {}).get("swarm") or {}
+
+
+def _load_json_cached(path: str) -> Any:
+    mtime = os.path.getmtime(path)
+    cached = _SWARM_JSON_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    with open(path) as f:
+        payload = json.load(f)
+    _SWARM_JSON_CACHE[path] = (mtime, payload)
+    return payload
+
+
+def _swarm_obsm_table(info: Dict[str, Any], table: str, adata: sc.AnnData) -> str:
+    """Map a tool obsm name to the pipeline's obsm key when the tool name is missing."""
+    if table in adata.obsm:
+        return table
+    mapped = info.get("keys", {}).get("obsm", {}).get(table)
+    return mapped if mapped and mapped in adata.obsm else table
+
+
+def _swarm_connections(info: Dict[str, Any], network: str, gene_set_name: str) -> Optional[Dict[str, Any]]:
+    """Module subnetwork precomputed by the pipeline (create_subnetworks.py), or None if not available."""
+    path = (info.get("paths") or {}).get(f"{network}_subnets_path")
+    if not path or not os.path.exists(path):
+        return None
+    subnets = _load_json_cached(path)
+    key = gene_set_name if gene_set_name in subnets else next(
+        (k for k in subnets if str(k).lower() == gene_set_name.lower()), None
+    )
+    edges = subnets.get(key, []) if key is not None else []
+    annotation = "weight" if network == "genie" else "p.adj"
+    values = np.array([e[annotation] for e in edges if e.get(annotation) is not None], dtype=float)
+    return {"connections": edges, "slider_data": _step_and_borders_networks(values) if len(values) else {}}
+
+
+# -----------------------------------------------------------------------------
 # Convenience endpoints
 # -----------------------------------------------------------------------------
 
@@ -2065,10 +2123,15 @@ async def get_dataset_capabilities(dataset_id: str, session_data: SessionData = 
             raise HTTPException(status_code=404, detail=f"Dataset {dataset_id} not found")
 
         # Determine capabilities based on dataset fields and paths
+        swarm_paths = ((getattr(dataset, "metadata", None) or {}).get("swarm") or {}).get("paths") or {}
+        has_networks = bool(
+            dataset.genie_network_path or dataset.sponge_network_path
+            or swarm_paths.get("genie_subnets_path") or swarm_paths.get("sponge_subnets_path")
+        )
         capabilities = {
             "has_gene_expression": bool(dataset.adata_path and Path(dataset.adata_path).exists()),
-            "has_regulatory_scores": bool(dataset.genie_network_path or dataset.sponge_network_path),
-            "has_networks": bool(dataset.genie_network_path or dataset.sponge_network_path),
+            "has_regulatory_scores": has_networks,
+            "has_networks": has_networks,
             "has_tangram": dataset.use_tangram if hasattr(dataset, 'use_tangram') else False,
             "has_multiome": dataset.use_multiome if hasattr(dataset, 'use_multiome') else False,
             "has_chromvar": dataset.use_chromvar if hasattr(dataset, 'use_chromvar') else False,
@@ -2487,6 +2550,10 @@ async def get_geneset_connections_genie(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    swarm_result = _swarm_connections(_swarm_info(session_data, dataset_id), "genie", gene_set_name)
+    if swarm_result is not None:
+        return swarm_result
+
     genie_network_path = _resolve_network_path(
         session_data,
         dataset_id,
@@ -2538,6 +2605,10 @@ async def get_geneset_connections_sponge(
     """
     Example: `curl -b cookies.txt http://127.0.0.1:3000/geneset_connections`
     """
+    swarm_result = _swarm_connections(_swarm_info(session_data, dataset_id), "sponge", gene_set_name)
+    if swarm_result is not None:
+        return swarm_result
+
     sponge_network_path = _resolve_network_path(
         session_data,
         dataset_id,
@@ -2575,6 +2646,38 @@ async def get_geneset_connections_sponge(
     connections = connections.to_dict(orient="records")
 
     return {"connections": connections, "slider_data": slider_data}
+
+
+@app.get("/api/autocorrelation/{dataset_id}/{name}", dependencies=[Depends(cookie)])
+async def get_autocorrelation(
+    dataset_id: str,
+    name: str,
+    session_data: SessionData = Depends(verifier),
+):
+    """
+    Moran's I / Geary's C per feature of one score table (e.g. `tf_activity_score_ulm`,
+    `ligand_receptor_cosine_similarity`, `aucell_scores_genie3`), for the score tables' extra columns.
+    Returns {"features": {feature: {moranI, moranI_padj, gearyC, gearyC_padj}}}.
+    """
+    info = _swarm_info(session_data, dataset_id)
+    uns_keys = info.get("keys", {}).get("autocorrelation", {}).get(name) or {
+        "moranI": f"{name}_moranI",
+        "gearyC": f"{name}_gearyC",
+    }
+    adata = _load_adata_cached(_resolve_adata_path(session_data, dataset_id))
+    features: Dict[str, Dict[str, Optional[float]]] = {}
+    for stat, column in (("moranI", "I"), ("gearyC", "C")):
+        uns_key = uns_keys.get(stat)
+        if not uns_key or uns_key not in adata.uns:
+            continue
+        table = adata.uns[uns_key]
+        table = table if isinstance(table, pd.DataFrame) else pd.DataFrame(table)
+        for feature, row in table.iterrows():
+            entry = features.setdefault(str(feature), {})
+            for out_key, col in ((stat, column), (f"{stat}_padj", "pval_norm_fdr_bh")):
+                value = row.get(col)
+                entry[out_key] = float(value) if value is not None and pd.notna(value) else None
+    return {"features": features}
 
 
 @app.get("/api/obsm_tables", dependencies=[Depends(cookie)])
@@ -2747,7 +2850,8 @@ async def get_obsm_column(
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"ChromVAR processing failed: {str(e)}")
 
-    # --- default behavior unchanged ---
+    # --- default behavior unchanged (tool names are mapped to swarm_nextflow keys) ---
+    table = _swarm_obsm_table(_swarm_info(session_data, dataset_id), table, adata)
     if table not in adata.obsm:
         print(f"[ERROR] Table '{table}' not found in adata.obsm")
         print(f"[DEBUG] Available obsm keys: {list(adata.obsm.keys())}")
