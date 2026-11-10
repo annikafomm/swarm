@@ -377,7 +377,7 @@ class DatasetRegistry:
                 if dataset_type == "Visium" and config.get("multiome").get("use") == True:
                     dataset_type = "Multiome"
                 # Paths may be relative to the config file (swarm_nextflow result folders)
-                output_files = self._resolve_output_files(config.get("output_files", {}), parent_dir)
+                output_files = self._resolve_output_paths(config.get("output_files") or {}, parent_dir)
 
 
                 # Determine which adata file to check based on dataset type and processing
@@ -498,8 +498,8 @@ class DatasetRegistry:
         user: str = "anonymous",
     ) -> Dataset:
         """
-        Register a dataset by loading its configuration file.
-        Creates a Dataset object of the appropriate type and adds it to the registry.
+        Register an uploaded dataset (a folder in uploads/) from its job_*_config.json.
+        The folder name is the dataset id; the dataset is owned by `user`.
 
         Args:
             config_file: Path to config JSON file (e.g., job_123_config.json)
@@ -518,82 +518,131 @@ class DatasetRegistry:
         with open(config_file, 'r') as f:
             config = json.load(f)
 
-        parent_dir = config_file.parent
-        dataset_id = parent_dir.name
+        dataset_id = config_file.parent.name
 
         # Allow re-registration of already registered datasets
         # This supports recovery flows and re-registration on new sessions
         if dataset_id in self.datasets.get("uploaded", {}):
             print(f"[DEBUG] Dataset {dataset_id} already registered, re-registering...")
 
-        # Extract paths and metadata from config (paths may be relative to the config file)
-        output_files = self._resolve_output_files(config.get("output_files", {}), parent_dir)
+        dataset = self.dataset_from_config(config, config_file.parent, dataset_id, user=user)
+        self.register_uploaded_dataset(dataset=dataset)
+        print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
+        return dataset
+
+    def register_builtin_from_config(
+        self,
+        config_file: Path,
+        dataset_id: str,
+        alias: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        """Register a built-in dataset (a folder in data/) from its config file."""
+        config_file = Path(config_file)
+        if not config_file.exists():
+            raise ValueError(f"Builtin config file not found: {config_file}")
+
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+
+        return self.register_builtin(config, config_file.parent, dataset_id, alias=alias, description=description)
+
+    def register_builtin(
+        self,
+        config: Dict[str, Any],
+        base_dir: Path,
+        dataset_id: str,
+        alias: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        """Register a built-in dataset from a config dict (paths absolute or relative to base_dir)."""
+        dataset = self.dataset_from_config(config, base_dir, dataset_id, user="builtin", alias=alias, description=description)
+        self.register_builtin_dataset(dataset=dataset)
+        print(f"✓ Registered builtin dataset from config: {dataset_id} ({dataset.alias})")
+        return dataset
+
+    def dataset_from_config(
+        self,
+        config: Dict[str, Any],
+        base_dir: Path,
+        dataset_id: str,
+        user: str,
+        alias: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Dataset:
+        """
+        Build the Dataset object for a dataset folder from its config. The one loader for both kinds:
+        built-in datasets (data/, user "builtin", visible to everyone) and uploaded ones (uploads/,
+        owned by the user who registers them). Both read the same config format, including
+        swarm_nextflow results; paths in output_files may be absolute or relative to base_dir.
+
+        Raises:
+            ValueError: If the adata file is missing
+        """
+        base_dir = Path(base_dir)
+        builtin = user == "builtin"
+        output_files = self._resolve_output_paths(config.get("output_files") or {}, base_dir)
         dataset_type = config.get("dataset", "Visium")
 
-        if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
+        if dataset_type == "Visium" and (config.get("multiome") or {}).get("use") == True:
             dataset_type = "Multiome"
 
         # Determine which adata file to use based on dataset type
         adata_path = self._determine_adata_path(dataset_type, output_files, config)
-
-        # For xenium datasets, also extract grid path for XeniumDataset
-        xenium_grid_adata_path = output_files.get("xenium_grid_adata_path") or output_files.get("adata_path")
-
-        geojson_path = output_files.get("geojson_path")
-        genie_network_path = output_files.get("genie_network_path")
-        sponge_network_path = output_files.get("sponge_network_path")
-        is_pipeline_result = config.get("source") == "swarm_nextflow"
-        if is_pipeline_result:
-            # Served by /api/geojson/<id>, which reads <dataset folder>/hexagons.geojson
-            geojson_path = f"/api/geojson/{dataset_id}"
+        if builtin and (not adata_path or not Path(adata_path).exists()):
+            # Builtin folders may not name their adata in the config: take any (scored) .h5ad
+            h5ad_files = list(base_dir.rglob("*scores*.h5ad")) or list(base_dir.glob("*.h5ad"))
+            if h5ad_files:
+                adata_path = str(h5ad_files[0])
 
         # Validate adata file exists
         if not adata_path or not Path(adata_path).exists():
             raise ValueError(f"AnnData file not found: {adata_path}")
 
-        # Extract processing options
-        use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
-        use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
+        is_pipeline_result = config.get("source") == "swarm_nextflow"
+        # Builtins and pipeline results are served by /api/geojson/<id>, which reads the folder's geojson
+        geojson_path = f"/api/geojson/{dataset_id}" if (builtin or is_pipeline_result) else output_files.get("geojson_path")
+        adata_tg_scores_path = output_files.get("adata_tg_scores_path")
+        use_tangram = bool((config.get("tangram") or {}).get("use", False))
+        use_multiome = bool((config.get("multiome") or {}).get("use", False))
 
-        # Use DatasetFactory to create the appropriate dataset type
-        # First, create a minimal Params object for the factory
-        # (The factory expects Params but we'll pass what we can from config)
+        common = dict(
+            dataset_id=dataset_id,
+            alias=alias or config.get("alias") or f"{dataset_type} Dataset",
+            adata_path=adata_path,
+            user=user,
+            geojson_path=geojson_path,
+            genie_network_path=output_files.get("genie_network_path"),
+            sponge_network_path=output_files.get("sponge_network_path"),
+            tf_graph_path=output_files.get("tf_graph_path"),
+            created_at=datetime.now(),
+            dataset_type=dataset_type,
+            use_tangram=use_tangram,
+            use_multiome=use_multiome,
+        )
+        if description is not None:
+            common["description"] = description
 
         # Route based on dataset type
         dataset_type_lower = dataset_type.lower()
 
         if "xenium" in dataset_type_lower:
-            # Create XeniumDataset with both adata paths
             dataset = XeniumDataset(
-                dataset_id=dataset_id,
-                alias=f"{dataset_type} Dataset",
-                adata_path=adata_path,
-                user=user,
-                tangram_adata_path=output_files.get("adata_tg_scores_path") if use_tangram else None,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                tf_graph_path=output_files.get("tf_graph_path"),
-                created_at=datetime.now(),
-                dataset_type=dataset_type,
-                use_tangram=use_tangram,
-                use_multiome=use_multiome,
-                xenium_grid_adata_path=xenium_grid_adata_path,
+                **common,
+                tangram_adata_path=adata_tg_scores_path if use_tangram else None,
+                xenium_grid_adata_path=output_files.get("xenium_grid_adata_path") or output_files.get("adata_path"),
             )
         elif "multiome" in dataset_type_lower:
-            # Create MultiomeDataset with all multiome paths
+            # The builtin heart datasets show measured and Tangram data as two separate datasets,
+            # so neither offers a Tangram switch
+            no_tangram_switch = builtin and (
+                dataset_id in ("builtin_heart_multiome", "builtin_heart_tangram") or adata_path == adata_tg_scores_path
+            )
             dataset = MultiomeDataset(
-                dataset_id=dataset_id,
-                alias=f"{dataset_type} Dataset",
-                adata_path=adata_path,
-                user=user,
-                tangram_adata_path=output_files.get("adata_tg_scores_path"),
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                created_at=datetime.now(),
+                **common,
+                tangram_adata_path=None if no_tangram_switch else adata_tg_scores_path,
                 adata_st_scores_path=output_files.get("adata_st_scores_path"),
-                adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
+                adata_tg_scores_path=adata_tg_scores_path,
                 adata_map_path=output_files.get("adata_map_path"),
                 adata_map_X_csv_path=output_files.get("adata_map_X_csv_path"),
                 adata_map_var_csv_path=output_files.get("adata_map_var_csv_path"),
@@ -606,33 +655,21 @@ class DatasetRegistry:
                 chromvar_scores_csv_path=output_files.get("chromvar_scores_csv_path"),
                 diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
-                tf_graph_path=output_files.get("tf_graph_path"),
-                grn_evaluation_name = output_files.get("grn_evaluation_name") or config.get("grn_evaluation_name")
+                grn_evaluation_name=output_files.get("grn_evaluation_name") or config.get("grn_evaluation_name"),
+                **self._multiome_flags(config),
             )
         else:
             # Default to VisiumDataset
             # For Visium datasets, also extract score paths so users can switch between them
             dataset = VisiumDataset(
-                dataset_id=dataset_id,
-                alias=f"{dataset_type} Dataset",
-                adata_path=adata_path,
-                user=user,
-                tangram_adata_path=output_files.get("adata_tg_scores_path") if use_tangram else None,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                created_at=datetime.now(),
-                dataset_type=dataset_type,
-                use_tangram=use_tangram,
-                use_multiome=use_multiome,
+                **common,
+                tangram_adata_path=adata_tg_scores_path if use_tangram else None,
                 adata_st_scores_path=output_files.get("adata_st_scores_path"),
-                adata_tg_scores_path=output_files.get("adata_tg_scores_path"),
-                tf_graph_path=output_files.get("tf_graph_path")
+                adata_tg_scores_path=adata_tg_scores_path,
             )
 
         if is_pipeline_result:
-            # swarm_nextflow results: name, and where the tool finds the pipeline's keys and files
-            dataset.alias = config.get("alias") or dataset.alias
+            # swarm_nextflow results: where the tool finds the pipeline's keys and files
             dataset.metadata["swarm"] = {
                 "keys": config.get("keys", {}),
                 "paths": {
@@ -640,18 +677,46 @@ class DatasetRegistry:
                     for key in ("genie_subnets_path", "sponge_subnets_path", "genie_genesets_path", "sponge_genesets_path")
                 },
             }
-
-        # Register it
-        self.register_uploaded_dataset(dataset=dataset)
-        print(f"✓ Registered dataset from config: {dataset_id} (type: {type(dataset).__name__})")
         return dataset
 
-    def _resolve_output_files(self, output_files: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
-        """Resolve relative string paths in output_files against the config's folder."""
+    def _multiome_flags(self, config: Dict[str, Any]) -> Dict[str, bool]:
+        """
+        Which multiome analyses a dataset actually carries. These gate frontend tabs
+        (ChromVar, Differential Motif Activity, Footprints) and the info page, so they
+        have to be read off the config rather than left at their False defaults.
+        `scores.chromVar` implies the chromVar Moran's I / Geary's C autocorrelations,
+        which the pipeline computes unconditionally alongside it (app.py's chromVar case
+        appends -moranI -gearyC), so accept either source for those two.
+        """
+        scores_conf = config.get("scores") or {}
+        chromvar_conf = config.get("chromVar") or {}
+        use_chromvar = bool(scores_conf.get("chromVar", False))
+        return {
+            "use_chromvar": use_chromvar,
+            "use_differential_motif_activity": bool(
+                chromvar_conf.get(
+                    "differential_motif_activity",
+                    scores_conf.get("differential_motif_activity", False),
+                )
+            ),
+            "use_footprinting": bool(scores_conf.get("footprinting", False)),
+            "use_moranI": bool(chromvar_conf.get("moranI", False)) or use_chromvar,
+            "use_gearyC": bool(chromvar_conf.get("gearyC", False)) or use_chromvar,
+        }
+
+    def _resolve_output_paths(self, output_files: Dict[str, Any], base_dir: Path) -> Dict[str, Any]:
+        """
+        Resolve the paths in a config's output_files against the dataset folder: every *_path
+        string, and the entries of *_paths dicts/lists. Other values (e.g. grn_evaluation_name) stay as they are.
+        """
         resolved = {}
         for key, value in output_files.items():
-            if isinstance(value, str) and value and not value.startswith("/api/") and not Path(value).is_absolute():
-                resolved[key] = str(base_dir / value)
+            if key.endswith("_path") and isinstance(value, str):
+                resolved[key] = self._resolve_config_path(value, base_dir)
+            elif key.endswith("_paths") and isinstance(value, dict):
+                resolved[key] = {k: self._resolve_config_path(v, base_dir) if isinstance(v, str) else v for k, v in value.items()}
+            elif key.endswith("_paths") and isinstance(value, list):
+                resolved[key] = [self._resolve_config_path(v, base_dir) if isinstance(v, str) else v for v in value]
             else:
                 resolved[key] = value
         return resolved
@@ -672,153 +737,6 @@ class DatasetRegistry:
         if candidates:
             return str(candidates[0])
         return str(candidate if not p.is_absolute() else p)
-
-    def register_builtin_from_config(
-        self,
-        config_file: Path,
-        dataset_id: str,
-        alias: str,
-        description: Optional[str] = None,
-    ) -> Dataset:
-        """
-        Register a built-in dataset directly from its configuration file.
-        Infers all paths and scores relative to the dataset directory.
-        """
-        config_file = Path(config_file)
-        if not config_file.exists():
-            raise ValueError(f"Builtin config file not found: {config_file}")
-
-        with open(config_file, 'r') as f:
-            config = json.load(f)
-
-        base_dir = config_file.parent
-        output_files = config.get("output_files", {})
-        dataset_type = config.get("dataset", "Visium")
-
-        if dataset_type == "Visium" and config.get("multiome", {}).get("use") == True:
-            dataset_type = "Multiome"
-
-        # Determine adata path
-        raw_adata_path = self._determine_adata_path(dataset_type, output_files, config)
-        adata_path = self._resolve_config_path(raw_adata_path, base_dir)
-
-        if not adata_path or not Path(adata_path).exists():
-            # Fallback to finding any .h5ad
-            h5ad_files = list(base_dir.rglob("*scores*.h5ad")) or list(base_dir.glob("*.h5ad"))
-            if h5ad_files:
-                adata_path = str(h5ad_files[0])
-            else:
-                raise ValueError(f"AnnData file not found for builtin dataset {dataset_id} in {base_dir}")
-
-        geojson_path = f"/api/geojson/{dataset_id}"
-        genie_network_path = self._resolve_config_path(output_files.get("genie_network_path"), base_dir)
-        sponge_network_path = self._resolve_config_path(output_files.get("sponge_network_path"), base_dir)
-        tangram_adata_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
-        adata_st_scores_path = self._resolve_config_path(output_files.get("adata_st_scores_path"), base_dir)
-        adata_tg_scores_path = self._resolve_config_path(output_files.get("adata_tg_scores_path"), base_dir)
-        tf_graph_path = self._resolve_config_path(output_files.get("tf_graph_path"), base_dir)
-
-        use_tangram = config.get("tangram", {}).get("use", False) if config.get("tangram") else False
-        use_multiome = config.get("multiome", {}).get("use", False) if config.get("multiome") else False
-
-        # Which multiome analyses this dataset actually carries. These gate frontend tabs
-        # (ChromVar, Differential Motif Activity, Footprints) and the info page, so they
-        # have to be read off the config rather than left at their False defaults.
-        # `scores.chromVar` implies the chromVar Moran's I / Geary's C autocorrelations,
-        # which the pipeline computes unconditionally alongside it (app.py's chromVar case
-        # appends -moranI -gearyC), so accept either source for those two.
-        scores_conf = config.get("scores") or {}
-        chromvar_conf = config.get("chromVar") or {}
-        use_chromvar = bool(scores_conf.get("chromVar", False))
-        multiome_flags = {
-            "use_chromvar": use_chromvar,
-            "use_differential_motif_activity": bool(
-                chromvar_conf.get(
-                    "differential_motif_activity",
-                    scores_conf.get("differential_motif_activity", False),
-                )
-            ),
-            "use_footprinting": bool(scores_conf.get("footprinting", False)),
-            "use_moranI": bool(chromvar_conf.get("moranI", False)) or use_chromvar,
-            "use_gearyC": bool(chromvar_conf.get("gearyC", False)) or use_chromvar,
-        }
-
-        dataset_type_lower = dataset_type.lower()
-        if "xenium" in dataset_type_lower:
-            xenium_grid_adata_path = self._resolve_config_path(output_files.get("xenium_grid_adata_path") or raw_adata_path, base_dir)
-            dataset = XeniumDataset(
-                dataset_id=dataset_id,
-                alias=alias,
-                adata_path=adata_path,
-                user="builtin",
-                tangram_adata_path=tangram_adata_path if use_tangram else None,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                tf_graph_path=tf_graph_path,
-                created_at=datetime.now(),
-                dataset_type=dataset_type,
-                use_tangram=use_tangram,
-                use_multiome=use_multiome,
-                xenium_grid_adata_path=xenium_grid_adata_path,
-                description=description,
-            )
-        elif "multiome" in dataset_type_lower:
-            dataset = MultiomeDataset(
-                dataset_id=dataset_id,
-                alias=alias,
-                adata_path=adata_path,
-                user="builtin",
-                tangram_adata_path=None if (dataset_id in ("builtin_heart_multiome", "builtin_heart_tangram") or adata_path == adata_tg_scores_path) else adata_tg_scores_path,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                created_at=datetime.now(),
-                adata_st_scores_path=adata_st_scores_path,
-                adata_tg_scores_path=adata_tg_scores_path,
-                adata_map_path=self._resolve_config_path(output_files.get("adata_map_path"), base_dir),
-                adata_map_X_csv_path=self._resolve_config_path(output_files.get("adata_map_X_csv_path"), base_dir),
-                adata_map_var_csv_path=self._resolve_config_path(output_files.get("adata_map_var_csv_path"), base_dir),
-                calc_scores_log_path=self._resolve_config_path(output_files.get("calc_scores_log_path"), base_dir),
-                global_motif_analysis_path=self._resolve_config_path(output_files.get("global_motif_analysis_path"), base_dir),
-                motif_to_tf_csv_path=self._resolve_config_path(output_files.get("motif_to_tf_csv_path"), base_dir),
-                spot_obj_chromvar_path=self._resolve_config_path(output_files.get("spot_obj_chromvar_path"), base_dir),
-                spot_obj_footprints_path=self._resolve_config_path(output_files.get("spot_obj_footprints_path"), base_dir),
-                dissociated_obj_footprints_path=self._resolve_config_path(output_files.get("dissociated_obj_footprints_path"), base_dir),
-                chromvar_scores_csv_path=self._resolve_config_path(output_files.get("chromvar_scores_csv_path"), base_dir),
-                diff_motif_activity_csv_paths={k: self._resolve_config_path(v, base_dir) for k, v in output_files.get("diff_motif_activity_csv_paths", {}).items()} if isinstance(output_files.get("diff_motif_activity_csv_paths"), dict) else output_files.get("diff_motif_activity_csv_paths"),
-                footprint_pdf_paths={k: self._resolve_config_path(v, base_dir) for k, v in output_files.get("footprint_pdf_paths", {}).items()} if isinstance(output_files.get("footprint_pdf_paths"), dict) else ([self._resolve_config_path(p, base_dir) for p in output_files.get("footprint_pdf_paths")] if isinstance(output_files.get("footprint_pdf_paths"), list) else output_files.get("footprint_pdf_paths")),
-                tf_graph_path=tf_graph_path,
-                grn_evaluation_name=output_files.get("grn_evaluation_name"),
-                dataset_type=dataset_type,
-                use_tangram=use_tangram,
-                use_multiome=use_multiome,
-                **multiome_flags,
-                description=description,
-            )
-        else:
-            dataset = VisiumDataset(
-                dataset_id=dataset_id,
-                alias=alias,
-                adata_path=adata_path,
-                user="builtin",
-                tangram_adata_path=tangram_adata_path if use_tangram else None,
-                geojson_path=geojson_path,
-                genie_network_path=genie_network_path,
-                sponge_network_path=sponge_network_path,
-                created_at=datetime.now(),
-                dataset_type=dataset_type,
-                use_tangram=use_tangram,
-                use_multiome=use_multiome,
-                adata_st_scores_path=adata_st_scores_path,
-                adata_tg_scores_path=adata_tg_scores_path,
-                tf_graph_path=tf_graph_path,
-                description=description,
-            )
-
-        self.register_builtin_dataset(dataset=dataset)
-        print(f"✓ Registered builtin dataset from config: {dataset_id} ({alias})")
-        return dataset
 
     def delete_unregistered_dataset(self, dataset_id: str, uploads_dir: Path, delete_files: bool = True) -> bool:
         """

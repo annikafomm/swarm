@@ -319,18 +319,39 @@ async def lifespan(app: FastAPI):
             ds_sponge = sponge_files[0] if sponge_files else ds_sponge
 
         if ds_adata.exists():
-            dataset_registry.register_builtin_dataset(
+            # Same loader as with a config, from a config made up of the files found
+            dataset_registry.register_builtin(
+                config={
+                    "dataset": "Visium",
+                    "output_files": {
+                        "adata_path": str(ds_adata),
+                        "genie_network_path": str(ds_genie) if ds_genie.exists() else None,
+                        "sponge_network_path": str(ds_sponge) if ds_sponge.exists() else None,
+                    },
+                },
+                base_dir=ds_dir,
                 dataset_id=dataset_id,
                 alias=alias,
-                adata_path=str(ds_adata),
-                geojson_path=f"/api/geojson/{dataset_id}",
-                genie_network_path=str(ds_genie) if ds_genie.exists() else None,
-                sponge_network_path=str(ds_sponge) if ds_sponge.exists() else None,
                 description=description,
             )
             print(f"✓ Registered default dataset {dataset_id} directly from files")
         else:
             print(f"✗ Builtin adata not found for {dataset_id} at {ds_adata}")
+
+    # Every other folder in data/ with a config is a builtin dataset too (e.g. copied pipeline
+    # results), registered as builtin_<folder> under the config's alias
+    data_dir = base_path / "data"
+    listed_dirs = {(base_path / ds_conf.get("dir", "data")).resolve() for ds_conf in DEFAULT_DATASETS}
+    for ds_dir in sorted(data_dir.iterdir()) if data_dir.is_dir() else []:
+        if not ds_dir.is_dir() or ds_dir.resolve() in listed_dirs:
+            continue
+        config_files = [ds_dir / "config.json"] if (ds_dir / "config.json").exists() else sorted(ds_dir.glob("job_*_config.json"))
+        if not config_files:
+            continue
+        try:
+            dataset_registry.register_builtin_from_config(config_file=config_files[0], dataset_id=f"builtin_{ds_dir.name}")
+        except Exception as e:
+            print(f"✗ Failed to register builtin dataset from {ds_dir}: {e}")
 
     asyncio.create_task(cleanup_expired_sessions())
     yield
