@@ -1155,7 +1155,23 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
    * sidebar tab — the map's color-by is updated to match, but the tab itself must not move
    * again as a side effect (see onColorbyPropertyChange's skipTabJump doc).
    */
+  /**
+   * The cell-type property to color by: `cell_type`, or for datasets without one (pipeline results
+   * carry the mapped cell types as `tangram_ct`) the closest available. Coloring by a missing
+   * property ends up coloring every spot by its barcode.
+   */
+  private cellTypeView(compare: boolean = false): string {
+    return ['cell_type', 'tangram_ct', 'leiden'].find((prop) => this.propertyAvailable(prop, compare)) ?? 'cell_type';
+  }
+
   public onTabColorChange(newView: string, compare: boolean = false): void {
+    if (newView === 'cell_type') {
+      newView = this.cellTypeView(compare);
+    }
+    if (newView === 'chromvar_total_sum' && !this.propertyAvailable(newView, compare)) {
+      // ATAC tab of a dataset without chromVAR (its sub-tabs are disabled): keep the current coloring
+      return;
+    }
     if (compare) {
       if (this.selectedCompareView !== newView) {
         this.selectedCompareView = newView;
@@ -1255,7 +1271,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
           prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
         );
-        this.selectedCompareView = probPropertyCompare || 'cell_type';
+        this.selectedCompareView = probPropertyCompare || this.cellTypeView(true);
 
         setTimeout(() => {
           this.onColorbyPropertyChange(true, true);
@@ -1268,7 +1284,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         const probProperty = Object.keys(this.propertyAvailability).find((prop: string) =>
           prop.toLowerCase().includes('prob') && this.propertyAvailability[prop]
         );
-        this.selectedView = probProperty || 'cell_type';
+        this.selectedView = probProperty || this.cellTypeView(false);
 
         setTimeout(() => {
           this.onColorbyPropertyChange(false, true);
@@ -1284,7 +1300,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
       const probPropertyCompare = Object.keys(this.propertyAvailabilityCompare).find((prop: string) =>
         prop.toLowerCase().includes('prob') && this.propertyAvailabilityCompare[prop]
       );
-      this.selectedCompareView = probPropertyCompare || 'cell_type';
+      this.selectedCompareView = probPropertyCompare || this.cellTypeView(true);
 
       setTimeout(() => {
         this.onColorbyPropertyChange(true, true);
@@ -4929,7 +4945,8 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
       self[loadingKey] = true;
 
-      const url = `/api/grn_evaluation/${dataset.id}/${evalName}/graph?filter_mode=${filterMode}`;
+      // fetch() bypasses the HttpClient interceptor that adds the /swarm base path
+      const url = `${this.sessionService.apiUrl}/api/grn_evaluation/${dataset.id}/${evalName}/graph?filter_mode=${filterMode}`;
       console.log(`[loadPrecomputedGrnGraph] Fetching ${filterMode}: ${url}`);
 
       fetch(url, { credentials: 'include' })
@@ -4984,7 +5001,7 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     const self = this as any;
     self[isLoadingKey] = true;
 
-    const url = `/api/grn_evaluation/${dataset.id}/${evalName}/plots`;
+    const url = `${this.sessionService.apiUrl}/api/grn_evaluation/${dataset.id}/${evalName}/plots`;
     console.log(`[loadPrecomputedGrnPlots] Fetching from: ${url}`);
 
     fetch(url, { credentials: 'include' })
@@ -5496,12 +5513,13 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
     // For on-demand runs, use the selected run name
     const selectedRun = compare ? this.selectedOnDemandRunCompare : this.selectedOnDemandRun;
     if (selectedRun) {
-      return `/api/grn_evaluation/${dataset.id}/${selectedRun}/image/${imageName}`;
+      return `${this.sessionService.apiUrl}/api/grn_evaluation/${dataset.id}/${selectedRun}/image/${imageName}`;
     }
 
     // For pre-computed plots, use the dataset's GRN evaluation name
     const evalName = dataset.grn_evaluation_name || 'GRN_Evaluation';
-    return `/api/grn_evaluation/${dataset.id}/${evalName}/image/${imageName}`;
+    // <img src> is loaded by the browser, not HttpClient: needs the base path itself
+    return `${this.sessionService.apiUrl}/api/grn_evaluation/${dataset.id}/${evalName}/image/${imageName}`;
   }
 
   /**

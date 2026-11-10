@@ -442,7 +442,8 @@ export class InfoComponent implements OnDestroy {
    */
   getDownloadLink(filePath: string): string {
     // Encode the path for URL parameter
-    return `/api/download/${encodeURIComponent(filePath)}`;
+    // used as <a href>, not through HttpClient: needs the base path itself
+    return `${this.sessionService.apiUrl}/api/download/${encodeURIComponent(filePath)}`;
   }
 
   /**

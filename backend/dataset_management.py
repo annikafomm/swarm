@@ -605,6 +605,12 @@ class DatasetRegistry:
         adata_tg_scores_path = output_files.get("adata_tg_scores_path")
         use_tangram = bool((config.get("tangram") or {}).get("use", False))
         use_multiome = bool((config.get("multiome") or {}).get("use", False))
+        grn_evaluation_name = output_files.get("grn_evaluation_name") or config.get("grn_evaluation_name")
+        tf_graph_path = output_files.get("tf_graph_path")
+        if not tf_graph_path and grn_evaluation_name:
+            # Pipeline results don't name it: the TF graph of the default GRN evaluation run
+            candidate = base_dir / "multiome" / "GRN_evaluation" / "initial_upload" / grn_evaluation_name / "graph.json"
+            tf_graph_path = str(candidate) if candidate.exists() else None
 
         common = dict(
             dataset_id=dataset_id,
@@ -614,7 +620,7 @@ class DatasetRegistry:
             geojson_path=geojson_path,
             genie_network_path=output_files.get("genie_network_path"),
             sponge_network_path=output_files.get("sponge_network_path"),
-            tf_graph_path=output_files.get("tf_graph_path"),
+            tf_graph_path=tf_graph_path,
             created_at=datetime.now(),
             dataset_type=dataset_type,
             use_tangram=use_tangram,
@@ -655,7 +661,7 @@ class DatasetRegistry:
                 chromvar_scores_csv_path=output_files.get("chromvar_scores_csv_path"),
                 diff_motif_activity_csv_paths=output_files.get("diff_motif_activity_csv_paths"),
                 footprint_pdf_paths=output_files.get("footprint_pdf_paths"),
-                grn_evaluation_name=output_files.get("grn_evaluation_name") or config.get("grn_evaluation_name"),
+                grn_evaluation_name=grn_evaluation_name,
                 **self._multiome_flags(config),
             )
         else:
