@@ -2899,8 +2899,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
 
     console.log(nodes);
 
-    edges.push(...candidateEdges);
-
     // Create the graph
     let graph = {
       nodes: nodes.filter((node) => node.id && node.id.length > 0),
@@ -3287,8 +3285,6 @@ export class HexagonPlotComponent implements OnInit, OnDestroy, AfterViewInit {
         edges.push(edge);
       }
     });
-
-    edges.push(...candidateEdges);
 
     // Create the graph
     let graph = {
