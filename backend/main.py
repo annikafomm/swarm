@@ -997,11 +997,20 @@ def get_subnetwork_data(file_path, gene_set, network_type):
 # Datasets registered from a swarm_nextflow config carry metadata["swarm"]:
 #   keys.obsm            tool obsm name -> pipeline obsm name (only where they differ)
 #   keys.autocorrelation tool table name -> {"moranI": uns key, "gearyC": uns key}
-#   paths                genie/sponge subnets JSON ({module: [edge records]}) and modules JSON
+#   paths                genie/sponge subnets (Parquet, each edge once; older results: JSON
+#                        {module: [edge records]}) and modules JSON ({regulator: [targets]})
 # Every lookup falls back to the tool's own names, so other datasets are unaffected.
 # -----------------------------------------------------------------------------
 
 _SWARM_JSON_CACHE: Dict[str, Any] = {}
+_SWARM_PARQUET_CACHE: Dict[str, Any] = {}
+
+# Most edges the GENIE3 graph draws: the "Minimum Edges in Graph" slider ends at 50
+# (regulatory-scores-panel.component.html). Keep in sync when that slider changes.
+SWARM_MAX_GRAPH_EDGES = 50
+
+# Gene columns of the subnets table (create_subnetworks.py keeps the input network's column names)
+_SWARM_EDGE_COLUMNS = {"genie": ("regulatoryGene", "targetGene"), "sponge": ("geneA", "geneB")}
 
 
 def _swarm_info(session_data: "SessionData", dataset_id: Optional[str]) -> Dict[str, Any]:
@@ -1034,11 +1043,90 @@ def _swarm_obsm_table(info: Dict[str, Any], table: str, adata: sc.AnnData) -> st
     return mapped if mapped and mapped in adata.obsm else table
 
 
+def _load_subnets_parquet_cached(path: str, network: str):
+    """Subnets table with categorical gene columns, and the upper-cased categories for module lookups."""
+    mtime = os.path.getmtime(path)
+    cached = _SWARM_PARQUET_CACHE.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1], cached[2], cached[3]
+    edges = pd.read_parquet(path)
+    gene_cols = _SWARM_EDGE_COLUMNS[network]
+    if not all(col in edges.columns for col in gene_cols):
+        gene_cols = tuple(edges.columns[:2])
+    upper_categories = {}
+    for col in gene_cols:
+        # Categorical: the genes are stored once, and a module lookup compares only the distinct names
+        edges[col] = edges[col].astype(str).astype("category")
+        upper_categories[col] = np.asarray(edges[col].cat.categories.str.upper())
+    _SWARM_PARQUET_CACHE[path] = (mtime, edges, gene_cols, upper_categories)
+    return edges, gene_cols, upper_categories
+
+
+def _genes_mask(edges: pd.DataFrame, col: str, upper_categories: np.ndarray, genes_upper: set) -> np.ndarray:
+    """Rows whose gene in `col` is one of `genes_upper` (case-insensitive, via the category codes)."""
+    hit = np.isin(upper_categories, list(genes_upper))
+    codes = edges[col].cat.codes.to_numpy()
+    return (codes >= 0) & hit[np.clip(codes, 0, None)] if len(hit) else np.zeros(len(edges), dtype=bool)
+
+
+def _graph_edges(module_edges: pd.DataFrame, gene_cols, upper_categories, regulator: str, weight: str = "weight") -> pd.DataFrame:
+    """
+    The module edges the GENIE3 graph can show at any slider position (visualizeGenie3Subgraph): the frontend
+    keeps the edges above the weight cutoff, takes the N strongest (N <= SWARM_MAX_GRAPH_EDGES), uses their
+    genes plus the regulator as nodes and draws every edge above the cutoff between those nodes. The N strongest
+    edges above any cutoff are always among the strongest SWARM_MAX_GRAPH_EDGES overall (ties included), so these
+    plus all edges between their genes give the same graph as the full module, in the original edge order.
+    """
+    weights = module_edges[weight].to_numpy(dtype=float)
+    valid = weights[~np.isnan(weights)]
+    if len(valid) <= SWARM_MAX_GRAPH_EDGES:
+        return module_edges
+    threshold = np.partition(valid, len(valid) - SWARM_MAX_GRAPH_EDGES)[len(valid) - SWARM_MAX_GRAPH_EDGES]
+    top = module_edges[weights >= threshold]
+    nodes = {str(g).upper() for col in gene_cols for g in top[col]} | {regulator.upper()}
+    keep = np.ones(len(module_edges), dtype=bool)
+    for col in gene_cols:
+        keep &= _genes_mask(module_edges, col, upper_categories[col], nodes)
+    return module_edges[keep]
+
+
+def _swarm_connections_parquet(info: Dict[str, Any], network: str, path: str, gene_set_name: str) -> Dict[str, Any]:
+    """Select one module's edges from the subnets table: edges touching the module's regulator or targets."""
+    genesets_path = (info.get("paths") or {}).get(f"{network}_genesets_path")
+    genesets = _load_json_cached(genesets_path) if genesets_path and os.path.exists(genesets_path) else {}
+    key = gene_set_name if gene_set_name in genesets else next(
+        (k for k in genesets if str(k).lower() == gene_set_name.lower()), None
+    )
+    if key is None:
+        return {"connections": [], "slider_data": {}}
+    targets = genesets[key] if isinstance(genesets[key], list) else [genesets[key]]
+    # Same rule as create_subnetworks.py: genes matched case-insensitively
+    genes_upper = {str(g).upper() for g in list(targets) + [key]}
+
+    edges, gene_cols, upper_categories = _load_subnets_parquet_cached(path, network)
+    mask = np.zeros(len(edges), dtype=bool)
+    for col in gene_cols:
+        mask |= _genes_mask(edges, col, upper_categories[col], genes_upper)
+    module_edges = edges[mask]
+
+    annotation = "weight" if network == "genie" else "p.adj"
+    values = module_edges[annotation].to_numpy(dtype=float) if annotation in module_edges else np.array([])
+    values = values[~np.isnan(values)]
+    slider_data = _step_and_borders_networks(values) if len(values) else {}
+    if network == "genie" and "weight" in module_edges:
+        module_edges = _graph_edges(module_edges, gene_cols, upper_categories, str(key))
+    # NaN is not valid JSON: send it as null
+    records = module_edges.astype(object).where(module_edges.notna(), None).to_dict(orient="records")
+    return {"connections": records, "slider_data": slider_data}
+
+
 def _swarm_connections(info: Dict[str, Any], network: str, gene_set_name: str) -> Optional[Dict[str, Any]]:
     """Module subnetwork precomputed by the pipeline (create_subnetworks.py), or None if not available."""
     path = (info.get("paths") or {}).get(f"{network}_subnets_path")
     if not path or not os.path.exists(path):
         return None
+    if path.endswith(".parquet"):
+        return _swarm_connections_parquet(info, network, path, gene_set_name)
     subnets = _load_json_cached(path)
     key = gene_set_name if gene_set_name in subnets else next(
         (k for k in subnets if str(k).lower() == gene_set_name.lower()), None
