@@ -1573,7 +1573,7 @@ async def upload(
                 subprocess.run,
                 [
                     "Rscript",
-                    "/workspaces/swarm/backend/rds_to_h5ad.R",
+                    str(Path(__file__).resolve().parent / "rds_to_h5ad.R"),
                     "--rds_path", rds_path,
                     "--assay", "RNA",
                     "--h5ad_path", h5ad_path,
@@ -1725,7 +1725,7 @@ async def upload(
                 subprocess.run,
                 [
                     "python3",
-                    "/workspaces/swarm/backend/visium_to_geojson.py",
+                    str(Path(__file__).resolve().parent / "visium_to_geojson.py"),
                     "--adata", adata_path,
                     "--outpath", geojson_path,
                     "--data_type", dataset.lower(),
@@ -3324,7 +3324,7 @@ async def compute_footprint(
     import subprocess
     motifs_csv = ",".join(motif)
     cmd = [
-        "Rscript", "/workspaces/swarm/backend/calc_multiome_scores/compute_additional_footprints.R",
+        "Rscript", str(Path(__file__).resolve().parent / "calc_multiome_scores/compute_additional_footprints.R"),
         "--outdir", str(out_dir),
         "--motifs", motifs_csv,
         "--cluster_by", cluster_by,

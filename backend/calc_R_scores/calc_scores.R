@@ -11,7 +11,9 @@ suppressPackageStartupMessages({
   suppressWarnings(library(AUCell))
 })
 
-source("/workspaces/swarm/backend/calc_R_scores/utils.R")
+# helpers next to this script, wherever the backend is installed
+script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(script_dir, "utils.R"))
 
 #  Rscript calc_scores.R   --dir ../datasets_scores/GSM6592049_M2_prepro   --dir ../datasets_scores/GSM6592049_M2_scores   --sponge_network ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_interactionNetwork.csv   --sponge_analysis ../networks/SPONGE/breast_invasive_carcinoma/breast_invasive_carcinoma_networkAnalysis.csv --genie_network ../networks/GENIE3/BRCA/genie3_BRCA_mrn.top_100k.csv --ensembl_col ensemble_id  --aucell --gsva --ssgsea --viper
 

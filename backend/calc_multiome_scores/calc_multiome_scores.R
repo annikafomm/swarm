@@ -19,7 +19,9 @@ suppressPackageStartupMessages({
 })
 
 # source("../backend/calc_R_scores/utils.R")
-source("/workspaces/swarm/backend/calc_multiome_scores/calc_global_motif_analysis.R")
+# helpers next to this script, wherever the backend is installed
+script_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(script_dir, "calc_global_motif_analysis.R"))
 
 #  Rscript calc_multiome_scores.R --outdir path/to/out_dir -log path/to/log_file -multiome -chromvar --multiome_rds path/to/multiome_rds path/to/multiome_rds_file
 # eg:
