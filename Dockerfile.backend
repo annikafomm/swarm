@@ -1,8 +1,14 @@
+# ── Tangram env: its own stage, so BuildKit builds it in parallel with the base env ──
+FROM mambaorg/micromamba:1.5.8 AS tangram
+
+COPY --chmod=644 tangram.yml /tmp/tangram.yml
+RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
+    micromamba clean --all --yes
+
 FROM mambaorg/micromamba:1.5.8
 
 # ── Copy environment specs ──────────────────────────────────────────────────
 COPY --chmod=644 docker_environment.yml /tmp/docker_environment.yml
-COPY --chmod=644 tangram.yml            /tmp/tangram.yml
 
 # ── Install Python / R / conda dependencies ─────────────────────────────────
 # These RUN steps execute as mambauser (micromamba default) and install
@@ -10,8 +16,7 @@ COPY --chmod=644 tangram.yml            /tmp/tangram.yml
 RUN micromamba install -y -n base -f /tmp/docker_environment.yml && \
     micromamba clean --all --yes
 
-RUN micromamba create -y -n tangram -f /tmp/tangram.yml && \
-    micromamba clean --all --yes
+COPY --from=tangram --chown=$MAMBA_USER:$MAMBA_USER /opt/conda/envs/tangram /opt/conda/envs/tangram
 
 # ── Install R packages that need remotes / GitHub ───────────────────────────
 RUN micromamba run -n base R -q -e "\
@@ -56,11 +61,12 @@ ENV PATH="/opt/conda/bin:$PATH" \
 
 # ── Copy backend source & set ownership ─────────────────────────────────────
 WORKDIR /app
-COPY backend/ ./backend/
 # Create uploads dir here so Docker initialises the named volume with
 # mopitaner ownership on first run (volume gets a copy of image content).
 RUN mkdir -p /app/backend/uploads && \
     chown -R $username:$username /app
+# Source last and owned on copy (no RUN after it): a code change only redoes this layer
+COPY --chown=$username:$username backend/ ./backend/
 
 USER $username
 
