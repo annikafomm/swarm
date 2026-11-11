@@ -42,6 +42,11 @@ USER root
 ARG username=mopitaner
 RUN useradd -m -u 1000 -s /bin/bash $username
 
+# The micromamba entrypoint sets USER=mambauser, HOME=/home/mambauser when USER is unset; mopitaner
+# can't write there, and `micromamba run` (Tangram) needs a lock file in $HOME/.cache
+ENV USER="$username" \
+    HOME="/home/$username"
+
 ENV PATH="/opt/conda/bin:$PATH" \
     CONDA_PREFIX="/opt/conda" \
     CONDA_DEFAULT_ENV="base" \
