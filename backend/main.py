@@ -435,8 +435,25 @@ def _load_adata_cached(file_path: str) -> sc.AnnData:
         "cell_comp_tf_activity_category": "cell_comp_tf_activity",
     }
 
+    # Label tables (LIANA's "high-high", ... per spot and pair) stored as int8 codes with their labels in
+    # uns["obsm_category_labels"] (pipeline, compact_category_obsm.py): labels again, as categoricals,
+    # which need a byte per value where the strings needed tens of GB for a large sample
+    decoded = set()
+    for obsm_key, labels in (adata.uns.get("obsm_category_labels") or {}).items():
+        if obsm_key in adata.obsm:
+            codes = np.asarray(adata.obsm[obsm_key])
+            labels = np.asarray(labels).astype(str)
+            adata.obsm[obsm_key] = pd.DataFrame(
+                {i: pd.Categorical.from_codes(codes[:, i], categories=labels) for i in range(codes.shape[1])},
+                index=adata.obs_names,
+            )
+            decoded.add(obsm_key)
+
     for obsm_key, col_names in reconstruct_obsm_cols.items():
         if obsm_key in adata.obsm and 'liana_columns' in adata.uns and col_names in adata.uns["liana_columns"]:
+            if obsm_key in decoded:
+                adata.obsm[obsm_key].columns = list(adata.uns["liana_columns"][col_names])
+                continue
             adata.obsm[obsm_key] = pd.DataFrame(
                 adata.obsm[obsm_key],
                 columns=adata.uns["liana_columns"][col_names],
