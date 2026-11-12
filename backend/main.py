@@ -41,6 +41,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     Response,
     UploadFile,
@@ -3155,10 +3156,49 @@ async def compute_footprint(
 
     return {"results": results}
 
+@app.get(
+    "/api/datasets/{dataset_id}/correlation_genes",
+    dependencies=[Depends(cookie)]
+)
+async def search_correlation_genes(
+    dataset_id: str,
+    q: str = "",
+    limit: int = Query(default=20, ge=1, le=100),
+    session_data: SessionData = Depends(verifier),
+):
+    adata_path = _resolve_adata_path(session_data, dataset_id)
+
+    if not adata_path or not Path(adata_path).exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Dataset h5ad file not found"
+        )
+
+    adata = _load_adata_cached(adata_path)
+
+    # Genes from the main expression matrix
+    genes = set(map(str, adata.var_names))
+
+    # Include genes available in raw expression data
+    if adata.raw is not None:
+        genes.update(map(str, adata.raw.var_names))
+
+    query = q.strip().lower()
+
+    matches = sorted(
+        gene for gene in genes
+        if query in gene.lower()
+    )
+
+    return {
+        "genes": matches[:limit],
+        "total": len(matches)
+    }
 
 @app.get("/api/datasets/{dataset_id}/spatial_correlation_matrix", dependencies=[Depends(cookie)])
 async def get_spatial_correlation_matrix(
     dataset_id: str,
+    genes: Optional[List[str]] = Query(default=None),
     session_data: SessionData = Depends(verifier),
 ):
     try:
@@ -3166,14 +3206,36 @@ async def get_spatial_correlation_matrix(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_id}' not found: {e}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset '{dataset_id}' not found: {e}"
+        )
 
     if not adata_path or not Path(adata_path).exists():
-        raise HTTPException(status_code=404, detail=f"Dataset h5ad file for '{dataset_id}' not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Dataset h5ad file for '{dataset_id}' not found"
+        )
+
+    # Limit genes to avoid oversized requests
+    if genes and len(genes) > 30:
+        raise HTTPException(
+            status_code=400,
+            detail="Maximum 30 genes allowed"
+        )
 
     adata = _load_adata_cached(adata_path)
-    result = await asyncio.to_thread(spatial_correlation.compute_spatial_correlation_matrix, adata)
-    return JSONResponse(content=result)
+
+    try:
+        result = await asyncio.to_thread(
+            spatial_correlation.compute_spatial_correlation_matrix,
+            adata,
+            genes
+        )
+        return JSONResponse(content=result)
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/datasets/{dataset_id}/spatial_correlation_pair", dependencies=[Depends(cookie)])

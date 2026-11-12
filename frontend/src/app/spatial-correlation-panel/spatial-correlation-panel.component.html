@@ -18,6 +18,80 @@
     </div>
   </div>
 
+  <!-- On-demand gene selection -->
+  <div class="matrix-card" style="margin-bottom: 16px; padding: 16px;">
+
+    <h4>Add gene expression to correlation heatmap</h4>
+
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+
+      <input
+        type="search"
+        [(ngModel)]="geneSearchQuery"
+        (keyup.enter)="searchGenes()"
+        placeholder="Search genes (e.g. TP53)"
+        aria-label="Search genes"
+        style="flex: 1; min-width: 180px; padding: 8px;"
+      />
+
+      <button
+        mat-raised-button
+        type="button"
+        (click)="searchGenes()"
+        [disabled]="!datasetId || !geneSearchQuery.trim() || isSearchingGenes"
+      >
+        <mat-icon>search</mat-icon>
+        Search
+      </button>
+
+    </div>
+
+    <p *ngIf="isSearchingGenes">Searching...</p>
+
+    <p *ngIf="geneSearchError" role="alert">
+      {{ geneSearchError }}
+    </p>
+
+    <!-- Search results -->
+    <div
+      *ngIf="geneSuggestions.length"
+      style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;"
+    >
+      <button
+        mat-stroked-button
+        type="button"
+        *ngFor="let gene of geneSuggestions"
+        (click)="addGene(gene)"
+        [disabled]="isLoadingMatrix || selectedGenes.length >= 30"
+      >
+        <mat-icon>add</mat-icon>
+        {{ gene }}
+      </button>
+    </div>
+
+    <!-- Added genes -->
+    <div *ngIf="selectedGenes.length" style="margin-top: 16px;">
+
+      <p>Selected genes:</p>
+
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+
+        <button
+          mat-stroked-button
+          type="button"
+          *ngFor="let gene of selectedGenes"
+          (click)="removeGene(gene)"
+          [disabled]="isLoadingMatrix"
+        >
+          {{ gene }}
+          <mat-icon>close</mat-icon>
+        </button>
+
+      </div>
+    </div>
+
+  </div>
+
   <!-- Top Box: Correlation Heatmap Matrix -->
   <div class="matrix-card">
     <div *ngIf="isLoadingMatrix" class="spinner-container">
@@ -25,7 +99,11 @@
       <span>Computing spatial correlation matrix...</span>
     </div>
 
-    <div *ngIf="!isLoadingMatrix && features.length === 0" class="empty-matrix">
+    <p *ngIf="geneMatrixError" role="alert">
+      {{ geneMatrixError }}
+    </p>
+
+    <div *ngIf="!isLoadingMatrix && !geneMatrixError && features.length === 0" class="empty-matrix">
       <p>No continuous score layers available for spatial correlation in this dataset.</p>
     </div>
 

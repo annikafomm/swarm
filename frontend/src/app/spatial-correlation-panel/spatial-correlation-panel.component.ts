@@ -1,7 +1,8 @@
-import { Component, ElementRef, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnChanges, OnDestroy, Output, SimpleChanges, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { Subscription } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatIconModule } from '@angular/material/icon';
@@ -51,7 +52,7 @@ export interface PairScatterData {
   templateUrl: './spatial-correlation-panel.component.html',
   styleUrls: ['./spatial-correlation-panel.component.scss'],
 })
-export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
+export class SpatialCorrelationPanelComponent implements OnDestroy, OnChanges {
   @Input() isCompare = false;
   @Input() datasetId?: string;
   /** Whether the app's global split-view compare mode is currently on (not to be confused with
@@ -90,6 +91,20 @@ export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
   matrixData: any = null;
   features: SpatialFeature[] = [];
 
+  // On-demand gene correlation
+  geneSearchQuery = '';
+  geneSuggestions: string[] = [];
+  selectedGenes: string[] = [];
+
+  isSearchingGenes = false;
+  geneSearchError = '';
+  geneMatrixError = '';
+
+  private matrixSubscription?: Subscription;
+  private geneSearchSubscription?: Subscription;
+  private matrixRequestId = 0;
+  private geneSearchRequestId = 0;
+
   selectedPairIndices: { i: number; j: number } | null = null;
   selectedFeatureA: SpatialFeature | null = null;
   selectedFeatureB: SpatialFeature | null = null;
@@ -98,40 +113,155 @@ export class SpatialCorrelationPanelComponent implements OnInit, OnChanges {
   pairScatterData: PairScatterData | null = null;
   scatterError = '';
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient) { }
 
-  ngOnInit(): void {
-    if (this.datasetId) {
-      this.loadCorrelationMatrix();
+  searchGenes(): void {
+    const query = this.geneSearchQuery.trim();
+
+    this.geneSearchSubscription?.unsubscribe();
+    const requestId = ++this.geneSearchRequestId;
+
+    this.geneSuggestions = [];
+    this.geneSearchError = '';
+
+    if (!this.datasetId || !query) {
+      this.isSearchingGenes = false;
+      return;
     }
+
+    const datasetId = this.datasetId;
+    this.isSearchingGenes = true;
+
+    const params = new HttpParams()
+      .set('q', query)
+      .set('limit', '20');
+
+    this.geneSearchSubscription = this.http.get<{
+      genes: string[];
+      total: number;
+    }>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/correlation_genes`,
+      { params, withCredentials: true }
+    ).subscribe({
+      next: res => {
+        if (requestId !== this.geneSearchRequestId ||
+          datasetId !== this.datasetId) return;
+
+        this.geneSuggestions = res.genes.filter(
+          gene => !this.selectedGenes.includes(gene)
+        );
+
+        this.isSearchingGenes = false;
+      },
+      error: err => {
+        if (requestId !== this.geneSearchRequestId) return;
+
+        console.error('Gene search failed:', err);
+        this.geneSearchError = 'Gene search failed.';
+        this.isSearchingGenes = false;
+      }
+    });
   }
 
+  addGene(gene: string): void {
+    if (
+      this.isLoadingMatrix ||
+      this.selectedGenes.includes(gene) ||
+      this.selectedGenes.length >= 30
+    ) {
+      return;
+    }
+
+    this.selectedGenes = [...this.selectedGenes, gene];
+    this.geneSuggestions = [];
+    this.geneSearchQuery = '';
+
+    this.loadCorrelationMatrix();
+  }
+
+  removeGene(gene: string): void {
+    if (this.isLoadingMatrix) return;
+
+    this.selectedGenes = this.selectedGenes.filter(g => g !== gene);
+    this.loadCorrelationMatrix();
+  }
+
+  ngOnDestroy(): void {
+    this.matrixSubscription?.unsubscribe();
+    this.geneSearchSubscription?.unsubscribe();
+  }
+
+
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['datasetId'] && this.datasetId) {
+    if (changes['datasetId']) {
+      this.selectedGenes = [];
+      this.geneSearchQuery = '';
+      this.geneSuggestions = [];
+      this.geneSearchError = '';
+
+      this.geneSearchSubscription?.unsubscribe();
+      this.geneSearchRequestId++;
+      this.isSearchingGenes = false;
+
       this.loadCorrelationMatrix();
     }
   }
 
   loadCorrelationMatrix(): void {
-    if (!this.datasetId) return;
-    this.isLoadingMatrix = true;
-    this.matrixData = null;
-    this.selectedPairIndices = null;
-    this.pairScatterData = null;
+    this.matrixSubscription?.unsubscribe();
+    const requestId = ++this.matrixRequestId;
 
-    this.http.get<any>(`/api/datasets/${encodeURIComponent(this.datasetId)}/spatial_correlation_matrix`, { withCredentials: true })
-      .subscribe({
-        next: (res) => {
-          this.matrixData = res;
-          this.features = res.features || [];
-          this.isLoadingMatrix = false;
-          setTimeout(() => this.renderHeatmap(), 50);
-        },
-        error: (err) => {
-          console.error('Failed to load spatial correlation matrix:', err);
-          this.isLoadingMatrix = false;
-        }
-      });
+    this.matrixData = null;
+    this.features = [];
+    this.selectedPairIndices = null;
+    this.selectedFeatureA = null;
+    this.selectedFeatureB = null;
+    this.pairScatterData = null;
+    this.geneMatrixError = '';
+
+    if (!this.datasetId) {
+      this.isLoadingMatrix = false;
+      return;
+    }
+
+    this.isLoadingMatrix = true;
+    const datasetId = this.datasetId;
+
+    let params = new HttpParams();
+
+    for (const gene of this.selectedGenes) {
+      params = params.append('genes', gene);
+    }
+
+    this.matrixSubscription = this.http.get<any>(
+      `/api/datasets/${encodeURIComponent(datasetId)}/spatial_correlation_matrix`,
+      { params, withCredentials: true }
+    ).subscribe({
+      next: res => {
+        if (requestId !== this.matrixRequestId ||
+          datasetId !== this.datasetId) return;
+
+        this.matrixData = res;
+        this.features = res.features || [];
+        this.isLoadingMatrix = false;
+
+        setTimeout(() => {
+          if (requestId === this.matrixRequestId) {
+            this.renderHeatmap();
+          }
+        }, 50);
+      },
+      error: err => {
+        if (requestId !== this.matrixRequestId) return;
+
+        console.error('Failed to load correlation matrix:', err);
+
+        this.geneMatrixError =
+          err?.error?.detail || 'Failed to load correlation matrix.';
+
+        this.isLoadingMatrix = false;
+      }
+    });
   }
 
   onMetricChange(mode: 'pearson' | 'moran'): void {
